@@ -28,7 +28,7 @@ npm ci
 npm run web
 ```
 
-For GitHub Pages, run `npm run build:pages` and publish only `dist/`. See [public hosting](docs/security.md) for paths, environment isolation and privacy.
+The [website workflow](.github/workflows/pages.yml) builds, checks and deploys pushes to `main` to GitHub Pages. Set the repository's Pages source to **GitHub Actions**. For a local Pages build, run `npm run build:pages`; only `dist/` is published. See [public hosting](docs/security.md) for paths, environment isolation and privacy.
 
 ## Develop for iPhone and Watch
 
