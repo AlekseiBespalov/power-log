@@ -11,30 +11,48 @@ interface PendingResponse {
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
+interface BikeSession {
+  device: BluetoothDevice;
+  epoch?: number;
+  sequence: number;
+  attempts: number;
+  established: boolean;
+}
 interface Connection {
   generation: number;
-  device: BluetoothDevice;
+  session: BikeSession;
   writer?: BluetoothRemoteGATTCharacteristic;
   reader?: BluetoothRemoteGATTCharacteristic;
   decoder: FrameDecoder;
   timer?: ReturnType<typeof setTimeout>;
+  cancelSetup?: () => void;
   pending?: PendingResponse;
   onValue: EventListener;
   onDisconnect: EventListener;
-  epoch: number;
-  sequence: number;
+  stableSince?: number;
 }
 const RESPONSE_SECONDS = 2.5;
+const SETUP_SECONDS = 15;
+const STABLE_SECONDS = 30;
+const IDLE_RETRIES = 5;
 const timeoutError = () => new Error('CYC response timed out');
 
 export class BrowserAdapter extends ForegroundAdapter {
   readonly kind = 'web' as const;
-  readonly description = 'Chrome / Edge on a supported desktop can read the bike while this page stays active. Web cannot guarantee background capture.';
+  readonly description = 'A supported browser, including Chrome on Android, can read the bike while this page stays active. Web cannot guarantee background capture.';
   private device?: BluetoothDevice;
+  private session?: BikeSession;
   private connection?: Connection;
+  private retryTimer?: ReturnType<typeof setTimeout>;
   private generation = 0;
   private hz = 2;
   private knownControllers = new Map<string, ControllerIdentity>();
+
+  override setWorkoutOwner(deviceId: string | null): void {
+    const previous = this.workoutDeviceId;
+    super.setWorkoutOwner(deviceId);
+    if (previous !== null && deviceId === null && this.state.status === 'reconnecting') void this.disconnect();
+  }
 
   async setSampleRate(hz: number): Promise<void> {
     if (![2, 4, 8].includes(hz)) throw new Error('Choose 2, 4 or 8 Hz');
@@ -49,19 +67,60 @@ export class BrowserAdapter extends ForegroundAdapter {
   /** Only remove resources belonging to this attempt; a late promise cannot clean up its successor. */
   private cleanup(connection: Connection, disconnectTransport: boolean): void {
     clearTimeout(connection.timer); connection.timer = undefined;
+    connection.cancelSetup?.(); connection.cancelSetup = undefined;
     const pending = connection.pending; connection.pending = undefined;
     if (pending) { clearTimeout(pending.timeout); pending.reject(new Error('Connection ended')); }
     connection.reader?.removeEventListener('characteristicvaluechanged', connection.onValue);
-    connection.device.removeEventListener('gattserverdisconnected', connection.onDisconnect);
+    connection.session.device.removeEventListener('gattserverdisconnected', connection.onDisconnect);
     connection.reader = undefined; connection.writer = undefined; connection.decoder.reset();
-    if (disconnectTransport) connection.device.gatt?.disconnect();
+    if (disconnectTransport) connection.session.device.gatt?.disconnect();
   }
 
   private failed(connection: Connection, error: unknown, disconnectTransport = true): void {
     if (!this.current(connection)) return;
-    this.generation += 1; this.connection = undefined;
+    this.generation += 1; this.connection = undefined; this.session = undefined;
+    clearTimeout(this.retryTimer); this.retryTimer = undefined;
     this.cleanup(connection, disconnectTransport);
-    this.update({ status: 'error', error: error instanceof Error ? error.message : String(error) });
+    this.update({ status: 'error', recoverableConnectionError: false, error: error instanceof Error ? error.message : String(error) });
+  }
+
+  private recover(connection: Connection, error: unknown, peerDisconnected = false): void {
+    if (!this.current(connection)) return;
+    const session = connection.session;
+    if (!session.established || (session.attempts >= IDLE_RETRIES && this.workoutDeviceId === null)) {
+      this.failed(connection, error); return;
+    }
+    const stable = connection.stableSince !== undefined && this.now() - connection.stableSince >= STABLE_SECONDS;
+    this.generation += 1; this.connection = undefined;
+    this.cleanup(connection, !peerDisconnected);
+    session.attempts += 1;
+    this.update({ status: 'reconnecting', recoverableConnectionError: true,
+      error: error instanceof Error ? error.message : String(error) });
+    // Match native recovery: quick recovery after a stable peer drop, then bounded backoff.
+    const delay = session.attempts === 1 && peerDisconnected && stable ? 0
+      : session.attempts > IDLE_RETRIES ? 30 : 2 ** (session.attempts - 1);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      if (this.session === session) void this.open(session, true);
+    }, delay * 1000);
+  }
+
+  private async setupStep<T>(connection: Connection, operation: () => Promise<T>, timeoutMessage: string): Promise<T> {
+    const deadline = this.now() + SETUP_SECONDS;
+    let rejectWait!: (error: Error) => void;
+    const interrupted = new Promise<never>((_resolve, reject) => { rejectWait = reject; });
+    const cancel = () => rejectWait(new Error('Connection ended'));
+    connection.cancelSetup = cancel;
+    const timer = setTimeout(() => rejectWait(new Error(timeoutMessage)), SETUP_SECONDS * 1000);
+    try {
+      const result = await Promise.race([operation(), interrupted]);
+      if (!this.current(connection)) throw new Error('Connection ended');
+      if (this.now() > deadline) throw new Error(timeoutMessage);
+      return result;
+    } finally {
+      clearTimeout(timer);
+      if (connection.cancelSetup === cancel) connection.cancelSetup = undefined;
+    }
   }
 
   private receive(connection: Connection, event: Event): void {
@@ -86,8 +145,8 @@ export class BrowserAdapter extends ForegroundAdapter {
 
   async startScan(): Promise<void> {
     if (this.workoutDeviceId !== null) throw new Error('Finish the ride before choosing another bike.');
-    if (this.connection) throw new Error('Disconnect before choosing another bike.');
-    if (typeof navigator === 'undefined' || !navigator.bluetooth) throw new Error('Web Bluetooth is unavailable. Use desktop Chrome / Edge, or the iPhone development build.');
+    if (this.session) throw new Error('Disconnect before choosing another bike.');
+    if (typeof navigator === 'undefined' || !navigator.bluetooth) throw new Error('Web Bluetooth is unavailable. Use Chrome on Android, supported desktop Chrome / Edge, or the iPhone app.');
     const generation = ++this.generation;
     this.update({ status: 'scanning', error: undefined });
     try {
@@ -153,58 +212,76 @@ export class BrowserAdapter extends ForegroundAdapter {
     if (!Number.isFinite(hz) || hz < 1 || hz > 8) throw new Error('Choose a rate from 1 to 8 Hz');
     if (this.workoutDeviceId === null) this.hz = hz;
     if (!this.device || this.device.id !== deviceId || this.state.status === 'scanning') throw new Error('Choose the bike first');
-    const device = this.device;
+    clearTimeout(this.retryTimer); this.retryTimer = undefined;
     const previous = this.connection; this.connection = undefined;
-    const generation = ++this.generation;
+    this.generation += 1;
     if (previous) this.cleanup(previous, true);
+    const session: BikeSession = { device: this.device, sequence: 0, attempts: 0, established: false };
+    this.session = session;
+    await this.open(session, false);
+  }
+
+  private async open(session: BikeSession, recovering: boolean): Promise<void> {
+    if (this.session !== session) return;
+    const device = session.device;
     const connection: Connection = {
-      generation, device, decoder: new FrameDecoder(), epoch: 0, sequence: 0,
+      generation: ++this.generation, session, decoder: new FrameDecoder(),
       onValue: event => this.receive(connection, event),
       onDisconnect: () => {
         // A queued disconnect event from a superseded attempt can arrive after this GATT has reconnected.
         if (device.gatt?.connected) return;
-        this.failed(connection, new Error('The bike disconnected. Reconnect to resume; this gap is retained in any active recording.'), false);
+        this.recover(connection, new Error('Bike disconnected.'), true);
       },
     };
     this.connection = connection;
     device.addEventListener('gattserverdisconnected', connection.onDisconnect);
-    this.update({ status: 'connecting', error: undefined, deviceId: device.id, deviceName: device.name, controllerModel: undefined, firmwareLabel: undefined });
+    if (!recovering) this.update({ status: 'connecting', error: undefined, recoverableConnectionError: false,
+      deviceId: device.id, deviceName: device.name, controllerModel: undefined, firmwareLabel: undefined });
+    let transportFailure = true;
     try {
-      const server = await device.gatt?.connect();
-      if (!this.current(connection)) {
-        // connect() itself is not cancellable. Close a late orphan, unless a newer attempt owns this same GATT device.
-        if (this.connection?.device !== device) server?.disconnect();
-        return;
-      }
-      if (!server) throw new Error('Bluetooth GATT is unavailable');
-      const service = await server.getPrimaryService(UART_SERVICE);
-      if (!this.current(connection)) return;
-      const writer = await service.getCharacteristic(UART_WRITE);
-      if (!this.current(connection)) return;
+      const gatt = device.gatt;
+      if (!gatt) throw new Error('Bluetooth GATT is unavailable');
+      const server = await this.setupStep(connection, () => gatt.connect().then(server => {
+        // A timed-out browser connect may still finish. Never close a newer attempt on the same device.
+        if (!this.current(connection) && this.connection?.session.device !== device) server.disconnect();
+        return server;
+      }), 'Bluetooth connection timed out. Disconnect other bike apps and try again.');
+      const service = await this.setupStep(connection, () => server.getPrimaryService(UART_SERVICE),
+        'Bike service discovery timed out. Restart the bike and try again.');
+      const writer = await this.setupStep(connection, () => service.getCharacteristic(UART_WRITE),
+        'Bike connection setup timed out. Restart the bike and try again.');
       connection.writer = writer;
-      const reader = await service.getCharacteristic(UART_NOTIFY);
-      if (!this.current(connection)) return;
+      const reader = await this.setupStep(connection, () => service.getCharacteristic(UART_NOTIFY),
+        'Bike connection setup timed out. Restart the bike and try again.');
       connection.reader = reader;
       reader.addEventListener('characteristicvaluechanged', connection.onValue);
-      await reader.startNotifications();
-      if (!this.current(connection)) return;
+      await this.setupStep(connection, () => reader.startNotifications(),
+        'Bike notifications timed out. Reconnect and try again.');
       const identity = await this.request(connection, 'identity');
       if (!this.current(connection)) return;
+      transportFailure = false;
       const controller = identifyController(identity);
       this.knownControllers.set(device.id, controller.identity);
       this.discovered({ id: device.id, name: device.name ?? 'CYC bike', rssi: 0,
         controllerModel: controller.identity.controllerModel, firmwareLabel: controller.identity.firmwareLabel });
-      connection.epoch = this.now();
-      this.update({ status: 'connected', deviceId: device.id, deviceName: device.name ?? 'CYC bike',
+      const epoch = session.epoch ??= this.now();
+      session.established = true;
+      this.update({ status: recovering ? 'reconnecting' : 'connected', deviceId: device.id, deviceName: device.name ?? 'CYC bike',
         controllerModel: controller.identity.controllerModel, firmwareLabel: controller.identity.firmwareLabel });
       const poll = async (): Promise<void> => {
         if (!this.current(connection)) return;
         const start = this.now();
+        let payload: Uint8Array;
+        try { payload = await this.request(connection, 'selective'); }
+        catch (error) { this.recover(connection, error); return; }
+        if (!this.current(connection)) return;
         try {
-          const payload = await this.request(connection, 'selective');
-          if (!this.current(connection)) return;
           const values = controller.adapter.decodeTelemetry(payload);
-          this.publish(toTelemetrySample(values, { timestamp: new Date().toISOString(), elapsedSeconds: this.now() - connection.epoch, sequence: connection.sequence++ }, controller.identity));
+          const now = this.now();
+          connection.stableSince ??= now;
+          if (now - connection.stableSince >= STABLE_SECONDS) session.attempts = 0;
+          if (this.state.status !== 'connected') this.update({ status: 'connected', error: undefined, recoverableConnectionError: false });
+          this.publish(toTelemetrySample(values, { timestamp: new Date().toISOString(), elapsedSeconds: now - epoch, sequence: session.sequence++ }, controller.identity));
           if (!this.current(connection)) return;
           connection.timer = setTimeout(() => { void poll(); }, Math.max(0, 1000 / this.hz - (this.now() - start) * 1000));
         } catch (error) { this.failed(connection, error); }
@@ -212,15 +289,23 @@ export class BrowserAdapter extends ForegroundAdapter {
       void poll();
     } catch (error) {
       if (!this.current(connection)) return;
+      if (recovering) {
+        if (transportFailure) this.recover(connection, error);
+        else this.failed(connection, error);
+        return;
+      }
       this.failed(connection, error); throw error;
     }
   }
 
   async disconnect(): Promise<void> {
     this.generation += 1;
+    this.session = undefined;
+    clearTimeout(this.retryTimer); this.retryTimer = undefined;
     const connection = this.connection; this.connection = undefined;
     if (connection) this.cleanup(connection, true);
-    this.update({ status: 'idle', deviceName: undefined, deviceId: undefined, controllerModel: undefined, firmwareLabel: undefined, error: undefined });
+    this.update({ status: 'idle', deviceName: undefined, deviceId: undefined, controllerModel: undefined, firmwareLabel: undefined,
+      error: undefined, recoverableConnectionError: false });
   }
 }
 export const deviceAdapter = new BrowserAdapter();

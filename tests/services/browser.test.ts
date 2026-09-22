@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserAdapter } from '../../src/services/device.web';
+import { SessionPresentation } from '../../src/services/session-presentation';
 import { crc16Xmodem, UART_NOTIFY, UART_WRITE } from '../../src/core/protocol';
 import fixture from '../fixtures/protocol.json';
 import { hex, toHex } from '../core/helpers';
@@ -165,7 +166,7 @@ describe('foreground browser BLE lifecycle', () => {
     const h = harness(); h.service.writer.onWrite = bytes => { if (bytes[2] === 111) h.service.reader.identity(); };
     await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
     h.clock.seconds = 3; h.service.reader.telemetry(); await flush();
-    expect(h.events.sample).not.toHaveBeenCalled(); expect((await h.adapter.getState()).status).toBe('error');
+    expect(h.events.sample).not.toHaveBeenCalled(); expect((await h.adapter.getState()).status).toBe('reconnecting');
   });
 
   it('applies the deadline if an on-time response waits behind a delayed write continuation', async () => {
@@ -199,10 +200,69 @@ describe('foreground browser BLE lifecycle', () => {
     });
     if (stage === 'notifications') h.service.reader.startNotifications.mockImplementationOnce(async () => { await gate.promise; return h.service.reader; });
     await h.adapter.startScan(); const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
-    await flush(); await h.adapter.disconnect(); gate.resolve(); await connecting; await flush();
+    await flush(); await h.adapter.disconnect(); await connecting;
+    expect(vi.getTimerCount()).toBe(0);
+    gate.resolve(); await flush();
     expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
     expect((await h.adapter.getState()).status).toBe('idle');
     expect(h.events.sample).not.toHaveBeenCalled();
+  });
+
+  it.each(['gatt', 'service', 'writer', 'reader', 'notifications'] as const)('times out stalled %s setup and allows a fresh connection', async stage => {
+    const h = harness(); const gate = deferred<void>();
+    if (stage === 'gatt') h.device.gatt.connect.mockImplementationOnce(async () => { await gate.promise; h.device.gatt.connected = true; return h.device.gatt; });
+    if (stage === 'service') h.device.gatt.getPrimaryService.mockImplementationOnce(async () => { await gate.promise; return h.service; });
+    if (stage === 'writer' || stage === 'reader') {
+      const lookup = h.service.getCharacteristic.getMockImplementation()!;
+      let delayed = false;
+      h.service.getCharacteristic.mockImplementation(async uuid => {
+        if (!delayed && uuid === (stage === 'writer' ? UART_WRITE : UART_NOTIFY)) { delayed = true; await gate.promise; }
+        return lookup(uuid);
+      });
+    }
+    if (stage === 'notifications') h.service.reader.startNotifications.mockImplementationOnce(async () => { await gate.promise; return h.service.reader; });
+    await h.adapter.startScan();
+    const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
+    await flush(); await vi.advanceTimersByTimeAsync(14999);
+    expect((await h.adapter.getState()).status).toBe('connecting');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await connecting).toBeInstanceOf(Error);
+    expect(await h.adapter.getState()).toMatchObject({ status: 'error', error: expect.stringContaining('timed out') });
+    expect(h.device.gatt.connected).toBe(false);
+    expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    replyAutomatically(h.service);
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const disconnects = h.device.gatt.disconnect.mock.calls.length;
+    gate.resolve(); await flush();
+    expect(h.device.gatt.disconnect).toHaveBeenCalledTimes(disconnects);
+    expect((await h.adapter.getState()).status).toBe('connected');
+    expect(h.events.sample).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a GATT connection that succeeds after its timeout when there is no retry', async () => {
+    const h = harness(); const gate = deferred<void>();
+    h.device.gatt.connect.mockImplementationOnce(async () => { await gate.promise; h.device.gatt.connected = true; return h.device.gatt; });
+    await h.adapter.startScan();
+    const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
+    await vi.advanceTimersByTimeAsync(15000); await connecting;
+    gate.resolve(); await flush();
+    expect(h.device.gatt.connected).toBe(false);
+    expect(h.device.gatt.getPrimaryService).not.toHaveBeenCalled();
+    expect((await h.adapter.getState()).status).toBe('error');
+  });
+
+  it('enforces the setup deadline after tab suspension even before its timeout callback runs', async () => {
+    const h = harness(); const service = deferred<FakeService>();
+    h.device.gatt.getPrimaryService.mockReturnValueOnce(service.promise);
+    await h.adapter.startScan();
+    const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
+    await flush(); h.clock.seconds = 15.001; service.resolve(h.service);
+    expect(await connecting).toBeInstanceOf(Error);
+    expect((await h.adapter.getState()).status).toBe('error');
+    expect(h.service.getCharacteristic).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('does not let an old delayed setup failure disconnect a successful newer connection', async () => {
@@ -246,8 +306,8 @@ describe('foreground browser BLE lifecycle', () => {
     const h = harness(); replyAutomatically(h.service);
     await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
     expect(h.events.sample).toHaveBeenCalledTimes(1);
-    h.device.gatt.disconnect(); h.service.reader.telemetry(); await vi.advanceTimersByTimeAsync(1000);
-    expect((await h.adapter.getState()).status).toBe('error');
+    h.device.gatt.disconnect(); h.service.reader.telemetry(); await vi.advanceTimersByTimeAsync(999);
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
     expect(h.events.sample).toHaveBeenCalledTimes(1);
     expect(h.service.writer.writeValueWithoutResponse).toHaveBeenCalledTimes(2);
   });
@@ -260,5 +320,170 @@ describe('foreground browser BLE lifecycle', () => {
     expect((await h.adapter.getState()).status).toBe('connected');
     h.clock.seconds = 0.5; await vi.advanceTimersByTimeAsync(500);
     expect(h.events.sample).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('automatic browser BLE recovery', () => {
+  it('recovers repeated 90-second drops without a picker, resetting stable retry budgets but not the sample timeline', async () => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    for (let cycle = 1; cycle <= 8; cycle += 1) {
+      h.clock.seconds = cycle * 90; await vi.advanceTimersByTimeAsync(500);
+      const before = h.events.sample.mock.lastCall![0];
+      h.device.gatt.disconnect();
+      expect(await h.adapter.getState()).toMatchObject({ status: 'reconnecting', recoverableConnectionError: true, deviceId: h.device.id });
+      h.clock.seconds += 0.2; await vi.advanceTimersByTimeAsync(0);
+      expect(await h.adapter.getState()).toMatchObject({ status: 'connected', error: undefined, recoverableConnectionError: false });
+      expect(h.device.gatt.connect).toHaveBeenCalledTimes(cycle + 1);
+      const after = h.events.sample.mock.lastCall![0];
+      expect(after.elapsedSeconds).toBeCloseTo(cycle * 90 + 0.2);
+      expect(after.sequence).toBe(before.sequence + 1);
+      expect(after.connectionEpoch).not.toBe(before.connectionEpoch);
+    }
+    expect(h.requestDevice).toHaveBeenCalledTimes(1);
+    expect(h.service.reader.startNotifications).toHaveBeenCalledTimes(9);
+    expect(h.service.writer.writeValueWithoutResponse.mock.calls.filter(([bytes]) => bytes[2] === 111)).toHaveLength(9);
+  });
+
+  it('holds presentation for six seconds without inventing samples and ends recovery only on fresh telemetry', async () => {
+    const h = harness(); replyAutomatically(h.service);
+    const presentation = new SessionPresentation(() => h.clock.seconds); presentation.setActive(true);
+    const unsubscribe = h.adapter.subscribe({ state: state => presentation.receiveState(state), sample: sample => presentation.receiveSample(sample), device: () => {} });
+    try {
+      await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+      h.clock.seconds = 0.25; await vi.advanceTimersByTimeAsync(250);
+      const connect = deferred<FakeGatt>(); h.device.gatt.connect.mockReturnValueOnce(connect.promise);
+      h.device.gatt.disconnect();
+      expect(presentation.getSnapshot().display).toBe('held');
+      h.clock.seconds = 5.999; await vi.advanceTimersByTimeAsync(5749);
+      expect(presentation.getSnapshot().display).toBe('held');
+      expect(h.events.sample).toHaveBeenCalledTimes(1);
+      h.clock.seconds = 6; await vi.advanceTimersByTimeAsync(1);
+      expect(presentation.getSnapshot().display).toBe('unavailable');
+      h.service.writer.onWrite = bytes => { if (bytes[2] === 111) h.service.reader.identity(); };
+      h.device.gatt.connected = true; connect.resolve(h.device.gatt); await flush();
+      expect(await h.adapter.getState()).toMatchObject({ status: 'reconnecting', recoverableConnectionError: true });
+      expect(presentation.getSnapshot().display).toBe('unavailable');
+      expect(h.events.sample).toHaveBeenCalledTimes(1);
+      h.clock.seconds = 6.1; h.service.reader.telemetry(); await flush();
+      expect(await h.adapter.getState()).toMatchObject({ status: 'connected', recoverableConnectionError: false, error: undefined });
+      expect(h.events.sample).toHaveBeenCalledTimes(2);
+      expect(h.events.sample.mock.lastCall![0]).toMatchObject({ sequence: 1, elapsedSeconds: 6.1 });
+      h.clock.seconds = 6.35; await vi.advanceTimersByTimeAsync(250);
+      expect(presentation.getSnapshot().display).toBe('live');
+    } finally { unsubscribe(); presentation.setActive(false); }
+  });
+
+  it('backs off 1, 2, 4, 8, 16 seconds and stops after five failed retries outside a ride', async () => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    h.device.gatt.connect.mockRejectedValue(new Error('GATT unavailable'));
+    h.device.gatt.disconnect();
+    for (const [index, seconds] of [1, 2, 4, 8, 16].entries()) {
+      await vi.advanceTimersByTimeAsync(seconds * 1000 - 1);
+      expect(h.device.gatt.connect).toHaveBeenCalledTimes(index + 1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.device.gatt.connect).toHaveBeenCalledTimes(index + 2);
+    }
+    expect(await h.adapter.getState()).toMatchObject({ status: 'error', recoverableConnectionError: false });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(h.events.sample).toHaveBeenCalledTimes(1);
+    await h.adapter.startScan(); expect(h.requestDevice).toHaveBeenCalledTimes(2);
+  });
+
+  it('continues every 30 seconds during a ride, preserves its rate and stops recovery when the ride releases ownership', async () => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 4 }); await flush();
+    h.adapter.setWorkoutOwner(h.device.id);
+    h.device.gatt.connect.mockRejectedValue(new Error('GATT unavailable')); h.device.gatt.disconnect();
+    await vi.advanceTimersByTimeAsync(31000);
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(29999); expect(h.device.gatt.connect).toHaveBeenCalledTimes(6);
+    h.device.gatt.connect.mockImplementation(async () => { h.device.gatt.connected = true; return h.device.gatt; });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(7);
+    const samples = h.events.sample.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(249); expect(h.events.sample).toHaveBeenCalledTimes(samples);
+    await vi.advanceTimersByTimeAsync(1); expect(h.events.sample).toHaveBeenCalledTimes(samples + 1);
+    h.device.gatt.disconnect();
+    await expect(h.adapter.setSampleRate(8)).rejects.toThrow('Finish the ride');
+    await expect(h.adapter.startScan()).rejects.toThrow('Finish the ride');
+    await expect(h.adapter.connect({ deviceId: 'other-bike', hz: 4 })).rejects.toThrow('Finish the ride');
+    h.adapter.setWorkoutOwner(null);
+    expect((await h.adapter.getState()).status).toBe('idle');
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(7);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not reset the retry budget just because identity succeeds on a flapping connection', async () => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    h.service.writer.onWrite = bytes => { if (bytes[2] === 111) h.service.reader.identity(); };
+    h.device.gatt.disconnect();
+    for (const seconds of [1, 2, 4, 8, 16]) {
+      await vi.advanceTimersByTimeAsync(seconds * 1000);
+      expect((await h.adapter.getState()).status).toBe('reconnecting');
+      await vi.advanceTimersByTimeAsync(2500);
+    }
+    expect((await h.adapter.getState()).status).toBe('error');
+    expect(h.events.sample).toHaveBeenCalledTimes(1);
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(6);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['timeout', 'write failure'])('recovers a telemetry %s without a disconnect event', async failure => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    if (failure === 'timeout') h.service.writer.onWrite = () => {};
+    else h.service.writer.writeValueWithoutResponse.mockRejectedValueOnce(new Error('GATT write failed'));
+    await vi.advanceTimersByTimeAsync(failure === 'timeout' ? 3000 : 500);
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
+    replyAutomatically(h.service); await vi.advanceTimersByTimeAsync(1000);
+    expect((await h.adapter.getState()).status).toBe('connected');
+    expect(h.events.sample).toHaveBeenCalledTimes(2);
+    expect(h.requestDevice).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['backoff', 'setup'])('cancels recovery during %s and ignores late completion', async stage => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const gate = deferred<FakeGatt>(); h.device.gatt.connect.mockReturnValueOnce(gate.promise);
+    h.device.gatt.disconnect();
+    await expect(h.adapter.startScan()).rejects.toThrow('Disconnect');
+    if (stage === 'setup') await vi.advanceTimersByTimeAsync(1000);
+    const connects = h.device.gatt.connect.mock.calls.length;
+    await h.adapter.disconnect();
+    h.device.gatt.connected = true; gate.resolve(h.device.gatt); await flush();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect((await h.adapter.getState()).status).toBe('idle');
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(connects);
+    expect(h.events.sample).toHaveBeenCalledTimes(1);
+    if (stage === 'setup') expect(h.device.gatt.connected).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('treats an unsupported identity on recovery as terminal rather than retrying unsafe telemetry', async () => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    h.device.gatt.disconnect();
+    h.service.writer.onWrite = () => h.service.reader.identity(111, 'X120');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await h.adapter.getState()).toMatchObject({ status: 'error', error: expect.stringContaining('Unsupported controller') });
+    expect(h.events.sample).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('rejects malformed telemetry without automatic retries', async () => {
+    const h = harness(); replyAutomatically(h.service);
+    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    h.service.writer.onWrite = () => {
+      const payload = Uint8Array.of(50, 0); const crc = crc16Xmodem(payload);
+      h.service.reader.notify(Uint8Array.of(2, payload.length, ...payload, crc >> 8, crc & 255, 3));
+    };
+    await vi.advanceTimersByTimeAsync(500);
+    expect((await h.adapter.getState()).status).toBe('error');
+    expect(h.events.sample).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

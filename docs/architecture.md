@@ -1,6 +1,10 @@
 # Architecture
 
-Power Log uses Expo/React Native on iPhone, React Native Web in the browser, and SwiftUI on Apple Watch. Native Swift owns Bluetooth, sensors and durable recording independently of React. Web recording requires an active page and uses IndexedDB. Android is not implemented.
+Power Log uses Expo/React Native on iPhone, React Native Web in the browser, and SwiftUI on Apple Watch. Native Swift owns Bluetooth, sensors and durable recording independently of React. Web recording requires an active page and uses IndexedDB. Android uses the web app in a compatible browser; there is no native Android app.
+
+Browser Bluetooth setup is cancellable and gives each connection/discovery/notification step 15 seconds; controller requests have a 2.5-second response deadline. Cancelled or expired attempts cannot publish samples or change a newer connection.
+
+After a transport interruption, web reconnects to the already selected bike, rediscovers its characteristics and validates identity before resuming telemetry. It matches native retry timing: immediate after a peer disconnect with 30 seconds of stable telemetry, otherwise 1/2/4/8/16 seconds, then every 30 seconds while a ride remains active. Thirty seconds of fresh telemetry resets the retry budget; identity alone does not end recovery. Explicit Disconnect cancels retries. Automatic recovery preserves the sample timeline, marks a new transport epoch and records only actual responses. The shared six-second display hold masks brief gaps without changing stored data. See Chrome's [automatic reconnect example](https://googlechrome.github.io/samples/web-bluetooth/automatic-reconnect.html).
 
 ```mermaid
 flowchart LR

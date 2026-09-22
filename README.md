@@ -15,7 +15,7 @@ Cycling rides and CYC X6/X12 telemetry for iPhone, Apple Watch and the web. Reco
 | Apple Watch | HealthKit/GPS, ride controls and automatic transfer to iPhone |
 | Web | Foreground Bluetooth recording, IndexedDB history, CSV import/export and responsive charts |
 
-Android is not implemented; macOS uses the web app. Web Bluetooth needs a compatible browser and HTTPS or localhost. Keep the page active while recording; browser storage can be cleared or evicted.
+Android and macOS use the web app; there is no native Android app. Web Bluetooth needs a compatible browser, such as Chrome on Android, and HTTPS or localhost. Keep the page active while recording; browser storage can be cleared or evicted.
 
 Motor input power is electrical battery input, separate from rider power. Missing measurements remain unavailable; [measurement rules](docs/measurements.md) explain units and distance sources.
 
