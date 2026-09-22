@@ -1,0 +1,295 @@
+{
+  "policyVersion": 1,
+  "defaults": {
+    "model": "X6",
+    "protocol": "5.3",
+    "identity": "fixture-bike",
+    "connectionEpoch": "connection-1",
+    "continuity": 0,
+    "active": true
+  },
+  "cases": [
+    {
+      "name": "linear speed and clipped range",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 2
+        },
+        {
+          "time": 2,
+          "speed": 6
+        },
+        {
+          "time": 4,
+          "speed": 6
+        }
+      ],
+      "distance": 20,
+      "covered": 4,
+      "intervals": 2,
+      "range": {
+        "start": 1,
+        "end": 3,
+        "distance": 11,
+        "covered": 2
+      }
+    },
+    {
+      "name": "valid zero",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 0
+        },
+        {
+          "time": 1,
+          "speed": 0
+        }
+      ],
+      "distance": 0,
+      "covered": 1,
+      "intervals": 1
+    },
+    {
+      "name": "gap reanchors",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10
+        },
+        {
+          "time": 1,
+          "speed": 10
+        },
+        {
+          "time": 4,
+          "speed": 10
+        },
+        {
+          "time": 5,
+          "speed": 10
+        }
+      ],
+      "distance": 20,
+      "covered": 2,
+      "intervals": 2
+    },
+    {
+      "name": "pause retains raw and excludes movement",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10
+        },
+        {
+          "time": 1,
+          "speed": 10
+        },
+        {
+          "time": 2,
+          "speed": 10,
+          "active": false
+        },
+        {
+          "time": 3,
+          "speed": 10,
+          "continuity": 1
+        },
+        {
+          "time": 4,
+          "speed": 10,
+          "continuity": 1
+        }
+      ],
+      "distance": 20,
+      "covered": 2,
+      "intervals": 2
+    },
+    {
+      "name": "short reconnect reanchors",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10
+        },
+        {
+          "time": 1,
+          "speed": 10
+        },
+        {
+          "time": 1.1,
+          "speed": 10,
+          "connectionEpoch": "connection-2"
+        },
+        {
+          "time": 2.1,
+          "speed": 10,
+          "connectionEpoch": "connection-2"
+        }
+      ],
+      "distance": 20,
+      "covered": 2,
+      "intervals": 2
+    },
+    {
+      "name": "invalid and unknown profile break",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 4
+        },
+        {
+          "time": 1,
+          "speed": -1
+        },
+        {
+          "time": 2,
+          "speed": 4
+        },
+        {
+          "time": 3,
+          "speed": 4,
+          "protocol": "9.9"
+        },
+        {
+          "time": 4,
+          "speed": 4
+        },
+        {
+          "time": 5,
+          "speed": 4
+        }
+      ],
+      "distance": 4,
+      "covered": 1,
+      "intervals": 1
+    },
+    {
+      "name": "backward clock breaks",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 4
+        },
+        {
+          "time": 1,
+          "speed": 4
+        },
+        {
+          "time": 0.5,
+          "speed": 4
+        },
+        {
+          "time": 1.5,
+          "speed": 4
+        },
+        {
+          "time": 2,
+          "speed": 4
+        }
+      ],
+      "distance": 6,
+      "covered": 1.5,
+      "intervals": 2
+    },
+    {
+      "name": "different controller identity",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 4
+        },
+        {
+          "time": 1,
+          "speed": 4,
+          "identity": "other-bike"
+        },
+        {
+          "time": 2,
+          "speed": 4,
+          "identity": "other-bike"
+        }
+      ],
+      "distance": 4,
+      "covered": 1,
+      "intervals": 1
+    },
+    {
+      "name": "exact 40 metres per second accepted",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 40
+        },
+        {
+          "time": 2.5,
+          "speed": 40
+        }
+      ],
+      "distance": 100,
+      "covered": 2.5,
+      "intervals": 1
+    },
+    {
+      "name": "above speed limit resets predecessor",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10
+        },
+        {
+          "time": 1,
+          "speed": 40.001
+        },
+        {
+          "time": 2,
+          "speed": 10
+        },
+        {
+          "time": 3,
+          "speed": 10
+        }
+      ],
+      "distance": 10,
+      "covered": 1,
+      "intervals": 1
+    },
+    {
+      "name": "missing identity unavailable",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10,
+          "identity": ""
+        },
+        {
+          "time": 1,
+          "speed": 10,
+          "identity": ""
+        }
+      ],
+      "distance": 0,
+      "covered": 0,
+      "intervals": 0
+    },
+    {
+      "name": "missing connection evidence unavailable",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10,
+          "connectionEpoch": ""
+        },
+        {
+          "time": 1,
+          "speed": 10,
+          "connectionEpoch": ""
+        }
+      ],
+      "distance": 0,
+      "covered": 0,
+      "intervals": 0
+    }
+  ]
+}

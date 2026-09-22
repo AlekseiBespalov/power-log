@@ -1,0 +1,99 @@
+{
+  "provenance": "Self-contained synthetic vectors from the original Python reference tests; live payloads carry measurements only. No serials, BLE identifiers, or original sample timestamps are retained.",
+  "crc": {
+    "ascii": "123456789",
+    "expected": 12739
+  },
+  "requests": {
+    "identity": "02016f9d4903",
+    "selective": "02053203c0fb8f5a1a03"
+  },
+  "framing": {
+    "single": "020104408403",
+    "corrupted": "020104408503",
+    "longPayloadHex": "424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242",
+    "longFrameHex": "03012c424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242595c03"
+  },
+  "identity": {
+    "origin": "synthetic from Python test_identity_product",
+    "payloadHex": "6f0503583620323032353037323500000000000000000000000000",
+    "controllerModel": "X6",
+    "firmwareLabel": "20250725"
+  },
+  "telemetry": [
+    {
+      "name": "synthetic-slots",
+      "origin": "synthetic from Python test_cyc_specific_slots_and_electrical_power",
+      "payloadHex": "3200405108000000fa0209000b71b0000007e90000009f",
+      "mask": 4215048,
+      "expected": {
+        "cadenceRpm": 75,
+        "pedalTorqueNm": 20.25,
+        "humanPowerW": 159,
+        "motorInputPowerW": 130.25
+      }
+    },
+    {
+      "name": "signed-temperature-current",
+      "origin": "synthetic from Python test_signed_current_and_temperature",
+      "payloadHex": "3200000009ffe7ffffff88",
+      "mask": 9,
+      "expected": {
+        "controllerTempC": -2.5,
+        "batteryCurrentA": -1.2
+      }
+    },
+    {
+      "name": "live-stationary",
+      "origin": "telemetry-only live X6 firmware 20250604 sample already published in Python test_real_stationary_x6_sample; decoding evidence, not physical calibration",
+      "payloadHex": "3203c0fb8f00f600d9000000000000000000000000021e000000000000000000000000000000520000000e0000000000000000000100",
+      "frameHex": "02363203c0fb8f00f600d9000000000000000000000000021e000000000000000000000000000000520000000e00000000000000000001000a3503",
+      "mask": 62978959,
+      "expected": {
+        "controllerTempC": 24.6,
+        "motorTempC": 21.7,
+        "motorCurrentA": 0.0,
+        "batteryCurrentA": 0.0,
+        "motorRpm": 0,
+        "batteryVoltageV": 54.2,
+        "consumedAh": 0.0,
+        "consumedWh": 0.0,
+        "cadenceRpm": 0.0,
+        "throttleVoltageV": 0.82,
+        "pedalTorqueNm": 0.14,
+        "faultCode": 0,
+        "humanPowerW": 0,
+        "speedRaw": 0.0,
+        "raceMode": 1,
+        "assistLevel": 0,
+        "motorInputPowerW": 0.0
+      }
+    },
+    {
+      "name": "live-unloaded-pedaling",
+      "origin": "one telemetry-only payload selected from the verified Python unloaded pedal capture; identifiers and original timestamps omitted; decoding evidence, not physical calibration",
+      "payloadHex": "3203c0fb8f00f900d9000000000000000000000000021e0000000000000000000229ff00000052000000550000000001000001790100",
+      "frameHex": "02363203c0fb8f00f900d9000000000000000000000000021e0000000000000000000229ff00000052000000550000000001000001790100761c03",
+      "mask": 62978959,
+      "expected": {
+        "controllerTempC": 24.9,
+        "motorTempC": 21.7,
+        "motorCurrentA": 0.0,
+        "batteryCurrentA": 0.0,
+        "motorRpm": 0,
+        "batteryVoltageV": 54.2,
+        "consumedAh": 0.0,
+        "consumedWh": 0.0,
+        "cadenceRpm": 14.1823,
+        "throttleVoltageV": 0.82,
+        "pedalTorqueNm": 0.85,
+        "faultCode": 0,
+        "humanPowerW": 1,
+        "speedRaw": 3.77,
+        "raceMode": 1,
+        "assistLevel": 0,
+        "motorInputPowerW": 0.0
+      }
+    }
+  ]
+}

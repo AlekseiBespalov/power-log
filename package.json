@@ -1,0 +1,90 @@
+{
+  "name": "power-log",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "expo start --dev-client",
+    "web": "expo start --web",
+    "ios": "expo run:ios --device",
+    "prebuild:ios": "expo prebuild --platform ios --no-install",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "benchmark:browser": "POWER_LOG_BROWSER_STRESS=1 vitest run --config vitest.browser.config.ts",
+    "test:watch": "vitest",
+    "test:swift": "sh scripts/test-swift.sh",
+    "test:ios-bundle": "node scripts/check-ios-bundle.mjs",
+    "test:native-config": "node --test tests/native-config/*.test.cjs",
+    "test:workout": "sh tests/workout-native/run.sh",
+    "test:e2e": "playwright test",
+    "build:web": "node scripts/build-pages.mjs /",
+    "check": "npm run typecheck && npm run lint && npm test && npm run test:native-config && npm run test:security && npm run test:notices && npm run build:web",
+    "doctor:local": "node scripts/check-tools.mjs",
+    "benchmark:native": "sh scripts/benchmark-native.sh",
+    "format": "sh scripts/format.sh --write",
+    "format:check": "sh scripts/format.sh --check",
+    "postinstall": "patch-package --error-on-fail",
+    "build:pages": "node scripts/build-pages.mjs",
+    "test:security": "node --test tests/security/*.test.cjs",
+    "test:notices": "node --test tests/web-notices/*.test.mjs",
+    "test:public-web": "npm run build:pages && node --test tests/public-web/*.test.mjs"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "57.0.15",
+    "expo": "^57.0.23",
+    "expo-build-properties": "^57.0.20",
+    "expo-constants": "~57.0.17",
+    "expo-dev-client": "~57.0.19",
+    "expo-document-picker": "~57.0.2",
+    "expo-file-system": "~57.0.6",
+    "expo-haptics": "~57.0.3",
+    "expo-linking": "~57.0.10",
+    "expo-modules-core": "~57.0.16",
+    "expo-router": "~57.0.21",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/react": "~19.2.2",
+    "@types/web-bluetooth": "^0.0.21",
+    "eslint": "^9.39.0",
+    "eslint-config-expo": "~57.0.2",
+    "prettier": "^3.9.6",
+    "typescript": "~6.0.3",
+    "vitest": "^4.0.18",
+    "patch-package": "8.0.1"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlekseiBespalov/power-log.git"
+  },
+  "description": "CYC e-bike telemetry and cycling rides for iPhone, Apple Watch and the web.",
+  "homepage": "https://github.com/AlekseiBespalov/power-log#readme",
+  "bugs": {
+    "url": "https://github.com/AlekseiBespalov/power-log/issues"
+  },
+  "overrides": {
+    "query-string": {
+      "decode-uri-component": "0.5.0"
+    },
+    "xcode": {
+      "uuid": "11.1.1"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+node_modules
+ios
+android
+dist
+.expo
+playwright-report
+test-results
+artifacts
+coverage
+package-lock.json
+*.md
