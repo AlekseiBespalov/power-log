@@ -83,6 +83,11 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
     }, { id, options });
     expect(foreign.state.pendingAction).toBe('anotherBrowserTab'); expect(foreign.errors.every(Boolean)).toBe(true);
     await page.close();
+    // Page closure can precede Web Locks cleanup in the browser process.
+    await expect.poll(() => other.evaluate(async () => {
+      const { held } = await navigator.locks.query();
+      return held?.some(lock => lock.name === window.rideTests.BROWSER_RECORDING_LOCK);
+    }), { timeout: 3000 }).toBe(false);
     const recovered = await other.evaluate(async id => ({ state: await window.fixture.recorder.getState(), record: await window.rideTests.store.get(id) }), id);
     expect(recovered.record).toMatchObject({ id, phase: 'completed', interrupted: true, elapsedSeconds: 1, timerSeconds: 1, samples: 1, endedAt: '2026-01-01T00:00:01.000Z' });
     expect(recovered.state.pendingAction).toBeNull();

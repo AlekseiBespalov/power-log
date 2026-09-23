@@ -4,6 +4,7 @@ import { browserWorkoutMonitorSource } from '../../src/services/browser-workout-
 import { ForegroundAdapter } from '../../src/services/foreground-adapter';
 import { syntheticSample } from './synthetic-sample';
 import type { ConnectionOptions, TelemetrySample } from '../../src/core/types';
+export { BROWSER_RECORDING_LOCK } from '../../src/services/browser-workout-recorder';
 export { browserRideStore as store, browserDatabase, browserTransaction, idbRequest, BROWSER_BATCH, browserWorkoutMonitorSource as monitor, syntheticSample };
 export { ensureBrowserDistance, peekBrowserDistance, browserDistanceCurrent, browserDistanceStats, browserDistanceLatest, inspectBrowserDistance, plotBrowserDistance } from '../../src/services/browser-distance-store';
 
