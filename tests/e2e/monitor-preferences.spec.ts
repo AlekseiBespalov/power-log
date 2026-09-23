@@ -24,6 +24,8 @@ async function chooseView(page: Page, name: 'Ride' | 'Battery' | 'Temperature') 
   await page.getByTestId('monitor-view-picker').click();
   await page.getByRole('button', { name: new RegExp(`^${name}(?:\\s+✓)?$`) }).click();
   await expect(page.getByTestId('monitor-view-picker')).toHaveAccessibleName(`Choose monitoring view, ${name}`);
+  // Dismissal restores focus and may scroll back to the opener before chart inspection.
+  await expect(page.getByTestId('monitor-menu-dialog')).toHaveCount(0);
 }
 
 async function addMetric(page: Page, name: string) {
@@ -336,6 +338,7 @@ test('chart navigation preserves layout while exact viewport statistics catch up
   await expect(page.getByText('Updating charts…', { exact: true })).toHaveCount(0);
   await page.clock.runFor(350);
   await expect(readout).toContainText(/Min \d/);
+  await expect(readout).not.toContainText('Previous range');
   expect((await chart.boundingBox())!.y).toBeCloseTo(before.y, 1);
   await expect(chart).not.toHaveAttribute('aria-valuetext', /Visible 00:00\.000 to 20:00\.000/);
 });

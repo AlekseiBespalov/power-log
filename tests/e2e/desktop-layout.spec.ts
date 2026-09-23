@@ -13,6 +13,7 @@ async function openExample(page: Page) {
 async function chooseBattery(page: Page) {
   await page.getByTestId('monitor-view-picker').click();
   await page.getByRole('button', { name: /^Battery(?:\s+✓)?$/ }).click();
+  await expect(page.getByTestId('monitor-menu-dialog')).toHaveCount(0);
 }
 const cardOrder = (page: Page) => page.getByTestId('monitor-chart-grid').locator(':scope > [data-testid^="monitor-card-"]').evaluateAll(elements => elements.map(element => element.getAttribute('data-testid')!.replace('monitor-card-', '')));
 const gridColumns = (page: Page) => page.getByTestId('monitor-chart-grid').evaluate(element => getComputedStyle(element).gridTemplateColumns.split(' ').length);
@@ -50,9 +51,10 @@ test('chart handles support repeated drag, keyboard reorder, per-view persistenc
   await openExample(page); await chooseBattery(page);
   await page.getByRole('radio', { name: '2 columns', exact: true }).click();
   await expect.poll(() => cardOrder(page)).toEqual(['batteryVoltageV', 'current', 'power']);
-  await page.getByTestId('monitor-drag-batteryVoltageV').dragTo(page.getByTestId('monitor-card-power'));
+  // Drop on the visible card header; centering an offscreen card can scroll before dragstart.
+  await page.getByTestId('monitor-drag-batteryVoltageV').dragTo(page.getByTestId('monitor-card-power'), { targetPosition: { x: 24, y: 24 } });
   await expect.poll(() => cardOrder(page)).toEqual(['current', 'power', 'batteryVoltageV']);
-  await page.getByTestId('monitor-drag-power').dragTo(page.getByTestId('monitor-card-current'));
+  await page.getByTestId('monitor-drag-power').dragTo(page.getByTestId('monitor-card-current'), { targetPosition: { x: 24, y: 24 } });
   await expect.poll(() => cardOrder(page)).toEqual(['power', 'current', 'batteryVoltageV']);
   await page.getByTestId('monitor-drag-power').focus();
   await page.getByTestId('monitor-drag-power').press('ArrowRight');
