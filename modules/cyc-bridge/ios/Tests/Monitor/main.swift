@@ -147,9 +147,17 @@ var afterFailure = first
 let nextObservation = UUID().uuidString.lowercased()
 afterFailure["observationId"] = nextObservation; afterFailure["timestamp"] = stamp(2)
 afterFailure["observationSequence"] = "2"
-canonical.beforeCommitForTesting = { throw PowerLogStorageError.sqlite(13, "Injected live append failure") }
+// Distance derivation also commits in the background; fail only this observation's transaction.
+try canonical.read { db in
+  canonical.beforeCommitForTesting = {
+    if try db.scalarInt("SELECT count(*) FROM collection_memberships WHERE collection_id=? AND event_id=?", [.text(liveID), .text(nextObservation)]) == 1 {
+      throw PowerLogStorageError.sqlite(13, "Injected live append failure")
+    }
+  }
+}
+check(try canonical.transaction(priority: .background) { _ in true }, "live fault injection leaves unrelated commits available")
 do { try reader.appendLive(afterFailure, elapsedSeconds: 2); fatalError("failed commit expected") } catch { assertions += 1 }
-canonical.beforeCommitForTesting = nil
+try canonical.read { _ in canonical.beforeCommitForTesting = nil }
 do { _ = try reader.describeSource(MonitorRequest()); fatalError("capture error expected") } catch { assertions += 1 }
 try reader.appendLive(afterFailure, elapsedSeconds: 2)
 check(try reader.describeSource(MonitorRequest())["sourceId"] as? String == "live:\(liveID)", "successful live commit clears prior capture error")
