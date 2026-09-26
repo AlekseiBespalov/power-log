@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Body, Button, Card, Chip, colors, formatDuration, Heading, Metric, styles } from '../../components/ui';
 import { ModalDialog } from '../../components/modal-dialog';
@@ -130,7 +130,7 @@ export function SavedWorkouts() {
         </View>}
         {(record.recordGPS ?? !record.indoor) && summary && <RoutePreview points={summary.routePreview} />}
         <MonitorPanel source={monitorSource} embedded />
-        <Body muted>{record.storage === 'browser' ? 'Browser' : record.watchEnabled ? 'Watch + iPhone' : 'iPhone'}{record.storage !== 'browser' ? ` · ${record.healthKitState === 'notRequested' ? 'Saved only in Power Log' : `Health ${record.healthKitState === 'notSaved' ? 'not saved' : record.healthKitState}`}` : ''}{summary && summary.lapCount > 0 ? ` · ${summary.lapCount} laps` : ''}</Body>
+        <Body muted>{record.storage === 'browser' ? 'Browser' : record.watchEnabled ? 'Watch + iPhone' : Platform.OS === 'android' ? 'Android' : 'iPhone'}{record.storage !== 'browser' ? ` · ${record.healthKitState === 'notRequested' ? 'Saved only in Power Log' : `Health ${record.healthKitState === 'notSaved' ? 'not saved' : record.healthKitState}`}` : ''}{summary && summary.lapCount > 0 ? ` · ${summary.lapCount} laps` : ''}</Body>
         {record.finalizationState === 'pending' && <Body>Ride ended. Syncing remaining data…</Body>}
         {record.finalizationState === 'partial' && <Body>Incomplete ride. Some sources are unavailable; see notices.</Body>}
         {!ready && <Body muted>{record.watchEnabled ? 'Exports are available when syncing finishes.' : 'Exports are available when saving finishes.'}</Body>}
@@ -138,7 +138,7 @@ export function SavedWorkouts() {
           setRepairingId(record.id);
           try { await workouts.recover(record.id); setRefreshVersion(value => value + 1); }
           finally { setRepairingId(null); }
-          })}>{repairingId === record.id ? 'Checking ride…' : recoveryAction === 'repair' ? 'Finish saving' : 'Retry'}</Button>}
+          })}>{repairingId === record.id ? 'Checking ride…' : recoveryAction === 'repair' ? record.healthProvider === 'healthConnect' ? 'Retry Health Connect' : 'Finish saving' : 'Retry'}</Button>}
         {warnings.length > 0 && <View style={{ gap: 6 }}><Button secondary onPress={() => setNoticeId(showNotices ? null : selectedId)}>{showNotices ? 'Hide notices' : `Recording notices · ${warnings.length}`}</Button>{showNotices && warnings.map(warning => <Body key={warning}>{warning}</Body>)}</View>}
         <View style={styles.row}>
           <Button disabled={workout.busy || !ready} onPress={action(async () => {
@@ -175,7 +175,7 @@ export function SavedWorkouts() {
       <ScrollView testID="delete-ride-scroll" style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 12 }}>
       <Heading>Delete ride?</Heading>
       {removalTarget && <Body muted>{dateLabel(removalTarget.startedAt)}</Body>}
-      <Body>This permanently removes the recording and charts from Power Log.{removalTarget?.watchEnabled ? ' The Watch copy will be removed when it connects.' : ''} Workouts already saved in Apple Health stay there.</Body>
+      <Body>This permanently removes the recording and charts from Power Log.{removalTarget?.watchEnabled ? ' The Watch copy will be removed when it connects.' : ''} Workouts already saved in {Platform.OS === 'android' ? 'Health Connect' : 'Apple Health'} stay there.</Body>
       {workout.error && <Body>{workout.error}</Body>}
       <Button danger disabled={workout.busy || !removalTarget || !workoutCanDelete(records.find(record => record.id === removalTarget.id) ?? removalTarget, workout.state)} onPress={confirmRemoval}>{workout.busy ? 'Deleting…' : 'Delete ride'}</Button>
       <Button secondary disabled={workout.busy} onPress={() => setRemovalTarget(null)}>Keep ride</Button>

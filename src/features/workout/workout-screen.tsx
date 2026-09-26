@@ -51,7 +51,8 @@ function useRideControlState() {
   const visibleError = errorMessage && errorMessage !== dismissedError;
   const askToFinish = () => { if (state.id) { workout.clearError(); setConfirmDiscard(false); setFinishTarget(state.id); } };
   const modeSummary = [options.indoor ? 'Indoor' : 'Outdoor', recordGPS ? 'GPS route' : null, useWatch ? 'Apple Watch' : null,
-    state.capabilities.healthKit ? (options.saveToHealth !== false ? 'Apple Health' : 'No Health save') : null].filter(Boolean).join(' · ');
+    state.capabilities.healthKit || state.capabilities.healthConnect
+      ? (options.saveToHealth !== false ? (state.capabilities.healthConnect ? 'Health Connect' : 'Apple Health') : 'No Health save') : null].filter(Boolean).join(' · ');
   const finishVisible = finishTarget !== null && finishTarget === state.id && ['running', 'paused'].includes(state.phase);
   const finishAvailable = finishVisible && !disabled;
   const finishRide = (discard: boolean) => action(async () => {
@@ -165,14 +166,14 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
     <ModalDialog visible={c.finishVisible} onClose={() => { if (!busy) c.setFinishTarget(null); }} closeLabel="Keep recording" testID="finish-ride-sheet" style={{ width: '100%', maxWidth: 600, alignSelf: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
       <ScrollView testID="finish-ride-scroll" style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 12 }}>
         <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 20, fontWeight: '600' }}>Finish this ride?</Text>
-        <Body>Save the ride, or permanently discard it from Power Log. Discarded rides are not saved as Apple Health workouts.</Body>
+        <Body>Save the ride, or permanently discard it from Power Log.</Body>
         {workout.error && <Text accessibilityRole="alert" style={{ color: colors.red }}>{workout.error}</Text>}
         {!c.confirmDiscard ? <>
           <Button disabled={!c.finishAvailable} onPress={c.finishRide(false)}>Save ride</Button>
           <Button secondary disabled={!c.finishAvailable} onPress={() => c.setConfirmDiscard(true)}>Discard ride</Button>
           <Button secondary disabled={busy} onPress={() => c.setFinishTarget(null)}>Keep recording</Button>
         </> : <>
-          <Body>Discarding removes this ride from Power Log for good. Nothing is saved to Apple Health.</Body>
+          <Body>Discarding removes this ride for good. Nothing will be saved.</Body>
           <Button danger disabled={!c.finishAvailable} onPress={c.finishRide(true)}>Discard for good</Button>
           <Button secondary disabled={busy} onPress={() => c.setConfirmDiscard(false)}>Back</Button>
         </>}

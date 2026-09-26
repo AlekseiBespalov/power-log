@@ -148,7 +148,7 @@ test('intermediate widths keep Controller and GPS readouts stable through resize
   await page.goto('/sessions'); await importFixture(page);
   const chart = page.getByTestId('monitor-chart-speed');
   const results = [];
-  for (const width of [321, 337, 359, 375, 399, 414, 429, 431, 439, 441, 480, 599, 759, 760, 761, 900, 1024, 1100, 1279, 1280, 1281, 1536, 1919]) {
+  for (const width of [321, 337, 359, 375, 399, 414, 429, 431, 439, 441, 448, 480, 599, 759, 760, 761, 900, 1024, 1100, 1279, 1280, 1281, 1536, 1919]) {
     await page.setViewportSize({ width, height: 1000 });
     await chart.press('Escape');
     // RN onLayout and the bounded plot query settle before measuring a new container.
@@ -160,6 +160,12 @@ test('intermediate widths keep Controller and GPS readouts stable through resize
       return JSON.stringify(first.charts) === JSON.stringify(second.charts);
     }).toBe(true);
     const states = [await measurements(page)];
+    if (width === 448) {
+      const gps = (await page.getByTestId('monitor-readout-speedMps').boundingBox())!;
+      const controller = (await page.getByTestId('monitor-readout-controllerSpeedMps').boundingBox())!;
+      expect(controller.y).toBeCloseTo(gps.y, 1);
+      expect(controller.width).toBeCloseTo(gps.width, 1);
+    }
     for (const key of ['ArrowRight', 'ArrowRight', 'Escape'] as const) { await chart.press(key); states.push(await measurements(page)); }
     const violations = { unstable: instability(states), clipped: states.flatMap(value => value.clipped), overflow: states.map(value => value.horizontalOverflow) };
     results.push({ width, states, violations });

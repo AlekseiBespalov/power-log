@@ -1,5 +1,6 @@
 {
-  "platforms": ["apple"],
+  "platforms": ["apple", "android"],
+  "android": { "modules": ["app.powerlog.bridge.CycBridgeModule"] },
   "apple": {
     "modules": ["CycBridgeModule"],
     "appDelegateSubscribers": ["CycBridgeAppDelegateSubscriber"]

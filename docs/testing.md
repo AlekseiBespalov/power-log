@@ -1,6 +1,6 @@
 # Testing
 
-Use Node 24 and `npm ci`. Browser checks need Playwright Chromium (`npx playwright install chromium`); native checks need macOS and full Xcode with iOS/watchOS SDKs.
+Use Node 24 and `npm ci`. Browser checks need Playwright Chromium (`npx playwright install chromium`); Apple checks need macOS and full Xcode with iOS/watchOS SDKs. Android checks need JDK 17 and the Android SDK.
 
 | Command | Coverage |
 | --- | --- |
@@ -13,7 +13,9 @@ Use Node 24 and `npm ci`. Browser checks need Playwright Chromium (`npx playwrig
 
 Install `garmin-fit-sdk` in a Python environment and set `FIT_PYTHON` to that interpreter for FIT checks. Tests use disposable stores and synthetic/sanitized inputs; see [fixture provenance](../tests/fixtures/README.md). ZIP tests need macOS file-coordination services: rerun a sandbox-denied operation with that access rather than treating it as an app defect. Swift typechecks are not linked app builds.
 
-## Native build and installation
+For Android, run `npm run test:android` and `npm run test:android -- --emulator`; see [Android](android.md) for APK builds and physical acceptance.
+
+## iOS build and installation
 
 ```sh
 npm run prebuild:ios

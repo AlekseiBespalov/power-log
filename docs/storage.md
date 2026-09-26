@@ -1,5 +1,7 @@
 # Storage, lifecycle and Watch synchronization
 
+Android uses a separate SQLite implementation of the same public contracts; [Android storage and exports](android.md) describes its lifecycle and schema.
+
 ## Originals and queries
 
 Each native device uses one SQLite database through [PowerLogStore](../modules/cyc-bridge/ios/PowerLogStore.swift), with one executor per connection, STRICT tables, WAL, `synchronous=FULL` and foreign keys. Normal capture writes typed rows, not whole-ride JSON. A checkpoint reclaims WAL space; durability follows committed transactions ([SQLite reference](https://sqlite.org/pragma.html#pragma_synchronous)). Incompatible schema versions require reinstalling; there are no in-place migrations.

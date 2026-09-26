@@ -6,7 +6,7 @@ export type WorkoutStream = { status: string; lastSampleAgeSeconds: number | nul
 export type WorkoutState = {
   distance?: WorkoutDistanceInfo;
   supported: boolean;
-  capabilities: { phoneWorkout: boolean; watchWorkout: boolean; healthKit: boolean; gps?: boolean; foregroundOnly?: boolean };
+  capabilities: { phoneWorkout: boolean; watchWorkout: boolean; healthKit: boolean; healthConnect?: boolean; gps?: boolean; foregroundOnly?: boolean };
   id: string | null;
   phase: WorkoutPhase;
   historyRevision?: string | null;
@@ -38,7 +38,7 @@ export type WorkoutState = {
 };
 export type WorkoutMetadata = {
   schemaVersion: number; id: string; startedAt: string; endedAt?: string; phase: string;
-  saveToHealth?: boolean; recordGPS?: boolean; storage?: 'native' | 'browser'; example?: boolean;
+  healthProvider?: 'healthConnect'; saveToHealth?: boolean; recordGPS?: boolean; storage?: 'native' | 'browser'; example?: boolean;
   indoor: boolean; watchEnabled: boolean; sport: string; subSport: string;
   eventCount: number; interrupted: boolean; healthKitState: string; healthKitUUID?: string; warnings: string[];
   watchSyncState: 'pending' | 'received' | 'notRequired';
@@ -65,7 +65,7 @@ export type WorkoutSummary = {
 export type WorkoutDetail = { metadata: WorkoutMetadata; summary: WorkoutSummary };
 export type WorkoutOptions = { indoor: boolean; useWatch: boolean; saveToHealth?: boolean; recordGPS?: boolean; sampleHz?: 2 | 4 | 8 };
 export type WorkoutPermissions = {
-  health: { available: boolean; readAuthorization: 'notObservable'; writeAuthorization: Record<string, string> };
+  health: { provider?: 'healthConnect'; requiredWrites?: string[]; available: boolean; readAuthorization: 'notObservable'; writeAuthorization: Record<string, string> };
   location: string;
 };
 export type WorkoutPermissionStatus = WorkoutPermissions & {
@@ -120,6 +120,7 @@ export function workoutCanDelete(record: WorkoutMetadata, current: WorkoutState)
 /** Historical phone repair never selects that ride as the current owner. */
 export function workoutRecoveryAction(record: WorkoutMetadata, currentID: string | null): 'repair' | 'recover' | null {
   if (record.storage === 'browser') return null;
+  if (record.healthProvider === 'healthConnect' && record.phase === 'completed' && record.saveToHealth && record.healthKitState === 'notSaved') return 'repair';
   if (workoutExportReady(record) && record.finalizationState !== 'partial') return null;
   if (record.phase === 'completed' && !record.watchEnabled && (record.healthKitState === 'saved'
     || record.saveToHealth === false && record.healthKitState === 'notRequested' && Boolean(record.endedAt))) return 'repair';
@@ -131,7 +132,7 @@ export function availableWorkoutOptions(options: WorkoutOptions, capabilities: W
     sampleHz: options.sampleHz ?? 2,
     indoor: options.indoor,
     useWatch: capabilities.watchWorkout && options.useWatch,
-    saveToHealth: capabilities.healthKit && options.saveToHealth !== false,
+    saveToHealth: (capabilities.healthKit || capabilities.healthConnect === true) && options.saveToHealth !== false,
     recordGPS: (capabilities.gps ?? capabilities.phoneWorkout) && (options.recordGPS ?? !options.indoor),
   };
 }

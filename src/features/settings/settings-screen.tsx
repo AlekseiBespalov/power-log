@@ -1,9 +1,10 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell } from '../../components/app-shell';
 import { ModalDialog } from '../../components/modal-dialog';
 import { StableLabel } from '../../components/stable-label';
+import { Toggle } from '../../components/toggle';
 import { Button, colors } from '../../components/ui';
 import { DISTANCE_SOURCE_LABELS, type DistanceSource } from '../../core/distance';
 import type { SpeedUnit } from '../../core/monitor';
@@ -17,7 +18,7 @@ type Focusable = { focus?: () => void };
 
 const choices: Record<Selection, readonly Choice[]> = {
   speed: ['km/h', 'mph', 'm/s'].map(value => ({ value, label: value })),
-  distance: (Object.keys(DISTANCE_SOURCE_LABELS) as DistanceSource[]).map(value => ({ value, label: DISTANCE_SOURCE_LABELS[value] })),
+  distance: (Object.keys(DISTANCE_SOURCE_LABELS) as DistanceSource[]).filter(value => Platform.OS !== 'android' || ['auto', 'gps:phone', 'controller'].includes(value)).map(value => ({ value, label: DISTANCE_SOURCE_LABELS[value] })),
   environment: [{ value: 'outdoor', label: 'Outdoor' }, { value: 'indoor', label: 'Indoor' }],
   sampleHz: [2, 4, 8].map(value => ({ value: String(value), label: `${value} Hz` })),
 };
@@ -36,7 +37,7 @@ function SettingsGroup({ title, caption, testID, children }: { title: string; ca
 function ToggleRow({ label, accessibilityLabel = label, value, onChange }: { label: string; accessibilityLabel?: string; value: boolean; onChange: (value: boolean) => void }) {
   return <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
     <Text style={{ flex: 1, minWidth: 0, fontSize: 14, color: colors.text }}>{label}</Text>
-    <Switch accessibilityLabel={accessibilityLabel} value={value} onValueChange={onChange} trackColor={{ false: colors.border, true: '#9b461d' }} thumbColor={value ? colors.accent : colors.muted} style={{ flexShrink: 0 }} />
+    <Toggle label={accessibilityLabel} value={value} onChange={onChange} />
   </View>;
 }
 
@@ -108,7 +109,7 @@ export function SettingsScreen() {
             {picker('environment')}
             {workout.state.capabilities.watchWorkout && <ToggleRow label="Apple Watch" accessibilityLabel="Use Apple Watch" value={options.useWatch} onChange={useWatch => settings.setWorkoutOptions(previous => ({ ...previous, useWatch }))} />}
             {(workout.state.capabilities.gps ?? workout.state.capabilities.phoneWorkout) && <ToggleRow label="GPS route" accessibilityLabel="Record GPS route" value={options.recordGPS ?? !options.indoor} onChange={recordGPS => settings.setWorkoutOptions(previous => ({ ...previous, recordGPS }))} />}
-            {workout.state.capabilities.healthKit && <ToggleRow label="Apple Health" accessibilityLabel="Save to Apple Health" value={options.saveToHealth !== false} onChange={saveToHealth => settings.setWorkoutOptions(previous => ({ ...previous, saveToHealth }))} />}
+            {(workout.state.capabilities.healthKit || workout.state.capabilities.healthConnect) && <ToggleRow label={workout.state.capabilities.healthConnect ? "Health Connect" : "Apple Health"} accessibilityLabel={workout.state.capabilities.healthConnect ? "Save to Health Connect" : "Save to Apple Health"} value={options.saveToHealth !== false} onChange={saveToHealth => settings.setWorkoutOptions(previous => ({ ...previous, saveToHealth }))} />}
             {picker('sampleHz')}
           </SettingsGroup>
         </View>

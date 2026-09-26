@@ -18,27 +18,27 @@ export function workoutPermissionAction(status: WorkoutPermissionStatus | null, 
   const phoneGPS = (options.recordGPS ?? !options.indoor) && !options.useWatch;
   if (!healthRequired && !phoneGPS) return { action: 'none', label: '', detail: '' };
   if (!status) return { action: 'check', label: 'Check permissions', detail: 'Current permission status is not available yet.' };
-  if (healthRequired && !status.health.available) return { action: 'unavailable', label: 'Health unavailable', detail: 'Apple Health is unavailable on this device.' };
+  if (healthRequired && !status.health.available) return { action: 'unavailable', label: 'Health unavailable', detail: 'Health saving is unavailable on this device.' };
   // Watch is the HealthKit writer in Watch mode; its own permission flow is confirmed on the Watch.
-  const requiredWrites = healthRequired ? [...writeTypes.common, ...(phoneGPS ? writeTypes.outdoor : [])] : [];
+  const requiredWrites = healthRequired ? status.health.requiredWrites ?? [...writeTypes.common, ...(phoneGPS ? writeTypes.outdoor : [])] : [];
   const writes = requiredWrites.map(type => status.health.writeAuthorization[type] ?? 'notDetermined');
   // The aggregate request status also includes optional types this ride did not select.
   if (writes.includes('notDetermined')) {
-    return { action: 'request', label: 'Set up permissions', detail: 'Review the Apple Health permissions requested by Power Log.' };
+    return { action: 'request', label: 'Set up permissions', detail: 'Review the health permissions requested by Power Log.' };
   }
   if (phoneGPS && status.location === 'notDetermined') {
-    return { action: 'request', label: 'Allow location', detail: 'The iPhone needs location access to record GPS measurements.' };
+    return { action: 'request', label: 'Allow location', detail: 'Your phone needs location access to record GPS measurements.' };
   }
   if (writes.includes('denied')) {
     return { action: 'settings', label: 'Review Health access', settingsTarget: 'health', detail: 'Some write access is denied. Review Power Log’s permissions in the Health app.' };
   }
   if (phoneGPS && (!status.locationServicesEnabled || ['denied', 'restricted'].includes(status.location))) {
     return { action: 'settings', label: 'Location settings', settingsTarget: 'app', detail: !status.locationServicesEnabled
-      ? 'Turn on Location Services to record the iPhone route.'
+      ? 'Turn on Location Services to record the phone route.'
       : status.location === 'restricted' ? 'Location access is restricted by device settings.' : 'Allow location access for Power Log in Settings.' };
   }
   if (phoneGPS && status.locationAccuracyAuthorization === 'reduced') {
-    return { action: 'settings', label: 'Precise location', settingsTarget: 'app', detail: 'Enable Precise Location for a useful iPhone cycling route.' };
+    return { action: 'settings', label: 'Precise location', settingsTarget: 'app', detail: 'Enable Precise Location for a useful cycling route.' };
   }
   if (writes.some(value => value !== 'authorized')
     || (phoneGPS && (!['authorizedAlways', 'authorizedWhenInUse'].includes(status.location) || status.locationAccuracyAuthorization === 'unknown'))) {

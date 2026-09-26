@@ -1,7 +1,7 @@
 import type { MonitorSnap } from '../../core/monitor-hit-test';
 import { clampChartViewport, type ChartViewport } from '../../core/chart-viewport';
 import type { MonitorData, MonitorObservationAnchor, MonitorDescribeResult, MonitorEnvelope, MonitorInspectResult, MonitorLatestResult, MonitorPoint, MonitorPlotResult, MonitorRange, MonitorSource, MonitorStatistics, MonitorStatsResult } from '../../core/monitor';
-import { ReadCancelled, readConsumer, readPressure, reads, type ReadExecutionLane } from '../../services/read-scheduler';
+import { ReadCancelled, ReadDeferred, readConsumer, readPressure, reads, type ReadExecutionLane } from '../../services/read-scheduler';
 
 export function rangeViewport(domain: ChartViewport, range: MonitorRange): ChartViewport {
   return { start: range === 'all' ? domain.start : Math.max(domain.start, domain.end - range), end: domain.end };
@@ -140,13 +140,14 @@ export class MonitorReadController {
     this.state = { ...this.state, intervalStatistics, data };
   }
 
-  private request<T extends MonitorEnvelope>(kind: ReadKind, operation: (generation: number) => Promise<T>, accept: (result: T, semanticKey?: string) => void) {
+  private request<T extends MonitorEnvelope & { status: string }>(kind: ReadKind, operation: (generation: number) => Promise<T>, accept: (result: T, semanticKey?: string) => void) {
     if (!this.active || this.disposed) return;
     const semanticKey = this.source.semanticKey;
     this.emit({ loading: { ...this.state.loading, [kind]: true } });
     this.lanes[kind].run(async generation => {
       const result = await operation(generation);
       if (result.generation !== generation) throw new Error('Source returned an invalid request generation.');
+      if ((kind === 'source' || kind === 'changes') && result.status !== 'ok') throw new ReadDeferred();
       return result;
     }, result => {
       if (this.disposed) return;

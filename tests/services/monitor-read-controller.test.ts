@@ -15,6 +15,52 @@ function setup() {
   return { source, controller };
 }
 describe('independent monitor reads', () => {
+  it('never admits incomplete native metadata into the chart clock and recovers on the next refresh', async () => {
+    const source = new TelemetryMonitor('native-metadata', true, [sample(0), sample(1)]);
+    const describe = source.describeSource.bind(source);
+    const descriptions = vi.spyOn(source, 'describeSource');
+    const retry = async (request: Parameters<typeof describe>[0]) => {
+      const value = await describe(request);
+      return { generation: value.generation, sourceId: value.sourceId, revision: value.revision, status: 'retry' } as unknown as Awaited<ReturnType<typeof describe>>;
+    };
+    descriptions.mockImplementationOnce(retry);
+    const controller = new MonitorReadController(source);
+    try {
+      controller.configure(['humanPowerW'], 'all'); controller.refresh(); await settle();
+      expect(controller.getSnapshot().description).toBeUndefined();
+      expect(controller.getSnapshot().deferred.source).toBe(true);
+      expect(() => controller.tick()).not.toThrow();
+      controller.refresh(); await settle();
+      const valid = controller.getSnapshot().description;
+      expect(valid?.domain).toEqual({ start: 0, end: 10 });
+      descriptions.mockImplementationOnce(retry);
+      controller.refresh(); await settle();
+      expect(controller.getSnapshot().description).toBe(valid);
+      expect(() => controller.tick()).not.toThrow();
+      controller.refresh(); await settle();
+      expect(controller.getSnapshot().deferred.source).toBe(false);
+    } finally { controller.dispose(); }
+  });
+
+  it('retains the plot when a native change journal returns an incomplete retry envelope', async () => {
+    const { controller, source } = setup(); await settle();
+    const before = controller.getSnapshot().data!.series;
+    const changes = source.changesSince.bind(source);
+    vi.spyOn(source, 'changesSince').mockImplementationOnce(async request => {
+      const value = await changes(request);
+      return { generation: value.generation, sourceId: value.sourceId, revision: value.revision, status: 'retry' } as unknown as Awaited<ReturnType<typeof changes>>;
+    });
+    try {
+      source.append(sample(31)); controller.refresh(); await settle();
+      expect(controller.getSnapshot().deferred.changes).toBe(true);
+      expect(controller.getSnapshot().data!.series).toBe(before);
+      expect(() => controller.tick()).not.toThrow();
+      controller.refresh(); await settle();
+      expect(controller.getSnapshot().deferred.changes).toBe(false);
+      expect(controller.getSnapshot().data?.revision).toBe(controller.getSnapshot().description?.revision);
+    } finally { controller.dispose(); }
+  });
+
   it('retains chart data and viewport identities when only publication bookkeeping changes', async () => {
     const { controller } = setup(); await settle();
     const { data, viewport } = controller.getSnapshot();

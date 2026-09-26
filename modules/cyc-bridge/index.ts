@@ -12,6 +12,7 @@ type Events = {
   onWorkoutState: (state: WorkoutState) => void;
 };
 export declare class CycBridge extends NativeModule<Events> {
+  shareFile?(uri: string): Promise<void>;
   readMonitorLatest(options: NativeMonitorTarget & import('../../src/core/monitor').MonitorLatestRequest): Promise<import('../../src/core/monitor').MonitorLatestResult>;
   describeMonitorSource(options: NativeMonitorTarget & MonitorDescribeRequest): Promise<MonitorDescribeResult>;
   readMonitorPlot(options: NativeMonitorTarget & MonitorPlotRequest): Promise<MonitorPlotResult>;

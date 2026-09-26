@@ -1,10 +1,21 @@
 import type { ExpoConfig } from 'expo/config';
+import { version } from './package.json';
+
+const androidVersionCode = Number(process.env.POWER_LOG_ANDROID_VERSION_CODE ?? 1);
+if (!Number.isSafeInteger(androidVersionCode) || androidVersionCode < 1 || androidVersionCode > 2100000000) throw new Error('Invalid Android version code');
 
 const config: ExpoConfig = {
-  name: 'Power Log', slug: 'power-log', version: '0.1.0', scheme: 'power-log',
+  name: process.env.POWER_LOG_ANDROID_PREVIEW === '1' ? 'Power Log Preview' : 'Power Log', slug: 'power-log', version, scheme: 'power-log',
   icon: './assets/Assets.xcassets/AppIcon.appiconset/AppIcon.png',
   orientation: 'default', userInterfaceStyle: 'dark',
-  platforms: ['ios', 'web'],
+  platforms: ['ios', 'android', 'web'],
+  android: {
+    allowBackup: false,
+    package: process.env.POWER_LOG_ANDROID_PREVIEW === '1' ? 'app.powerlog.mobile.preview' : 'app.powerlog.mobile',
+    versionCode: androidVersionCode,
+    permissions: ['BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'POST_NOTIFICATIONS'],
+    blockedPermissions: ['android.permission.RECORD_AUDIO', 'android.permission.READ_EXTERNAL_STORAGE', 'android.permission.WRITE_EXTERNAL_STORAGE'],
+  },
   ios: {
     bundleIdentifier: process.env.POWER_LOG_BUNDLE_ID ?? 'app.powerlog.mobile',
     appleTeamId: process.env.POWER_LOG_APPLE_TEAM_ID,
@@ -24,9 +35,10 @@ const config: ExpoConfig = {
     'expo-router', 'expo-dev-client', 'expo-document-picker',
     // Precompiled Expo modules require React.framework. Keep both on source
     // builds so a missing React prebuilt cannot produce an unlaunchable app.
-    ['expo-build-properties', { ios: { buildReactNativeFromSource: true, usePrecompiledModules: false, enableSceneSupport: true } }],
+    ['expo-build-properties', { android: { minSdkVersion: 28 }, ios: { buildReactNativeFromSource: true, usePrecompiledModules: false, enableSceneSupport: true } }],
     './plugins/with-power-log-watch',
     './plugins/with-power-log-live-activity',
+    './plugins/with-power-log-android',
   ],
   experiments: {
     typedRoutes: true,

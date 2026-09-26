@@ -50,6 +50,8 @@ describe('original vertex acquisition', () => {
     const expected = { key: 'logical', width: 354, height: 134, displayScale: 3, hits: scene([point(14400, 100)]) };
     const ready = { key: 'logical', width: 354, height: 134, displayScale: 3, sourceId: 'synthetic', acceptanceId: 'viewA:2' };
     expect(admitMonitorHitScene(expected, ready)?.key).toBe('viewA:2');
+    expect(admitMonitorHitScene({ ...expected, width: 354.125 }, ready)?.key).toBe('viewA:2');
+    expect(admitMonitorHitScene({ ...expected, width: 354.3 }, ready)).toBeNull();
     for (const change of [{ key: 'old' }, { sourceId: 'other' }, { width: 355 }, { height: 135 }, { displayScale: 2 }, { acceptanceId: undefined }]) expect(admitMonitorHitScene(expected, { ...ready, ...change })).toBeNull();
   });
 });

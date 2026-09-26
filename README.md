@@ -1,6 +1,6 @@
 # Power Log
 
-Cycling rides and CYC X6/X12 telemetry for iPhone, Apple Watch and the web. Record bike measurements with available GPS/Health data, inspect configurable charts and export rides. Controller access is read-only; Power Log cannot change motor settings, calibration or firmware.
+Cycling rides and CYC X6/X12 telemetry for iPhone, Android, Apple Watch and the web. Record bike measurements with available GPS/Health data, inspect configurable charts and export rides. Controller access is read-only; Power Log cannot change motor settings, calibration or firmware.
 
 ## Features
 
@@ -12,10 +12,11 @@ Cycling rides and CYC X6/X12 telemetry for iPhone, Apple Watch and the web. Reco
 | Platform | Capabilities |
 | --- | --- |
 | iPhone | Native Bluetooth, optional GPS/Apple Health, Watch recording, Live Activities, FIT and original ZIP exports (including telemetry CSV) |
+| Android | Native Bluetooth, phone GPS, optional Health Connect saving, recording notification controls, FIT and original ZIP exports |
 | Apple Watch | HealthKit/GPS, ride controls and automatic transfer to iPhone |
 | Web | Foreground Bluetooth recording, IndexedDB history, CSV import/export and responsive charts |
 
-Android and macOS use the web app; there is no native Android app. Web Bluetooth needs a compatible browser, such as Chrome on Android, and HTTPS or localhost. Keep the page active while recording; browser storage can be cleared or evicted.
+Web Bluetooth needs a compatible browser, such as Chrome on Android, and HTTPS or localhost. Keep the page active while recording; browser storage can be cleared or evicted.
 
 Motor input power is electrical battery input, separate from rider power. Missing measurements remain unavailable; [measurement rules](docs/measurements.md) explain units and distance sources.
 
@@ -48,14 +49,30 @@ Use an Expo development build, not Expo Go. Debug uses Metro (`npm start`); stan
 
 Native schema upgrades currently require reinstalling, so export important rides before an incompatible update. [Testing](docs/testing.md) covers bundle/signing checks, installation and physical background-recording acceptance. Run `npm run check` for the shared checks and web build.
 
+## Install on Android
+
+Download `power-log.apk` from the [latest release](https://github.com/AlekseiBespalov/power-log/releases/latest) and open it on Android 9 or newer. Release APKs are signed for updates; development previews install separately as **Power Log Preview**.
+
+## Develop for Android
+
+With Android Studio, JDK 17 and Node 24 installed:
+
+```sh
+npm ci
+npm run build:android -- --preview
+```
+
+This produces an installable release-mode preview APK. [Android setup](docs/android.md) covers emulator tests, background recording, optional Health Connect and signed APK releases through GitHub Actions. Android watch recording is not included.
+
 ## Export to Strava
 
-On iPhone: **History → saved ride → Export FIT → Save to Files**, then **Open Strava upload** and select the file on [Strava's website](https://www.strava.com/upload/select). Export becomes available after saving/syncing finishes. No Strava account setup, API credentials or backend are needed in Power Log. Browser rides export CSV only.
+On iPhone or Android: **History → saved ride → Export FIT**, then save the shared file, then **Open Strava upload** and select the file on [Strava's website](https://www.strava.com/upload/select). Export becomes available after saving/syncing finishes. No Strava account setup, API credentials or backend are needed in Power Log. Browser rides export CSV only.
 
 ## Documentation
 
 | Document | Purpose |
 | --- | --- |
+| [Android](docs/android.md) | Native build, recording and GitHub APK releases |
 | [Architecture](docs/architecture.md) | Code map, native/UI boundaries and charts |
 | [Storage](docs/storage.md) | Lifecycle, Watch synchronization, deletion and exports |
 | [Measurements](docs/measurements.md) | Values, distance sources and calculation rules |

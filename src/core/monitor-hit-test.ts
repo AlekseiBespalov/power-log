@@ -56,9 +56,11 @@ export function hitMonitorScene(scene: MonitorHitScene | null, view: ChartViewpo
 export type MonitorRasterReady = { key: string; sourceId?: string; acceptanceId?: string; viewId?: string; acceptanceGeneration?: number; width?: number; height?: number; displayScale?: number };
 /** Logical content and actual layout must both match the native accepted bitmap. */
 export function admitMonitorHitScene(expected: { key: string; width: number; height: number; displayScale: number; hits: MonitorHitScene }, ready: MonitorRasterReady): MonitorHitScene | null {
+  // Android view bounds are rounded to physical pixels; Yoga reports logical fractions.
+  const layoutTolerance = 0.5 / expected.displayScale + 1e-3;
   if (ready.key !== expected.key || ready.sourceId !== expected.hits.sourceId || !ready.acceptanceId ||
-      ready.width === undefined || !Number.isFinite(ready.width) || Math.abs(ready.width - expected.width) > 1e-3 ||
-      ready.height === undefined || !Number.isFinite(ready.height) || Math.abs(ready.height - expected.height) > 1e-3 || ready.displayScale !== expected.displayScale) return null;
+      ready.width === undefined || !Number.isFinite(ready.width) || Math.abs(ready.width - expected.width) > layoutTolerance ||
+      ready.height === undefined || !Number.isFinite(ready.height) || Math.abs(ready.height - expected.height) > layoutTolerance || ready.displayScale !== expected.displayScale) return null;
   return { ...expected.hits, key: ready.acceptanceId };
 }
 

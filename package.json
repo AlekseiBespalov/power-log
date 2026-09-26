@@ -32,7 +32,11 @@
     "build:pages": "node scripts/build-pages.mjs",
     "test:security": "node --test tests/security/*.test.cjs",
     "test:notices": "node --test tests/web-notices/*.test.mjs",
-    "test:public-web": "npm run build:pages && node --test tests/public-web/*.test.mjs"
+    "test:public-web": "npm run build:pages && node --test tests/public-web/*.test.mjs",
+    "android": "expo run:android",
+    "prebuild:android": "node scripts/build-android.mjs --prepare",
+    "build:android": "node scripts/build-android.mjs",
+    "test:android": "node scripts/test-android.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "57.0.15",
@@ -74,7 +78,7 @@
     "type": "git",
     "url": "https://github.com/AlekseiBespalov/power-log.git"
   },
-  "description": "CYC e-bike telemetry and cycling rides for iPhone, Apple Watch and the web.",
+  "description": "CYC e-bike telemetry and cycling rides for iPhone, Android, Apple Watch and the web.",
   "homepage": "https://github.com/AlekseiBespalov/power-log#readme",
   "bugs": {
     "url": "https://github.com/AlekseiBespalov/power-log/issues"

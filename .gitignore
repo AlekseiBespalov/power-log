@@ -32,6 +32,12 @@ expo-env.d.ts
 # Local app build artifacts.
 /artifacts/builds/
 *.ipa
+*.apk
+*.aab
+*.jks
+*.keystore
+/modules/cyc-bridge/android/build/
+/modules/cyc-bridge/android/.gradle/
 *.xcarchive/
 *.dSYM/
 
@@ -72,3 +78,5 @@ __pycache__/
 /artifacts/app-store/source/example-values.json
 /artifacts/app-store/source/monitor-preferences.json
 /artifacts/app-store/.cache/
+
+modules/cyc-bridge/android/.cxx/

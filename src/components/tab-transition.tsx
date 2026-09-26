@@ -22,7 +22,7 @@ export function TabTransitionProvider({ children }: { children: ReactNode }) {
 }
 
 export function TabTransition({ index, children }: { index: number; children: ReactNode }) {
-  return Platform.OS === 'ios' ? <>{children}</> : <SlidingTabTransition index={index}>{children}</SlidingTabTransition>;
+  return Platform.OS !== 'web' ? <>{children}</> : <SlidingTabTransition index={index}>{children}</SlidingTabTransition>;
 }
 function SlidingTabTransition({ index, children }: { index: number; children: ReactNode }) {
   const state = useContext(Context);

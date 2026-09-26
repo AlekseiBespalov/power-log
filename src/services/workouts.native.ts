@@ -3,7 +3,7 @@ import type { WorkoutAdapter } from '../core/workouts';
 import { unavailableWorkoutState } from '../core/workouts';
 
 function native() {
-  if (!bridge?.getWorkoutState) throw new Error('Install the current Power Log iPhone build to record workouts.');
+  if (!bridge?.getWorkoutState) throw new Error('Install the current Power Log build to record workouts.');
   return bridge;
 }
 export const workouts: WorkoutAdapter = {
@@ -19,7 +19,7 @@ export const workouts: WorkoutAdapter = {
     return (await add()).added;
   },
   getPermissions: () => {
-    if (!native().getWorkoutPermissions) throw new Error('Install the latest iPhone build to check current permissions.');
+    if (!native().getWorkoutPermissions) throw new Error('Install the latest Power Log build to check current permissions.');
     return native().getWorkoutPermissions();
   },
   requestPermissions: options => options && native().requestWorkoutPermissionsForOptions

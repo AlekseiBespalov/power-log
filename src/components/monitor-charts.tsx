@@ -125,7 +125,6 @@ function MonitorPlot({ data, metricSources, view, domain, group, groups, interac
   const [width, setWidth] = useState(360);
   const { fontScale } = useWindowDimensions();
   const readingColumns = Math.max(1, Math.min(group.metrics.length, Math.floor((width + 12) / (120 * fontScale + 12))));
-  const readingWidth = (width - (readingColumns - 1) * 12) / readingColumns;
   const ownsComparison = group === groups.find(item => item.metrics.some(isVoltage));
   const canReference = !data.selectionPending && cursor !== null && groups.some(item => item.metrics.some(metric => isVoltage(metric) && monitorSelection(data, metric, cursor) !== null));
   const setReference = (seconds: number | null) => { if (Platform.OS !== 'web') interaction.cancel(); onReferenceChange(seconds); };
@@ -151,6 +150,7 @@ function MonitorPlot({ data, metricSources, view, domain, group, groups, interac
     return { x, y, paths };
   }, [data.series, group.metrics, geometryView.start, geometryDuration, plotWidth, scale, height]);
   const readings = group.metrics.map(metric => ({ metric, selected: monitorSelection(data, metric, cursor), reference: monitorSelection(data, metric, referenceSeconds, 'reference') }));
+  const readingRows = Array.from({ length: Math.ceil(readings.length / readingColumns) }, (_, row) => readings.slice(row * readingColumns, (row + 1) * readingColumns));
   const accessibleValue = readings.map(({ metric, selected }) => selected
     ? `${metric.label} ${formatMetricPoint(metric, selected)} ${metric.unit}, ${monitorElapsed(selected.elapsedSeconds)} elapsed, ${selected.timestamp}`
     : `${metric.label}: ${cursor === null ? 'No sample selected' : 'No sample'}`).join('. ');
@@ -233,7 +233,7 @@ function MonitorPlot({ data, metricSources, view, domain, group, groups, interac
   } : {};
   const suffix = fullscreen ? '-fullscreen' : '';
   const inside = (seconds: number | null) => seconds !== null && Number.isFinite(seconds) && seconds >= view.start && seconds <= view.end;
-  return <GestureHandlerRootView style={styles.chartRoot}>
+  return <View style={styles.chartRoot}><GestureHandlerRootView style={{ flexGrow: 0, flexShrink: 0 }}>
     <View onLayout={event => { const measured = Math.max(1, event.nativeEvent.layout.width); setWidth(measured); onPlotWidthChange?.(measured); }}>
       <View style={[styles.plotHeader, !!desktopColumns && { paddingRight: 32 }]}>
         <View style={{ flex: 1 }}><View style={styles.plotTitle}><Text style={styles.title}>{group.label}</Text><Text style={styles.unit}>{group.unit}</Text></View>{group.metrics.map(metric => metric.id === 'distanceMeters'
@@ -244,15 +244,15 @@ function MonitorPlot({ data, metricSources, view, domain, group, groups, interac
           {referenceSeconds !== null && <Control label="Clear A and B comparison" testID={`monitor-reference-clear${suffix}`} onPress={() => setReference(null)}><Text style={styles.controlText}>Clear A/B</Text></Control>}
         </View>}
       </View>
-      <View style={styles.readings}>{readings.map(({ metric, selected, reference }) => {
+      <View style={styles.readings}>{readingRows.map(row => <View key={row[0]!.metric.id} style={styles.readingRow}>{row.map(({ metric, selected, reference }) => {
         const shown = selected ?? (cursor === null ? latestMonitorPoint(data.series[metric.id] ?? [], metric) : null);
-        return <View key={metric.id} style={[styles.reading, { width: readingWidth }]} testID={`monitor-readout-${metric.id}${suffix}`}>
+        return <View key={metric.id} style={styles.reading} testID={`monitor-readout-${metric.id}${suffix}`}>
           <View style={styles.readingLabel}><View style={[styles.dot, { backgroundColor: metric.color }]} /><Text style={styles.label}>{metric.shortLabel}</Text></View>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[styles.value, { color: shown ? metric.color : colors.muted }]}>{shown ? formatMetricPoint(metric, shown) : cursor === null ? '\u00a0' : 'No sample'}<Text style={styles.unit}>{shown ? ` ${metric.unit}` : '\u00a0'}</Text></Text>
           <Text numberOfLines={1} style={[styles.sampleTime, { minHeight: 15 * fontScale }]} accessibilityLabel={cursor === null ? 'No sample selected' : selected ? `${monitorElapsed(selected.elapsedSeconds)} elapsed, ${selected.timestamp}` : 'No sample'}>{cursor !== null && selected ? monitorElapsed(selected.elapsedSeconds) : '\u00a0'}</Text>
           {isVoltage(metric) && <VoltageDetails metric={metric} data={data} a={reference} b={selected} comparing={referenceSeconds !== null} suffix={suffix} />}
         </View>;
-      })}</View>
+      })}{Array.from({ length: readingColumns - row.length }, (_, index) => <View key={`space-${index}`} style={{ flex: 1 }} />)}</View>)}</View>
       <GestureDetector gesture={Platform.OS === 'web' ? gestures : nativeGestures} touchAction="pan-y" userSelect="none">
         <View ref={surface} {...webProps} testID={`monitor-chart-${group.id}${suffix}`} collapsable={false} style={{ height }}
           accessible accessibilityRole="adjustable" accessibilityLabel={`${group.label} chart`}
@@ -294,7 +294,7 @@ function MonitorPlot({ data, metricSources, view, domain, group, groups, interac
         </View>
       </GestureDetector>
     </View>
-  </GestureHandlerRootView>;
+  </GestureHandlerRootView></View>;
 }
 
 function VoltageDetails({ metric, data, a, b, comparing, suffix }: { metric: MonitorMetric; data: MonitorData; a: MonitorPoint | null; b: MonitorPoint | null; comparing: boolean; suffix: string }) {
@@ -330,8 +330,9 @@ const styles = StyleSheet.create({
   plotTitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 6, paddingVertical: 4 },
   title: { color: colors.text, fontWeight: '600', fontSize: 12 },
   unit: { color: colors.muted, fontSize: 10, fontWeight: '400' },
-  readings: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 8 },
-  reading: { minWidth: 0, gap: 2 },
+  readings: { gap: 12, marginBottom: 8 },
+  readingRow: { flexDirection: 'row', gap: 12 },
+  reading: { flex: 1, minWidth: 0, gap: 2 },
   readingLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, alignSelf: 'center' },
   label: { color: colors.muted, fontSize: 11, lineHeight: 15, flexShrink: 1 },

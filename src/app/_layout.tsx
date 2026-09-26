@@ -11,7 +11,7 @@ import { TabTransitionProvider } from '../components/tab-transition';
 import { AppHeader } from '../components/app-header';
 import { TabBar } from '../components/tab-bar';
 
-const ios = Platform.OS === 'ios';
+const native = Platform.OS !== 'web';
 const subscribe = () => () => {};
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
@@ -20,9 +20,9 @@ export default function RootLayout() {
   // Static HTML cannot know the browser viewport or its locally stored rides/settings.
   if (Platform.OS === 'web' && !hydrated) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return <SafeAreaProvider><MonitorPreferencesProvider><SessionProvider><WorkoutProvider><TabTransitionProvider><StatusBar style="light" />
-    <SafeAreaView edges={ios ? ['left', 'right'] : ['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      {!ios && <AppHeader />}
-      <Tabs tabBar={ios ? props => <TabBar {...props} /> : () => null} backBehavior="fullHistory" screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: colors.bg } }} />
+    <SafeAreaView edges={native ? ['left', 'right'] : ['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      {!native && <AppHeader />}
+      <Tabs tabBar={native ? props => <TabBar {...props} /> : () => null} backBehavior="fullHistory" screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: colors.bg } }} />
     </SafeAreaView>
   </TabTransitionProvider></WorkoutProvider></SessionProvider></MonitorPreferencesProvider></SafeAreaProvider>;
 }

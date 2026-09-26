@@ -5,6 +5,7 @@ import type { Tabs } from 'expo-router';
 import { APP_NAVIGATION } from './app-navigation';
 import { Icon, type IconName } from './icon';
 import { colors, type } from './ui';
+import { haptics } from '../services/haptics';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 const icons: Record<string, IconName> = { index: 'bike', sessions: 'history', settings: 'settings' };
@@ -21,7 +22,7 @@ export function TabBar({ state, navigation }: TabBarProps) {
       return <Pressable key={item.route} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={item.title} testID={`tab-${item.route}`}
         onPress={() => {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-          if (!selected && !event.defaultPrevented) navigation.navigate(route.name);
+          if (!selected && !event.defaultPrevented) { haptics.selection(); navigation.navigate(route.name); }
         }}
         style={({ pressed }) => ({ flex: 1, minHeight: 49, alignItems: 'center', justifyContent: 'center', gap: 3, opacity: pressed ? 0.7 : 1 })}>
         <Icon name={icons[item.route] ?? 'bike'} color={color} size={24} />

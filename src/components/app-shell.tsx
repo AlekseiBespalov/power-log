@@ -14,7 +14,7 @@ export function AppShell({ children, footer }: { children: ReactNode; footer?: R
   const navigationIndex = appNavigationIndex(route.name);
   const focused = useIsFocused();
   const desktop = Platform.OS === 'web' && width >= 1100;
-  return <View style={{ flex: 1, display: Platform.OS === 'web' && !focused ? 'none' : 'flex' }}><TabTransition index={navigationIndex}><SafeAreaView edges={Platform.OS === 'ios' ? ['top'] : ['bottom']} style={{ flex: 1, backgroundColor: colors.bg }}>
+  return <View style={{ flex: 1, display: Platform.OS === 'web' && !focused ? 'none' : 'flex' }}><TabTransition index={navigationIndex}><SafeAreaView edges={Platform.OS !== 'web' ? ['top'] : ['bottom']} style={{ flex: 1, backgroundColor: colors.bg }}>
     <ScrollView showsVerticalScrollIndicator={Platform.OS === 'web'} showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: width > 700 ? 24 : 12, paddingBottom: 24, flexGrow: 1 }}>
       <View testID="app-workspace" style={{ width: '100%', maxWidth: 1400, alignSelf: 'center', gap: desktop ? 16 : 12 }}>
         {navigationIndex !== 0 && <ActiveRideLink />}

@@ -9,8 +9,8 @@ export interface DistanceProfileInfo extends MetricSourceInfo { source: Exclude<
 export interface WorkoutDistanceInfo { selection: DistanceSource; selected?: DistanceProfileInfo | null; available: DistanceProfileInfo[] }
 export const DISTANCE_POLICY_VERSION = 1;
 export const DISTANCE_SOURCE_LABELS: Record<DistanceSource, string> = {
-  auto: 'Auto', 'gps:watch': 'GPS · Watch', 'gps:phone': 'GPS · iPhone',
-  'health:watch': 'Health · Watch', 'health:phone': 'Health · iPhone', controller: 'Controller estimate',
+  auto: 'Auto', 'gps:watch': 'GPS · Watch', 'gps:phone': 'GPS · Phone',
+  'health:watch': 'Health · Watch', 'health:phone': 'Health · Phone', controller: 'Controller estimate',
 };
 export const distanceSourceLabel = (info: Pick<MetricSourceInfo, 'source' | 'label'>) => DISTANCE_SOURCE_LABELS[info.source as DistanceSource] ?? info.label;
 export const distanceSourceCaption = (info: MetricSourceInfo) => `${distanceSourceLabel(info)}${info.partial ? ' · Partial' : ''}`;
