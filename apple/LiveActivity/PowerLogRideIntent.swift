@@ -9,8 +9,11 @@ struct PowerLogRideIntent: LiveActivityIntent {
   static var title: LocalizedStringResource = "Control ride"
   static var isDiscoverable: Bool = false
   static var supportedModes: IntentModes { .background }
-  @available(iOS 27.0, *)
-  static var allowedExecutionTargets: IntentExecutionTargets { .main }
+  // IntentExecutionTargets exists only in the iOS 27 SDK, which ships with the Swift 6.4 toolchain.
+  #if compiler(>=6.4)
+    @available(iOS 27.0, *)
+    static var allowedExecutionTargets: IntentExecutionTargets { .main }
+  #endif
 
   @Parameter(title: "Ride") var rideID: String
   @Parameter(title: "Command") var commandID: String
