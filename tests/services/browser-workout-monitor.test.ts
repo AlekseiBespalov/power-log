@@ -434,7 +434,7 @@ describe('browser monitor projections', () => {
       await vi.advanceTimersByTimeAsync(3999);
       expect((await recorder.getState()).streams.cyc.status).toBe('receiving');
       await vi.advanceTimersByTimeAsync(1);
-      expect((await recorder.getState()).streams.cyc.status).toBe('waiting');
+      expect((await recorder.getState()).streams.cyc.status).toBe('stale');
       controller.tick();
       const state = controller.getSnapshot();
       expect(

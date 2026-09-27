@@ -61,6 +61,7 @@ class RecordingEngineTest {
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.ACCESS_FINE_LOCATION,
             )
+        shadowOf(context.getSystemService(BluetoothManager::class.java).adapter).setState(BluetoothAdapter.STATE_ON)
         val locations = context.getSystemService(LocationManager::class.java)
         shadowOf(locations).setLocationEnabled(true)
         shadowOf(locations).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
@@ -397,6 +398,63 @@ class RecordingEngineTest {
         val next = start()
         assertEquals(empty, latest(next)["points"])
         assertEquals(empty, latest(next)["liveAcquiredAt"])
+    }
+
+    private fun times(id: String) =
+        engine.store.readableDatabase
+            .rawQuery("SELECT time FROM observations WHERE ride=? ORDER BY id", arrayOf(id))
+            .use {
+                buildList { while (it.moveToNext()) add(it.getDouble(0)) }
+            }
+
+    @Test
+    fun manualConnectStartsAFreshLiveSessionFromZero() = command {
+        val previous = engine.source(MonitorTarget.Live)
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(30))
+        telemetry()
+        engine.flush()
+        assertEquals(1L, engine.store.count(previous))
+        engine.connect(BridgeInputs.connect(mapOf("deviceId" to "02:00:00:00:00:01", "hz" to 4))) {}
+        val live = engine.source(MonitorTarget.Live)
+        assertNotEquals(previous, live)
+        assertEquals(0L, engine.store.count(previous))
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
+        telemetry()
+        engine.flush()
+        assertEquals(listOf(2.0), times(live))
+    }
+
+    @Test
+    fun rejectedConnectKeepsTheLiveSessionAndItsOriginals() = command {
+        val input = BridgeInputs.connect(mapOf("deviceId" to "02:00:00:00:00:01", "hz" to 4))
+        engine.connect(input) {}
+        val live = engine.source(MonitorTarget.Live)
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        telemetry()
+        engine.flush()
+        assertThrows(IllegalStateException::class.java) { engine.connect(input) { fail("Unexpected admission") } }
+        assertEquals(live, engine.source(MonitorTarget.Live))
+        assertEquals(1L, engine.store.count(live))
+        engine.bluetooth.disconnect()
+    }
+
+    @Test
+    fun liveSessionKeepsRecordingThroughARideAndContinuesAfterIt() = command {
+        val live = engine.source(MonitorTarget.Live)
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        telemetry()
+        val ride = start()
+        advanceTo(1)
+        telemetry()
+        engine.flush()
+        engine.action("stop", ride)
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        telemetry()
+        engine.flush()
+        assertEquals(live, engine.source(MonitorTarget.Live))
+        assertEquals(3, times(live).size)
+        assertEquals(times(live), times(live).sorted())
+        assertEquals(listOf(1.0), times(ride))
     }
 
     @Test
@@ -761,11 +819,11 @@ class RecordingEngineTest {
         engine.action("stop", id)
         val rows = engine.store.page(id)
         assertEquals(
-            listOf(1.0, 2.0, 2.5, 4.0, 6.0, 7.0, 8.0, 7.5, 10.0, 11.0),
+            listOf(1.0, 2.0, 2.5, 6.0, 7.0, 8.0, 7.5, 10.0, 11.0),
             rows.filter { it.kind == "location" }.map { it.time },
         )
         assertTrue(rows.first { it.time == 2.0 }.active)
-        assertFalse(rows.first { it.time == 4.0 }.active)
+        assertFalse(rows.any { it.time == 4.0 })
         assertDistanceReplay(engine.store, id)
     }
 
@@ -859,7 +917,8 @@ class RecordingEngineTest {
             }
             engine.recover(id)
             assertNull(engine.state()["id"])
-            assertThrows(IllegalStateException::class.java) { engine.action("resume", id) }
+            val error = assertThrows(IllegalArgumentException::class.java) { engine.action("resume", id) }
+            assertEquals("The selected workout changed. Refresh before trying again.", error.message)
             assertThrows(IllegalStateException::class.java) { engine.action("stop", id) }
             assertEquals(retained, engine.store.timing(id))
         }
@@ -1444,14 +1503,114 @@ class RecordingEngineTest {
         location(10.0)
         engine.flush()
         val rows = engine.store.page(id).associateBy { it.time }
-        assertEquals(4, rows.size)
-        assertFalse(rows.getValue(11.0).active)
-        assertFalse(rows.getValue(10.0).active)
+        assertEquals(setOf(9.0, 12.0), rows.keys)
         assertTrue(rows.getValue(12.0).active)
         assertTrue(rows.getValue(9.0).active)
-        assertEquals(rows.getValue(10.0).segment, rows.getValue(11.0).segment)
-        assertNotEquals(rows.getValue(11.0).segment, rows.getValue(12.0).segment)
         assertNotEquals(rows.getValue(9.0).segment, rows.getValue(12.0).segment)
+    }
+
+    @Test
+    fun endingARideCancelsOnlyAnActiveBluetoothRecovery() = command {
+        for (action in listOf("stop", "discard", "interrupted")) {
+            for (status in listOf("reconnecting", "connected", "connecting")) {
+                val id = start()
+                CycBluetooth::class
+                    .java
+                    .getDeclaredField("desired")
+                    .apply { isAccessible = true }
+                    .set(engine.bluetooth, "02:00:00:00:00:01")
+                CycBluetooth::class
+                    .java
+                    .getDeclaredField("state")
+                    .apply { isAccessible = true }
+                    .set(engine.bluetooth, mapOf("status" to status))
+                var retried = false
+                val retry = Runnable { retried = true }
+                engine.handler.postDelayed(retry, 1000)
+                CycBluetooth::class
+                    .java
+                    .getDeclaredField("retry")
+                    .apply { isAccessible = true }
+                    .set(engine.bluetooth, retry)
+                if (action == "interrupted") {
+                    RecordingEngine::class
+                        .java
+                        .getDeclaredMethod("captureFailed", Exception::class.java)
+                        .apply { isAccessible = true }
+                        .invoke(engine, SQLiteException("fixture failure"))
+                } else engine.action(action, id)
+                assertEquals(if (status == "reconnecting") "idle" else status, engine.bluetooth.state["status"])
+                assertEquals(status != "reconnecting", engine.handler.hasCallbacks(retry))
+                assertFalse(retried)
+                engine.bluetooth.disconnect()
+            }
+        }
+    }
+
+    @Test
+    fun pauseStopsGpsAndOnlyFixesAcquiredInActiveIntervalsAreAdmitted() = command {
+        val locations = shadowOf(engine.context.getSystemService(LocationManager::class.java))
+        val id = start(true)
+        assertEquals(1, locations.getLocationRequests(LocationManager.GPS_PROVIDER).size)
+        advanceTo(1)
+        location(1.0, accuracy = 5f)
+        advanceTo(3)
+        engine.action("pause", id)
+        assertTrue(locations.getLocationRequests(LocationManager.GPS_PROVIDER).isEmpty())
+        advanceTo(4)
+        location(2.0, accuracy = 6f)
+        location(3.0, accuracy = 80f)
+        location(4.0, accuracy = 90f)
+        engine.flush()
+        assertEquals(6.0, stream("gps")["accuracyMeters"])
+        assertEquals(listOf(1.0, 2.0), engine.store.page(id).map { it.time })
+        advanceTo(5)
+        engine.action("resume", id)
+        assertEquals(1, locations.getLocationRequests(LocationManager.GPS_PROVIDER).size)
+        location(4.5, accuracy = 100f)
+        assertEquals(6.0, stream("gps")["accuracyMeters"])
+        location(5.0, accuracy = 7f)
+        engine.flush()
+        assertEquals(listOf(1.0, 2.0, 5.0), engine.store.page(id).map { it.time })
+        assertTrue(engine.store.page(id).all { it.active })
+    }
+
+    @Test
+    fun repeatedAndLateControlsRejectWithTheirPhaseErrorsWithoutWritingEvents() = command {
+        val errors =
+            mapOf(
+                "pause" to "The workout is not ready to pause.",
+                "resume" to "The owner must be paused before resuming.",
+                "lap" to "Start or resume the workout before marking a lap.",
+            )
+        fun rejected(action: String, id: String?) {
+            val error = assertThrows(IllegalStateException::class.java) { engine.action(action, id) }
+            assertEquals(errors[action], error.message)
+        }
+        errors.keys.forEach { rejected(it, null) }
+        val id = start()
+        rejected("resume", id)
+        advanceTo(1)
+        engine.action("lap", id)
+        engine.action("lap", id)
+        assertEquals(2, engine.store.events(id).count { it.action == "lap" })
+        advanceTo(2)
+        engine.action("pause", id)
+        val revision = engine.store.revision(id)
+        rejected("pause", id)
+        rejected("lap", id)
+        assertEquals(revision, engine.store.revision(id))
+        advanceTo(3)
+        engine.action("resume", id)
+        rejected("resume", id)
+        engine.action("stop", id)
+        errors.keys.forEach { rejected(it, id) }
+        val next = start()
+        errors.keys.forEach { action ->
+            val error = assertThrows(IllegalArgumentException::class.java) { engine.action(action, id) }
+            assertEquals("The selected workout changed. Refresh before trying again.", error.message)
+        }
+        assertEquals("idle", engine.action("discard", next)["phase"])
     }
 
     @Test

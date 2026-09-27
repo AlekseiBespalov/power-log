@@ -1,5 +1,6 @@
 import { Link, useIsFocused, useRoute } from 'expo-router';
-import { Platform, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Text, View, useWindowDimensions } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 import { useSession } from '../services/session-context';

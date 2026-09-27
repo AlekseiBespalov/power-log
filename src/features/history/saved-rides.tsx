@@ -612,8 +612,10 @@ export function SavedRides() {
           {removalTarget && <Body muted>{dateLabel(removalTarget.startedAt)}</Body>}
           <Body>
             This permanently removes the recording and charts from Power Log.
-            {removalTarget?.watchEnabled ? ' The Watch copy will be removed when it connects.' : ''} Workouts already
-            saved in {Platform.OS === 'android' ? 'Health Connect' : 'Apple Health'} stay there.
+            {removalTarget?.watchEnabled ? ' The Watch copy will be removed when it connects.' : ''}
+            {removalTarget?.storage !== 'browser'
+              ? ` Workouts already saved in ${Platform.OS === 'android' ? 'Health Connect' : 'Apple Health'} stay there.`
+              : ''}
           </Body>
           {removalKey && archiveState.get(removalKey)?.error && (
             <Text accessibilityRole="alert" style={{ color: colors.red }}>

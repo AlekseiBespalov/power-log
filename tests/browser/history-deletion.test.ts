@@ -744,3 +744,22 @@ it('keeps catalog refresh failures in History without reporting a ride-command e
     expect(JSON.parse(await page.getByTestId('ride-controls-state').innerText()).error).toBeNull();
     await ui(page.getByRole('button', { name: 'Pause active ride' })).toBeEnabled();
   }));
+
+it.each(['browser', 'native'] as const)(
+  'describes only applicable storage when deleting a %s ride with Health off',
+  async storage =>
+    run(async page => {
+      await page.evaluate(storage => {
+        const h = window.historyTests;
+        h.seed([{ ...h.metadata('local-only', 1), storage, watchEnabled: false, saveToHealth: false }]);
+        h.mount();
+      }, storage);
+      await selectFirst(page);
+      await page.getByRole('button', { name: 'Delete ride', exact: true }).click();
+      const modal = page.getByTestId('delete-ride-sheet');
+      await ui(modal).toContainText('This permanently removes the recording and charts from Power Log.');
+      await ui(modal).not.toContainText('The Watch copy');
+      if (storage === 'browser') await ui(modal).not.toContainText('Health');
+      else await ui(modal).toContainText('Workouts already saved in Apple Health stay there.');
+    }),
+);

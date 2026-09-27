@@ -130,7 +130,7 @@ test('one persistent header stays fixed during navigation and scrolling at phone
       requestAnimationFrame(record);
     });
     await page.getByRole('link', { name: 'History', exact: true }).click();
-    await expect(page.getByTestId('tab-transition-1')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+    await expect(page.getByTestId('tab-transition-1')).toHaveCSS('transform', 'none');
     await page.getByRole('link', { name: 'Ride', exact: true }).click();
     await expect(header).toHaveAttribute('data-persistent-header', 'yes');
     await expect

@@ -28,6 +28,7 @@ internal class RecordingEngine private constructor(val context: Context) {
     private var liveStart = SystemClock.elapsedRealtime()
     @Volatile private var ride: String? = null
     private var phase = "idle"
+    private var selectedRide: String? = null
     private var options = RideOptions(indoor = false, saveToHealth = false, recordGPS = false)
     @Volatile private var startClock = 0L
     private var activeSince = 0L
@@ -207,6 +208,7 @@ internal class RecordingEngine private constructor(val context: Context) {
         phase = "running"
         startClock = SystemClock.elapsedRealtime()
         ride = created
+        selectedRide = created
         monitor.selectLiveRide(created)
         activeSince = startClock
         activeSeconds = 0.0
@@ -218,7 +220,7 @@ internal class RecordingEngine private constructor(val context: Context) {
         lastLocationValues = emptyMap()
         gpsUnavailable = false
         rideDevice = bluetooth.deviceId
-        distance.reset()
+        distance.retainOnly(live)
         gpsActive = gps
         notificationState = RideNotificationState(ride, phase, activeSince, activeSeconds)
         try {
@@ -231,14 +233,7 @@ internal class RecordingEngine private constructor(val context: Context) {
                     .getSystemService(PowerManager::class.java)
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PowerLog:recording")
                     .apply { acquire(24 * 60 * 60 * 1000L) }
-            if (gps)
-                locations.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    1000,
-                    0f,
-                    locationListener,
-                    thread.looper,
-                )
+            if (gps) startLocationUpdates()
         } catch (error: Exception) {
             ride?.let { store.remove(it) }
             ride = null
@@ -258,6 +253,16 @@ internal class RecordingEngine private constructor(val context: Context) {
     }
 
     fun action(action: String, id: String?): Payload {
+        if (action in listOf("pause", "resume", "lap")) {
+            require(id == null || id == selectedRide) {
+                "The selected workout changed. Refresh before trying again."
+            }
+            when (action) {
+                "pause" -> check(phase == "running") { "The workout is not ready to pause." }
+                "resume" -> check(phase == "paused") { "The owner must be paused before resuming." }
+                "lap" -> check(phase == "running") { "Start or resume the workout before marking a lap." }
+            }
+        }
         val current = requireRide(id)
         val nextHistoryRevision =
             if (action in listOf("stop", "discard")) RideStore.nextRevision(historyRevision) else historyRevision
@@ -275,6 +280,7 @@ internal class RecordingEngine private constructor(val context: Context) {
                     segment++
                     telemetrySegment++
                     boundary(time)
+                    if (options.recordGPS) locations.removeUpdates(locationListener)
                 }
             "resume" ->
                 if (phase == "paused") {
@@ -284,9 +290,9 @@ internal class RecordingEngine private constructor(val context: Context) {
                     segment++
                     telemetrySegment++
                     boundary(time)
+                    if (options.recordGPS) startLocationUpdates()
                 }
             "lap" -> {
-                check(phase == "running") { "Resume the ride before marking a lap." }
                 store.transaction {
                     store.lifecycle(current, timing, "lap")
                     store.update(current, phase, timing)
@@ -303,6 +309,7 @@ internal class RecordingEngine private constructor(val context: Context) {
             "discard" -> {
                 store.remove(current)
                 lastDeleted = current
+                selectedRide = null
                 ride = null
                 phase = "idle"
                 cleanup()
@@ -327,6 +334,7 @@ internal class RecordingEngine private constructor(val context: Context) {
         store.remove(id)
         historyRevision = nextHistoryRevision
         lastDeleted = id
+        if (selectedRide == id) selectedRide = null
         publish()
         return state()
     }
@@ -383,6 +391,7 @@ internal class RecordingEngine private constructor(val context: Context) {
     }
 
     private fun cleanup() {
+        if (bluetooth.state["status"] == "reconnecting") bluetooth.disconnect()
         monitor.selectLiveRide(live)
         rideDevice = null
         gpsActive = false
@@ -390,7 +399,7 @@ internal class RecordingEngine private constructor(val context: Context) {
         locations.removeUpdates(locationListener)
         if (wake?.isHeld == true) wake?.release()
         wake = null
-        distance.reset()
+        distance.retainOnly(live)
         context.stopService(Intent(context, RecordingService::class.java))
     }
 
@@ -402,9 +411,11 @@ internal class RecordingEngine private constructor(val context: Context) {
         timestamp: String,
     ) {
         val now = SystemClock.elapsedRealtime()
-        val id = ride ?: live
-        val time = if (ride == null) (acquiredAt - liveStart) / 1000.0 else elapsed(acquiredAt)
-        val active = if (ride == null) true else boundaries.lastOrNull { it.time <= time }?.active ?: return
+        val current = ride
+        val liveTime = (acquiredAt - liveStart) / 1000.0
+        val rideTime = current?.let { elapsed(acquiredAt) }
+        val rideActive = rideTime?.let { time -> boundaries.lastOrNull { it.time <= time }?.active }
+        val time = rideTime ?: liveTime
         lastTelemetry = acquiredAt
         sequence++
         if (lastEpoch != epoch) {
@@ -412,22 +423,24 @@ internal class RecordingEngine private constructor(val context: Context) {
             lastEpoch = epoch
         }
         val identityText = "${identity.model}|${identity.firmware}|${identity.protocol}"
-        pending.add(
+        fun observation(target: String, at: Double, active: Boolean, segment: Int) =
             Pending(
-                id,
-                time,
+                target,
+                at,
                 timestamp,
                 "telemetry",
                 active,
-                telemetrySegment,
+                segment,
                 values,
                 identityText,
                 epoch,
                 acquiredAt / 1000.0,
             )
-        )
+        pending.add(observation(live, liveTime, true, 0))
+        if (current != null && rideTime != null && rideActive != null)
+            pending.add(observation(current, rideTime, rideActive, telemetrySegment))
         try {
-            if (pending.size >= 8) flush()
+            if (pending.count { current == null || it.ride != live } >= 8) flush()
         } catch (error: Exception) {
             captureFailed(error)
         }
@@ -451,6 +464,10 @@ internal class RecordingEngine private constructor(val context: Context) {
         }
     }
 
+    private fun startLocationUpdates() {
+        locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0f, locationListener, thread.looper)
+    }
+
     private val locationListener =
         object : LocationListener {
             override fun onLocationChanged(location: Location) {
@@ -461,6 +478,7 @@ internal class RecordingEngine private constructor(val context: Context) {
                 val time = (location.elapsedRealtimeNanos / 1_000_000 - startClock) / 1000.0
                 if (time < 0) return
                 val boundary = boundaries.lastOrNull { it.time <= time } ?: return
+                if (!boundary.active) return
                 val values =
                     mutableMapOf(
                         "latitude" to location.latitude,
@@ -585,8 +603,18 @@ internal class RecordingEngine private constructor(val context: Context) {
         }
 
     fun connect(input: ConnectInput, completion: (Throwable?) -> Unit) {
+        bluetooth.validateConnect(input.deviceId, input.sampleHz)
         checkBike(input.deviceId)
+        if (!bluetooth.connectedTo(input.deviceId)) startLiveSession()
         bluetooth.connect(input.deviceId, input.sampleHz, completion)
+    }
+
+    private fun startLiveSession() {
+        flush()
+        distance.forget(live)
+        live = store.replaceLive()
+        liveStart = SystemClock.elapsedRealtime()
+        if (ride == null) monitor.selectLiveRide(live)
     }
 
     private fun monitorOriginSeconds(id: String): Double? {
@@ -605,8 +633,7 @@ internal class RecordingEngine private constructor(val context: Context) {
         handler.post {
             try {
                 store.recoverOrphans()
-                live = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false), live = true)
-                monitor.selectLiveRide(live)
+                startLiveSession()
                 initialized = true
                 tick.run()
                 store.pendingHealthJobs().forEach { queueHealth(it) }

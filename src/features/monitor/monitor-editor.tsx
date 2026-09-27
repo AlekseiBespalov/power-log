@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { useRef, useState } from 'react';
+import { Platform, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, colors, Label } from '../../components/ui';
 import { type MonitorView, type SpeedUnit } from '../../core/monitor';
@@ -43,6 +43,8 @@ export function MonitorEditor(props: Props) {
 function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
   const [tab, setTab] = useState<'numbers' | 'charts'>('numbers');
   const [query, setQuery] = useState('');
+  const search = useRef<TextInput>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
   const { height, fontScale } = useWindowDimensions();
   const compact = height < 520 * fontScale;
   const selected = view[tab],
@@ -94,10 +96,13 @@ function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
         }}
       >
         <TextInput
+          ref={search}
           accessibilityLabel="Search metrics"
           placeholder="Search metrics"
           value={query}
           onChangeText={setQuery}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
           autoCorrect={false}
           autoCapitalize="none"
           clearButtonMode="while-editing"
@@ -109,9 +114,33 @@ function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
             backgroundColor: colors.bg,
             color: colors.text,
             paddingHorizontal: 12,
+            paddingRight: Platform.OS === 'ios' ? 12 : 44,
             fontSize: 14,
           }}
         />
+        {Platform.OS !== 'ios' && searchFocused && query.length > 0 && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            onPointerDown={event => {
+              if (Platform.OS === 'web') event.preventDefault();
+            }}
+            onPress={() => {
+              setQuery('');
+              search.current?.focus();
+            }}
+            style={{
+              position: 'absolute',
+              right: 0,
+              minHeight: 44,
+              minWidth: 44,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: colors.muted, fontSize: 22 }}>×</Text>
+          </Pressable>
+        )}
       </View>
     </>
   );

@@ -74,6 +74,81 @@ class RideMonitorLiveTest {
         return (result["series"] as Map<*, *>)["speedMps"] as List<*>
     }
 
+    private fun describe(source: String = "workout"): Payload =
+        monitor.query(
+            id,
+            BridgeInputs.monitor(MonitorOperation.Describe, mapOf("source" to source, "id" to id, "generation" to 7)),
+        )
+
+    @Test
+    fun emptyLiveAndWorkoutDescriptionsHaveTenSecondDomainsAndAvailableOutcomes() {
+        for (source in listOf("live", "workout")) {
+            val result = describe(source)
+            assertEquals("ok", result["status"])
+            assertEquals("$source:$id", result["sourceId"])
+            assertEquals(7, result["generation"])
+            assertEquals(store.revision(id).toString(), result["revision"])
+            assertEquals(store.metadata(id)["startedAt"], result["startedAt"])
+            assertEquals(mapOf("start" to 0.0, "end" to 10.0), result["domain"])
+            assertEquals("available", result["outcome"])
+            assertEquals(emptyList<String>(), result["availableMetrics"])
+            assertEquals(emptyMap<String, Any>(), result["metricSources"])
+            assertEquals(emptyList<String>(), result["warnings"])
+            assertTrue(result.containsKey("nowSeconds"))
+            assertTrue(result.containsKey("monotonicAt"))
+            assertFalse(result.containsKey("liveAcquiredAt"))
+        }
+        store.seal(id, RideTiming(12.0, 12.0, iso()))
+        val saved = describe()
+        assertEquals(mapOf("start" to 0.0, "end" to 12.0), saved["domain"])
+        assertEquals("available", saved["outcome"])
+        assertFalse(saved.containsKey("nowSeconds"))
+        assertFalse(saved.containsKey("monotonicAt"))
+    }
+
+    @Test
+    fun descriptionsPreserveWarningsAndFinalizationOutcomes() {
+        for ((extra, outcome) in
+            listOf(
+                mapOf("finalizationState" to "pending") to "pending",
+                mapOf("watchSyncState" to "pending") to "pending",
+                mapOf("finalizationState" to "partial") to "partial",
+                mapOf("warnings" to listOf("Fixture warning")) to "partial",
+            )) {
+            store.update(
+                id,
+                "running",
+                RideTiming(2.0, 2.0, iso()),
+                mapOf(
+                    "finalizationState" to "complete",
+                    "watchSyncState" to "notRequired",
+                    "warnings" to emptyList<String>(),
+                ) + extra,
+            )
+            val result = describe()
+            assertEquals(outcome, result["outcome"])
+            assertEquals(extra["warnings"] ?: emptyList<String>(), result["warnings"])
+        }
+    }
+
+    @Test
+    fun descriptionsReportPartialDistanceAndKeepObservedDomainAndSortedMetrics() {
+        val distance = RideDistance(store)
+        store.transaction {
+            for (time in listOf(12.0, 13.0)) {
+                val values = mapOf("controllerSpeedMps" to 4.0, "humanPowerW" to 120.0)
+                val row = store.insert(id, time, iso(), "telemetry", true, 0, values, "X6|20250725|5.3", "fixture")
+                distance.append(id, row, time, values, true, 0, "fixture", "X6|20250725|5.3", false)
+            }
+        }
+        store.update(id, "running", RideTiming(13.0, 13.0, iso()))
+        val result = describe()
+        assertEquals("partial", result["outcome"])
+        assertEquals(mapOf("start" to 0.0, "end" to 13.0), result["domain"])
+        assertEquals(listOf("controllerSpeedMps", "distanceMeters", "humanPowerW"), result["availableMetrics"])
+        assertEquals(distance.info(id, "auto")["selected"], (result["metricSources"] as Map<*, *>)["distanceMeters"])
+    }
+
     @Test
     fun plotNeighborsPreserveOriginalsAndSegmentsAcrossBucketsAndTies() {
         val points = listOf(1.0 to 3.0, 15.0 to 4.0, 16.0 to 5.0, 18.0 to 6.0, 18.0 to 7.0, 64.0 to 8.0, 66.0 to 9.0)

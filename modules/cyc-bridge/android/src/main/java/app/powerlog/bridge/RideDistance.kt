@@ -17,6 +17,10 @@ internal class RideDistance(private val store: RideStore) {
 
     fun reset() = previous.clear()
 
+    fun forget(ride: String) = previous.keys.removeAll { it.startsWith("$ride:") }
+
+    fun retainOnly(ride: String) = previous.keys.retainAll { it.startsWith("$ride:") }
+
     fun append(
         ride: String,
         row: Long,

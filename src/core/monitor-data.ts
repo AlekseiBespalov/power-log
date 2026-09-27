@@ -60,7 +60,7 @@ export class TelemetryMonitor implements MonitorSource {
   private liveAnchor: number | null = null;
   private clock?: MonotonicMapping;
   private liveAcquiredAt: Record<string, number | null> = {};
-  private readonly emptyStartedAt = new Date().toISOString();
+  private startedAt = new Date().toISOString();
   constructor(
     readonly key: string,
     readonly live: boolean,
@@ -79,7 +79,8 @@ export class TelemetryMonitor implements MonitorSource {
     this.journal = [];
     this.start = 0;
     this.end = 0;
-    this.liveAnchor = null;
+    this.liveAnchor = this.live ? this.now() : null;
+    this.startedAt = new Date().toISOString();
     this.clock = undefined;
     this.liveAcquiredAt = {};
   }
@@ -90,7 +91,7 @@ export class TelemetryMonitor implements MonitorSource {
     const last = this.samples[this.samples.length - 1];
     if (this.live && last && sample.elapsedSeconds <= last.elapsedSeconds) return;
     this.samples.push(sample);
-    const time = this.time(sample),
+    const time = sample.elapsedSeconds,
       previousEnd = this.end,
       previousStart = this.start;
     const receivedAt = delivery ? samplePresentationTime(delivery) : null;
@@ -124,9 +125,6 @@ export class TelemetryMonitor implements MonitorSource {
     });
     if (this.journal.length > JOURNAL_ENTRIES) this.journal.shift();
   }
-  private time(sample: TelemetrySample) {
-    return sample.elapsedSeconds - (this.live ? this.samples[0]!.elapsedSeconds : 0);
-  }
   mapMonotonicSeconds = (seconds: number): number | null => (this.clock ? this.clock.toJS(seconds) : seconds);
   private timing() {
     const now = this.now();
@@ -151,7 +149,7 @@ export class TelemetryMonitor implements MonitorSource {
     for (let i = cached.processed; i < this.samples.length; i++) {
       const sample = this.samples[i]!,
         value = sample[id as keyof TelemetrySample],
-        elapsedSeconds = this.time(sample);
+        elapsedSeconds = sample.elapsedSeconds;
       if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isFinite(elapsedSeconds)) continue;
       if (cached.points.length && elapsedSeconds <= cached.points[cached.points.length - 1]!.elapsedSeconds)
         needsSort = true;
@@ -171,9 +169,10 @@ export class TelemetryMonitor implements MonitorSource {
   }
   async describeSource({ generation }: MonitorDescribeRequest): Promise<MonitorDescribeResult> {
     const first = this.samples[0];
-    const startedAt = first
-      ? new Date(Date.parse(first.timestamp) - (this.live ? 0 : first.elapsedSeconds) * 1000).toISOString()
-      : this.emptyStartedAt;
+    const startedAt =
+      !this.live && first
+        ? new Date(Date.parse(first.timestamp) - first.elapsedSeconds * 1000).toISOString()
+        : this.startedAt;
     return {
       ...this.envelope(generation),
       status: 'ok',
@@ -263,7 +262,7 @@ export class TelemetryMonitor implements MonitorSource {
         const index = /^\d{16}$/.test(suffix) ? Number(suffix) : -1;
         const sample = Number.isSafeInteger(index) ? this.samples[index] : undefined;
         const value = sample?.[id as keyof TelemetrySample],
-          elapsedSeconds = sample ? this.time(sample) : NaN;
+          elapsedSeconds = sample?.elapsedSeconds ?? NaN;
         const point: MonitorPoint | null =
           sample &&
           typeof value === 'number' &&

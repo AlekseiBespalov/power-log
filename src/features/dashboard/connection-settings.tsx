@@ -75,16 +75,10 @@ export function ConnectionSettings() {
             <Text style={{ color: colors.muted, fontSize: 12 }}>{bikeDetails(device)}</Text>
           </View>
         ))}
-      {state.status === 'connecting' && adapter.kind === 'web' ? (
-        <Button secondary onPress={action(() => adapter.disconnect())}>
-          Cancel connection
+      {(connected || connecting) && (
+        <Button secondary disabled={busy || active} onPress={action(() => adapter.disconnect())}>
+          Disconnect
         </Button>
-      ) : (
-        (connected || connecting) && (
-          <Button secondary disabled={busy || active} onPress={action(() => adapter.disconnect())}>
-            Disconnect
-          </Button>
-        )
       )}
       <Button secondary onPress={() => setDetails(value => !value)}>
         {details ? 'Hide connection details' : 'Connection details'}

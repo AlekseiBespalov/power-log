@@ -31,6 +31,7 @@ export class TestTelemetryAdapter implements TelemetryAdapter {
   async connect(options: ConnectionOptions = { deviceId: 'test-bike', hz: 8 }) {
     if (this.owner !== null && options.deviceId !== this.owner)
       throw new Error('Finish the ride before changing its bike.');
+    this.emitState({ status: 'connecting', deviceId: options.deviceId });
     this.connectionEpoch = crypto.randomUUID();
     this.emitState({ status: 'connected', deviceId: options.deviceId });
   }

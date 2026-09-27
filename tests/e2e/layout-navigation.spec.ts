@@ -83,7 +83,7 @@ for (const width of [320, 390, 900])
     await page.screenshot({ animations: 'disabled', path: testInfo.outputPath(`temperature-compact-${width}.png`) });
   });
 
-test('Ride and History enter from their relative side, including repeated navigation and Back', async ({ page }) => {
+test('Ride and History stay stationary during repeated navigation and Back', async ({ page }) => {
   await page.addInitScript(() => {
     const samples: { tab: string; x: number }[] = [];
     Object.assign(window, { tabMotion: samples });
@@ -102,16 +102,15 @@ test('Ride and History enter from their relative side, including repeated naviga
   await page.getByTestId('tab-transition-0').evaluate(element => {
     element.setAttribute('data-original-ride-tab', 'true');
   });
-  const assertDirection = async (index: number, action: () => Promise<unknown>) => {
+  const assertStationary = async (index: number, action: () => Promise<unknown>) => {
     await page.evaluate(() => {
       (window as unknown as { tabMotion: unknown[] }).tabMotion.length = 0;
     });
     await action();
     const moving = page.locator(`[data-testid="tab-transition-${index}"]:visible`);
     await expect(moving).toHaveCount(1);
-    await expect
-      .poll(() => moving.evaluate(element => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41))
-      .toBe(0);
+    await expect(moving).toHaveCSS('transform', 'none');
+    await page.waitForTimeout(220);
     const positions = await page.evaluate(
       index =>
         (window as unknown as { tabMotion: { tab: string; x: number }[] }).tabMotion
@@ -119,16 +118,14 @@ test('Ride and History enter from their relative side, including repeated naviga
           .map(item => item.x),
       index,
     );
-    expect(positions.length).toBeGreaterThan(1);
-    expect(positions.every(x => (index === 1 ? x > 0 : x < 0))).toBe(true);
-    expect(Math.abs(positions[positions.length - 1]!)).toBeLessThan(Math.abs(positions[0]!));
+    expect(positions).toEqual([]);
   };
-  await assertDirection(1, () => page.getByRole('link', { name: 'History', exact: true }).click());
+  await assertStationary(1, () => page.getByRole('link', { name: 'History', exact: true }).click());
   await expect(page.locator('[data-original-ride-tab="true"]')).toHaveAttribute('data-testid', 'tab-transition-0');
   await expect(page.locator('[data-original-ride-tab="true"]')).toBeHidden();
-  await assertDirection(0, () => page.getByRole('link', { name: 'Ride', exact: true }).click());
-  await assertDirection(1, () => page.getByRole('link', { name: 'History', exact: true }).click());
-  await assertDirection(0, () => page.goBack());
+  await assertStationary(0, () => page.getByRole('link', { name: 'Ride', exact: true }).click());
+  await assertStationary(1, () => page.getByRole('link', { name: 'History', exact: true }).click());
+  await assertStationary(0, () => page.goBack());
 });
 
 test('tab transitions respect reduced motion', async ({ page }) => {
@@ -147,16 +144,10 @@ test('tab transitions respect reduced motion', async ({ page }) => {
     requestAnimationFrame(record);
   });
   await page.getByRole('link', { name: 'History', exact: true }).click();
-  await expect(page.locator('[data-testid="tab-transition-1"]:visible')).toHaveCSS(
-    'transform',
-    'matrix(1, 0, 0, 1, 0, 0)',
-  );
+  await expect(page.locator('[data-testid="tab-transition-1"]:visible')).toHaveCSS('transform', 'none');
   await page.waitForTimeout(220);
   await page.getByRole('link', { name: 'Ride', exact: true }).click();
-  await expect(page.locator('[data-testid="tab-transition-0"]:visible')).toHaveCSS(
-    'transform',
-    'matrix(1, 0, 0, 1, 0, 0)',
-  );
+  await expect(page.locator('[data-testid="tab-transition-0"]:visible')).toHaveCSS('transform', 'none');
   await page.waitForTimeout(220);
   const motion = await page.evaluate(() => (window as unknown as { reducedMotionProbe: number[] }).reducedMotionProbe);
   expect(motion.length).toBeGreaterThan(5);

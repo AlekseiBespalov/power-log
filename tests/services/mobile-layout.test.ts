@@ -35,7 +35,7 @@ vi.mock('../../src/services/session-context', () => ({ SessionProvider: 'session
 vi.mock('../../src/services/workout-context', () => ({ WorkoutProvider: 'workout-provider' }));
 vi.mock('../../src/services/monitor-preferences', () => ({ MonitorPreferencesProvider: 'preferences-provider' }));
 vi.mock('../../src/components/ui', () => ({ colors: { bg: '#0b0d10' } }));
-vi.mock('../../src/components/tab-transition', () => ({ TabTransitionProvider: 'transition-provider' }));
+vi.mock('react-native-gesture-handler', () => ({ GestureHandlerRootView: 'gesture-root' }));
 vi.mock('../../src/components/app-header', () => ({
   AppHeader: () => createElement('header', null, 'Web navigation'),
 }));

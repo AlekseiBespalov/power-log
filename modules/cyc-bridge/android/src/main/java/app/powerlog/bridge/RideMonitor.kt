@@ -136,7 +136,7 @@ internal class RideMonitor(
         val envelope =
             mapOf(
                 "generation" to request.generation,
-                "sourceId" to id,
+                "sourceId" to "${if (request.target == MonitorTarget.Live) "live" else "workout"}:$id",
                 "revision" to revision,
                 "metricSources" to metricSources.filterValues { it != null },
             )
@@ -166,12 +166,25 @@ internal class RideMonitor(
                 MonitorOperation.Describe -> {
                     val available = store.available(id).filter { !it.endsWith("DistanceMeters") }.toMutableList()
                     if (distanceInfo["selected"] != null) available.add("distanceMeters")
+                    val metadata = store.metadata(id)
+                    val warnings = (metadata["warnings"] as? List<*>)?.filterIsInstance<String>().orEmpty()
+                    val selectedDistance = distanceInfo["selected"] as? Map<*, *>
+                    val outcome =
+                        when {
+                            metadata["finalizationState"] == "pending" ||
+                                metadata["watchSyncState"] == "pending" ||
+                                metadata["phase"] == "finishing" -> "pending"
+                            selectedDistance?.get("partial") == true ||
+                                metadata["finalizationState"] == "partial" ||
+                                warnings.isNotEmpty() -> "partial"
+                            else -> "available"
+                        }
                     mapOf(
-                        "startedAt" to store.metadata(id)["startedAt"],
-                        "domain" to mapOf("start" to 0, "end" to max(1.0, elapsed)),
-                        "availableMetrics" to available,
-                        "outcome" to if (available.isEmpty()) "unavailable" else "available",
-                        "warnings" to emptyList<String>(),
+                        "startedAt" to metadata["startedAt"],
+                        "domain" to mapOf("start" to 0.0, "end" to max(10.0, elapsed)),
+                        "availableMetrics" to available.sorted(),
+                        "outcome" to outcome,
+                        "warnings" to warnings,
                     )
                 }
                 MonitorOperation.Latest -> mapOf("points" to latest.mapValues { it.value?.payload() })

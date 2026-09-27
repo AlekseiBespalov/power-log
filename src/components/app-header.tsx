@@ -1,5 +1,6 @@
 import { Link, usePathname } from 'expo-router';
 import { Platform, Text, View, useWindowDimensions } from 'react-native';
+import { haptics } from '../services/haptics';
 import { colors } from './ui';
 import { APP_NAVIGATION, appNavigationIndex } from './app-navigation';
 
@@ -57,6 +58,9 @@ export function AppHeader() {
               <Link
                 key={href}
                 href={href}
+                onPress={() => {
+                  if (!selected) haptics.selection();
+                }}
                 accessibilityState={{ selected }}
                 aria-current={selected ? 'page' : undefined}
                 style={{

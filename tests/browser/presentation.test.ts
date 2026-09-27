@@ -26,6 +26,89 @@ const bundle = browserTestBundle('tests/fixtures/presentation-harness.tsx', 'pre
 });
 
 describe('production presentation providers with real browser capture', () => {
+  it('resets live history at the Connect request and preserves it across connected and reconnecting transitions', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      await page.route('http://127.0.0.1:43124/**', route =>
+        route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Connect boundary</title>' }),
+      );
+      await page.goto('http://127.0.0.1:43124/');
+      await page.addScriptTag({ content: bundle });
+      await page.evaluate(() => window.presentationTests.mount());
+      await page.waitForFunction(() => document.getElementById('phase')?.textContent === 'idle');
+      const result = await page.evaluate(async () => {
+        const p = window.presentationTests;
+        const describe = () => p.liveMonitor().describeSource({ generation: 0 });
+        await p.emitFrames(0, 2);
+        const before = await describe();
+        await p.deviceAdapter.disconnect();
+        p.deviceAdapter.emitState({ status: 'connecting' });
+        const connecting = await describe();
+        p.deviceAdapter.emitState({ status: 'reconnecting' });
+        const retrying = await describe();
+        p.deviceAdapter.emitState({ status: 'connected' });
+        await p.emitFrames(8, 1);
+        const connected = await describe();
+        p.deviceAdapter.emitState({ status: 'reconnecting' });
+        p.deviceAdapter.emitState({ status: 'connected' });
+        await p.emitFrames(16, 1);
+        return { before, connecting, retrying, connected, reconnected: await describe() };
+      });
+      expect(result.connecting.sourceId).not.toBe(result.before.sourceId);
+      expect(result.connecting.revision).toBe('0');
+      expect(result.retrying.sourceId).toBe(result.connecting.sourceId);
+      expect(result.connected.sourceId).toBe(result.connecting.sourceId);
+      expect(result.connected.domain.start).toBe(1);
+      expect(result.reconnected.sourceId).toBe(result.connecting.sourceId);
+      expect(result.reconnected.revision).toBe('2');
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it('keeps one live session through a ride and starts a new one only on a manual connect', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      await page.route('http://127.0.0.1:43124/**', route =>
+        route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Presentation integration</title>' }),
+      );
+      await page.goto('http://127.0.0.1:43124/');
+      await page.addScriptTag({ content: bundle });
+      await page.evaluate(() => window.presentationTests.mount());
+      await page.waitForFunction(() => document.getElementById('phase')?.textContent === 'idle');
+      const result = await page.evaluate(async () => {
+        const p = window.presentationTests;
+        const describe = async () => {
+          const description = await p.liveMonitor().describeSource({ generation: 0 });
+          return { source: description.sourceId, revision: description.revision };
+        };
+        await p.emitFrames(0, 4);
+        const connected = await describe();
+        const ride = await p.workouts.start({
+          indoor: true,
+          useWatch: false,
+          saveToHealth: false,
+          recordGPS: false,
+          sampleHz: 8,
+        });
+        await p.emitFrames(4, 4);
+        await p.workouts.stop(ride.id!);
+        await p.emitFrames(8, 4);
+        const afterRide = await describe();
+        await p.deviceAdapter.disconnect();
+        await p.deviceAdapter.connect();
+        await p.emitFrames(0, 2);
+        return { connected, afterRide, reconnected: await describe() };
+      });
+      expect(result.afterRide).toEqual({ source: result.connected.source, revision: '12' });
+      expect(result.reconnected.source).not.toBe(result.connected.source);
+      expect(result.reconnected.revision).toBe('2');
+    } finally {
+      await browser.close();
+    }
+  }, 15000);
   it('isolates shared UI, suspends hidden publication, and retains every recorded original', async () => {
     const browser = await chromium.launch({ headless: true });
     try {

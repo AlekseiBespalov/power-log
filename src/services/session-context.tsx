@@ -14,8 +14,6 @@ import type { TelemetryDisplay } from '../core/telemetry-display';
 import type { TelemetryAdapter } from './adapter';
 import { deviceAdapter } from './device';
 import { initialSessionErrors, sessionErrorMessage, sessionErrorReducer } from './session-errors';
-import { workouts } from './workouts';
-import { workoutInProgress } from '../core/workouts';
 import { TelemetryMonitor } from '../core/monitor-data';
 import { useMonitorPreferences } from './monitor-preferences';
 import { appIsForeground, subscribeAppVisibility } from './app-visibility';
@@ -54,34 +52,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     deferNative: state.recoverableConnectionError === true && display === 'held',
   });
   useEffect(() => {
-    let rideActive = false,
-      rideEvents = 0;
-    const receiveRide = (value: Awaited<ReturnType<typeof workouts.getState>>) => {
-      const next = workoutInProgress(value.phase);
-      if (rideActive && !next) monitor.beginSession();
-      rideActive = next;
-    };
-    const unsubscribeRide = workouts.subscribe(value => {
-      rideEvents++;
-      receiveRide(value);
-    });
-    void workouts
-      .getState()
-      .then(value => {
-        if (!rideEvents) receiveRide(value);
-      })
-      .catch(() => {});
     let disposed = false;
     let stateEvents = 0;
     let previousStatus: NativeState['status'] = 'idle';
     const receiveState = (next: NativeState) => {
       if (disposed) return;
-      if (
-        adapter.kind !== 'native' &&
-        next.status === 'connected' &&
-        previousStatus !== 'connected' &&
-        previousStatus !== 'reconnecting'
-      )
+      if (adapter.kind !== 'native' && next.status === 'connecting' && previousStatus !== 'connecting')
         monitor.beginSession();
       previousStatus = next.status;
       presentation.receiveState(next);
@@ -97,9 +73,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       sample: (sample, delivery) => {
         if (disposed) return;
-        if (adapter.kind !== 'native' && !rideActive) {
-          monitor.append(sample, delivery);
-        }
+        if (adapter.kind !== 'native') monitor.append(sample, delivery);
         presentation.receiveSample(sample, delivery);
       },
     });
@@ -126,7 +100,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       presentation.setActive(false);
       unsubscribeVisibility();
       unsubscribe();
-      unsubscribeRide();
     };
   }, [monitor, presentation]);
   const run = useCallback(async (action: () => Promise<unknown>) => {

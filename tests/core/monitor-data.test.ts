@@ -55,6 +55,25 @@ async function query(
   };
 }
 describe('monitor original observations', () => {
+  it('starts the empty live clock at Connect and keeps the setup delay in every observation', async () => {
+    let now = 100;
+    const monitor = new TelemetryMonitor('connect-origin', true, [], () => now);
+    monitor.beginSession();
+    now = 102;
+    const waiting = await monitor.describeSource({ generation: 1 });
+    expect(waiting).toMatchObject({ nowSeconds: 2, revision: '0' });
+    now = 103;
+    monitor.append(sample(3), { receivedAtSeconds: now });
+    const data = await query(monitor, { metrics: ['humanPowerW'], cursorSeconds: 3 });
+    expect(data.sourceId).toBe(waiting.sourceId);
+    expect(data.startedAt).toBe(waiting.startedAt);
+    expect(data.series.humanPowerW![0]!.elapsedSeconds).toBe(3);
+    expect(data.selection!.humanPowerW!.elapsedSeconds).toBe(3);
+    expect(data.nowSeconds).toBe(3);
+    monitor.beginSession();
+    expect(await monitor.describeSource({ generation: 2 })).toMatchObject({ revision: '0', nowSeconds: 0 });
+  });
+
   it('reevaluates retained native acquisition after sleep and during foreground resynchronization', async () => {
     let native = 1000;
     let now = 0;
@@ -85,20 +104,20 @@ describe('monitor original observations', () => {
     now++;
     const next = { ...sample(51), timestamp: '2025-12-31T23:00:00Z' };
     monitor.append(next, { receivedAtSeconds: now });
-    expect(await monitor.describeSource({ generation: 1 })).toMatchObject({ nowSeconds: 1, monotonicAt: 101 });
+    expect(await monitor.describeSource({ generation: 1 })).toMatchObject({ nowSeconds: 51, monotonicAt: 101 });
     now += 6;
     monitor.append(next, { receivedAtSeconds: now });
     expect(await monitor.describeSource({ generation: 2 })).toMatchObject({
       revision: '2',
-      nowSeconds: 7,
+      nowSeconds: 57,
       monotonicAt: 107,
     });
     const latest = await monitor.readLatest({ generation: 3, metrics: ['humanPowerW'] });
     expect(latest).toMatchObject({
-      nowSeconds: 7,
+      nowSeconds: 57,
       liveAcquiredAt: { humanPowerW: 101 },
       monotonicAt: 107,
-      points: { humanPowerW: { elapsedSeconds: 1, timestamp: next.timestamp } },
+      points: { humanPowerW: { elapsedSeconds: 51, timestamp: next.timestamp } },
     });
     const history = new TelemetryMonitor('csv', false, [next]);
     expect(await history.describeSource({ generation: 1 })).not.toHaveProperty('liveAcquiredAt');
@@ -229,7 +248,7 @@ describe('monitor original observations', () => {
     monitor.append(first);
     monitor.append(second);
     const result = await query(monitor, { metrics: ['humanPowerW'] });
-    expect(result.series.humanPowerW!.map(point => point.elapsedSeconds)).toEqual([0, 1]);
+    expect(result.series.humanPowerW!.map(point => point.elapsedSeconds)).toEqual([50, 51]);
     expect([first.elapsedSeconds, second.elapsedSeconds]).toEqual([50, 51]);
     expect(result.series.humanPowerW![1]!.timestamp).toBe(second.timestamp);
   });
@@ -496,7 +515,7 @@ describe('monitor snapshot contract', () => {
     const after = await monitor.describeSource({ generation: 2 });
     expect(after.sourceId).not.toBe(before.sourceId);
     expect(after.revision).toBe('1');
-    expect(after.domain.start).toBe(0);
+    expect(after.domain.start).toBe(50);
   });
 });
 describe('monitor metric boundaries', () => {

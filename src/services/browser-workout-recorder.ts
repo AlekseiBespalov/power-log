@@ -7,8 +7,10 @@ import {
 } from '../core/types';
 import { csvRow } from '../core/recordings';
 import { validateSample } from '../core/validation';
+import { telemetryDisplay } from '../core/telemetry-display';
 import {
   effectiveWorkoutOptions,
+  workoutInProgress,
   unavailableWorkoutState,
   type WorkoutAdapter,
   type WorkoutOptions,
@@ -98,6 +100,7 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
   private interval = 0;
   private nextSequence = 0;
   private latestReceived?: number;
+  private latestSourceReceived: number | null = null;
   constructor(
     private readonly store: BrowserRideStore = browserRideStore,
     private readonly now = () => performance.now() / 1000,
@@ -110,11 +113,12 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
     this.unsubscribe?.();
     this.source = source;
     this.sourceState = undefined;
-    this.latestReceived = undefined;
+    this.latestSourceReceived = null;
     this.unsubscribe = source.subscribe({
       device: () => {},
       state: state => {
         this.sourceState = state;
+        if (state.status !== 'connected' && state.status !== 'reconnecting') this.latestSourceReceived = null;
         this.emit();
       },
       sample: (sample, delivery) => this.receive(sample, delivery),
@@ -144,7 +148,13 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
     const supported = typeof indexedDB !== 'undefined' && typeof navigator !== 'undefined' && Boolean(navigator.locks);
     const timer = this.accepting ? this.clock().timer : (this.record?.timerSeconds ?? 0);
     const age = this.latestReceived === undefined ? null : Math.max(0, this.now() - this.latestReceived);
-    const fresh = age !== null && age < 6;
+    const phase = this.failure && this.release ? 'recoverable' : (this.record?.phase ?? 'idle');
+    const streamStatus = () => {
+      if (!workoutInProgress(phase)) return 'off';
+      if (phase === 'paused') return 'paused';
+      if (age === null) return 'waiting';
+      return age < 6 ? 'receiving' : 'stale';
+    };
     return {
       ...unavailableWorkoutState,
       supported,
@@ -158,7 +168,7 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
         foregroundOnly: true,
       },
       id: this.record?.id ?? null,
-      phase: this.failure && this.release ? 'recoverable' : (this.record?.phase ?? 'idle'),
+      phase,
       indoor: this.record?.indoor ?? false,
       useWatch: false,
       saveToHealth: false,
@@ -170,7 +180,7 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
       finalizationState: this.record ? (this.record.endedAt ? 'complete' : 'pending') : null,
       streams: {
         ...unavailableWorkoutState.streams,
-        cyc: { status: fresh ? 'receiving' : 'waiting' },
+        cyc: { status: streamStatus() },
       },
       warnings: [
         ...(this.record?.warnings ?? []),
@@ -235,7 +245,12 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
       const source = this.source;
       if (!source || source.kind !== 'web') throw new Error('Connect a browser data source first');
       const state = await source.getState();
-      if (state.status !== 'connected' || !state.deviceId) throw new Error('Connect a data source first');
+      if (
+        !state.deviceId ||
+        (state.status !== 'connected' &&
+          telemetryDisplay(state.status, this.latestSourceReceived, this.now()) !== 'held')
+      )
+        throw new Error('Connect a data source first');
       const release = await acquireLock();
       if (!release) throw new Error('Another browser tab owns the recording');
       this.release = release;
@@ -250,7 +265,10 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
       this.token = crypto.randomUUID();
       this.record = await this.store.begin(this.token, frozenOptions.indoor, this.utc());
       this.sourceState = await source.getState();
-      if (this.sourceState.status !== 'connected' || this.sourceState.deviceId !== this.deviceID) {
+      if (
+        !['connected', 'reconnecting'].includes(this.sourceState.status) ||
+        this.sourceState.deviceId !== this.deviceID
+      ) {
         this.record = await this.store.recoverOrphan();
         throw new Error('Data source changed while the ride was starting');
       }
@@ -258,6 +276,7 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
       this.foreign = false;
       this.interval = 0;
       this.nextSequence = 0;
+      this.latestReceived = undefined;
       this.admissionPhase = 'running';
       this.accepting = true;
       this.releaseClock = registerBrowserWorkoutClock(
@@ -301,7 +320,7 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
       return;
     }
     const acquiredAt = samplePresentationTime(delivery);
-    this.latestReceived = acquiredAt ?? undefined;
+    this.latestSourceReceived = acquiredAt;
     if (!this.accepting || !this.record) return;
     try {
       if (acquiredAt === null || acquiredAt > this.now())
@@ -371,6 +390,7 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
             clock.timer,
             clock.at,
           );
+          this.latestReceived = this.epoch + clock.elapsed;
         } else {
           if (first.action === 'discard') {
             await this.store.remove(this.record.id, this.token);

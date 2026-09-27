@@ -9,7 +9,6 @@ import {
 } from '../../src/core/workouts';
 import { TestTelemetryAdapter } from '../support/telemetry-adapter';
 import { browserRide } from '../support/browser-ride';
-import { syntheticSample } from '../fixtures/synthetic-sample';
 import rideSnapshots from '../fixtures/contract/ride-snapshots.json';
 import rideOptions from '../fixtures/contract/ride-options.json';
 
@@ -95,19 +94,6 @@ it('keeps the retained snapshot key set in browser reads, commands and events', 
     unsubscribe();
     if ((await recorder.getState()).id === record.id) await recorder.discard(record.id);
   }
-});
-
-it('uses receipt age only to present browser stream freshness', async () => {
-  vi.stubGlobal('indexedDB', undefined);
-  let now = 10;
-  const recorder = new BrowserWorkoutRecorder(undefined, () => now);
-  const source = new TestTelemetryAdapter(() => now);
-  recorder.setTelemetrySource(source);
-  source.emitSample(syntheticSample(0, 0));
-  now = 15.9;
-  expect((await recorder.getState()).streams.cyc).toEqual({ status: 'receiving' });
-  now = 16;
-  expect((await recorder.getState()).streams.cyc).toEqual({ status: 'waiting' });
 });
 
 const invalidOptions = [

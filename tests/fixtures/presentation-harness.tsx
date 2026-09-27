@@ -19,9 +19,12 @@ export function setHistoryVisible(active: boolean) {
   historyVisible = active;
   historyVisibility?.(active);
 }
+const latestSession: { current?: ReturnType<typeof useSession> } = {};
+export const liveMonitor = () => latestSession.current!.monitor;
 function SessionConsumer() {
-  useSession();
+  const session = useSession();
   useLayoutEffect(() => {
+    latestSession.current = session;
     counts.session++;
   });
   return null;

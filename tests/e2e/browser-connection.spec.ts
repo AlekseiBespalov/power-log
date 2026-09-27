@@ -24,21 +24,24 @@ for (const outcome of ['cancel', 'timeout'] as const) {
     await page.clock.install();
     await connect.click();
     await expect(page.getByTestId('bike-connection-status')).toHaveText('Connecting…');
-    const cancel = page.getByRole('button', { name: 'Cancel connection', exact: true });
-    await expect(cancel).toBeEnabled();
-    if (outcome === 'cancel') await cancel.click();
+    const disconnect = page.getByRole('button', { name: 'Disconnect', exact: true });
+    await expect(disconnect).toBeEnabled();
+    if (outcome === 'cancel') await disconnect.click();
     else {
       await page.clock.runFor(15001);
       await expect(page.getByTestId('ride-setup-sheet').getByRole('alert')).toContainText(
         'Bluetooth connection timed out',
       );
+      await expect(page.getByTestId('bike-connection-status')).toHaveText('Reconnecting…');
+      await expect(disconnect).toBeEnabled();
+      await disconnect.click();
     }
     await expect(page.getByTestId('bike-connection-status')).toHaveText('Not connected');
     await expect(connect).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Find bike', exact: true })).toBeEnabled();
     await connect.click();
-    await expect(cancel).toBeEnabled();
-    await cancel.click();
+    await expect(disconnect).toBeEnabled();
+    await disconnect.click();
     await expect(connect).toBeEnabled();
     await expect(page.getByRole('alert')).toHaveCount(0);
   });

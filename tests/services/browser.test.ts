@@ -113,6 +113,82 @@ afterEach(async () => {
 });
 
 describe('foreground browser BLE lifecycle', () => {
+  it('resolves Connect on admission and measures the first sample from that request', async () => {
+    const h = harness();
+    const gate = deferred<FakeGatt>();
+    h.device.gatt.connect.mockReturnValueOnce(gate.promise);
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    h.clock.seconds = 10;
+    const admitted = vi.fn();
+    void h.adapter.connect({ deviceId: h.device.id, hz: 2 }).then(admitted);
+    await flush();
+    expect(admitted).toHaveBeenCalledOnce();
+    expect((await h.adapter.getState()).status).toBe('connecting');
+    h.clock.seconds = 13;
+    h.device.gatt.connected = true;
+    gate.resolve(h.device.gatt);
+    await flush();
+    expect(h.events.sample.mock.lastCall![0].elapsedSeconds).toBe(3);
+    h.device.gatt.disconnect();
+    h.clock.seconds = 14;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.events.sample.mock.lastCall![0].elapsedSeconds).toBe(4);
+  });
+
+  it('treats chooser dismissal as cancellation and preserves real chooser errors', async () => {
+    const h = harness();
+    h.requestDevice.mockRejectedValueOnce(new DOMException('User cancelled', 'NotFoundError'));
+    await expect(h.adapter.startScan()).resolves.toBeUndefined();
+    expect(await h.adapter.getState()).toMatchObject({ status: 'idle', error: undefined });
+    expect(h.events.device).not.toHaveBeenCalled();
+    h.requestDevice.mockRejectedValueOnce(new DOMException('Permission denied', 'SecurityError'));
+    await expect(h.adapter.startScan()).rejects.toThrow('Permission denied');
+  });
+
+  it('keeps missing required services terminal instead of retrying unsupported hardware', async () => {
+    const h = harness();
+    h.device.gatt.getPrimaryService.mockRejectedValueOnce(new DOMException('UART service missing', 'NotFoundError'));
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    expect(await h.adapter.getState()).toMatchObject({ status: 'error', error: 'UART service missing' });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(h.events.sample).not.toHaveBeenCalled();
+  });
+
+  it('retains the selected display identity after manual Disconnect', async () => {
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    const connected = await h.adapter.getState();
+    await h.adapter.disconnect();
+    expect(await h.adapter.getState()).toEqual({ ...connected, status: 'idle' });
+    expect(h.device.gatt.connected).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('retries initial connection failures at 1, 2, 4, 8 and 16 seconds before stopping', async () => {
+    const h = harness();
+    h.device.gatt.connect.mockRejectedValue(new Error('Radio unavailable'));
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    expect(await h.adapter.getState()).toMatchObject({ status: 'reconnecting', recoverableConnectionError: true });
+    for (const [index, seconds] of [1, 2, 4, 8, 16].entries()) {
+      await vi.advanceTimersByTimeAsync(seconds * 1000 - 1);
+      expect(h.device.gatt.connect).toHaveBeenCalledTimes(index + 1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.device.gatt.connect).toHaveBeenCalledTimes(index + 2);
+    }
+    expect(await h.adapter.getState()).toMatchObject({ status: 'error', recoverableConnectionError: false });
+    expect(h.requestDevice).toHaveBeenCalledOnce();
+    expect(h.events.sample).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('admits a notification before Pause while its write completion is still pending', async () => {
     const h = harness();
     const write = deferred<void>();
@@ -155,6 +231,7 @@ describe('foreground browser BLE lifecycle', () => {
     recorder.setTelemetrySource(h.adapter);
     await h.adapter.startScan();
     await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     await recorder.start({ indoor: true, useWatch: false });
     try {
       h.clock.seconds = 1;
@@ -168,7 +245,7 @@ describe('foreground browser BLE lifecycle', () => {
       write.resolve();
       await flush();
       expect(h.events.sample).toHaveBeenCalledTimes(1);
-      expect((await recorder.getState()).streams.cyc.status).toBe('receiving');
+      expect((await recorder.getState()).streams.cyc.status).toBe('paused');
     } finally {
       await recorder.discard(record.id);
     }
@@ -291,7 +368,9 @@ describe('foreground browser BLE lifecycle', () => {
     expect(h.events.device.mock.lastCall![0]).toMatchObject({ id: h.device.id, controllerModel: 'X12' });
     // Remembered display metadata must never bypass a fresh identity handshake.
     h.service.writer.onWrite = () => h.service.reader.identity(111, 'X120');
-    await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toThrow('Unsupported controller');
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    expect((await h.adapter.getState()).error).toContain('Unsupported controller');
     expect((await h.adapter.getState()).status).toBe('error');
     expect(h.events.sample).toHaveBeenCalledTimes(1);
   });
@@ -335,6 +414,7 @@ describe('foreground browser BLE lifecycle', () => {
     await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
     oldChoice.reject(new Error('Old picker cancelled'));
     await oldScan;
+    await flush();
     expect((await h.adapter.getState()).status).toBe('connected');
   });
 
@@ -347,8 +427,9 @@ describe('foreground browser BLE lifecycle', () => {
     h.clock.seconds = 2.501; // Simulate a suspended tab without running its queued timer.
     h.service.reader.identity();
     await flush();
-    expect(await connecting).toBeInstanceOf(Error);
-    expect((await h.adapter.getState()).status).toBe('error');
+    expect(await connecting).toBeUndefined();
+    await flush();
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
     expect(h.service.writer.writeValueWithoutResponse).toHaveBeenCalledTimes(1);
     expect(h.events.sample).not.toHaveBeenCalled();
   });
@@ -381,8 +462,9 @@ describe('foreground browser BLE lifecycle', () => {
     h.clock.seconds = 3;
     write.resolve();
     await flush();
-    expect(await connecting).toBeInstanceOf(Error);
-    expect((await h.adapter.getState()).status).toBe('error');
+    expect(await connecting).toBeUndefined();
+    await flush();
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
     expect(h.events.sample).not.toHaveBeenCalled();
   });
 
@@ -398,8 +480,9 @@ describe('foreground browser BLE lifecycle', () => {
     await flush();
     h.clock.seconds = 2.5;
     await vi.advanceTimersByTimeAsync(2500);
-    expect(await connecting).toBeInstanceOf(Error);
-    expect((await h.adapter.getState()).status).toBe('error');
+    expect(await connecting).toBeUndefined();
+    await flush();
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
     write.resolve();
     await flush();
     expect(h.events.sample).not.toHaveBeenCalled();
@@ -483,14 +566,15 @@ describe('foreground browser BLE lifecycle', () => {
       await vi.advanceTimersByTimeAsync(14999);
       expect((await h.adapter.getState()).status).toBe('connecting');
       await vi.advanceTimersByTimeAsync(1);
-      expect(await connecting).toBeInstanceOf(Error);
+      expect(await connecting).toBeUndefined();
+      await flush();
       expect(await h.adapter.getState()).toMatchObject({
-        status: 'error',
+        status: 'reconnecting',
         error: expect.stringContaining('timed out'),
       });
       expect(h.device.gatt.connected).toBe(false);
       expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
-      expect(vi.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(1);
 
       replyAutomatically(h.service);
       await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
@@ -520,7 +604,7 @@ describe('foreground browser BLE lifecycle', () => {
     await flush();
     expect(h.device.gatt.connected).toBe(false);
     expect(h.device.gatt.getPrimaryService).not.toHaveBeenCalled();
-    expect((await h.adapter.getState()).status).toBe('error');
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
   });
 
   it('enforces the setup deadline after tab suspension even before its timeout callback runs', async () => {
@@ -532,10 +616,11 @@ describe('foreground browser BLE lifecycle', () => {
     await flush();
     h.clock.seconds = 15.001;
     service.resolve(h.service);
-    expect(await connecting).toBeInstanceOf(Error);
-    expect((await h.adapter.getState()).status).toBe('error');
+    expect(await connecting).toBeUndefined();
+    await flush();
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
     expect(h.service.getCharacteristic).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
   });
 
   it('does not let an old delayed setup failure disconnect a successful newer connection', async () => {

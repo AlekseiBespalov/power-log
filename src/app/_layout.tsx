@@ -2,12 +2,12 @@ import { Tabs, usePathname } from 'expo-router';
 import { useSyncExternalStore } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { SessionProvider } from '../services/session-context';
 import { colors } from '../components/ui';
 import { WorkoutProvider } from '../services/workout-context';
 import { MonitorPreferencesProvider } from '../services/monitor-preferences';
-import { TabTransitionProvider } from '../components/tab-transition';
 import { AppHeader } from '../components/app-header';
 import { TabBar } from '../components/tab-bar';
 import { PrivacyPolicy } from '../features/privacy/privacy-screen';
@@ -27,11 +27,11 @@ export default function RootLayout() {
       </View>
     );
   return (
-    <SafeAreaProvider>
-      <MonitorPreferencesProvider>
-        <SessionProvider>
-          <WorkoutProvider>
-            <TabTransitionProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <MonitorPreferencesProvider>
+          <SessionProvider>
+            <WorkoutProvider>
               <StatusBar style="light" />
               <SafeAreaView
                 edges={native ? ['left', 'right'] : ['top', 'left', 'right']}
@@ -41,13 +41,17 @@ export default function RootLayout() {
                 <Tabs
                   tabBar={native ? props => <TabBar {...props} /> : () => null}
                   backBehavior="fullHistory"
-                  screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: colors.bg } }}
+                  screenOptions={{
+                    headerShown: false,
+                    animation: 'none',
+                    sceneStyle: { backgroundColor: colors.bg },
+                  }}
                 />
               </SafeAreaView>
-            </TabTransitionProvider>
-          </WorkoutProvider>
-        </SessionProvider>
-      </MonitorPreferencesProvider>
-    </SafeAreaProvider>
+            </WorkoutProvider>
+          </SessionProvider>
+        </MonitorPreferencesProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

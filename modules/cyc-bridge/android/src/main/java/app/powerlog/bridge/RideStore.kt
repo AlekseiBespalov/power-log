@@ -381,6 +381,11 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
         }
     }
 
+    fun replaceLive(): String = transaction {
+        writableDatabase.delete("rides", "id LIKE 'live-%'", null)
+        create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false), live = true)
+    }
+
     fun recoverOrphans() = transaction {
         writableDatabase.delete("rides", "id LIKE 'live-%'", null)
         val ids =

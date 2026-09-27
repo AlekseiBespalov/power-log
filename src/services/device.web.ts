@@ -23,10 +23,9 @@ interface PendingResponse {
 }
 interface BikeSession {
   device: BluetoothDevice;
-  epoch?: number;
+  epoch: number;
   sequence: number;
   attempts: number;
-  established: boolean;
 }
 interface Connection {
   generation: number;
@@ -145,7 +144,7 @@ export class BrowserAdapter implements TelemetryAdapter {
   private recover(connection: Connection, error: unknown, peerDisconnected = false): void {
     if (!this.current(connection)) return;
     const session = connection.session;
-    if (!session.established || (session.attempts >= IDLE_RETRIES && this.workoutDeviceId === null)) {
+    if (session.attempts >= IDLE_RETRIES && this.workoutDeviceId === null) {
       this.failed(connection, error);
       return;
     }
@@ -159,7 +158,6 @@ export class BrowserAdapter implements TelemetryAdapter {
       recoverableConnectionError: true,
       error: error instanceof Error ? error.message : String(error),
     });
-    // Match native recovery: quick recovery after a stable peer drop, then bounded backoff.
     const delay =
       session.attempts === 1 && peerDisconnected && stable
         ? 0
@@ -245,6 +243,7 @@ export class BrowserAdapter implements TelemetryAdapter {
     } catch (error) {
       if (generation !== this.generation) return;
       this.update({ status: 'idle' });
+      if (error instanceof DOMException && error.name === 'NotFoundError') return;
       throw error;
     }
   }
@@ -324,9 +323,9 @@ export class BrowserAdapter implements TelemetryAdapter {
     this.connection = undefined;
     this.generation += 1;
     if (previous) this.cleanup(previous, true);
-    const session: BikeSession = { device: this.device, sequence: 0, attempts: 0, established: false };
+    const session: BikeSession = { device: this.device, epoch: this.now(), sequence: 0, attempts: 0 };
     this.session = session;
-    await this.open(session, false);
+    void this.open(session, false);
   }
 
   private async open(session: BikeSession, recovering: boolean): Promise<void> {
@@ -404,8 +403,6 @@ export class BrowserAdapter implements TelemetryAdapter {
         controllerModel: controller.controllerModel,
         firmwareLabel: controller.firmwareLabel,
       });
-      const epoch = (session.epoch ??= this.now());
-      session.established = true;
       this.update({
         status: recovering ? 'reconnecting' : 'connected',
         deviceId: device.id,
@@ -427,7 +424,7 @@ export class BrowserAdapter implements TelemetryAdapter {
             this.publish(
               toTelemetrySample(
                 values,
-                { timestamp: response.timestamp, elapsedSeconds: now - epoch, sequence: session.sequence++ },
+                { timestamp: response.timestamp, elapsedSeconds: now - session.epoch, sequence: session.sequence++ },
                 controller,
               ),
               now,
@@ -448,13 +445,9 @@ export class BrowserAdapter implements TelemetryAdapter {
       void poll();
     } catch (error) {
       if (!this.current(connection)) return;
-      if (recovering) {
-        if (transportFailure) this.recover(connection, error);
-        else this.failed(connection, error);
-        return;
-      }
-      this.failed(connection, error);
-      throw error;
+      if (transportFailure && !(error instanceof DOMException && error.name === 'NotFoundError'))
+        this.recover(connection, error);
+      else this.failed(connection, error);
     }
   }
 
@@ -468,10 +461,6 @@ export class BrowserAdapter implements TelemetryAdapter {
     if (connection) this.cleanup(connection, true);
     this.update({
       status: 'idle',
-      deviceName: undefined,
-      deviceId: undefined,
-      controllerModel: undefined,
-      firmwareLabel: undefined,
       error: undefined,
       recoverableConnectionError: false,
     });

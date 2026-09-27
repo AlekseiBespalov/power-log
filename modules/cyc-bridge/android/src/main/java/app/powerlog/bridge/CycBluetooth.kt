@@ -27,6 +27,9 @@ internal class CycBluetooth(
     private var writer: BluetoothGattCharacteristic? = null
     private var identity: CycProtocol.Identity? = null
     private var desired: String? = null
+    private var selected: BluetoothDevice? = null
+    private val knownControllers = mutableMapOf<String, CycProtocol.Identity>()
+    private var recoveryError: String? = null
     val deviceId: String?
         get() = desired
 
@@ -38,7 +41,9 @@ internal class CycBluetooth(
     private var pending: CycProtocol.Read? = null
     private var pendingSince = 0L
     private var nextPollAt = 0L
-    private var connectingCompletion: ((Throwable?) -> Unit)? = null
+    private var connectionWatchdog: Runnable? = null
+    private var connectionDeadline: Long? = null
+    private var scanDeadline: Runnable? = null
     private var watchdog: Runnable? = null
     private var polling: Runnable? = null
     private var retry: Runnable? = null
@@ -78,7 +83,7 @@ internal class CycBluetooth(
 
             override fun onScanFailed(code: Int) {
                 handler.post {
-                    stopScan()
+                    stopScan(publishIdle = false)
                     publish("error", "Bluetooth scan failed ($code). Try again.")
                 }
             }
@@ -92,7 +97,7 @@ internal class CycBluetooth(
 
     fun startScan() {
         check(manager?.adapter?.isEnabled == true) { "Turn on Bluetooth to find your bike." }
-        stopScan()
+        stopScan(publishIdle = false)
         devices.clear()
         scanning = true
         publish("scanning")
@@ -101,49 +106,50 @@ internal class CycBluetooth(
             ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
             scanner,
         )
-        handler.postDelayed(
-            {
-                if (scanning) {
-                    stopScan()
-                    publish("idle")
-                }
-            },
-            15000,
-        )
+        scanDeadline = Runnable { stopScan() }.also { handler.postDelayed(it, 20000) }
     }
 
-    fun stopScan() {
+    fun stopScan(publishIdle: Boolean = true) {
+        scanDeadline?.let(handler::removeCallbacks)
+        scanDeadline = null
         if (scanning) {
             runCatching { manager?.adapter?.bluetoothLeScanner?.stopScan(scanner) }
             scanning = false
         }
+        if (publishIdle && state["status"] == "scanning") publish("idle")
+    }
+
+    fun validateConnect(id: String, frequency: Int) {
+        BridgeInputs.sampleHz(frequency)
+        require(BluetoothAdapter.checkBluetoothAddress(id)) { "Invalid local Bluetooth device identifier." }
+        check(desired == null) { "Disconnect the current controller before connecting again." }
+        check(manager?.adapter?.isEnabled == true) {
+            "Bluetooth must be powered on; scan first to request permission."
+        }
     }
 
     fun connect(id: String, frequency: Int, completion: (Throwable?) -> Unit) {
-        if (recording() && desired != null && desired != id)
-            error("Finish the current ride before connecting another bike.")
+        validateConnect(id, frequency)
         if (!recording()) setHz(frequency)
-        if (desired == id && state["status"] == "connected") {
-            completion(null)
-            return
-        }
-        disconnect()
+        stopScan(publishIdle = false)
+        selected = devices[id] ?: manager!!.adapter.getRemoteDevice(id)
         desired = id
         retries = 0
-        connectingCompletion = completion
+        recoveryError = null
         begin()
+        completion(null)
     }
 
     private fun publish(status: String, error: String? = null) {
         state =
             mapOf(
                 "status" to status,
-                "deviceId" to desired,
-                "deviceName" to desired?.let { runCatching { devices[it]?.name }.getOrNull() ?: "CYC bike" },
-                "controllerModel" to identity?.model,
-                "firmwareLabel" to identity?.firmware,
+                "deviceId" to selected?.address,
+                "deviceName" to selected?.let { runCatching { it.name }.getOrNull() ?: "CYC bike" },
+                "controllerModel" to selected?.address?.let { knownControllers[it]?.model },
+                "firmwareLabel" to selected?.address?.let { knownControllers[it]?.firmware },
                 "error" to error,
-                "recoverableConnectionError" to (status == "reconnecting"),
+                "recoverableConnectionError" to (status == "reconnecting" && error != null),
             )
         emit("onState", state)
     }
@@ -168,14 +174,19 @@ internal class CycBluetooth(
         pending = null
         writer = null
         stableSince = 0
-        publish(if (retries == 0) "connecting" else "reconnecting")
+        publish(if (retries == 0) "connecting" else "reconnecting", recoveryError)
         val adapter = manager?.adapter
         if (adapter?.isEnabled != true) {
             failed("Bluetooth is off.")
             return
         }
         val device = devices[id] ?: adapter.getRemoteDevice(id)
-        deadline(15000, "Bike connection timed out.", attempt)
+        connectionDeadline = SystemClock.elapsedRealtime() + 20000
+        connectionWatchdog =
+            Runnable { if (attempt == generation) expireConnection() }
+                .also {
+                    handler.postDelayed(it, 20000)
+                }
         gatt =
             device.connectGatt(
                 context,
@@ -184,6 +195,7 @@ internal class CycBluetooth(
                     private fun event(connection: BluetoothGatt, body: () -> Unit) {
                         handler.post {
                             if (attempt == generation && gatt === connection) {
+                                if (expireConnection()) return@post
                                 try {
                                     body()
                                 } catch (_: SecurityException) {
@@ -207,7 +219,6 @@ internal class CycBluetooth(
                             if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
                                 // No competing MTU requests: the frame decoder accepts fragmented
                                 // notifications.
-                                deadline(15000, "Bike service discovery timed out.", attempt)
                                 if (!connection.discoverServices()) failed("Could not discover bike services.")
                             } else if (
                                 newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS
@@ -233,11 +244,6 @@ internal class CycBluetooth(
                                 )
                                 return@event
                             }
-                            deadline(
-                                15000,
-                                "Bike notifications timed out. Reconnect and try again.",
-                                attempt,
-                            )
                             if (!connection.setCharacteristicNotification(notify, true)) {
                                 failed("Could not enable bike notifications.")
                                 return@event
@@ -301,6 +307,14 @@ internal class CycBluetooth(
             )
     }
 
+    private fun expireConnection(): Boolean {
+        val deadline = connectionDeadline ?: return false
+        if (SystemClock.elapsedRealtime() < deadline) return false
+        timeouts++
+        failed("CYC connection or identity handshake timed out.")
+        return true
+    }
+
     private fun deadline(millis: Long, message: String, attempt: Int = generation) {
         watchdog?.let(handler::removeCallbacks)
         watchdog =
@@ -348,6 +362,7 @@ internal class CycBluetooth(
     }
 
     private fun receive(bytes: ByteArray, receivedAt: Long, timestamp: String) {
+        if (expireConnection()) return
         var identified = false
         for (payload in decoder.feed(bytes)) {
             val command = payload.firstOrNull()?.toInt()?.and(255) ?: continue
@@ -363,6 +378,10 @@ internal class CycBluetooth(
                     failed(error.message ?: "Unsupported controller", terminal = true)
                     return
                 }
+                selected?.address?.let { knownControllers[it] = checkNotNull(identity) }
+                connectionWatchdog?.let(handler::removeCallbacks)
+                connectionDeadline = null
+                publish(state.str("status"), recoveryError)
                 epoch = UUID.randomUUID().toString()
                 pending = null
                 watchdog?.let(handler::removeCallbacks)
@@ -382,9 +401,8 @@ internal class CycBluetooth(
                 lastSample = receivedAt
                 sampleCount++
                 if (state["status"] != "connected") {
+                    recoveryError = null
                     publish("connected")
-                    connectingCompletion?.invoke(null)
-                    connectingCompletion = null
                 }
                 sample(values, model, epoch, receivedAt, timestamp)
                 val wait = maxOf(0L, nextPollAt - SystemClock.elapsedRealtime())
@@ -398,6 +416,8 @@ internal class CycBluetooth(
     private fun closeGatt() {
         generation++
         watchdog?.let(handler::removeCallbacks)
+        connectionWatchdog?.let(handler::removeCallbacks)
+        connectionDeadline = null
         polling?.let(handler::removeCallbacks)
         pending = null
         nextPollAt = 0
@@ -409,32 +429,33 @@ internal class CycBluetooth(
     }
 
     private fun failed(message: String, peer: Boolean = false, terminal: Boolean = false) {
-        val immediate = peer && stableSince > 0 && SystemClock.elapsedRealtime() - stableSince >= 30000
+        val immediate = retries == 0 && peer && stableSince > 0 && SystemClock.elapsedRealtime() - stableSince >= 30000
         closeGatt()
         if (desired == null) return
         if (terminal || retries >= 5 && !recording()) {
-            publish("error", message)
+            recoveryError = null
+            publish("error", if (terminal) message else "Reconnect limit reached. $message")
             desired = null
-            connectingCompletion?.invoke(IllegalStateException(message))
-            connectingCompletion = null
             return
         }
+        recoveryError = message
         publish("reconnecting", message)
         val delay = if (immediate) 0 else listOf(1000L, 2000L, 4000L, 8000L, 16000L, 30000L)[retries.coerceAtMost(5)]
-        retries++
+        retries = (retries + 1).coerceAtMost(6)
         val attempt = generation
         retry =
             Runnable { if (generation == attempt && desired != null) begin() }.also { handler.postDelayed(it, delay) }
     }
 
+    fun connectedTo(id: String) = desired == id && state["status"] == "connected"
+
     fun disconnect() {
-        stopScan()
+        stopScan(publishIdle = false)
         retry?.let(handler::removeCallbacks)
         closeGatt()
         desired = null
         retries = 0
-        connectingCompletion?.invoke(IllegalStateException("Connection cancelled."))
-        connectingCompletion = null
+        recoveryError = null
         publish("idle")
     }
 

@@ -146,12 +146,15 @@ class BluetoothPollingTest {
         bluetooth.setHz(4)
         field(bluetooth, "desired", id)
         field(bluetooth, "state", mapOf("status" to "connected"))
-        bluetooth.connect(id, 8) { assertNull(it) }
+        assertThrows(IllegalStateException::class.java) { bluetooth.connect(id, 8) { fail("Unexpected admission") } }
         assertEquals(4, bluetooth.hz)
+        shadowOf(RuntimeEnvironment.getApplication().getSystemService(BluetoothManager::class.java).adapter)
+            .setState(BluetoothAdapter.STATE_ON)
         bluetooth.disconnect()
         bluetooth.connect(id, 2) {}
         assertEquals(4, bluetooth.hz)
         recording = false
+        bluetooth.disconnect()
         bluetooth.connect(id, 8) {}
         assertEquals(8, bluetooth.hz)
         bluetooth.disconnect()

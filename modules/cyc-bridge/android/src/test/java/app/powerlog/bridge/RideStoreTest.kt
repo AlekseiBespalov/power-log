@@ -752,7 +752,7 @@ class RideStoreTest {
                     if (kind == "describe") {
                         val domain = result["domain"] as Map<*, *>
                         assertTrue((domain["end"] as Number).toDouble() >= 1.0)
-                        assertEquals(0, domain["start"])
+                        assertEquals(0.0, (domain["start"] as Number).toDouble(), 0.0)
                     } else {
                         assertTrue(result["changes"] is List<*>)
                     }
