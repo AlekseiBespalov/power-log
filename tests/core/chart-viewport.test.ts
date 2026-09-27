@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { chartVisibleRange, clampChartViewport, isChartZoomed, panChartViewport, zoomChartViewport } from '../../src/core/chart-viewport';
+import {
+  chartVisibleRange,
+  clampChartViewport,
+  isChartZoomed,
+  panChartViewport,
+  zoomChartViewport,
+} from '../../src/core/chart-viewport';
 
 describe('chart viewport interaction', () => {
   const domain = { start: 10, end: 110 };

@@ -5,5 +5,9 @@ export const APP_NAVIGATION = [
 ] as const;
 
 export function appNavigationIndex(pathOrRoute: string) {
-  return Math.max(0, APP_NAVIGATION.findIndex(item => item.href === pathOrRoute || item.route === pathOrRoute));
+  if (pathOrRoute === '/privacy' || pathOrRoute === 'privacy') return 2;
+  return Math.max(
+    0,
+    APP_NAVIGATION.findIndex(item => item.href === pathOrRoute || item.route === pathOrRoute),
+  );
 }

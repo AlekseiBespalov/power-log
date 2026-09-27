@@ -10,8 +10,7 @@ import kotlin.math.*
 import org.json.JSONObject
 
 /** Geometry is rasterized off the UI thread; gestures only transform the accepted bitmap. */
-internal class MonitorRasterView(context: Context, appContext: AppContext) :
-    ExpoView(context, appContext) {
+internal class MonitorRasterView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     val onRenderStatus by EventDispatcher()
     private val density = resources.displayMetrics.density
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -134,19 +133,14 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
                 val end = data.getDouble("end")
                 val low = data.getDouble("min")
                 val high = data.getDouble("max")
-                require(
-                    listOf(start, end, low, high).all { it.isFinite() } && end > start && high > low
-                )
+                require(listOf(start, end, low, high).all { it.isFinite() } && end > start && high > low)
                 val lanes = data.optInt("laneCount", 1).coerceIn(1, 128)
                 val plotWidth = w - 16 * density
                 val plotHeight = h - 24 * density
                 val scale =
                     min(
                         1.0,
-                        sqrt(
-                            min(3 * 1024 * 1024.0, 32 * 1024 * 1024.0 / lanes) /
-                                (plotWidth * plotHeight * 4)
-                        ),
+                        sqrt(min(3 * 1024 * 1024.0, 32 * 1024 * 1024.0 / lanes) / (plotWidth * plotHeight * 4)),
                     )
                 val bw = max(1, (plotWidth * scale).toInt())
                 val bh = max(1, (plotHeight * scale).toInt())
@@ -182,18 +176,15 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
                         points.forEach { p ->
                             val x = ((p.time - start) / (end - start) * bw).toFloat()
                             val y =
-                                ((8 * density +
-                                        (high - p.value) / (high - low) * (h - 34 * density)) * bh /
-                                        plotHeight)
+                                ((8 * density + (high - p.value) / (high - low) * (h - 34 * density)) * bh / plotHeight)
                                     .toFloat()
                             if (previous == null || p.start) path.moveTo(x, y)
                             else {
                                 if (item.optBoolean("step"))
                                     path.lineTo(
                                         x,
-                                        ((8 * density +
-                                                (high - previous!!.value) / (high - low) *
-                                                    (h - 34 * density)) * bh / plotHeight)
+                                        ((8 * density + (high - previous!!.value) / (high - low) * (h - 34 * density)) *
+                                                bh / plotHeight)
                                             .toFloat(),
                                     )
                                 path.lineTo(x, y)
@@ -205,15 +196,11 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
                         canvas.drawPath(path, brush)
                         brush.style = Paint.Style.FILL
                         points.forEachIndexed { index, p ->
-                            if (
-                                (index == 0 || p.start) &&
-                                    (index == points.lastIndex || points[index + 1].start)
-                            ) {
+                            if ((index == 0 || p.start) && (index == points.lastIndex || points[index + 1].start)) {
                                 canvas.drawCircle(
                                     ((p.time - start) / (end - start) * bw).toFloat(),
-                                    ((8 * density +
-                                            (high - p.value) / (high - low) * (h - 34 * density)) *
-                                            bh / plotHeight)
+                                    ((8 * density + (high - p.value) / (high - low) * (h - 34 * density)) * bh /
+                                            plotHeight)
                                         .toFloat(),
                                     (1.8 * density * scale).toFloat(),
                                     brush,
@@ -239,12 +226,7 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
                         version,
                     )
                 post {
-                    if (
-                        version != generation ||
-                            source != expectedSource ||
-                            width != w ||
-                            height != h
-                    ) {
+                    if (version != generation || source != expectedSource || width != w || height != h) {
                         bitmap.recycle()
                         return@post
                     }
@@ -292,10 +274,8 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
         val bottom = height - 26 * density
         val viewStart = presentation.getOrNull(0) ?: scene.start
         val viewEnd = presentation.getOrNull(1) ?: scene.end
-        fun x(t: Double) =
-            (left + (t - viewStart) / (viewEnd - viewStart) * (right - left)).toFloat()
-        fun y(v: Double) =
-            (top + (scene.max - v) / (scene.max - scene.min) * (bottom - top)).toFloat()
+        fun x(t: Double) = (left + (t - viewStart) / (viewEnd - viewStart) * (right - left)).toFloat()
+        fun y(v: Double) = (top + (scene.max - v) / (scene.max - scene.min) * (bottom - top)).toFloat()
         paint.strokeWidth = density
         paint.color = Color.rgb(48, 56, 68)
         paint.style = Paint.Style.STROKE
@@ -328,8 +308,7 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
                 val t = viewStart + (viewEnd - viewStart) * i / 2
                 val seconds = max(0, t.toInt())
                 val text =
-                    if (seconds >= 3600)
-                        "%d:%02d:%02d".format(seconds / 3600, seconds / 60 % 60, seconds % 60)
+                    if (seconds >= 3600) "%d:%02d:%02d".format(seconds / 3600, seconds / 60 % 60, seconds % 60)
                     else "%02d:%02d".format(seconds / 60, seconds % 60)
                 paint.textAlign =
                     when (i) {
@@ -412,11 +391,7 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
                 val mid = (low + high) / 2
                 if (series!!.points[mid].time < point.seconds) low = mid + 1 else high = mid
             }
-            while (
-                series != null &&
-                    low < series.points.size &&
-                    series.points[low].time == point.seconds
-            ) {
+            while (series != null && low < series.points.size && series.points[low].time == point.seconds) {
                 if (series.points[low++].value == point.value) {
                     drawPoint(point)
                     break
@@ -430,10 +405,9 @@ internal class MonitorRasterView(context: Context, appContext: AppContext) :
                 selection.optDouble("referenceSeconds") == reference
         ) {
             selection.optJSONArray("references")?.let { points ->
-                for (i in 0 until minOf(32, points.length())) MonitorMarkers.parse(
-                        points.getJSONObject(i)
-                    )
-                    ?.let { drawPoint(it, true) }
+                for (i in 0 until minOf(32, points.length())) MonitorMarkers.parse(points.getJSONObject(i))?.let {
+                    drawPoint(it, true)
+                }
             }
         }
         canvas.restore()

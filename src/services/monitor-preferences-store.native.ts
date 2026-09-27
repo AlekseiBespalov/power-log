@@ -1,15 +1,24 @@
 import { Directory, File, Paths } from 'expo-file-system';
-import { defaultMonitorPreferences, validateMonitorPreferences, type MonitorPreferences } from '../core/monitor';
+import {
+  defaultMonitorPreferences,
+  validateMonitorPreferences,
+  validateStoredMonitorPreferences,
+  type MonitorPreferences,
+} from '../core/monitor';
 import type { MonitorPreferencesStore } from './monitor-preferences-store';
 
 const root = () => new Directory(Paths.document, 'power-log-preferences');
 const revisionPattern = /^monitor-(\d{16})\.json$/;
-const revisions = (directory: Directory) => directory.list().map(file => ({ name: file.name, revision: Number(revisionPattern.exec(file.name)?.[1]) }))
-  .filter(file => Number.isSafeInteger(file.revision) && file.revision > 0).sort((a, b) => b.revision - a.revision);
+const revisions = (directory: Directory) =>
+  directory
+    .list()
+    .map(file => ({ name: file.name, revision: Number(revisionPattern.exec(file.name)?.[1]) }))
+    .filter(file => Number.isSafeInteger(file.revision) && file.revision > 0)
+    .sort((a, b) => b.revision - a.revision);
 function read(directory: Directory, name: string): MonitorPreferences {
   const file = new File(directory, name);
   if (file.size > 64 * 1024) throw new Error('Monitor settings file is too large.');
-  return validateMonitorPreferences(JSON.parse(file.textSync()));
+  return validateStoredMonitorPreferences(JSON.parse(file.textSync()));
 }
 
 let writes: Promise<void> = Promise.resolve();
@@ -20,8 +29,14 @@ export const monitorPreferencesStore: MonitorPreferencesStore = {
     if (!directory.exists) return { preferences: defaultMonitorPreferences() };
     const files = revisions(directory);
     for (const [index, file] of files.entries()) {
-      try { return { preferences: read(directory, file.name), ...(index > 0 ? { warning: 'Recovered the previous monitor settings.' } : {}) }; }
-      catch { /* A prior committed revision can recover an unreadable newest file. */ }
+      try {
+        return {
+          preferences: read(directory, file.name),
+          ...(index > 0 ? { warning: 'Recovered the previous monitor settings.' } : {}),
+        };
+      } catch {
+        /* A prior committed revision can recover an unreadable newest file. */
+      }
     }
     if (files.length) throw new Error('Saved monitor settings could not be read.');
     return { preferences: defaultMonitorPreferences() };
@@ -44,7 +59,9 @@ export const monitorPreferencesStore: MonitorPreferencesStore = {
         try {
           read(directory, file.name);
           if (++retained > 2) new File(directory, file.name).delete();
-        } catch { /* Cleanup must not turn a committed save into a failed save. */ }
+        } catch {
+          /* Cleanup must not turn a committed save into a failed save. */
+        }
       }
     });
     writes = pending.catch(() => {});

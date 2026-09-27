@@ -21,15 +21,15 @@ internal class RecordingEngine private constructor(val context: Context) {
     private val healthWork = Executors.newSingleThreadExecutor()
     private val healthPending = mutableSetOf<String>()
     val distance = RideDistance(store)
-    val monitor = RideMonitor(store, distance)
+    val monitor = RideMonitor(store, distance, ::monitorOriginSeconds)
     val listeners = CopyOnWriteArrayList<(String, Payload) -> Unit>()
     private val locations = context.getSystemService(LocationManager::class.java)
     private var live = ""
     private var liveStart = SystemClock.elapsedRealtime()
     @Volatile private var ride: String? = null
     private var phase = "idle"
-    private var options: Payload = emptyMap()
-    private var startClock = 0L
+    private var options = RideOptions(indoor = false, saveToHealth = false, recordGPS = false)
+    @Volatile private var startClock = 0L
     private var activeSince = 0L
     private var activeSeconds = 0.0
     private var segment = 0
@@ -37,7 +37,6 @@ internal class RecordingEngine private constructor(val context: Context) {
     private var rideDevice: String? = null
     private var historyRevision = 0L
     private var lastDeleted: String? = null
-    private var lastValues: Map<String, Double> = emptyMap()
     private var lastTelemetry = 0L
     private var lastLocation = 0L
     private var lastEpoch = ""
@@ -47,7 +46,12 @@ internal class RecordingEngine private constructor(val context: Context) {
     private var rideError: String? = null
     private var lastSampleEvent = 0L
     private var lastLocationValues: Map<String, Double> = emptyMap()
+    private var gpsUnavailable = false
     private var wake: PowerManager.WakeLock? = null
+
+    private data class Boundary(val time: Double, val active: Boolean, val segment: Int)
+
+    private val boundaries = mutableListOf<Boundary>()
 
     private data class Pending(
         val ride: String,
@@ -59,12 +63,13 @@ internal class RecordingEngine private constructor(val context: Context) {
         val values: Map<String, Double>,
         val identity: String,
         val epoch: String,
+        val acquiredAt: Double,
     )
 
     private val pending = mutableListOf<Pending>()
     val bluetooth = CycBluetooth(context, handler, ::emit, ::telemetry) { ride != null }
     @Volatile
-    var notificationState: Payload = emptyMap()
+    var notificationState = RideNotificationState(null, "idle", 0L, 0.0)
         private set
 
     @Volatile
@@ -81,7 +86,7 @@ internal class RecordingEngine private constructor(val context: Context) {
                 try {
                     flush()
                     ride?.let { id ->
-                        store.update(id, phase, elapsed(), timer())
+                        store.update(id, phase, timing())
                         publish()
                     }
                 } catch (error: Exception) {
@@ -91,136 +96,103 @@ internal class RecordingEngine private constructor(val context: Context) {
             }
         }
 
-    private fun elapsed() =
-        if (ride == null) 0.0 else (SystemClock.elapsedRealtime() - startClock) / 1000.0
+    private fun elapsed(now: Long = SystemClock.elapsedRealtime()) =
+        if (ride == null) 0.0 else (now - startClock) / 1000.0
 
-    private fun timer() =
-        activeSeconds +
-            if (phase == "running") (SystemClock.elapsedRealtime() - activeSince) / 1000.0 else 0.0
+    private fun timer(now: Long = SystemClock.elapsedRealtime()) =
+        activeSeconds + if (phase == "running") (now - activeSince) / 1000.0 else 0.0
 
-    fun state(): Payload {
+    private fun timing(now: Long = SystemClock.elapsedRealtime()) = RideTiming(elapsed(now), timer(now), iso())
+
+    fun capabilities() = RideCapabilities.android(health.available)
+
+    fun state(): Payload = snapshot().toWireMap()
+
+    private fun snapshot(): RideSnapshot {
         val now = SystemClock.elapsedRealtime()
         val fresh = now - lastTelemetry <= 2500 && lastTelemetry != 0L
         val gpsFresh = now - lastLocation <= 10000 && lastLocation != 0L
         val id = ride
-        val distanceInfo = id?.let { distance.info(it, "auto") }
-        return mapOf(
-            "supported" to true,
-            "capabilities" to
-                mapOf(
-                    "phoneWorkout" to true,
-                    "watchWorkout" to false,
-                    "healthKit" to false,
-                    "healthConnect" to health.available,
-                    "gps" to true,
-                    "foregroundOnly" to false,
+        val gpsStatus =
+            when {
+                id == null || !options.recordGPS -> "off"
+                !granted(Manifest.permission.ACCESS_FINE_LOCATION) -> "denied"
+                phase == "paused" -> "paused"
+                gpsUnavailable || !locations.isLocationEnabled -> "unavailable"
+                lastLocation == 0L -> "waiting"
+                !gpsFresh -> "stale"
+                (lastLocationValues["horizontalAccuracyM"] ?: 0.0) > 50 -> "weak"
+                else -> "receiving"
+            }
+        val cycStatus =
+            when {
+                id == null && bluetooth.deviceId == null -> "off"
+                phase == "paused" -> "paused"
+                fresh -> "receiving"
+                lastTelemetry != 0L -> "stale"
+                else -> "waiting"
+            }
+        return RideSnapshot(
+            capabilities = capabilities(),
+            id = id,
+            phase = phase,
+            timerSeconds = timer(now),
+            historyRevision = historyRevision.toString(),
+            lastDeletedWorkoutId = lastDeleted,
+            indoor = options.indoor,
+            useWatch = options.useWatch,
+            saveToHealth = options.saveToHealth,
+            recordGPS = options.recordGPS,
+            healthKitState = if (id != null && options.saveToHealth) "pending" else "notRequested",
+            streams =
+                RideStreams(
+                    RideStream(cycStatus),
+                    RideStream("off"),
+                    RideGPSStream(
+                        gpsStatus,
+                        accuracyMeters = lastLocationValues["horizontalAccuracyM"]?.takeIf { it.isFinite() && it >= 0 },
+                    ),
                 ),
-            "id" to id,
-            "phase" to phase,
-            "historyRevision" to historyRevision.toString(),
-            "lastDeletedWorkoutId" to lastDeleted,
-            "startedAt" to id?.let { store.metadata(it)["startedAt"] },
-            "indoor" to options.flag("indoor"),
-            "useWatch" to false,
-            "saveToHealth" to options.flag("saveToHealth"),
-            "recordGPS" to options.flag("recordGPS"),
-            "elapsedSeconds" to elapsed(),
-            "timerSeconds" to timer(),
-            "pendingAction" to null,
-            "recoveryState" to "idle",
-            "healthKitState" to "notRequested",
-            "healthKitUUID" to null,
-            "watch" to
-                mapOf(
-                    "supported" to false,
-                    "paired" to false,
-                    "installed" to false,
-                    "reachable" to false,
-                    "pendingMessages" to 0,
-                ),
-            "streams" to
-                mapOf(
-                    "cyc" to
-                        mapOf(
-                            "status" to if (fresh) "live" else "missing",
-                            "lastSampleAgeSeconds" to
-                                if (lastTelemetry == 0L) null else (now - lastTelemetry) / 1000.0,
-                        ),
-                    "heartRate" to mapOf("status" to "unavailable", "lastSampleAgeSeconds" to null),
-                    "gps" to
-                        mapOf(
-                            "status" to
-                                if (gpsFresh) "live"
-                                else if (gpsActive) "waiting" else "notRequested",
-                            "lastSampleAgeSeconds" to
-                                if (lastLocation == 0L) null else (now - lastLocation) / 1000.0,
-                            "source" to "phone",
-                            "accuracyMeters" to lastLocationValues["horizontalAccuracyM"],
-                        ),
-                ),
-            "metrics" to
-                mapOf(
-                    "riderPowerW" to if (fresh) lastValues["humanPowerW"] else null,
-                    "cadenceRpm" to if (fresh) lastValues["cadenceRpm"] else null,
-                    "heartRateBpm" to null,
-                    "activeEnergyKcal" to null,
-                    "basalEnergyKcal" to null,
-                    "distanceMeters" to
-                        (distanceInfo?.get("selected") as? Map<*, *>)?.get("distanceMeters"),
-                    "speedMps" to if (gpsFresh) lastLocationValues["speedMps"] else null,
-                ),
-            "distance" to distanceInfo,
-            "warnings" to emptyList<String>(),
-            "error" to rideError,
+            error = rideError,
         )
     }
 
     private fun publish() {
         val snapshot = state()
-        notificationState = snapshot
         emit("onWorkoutState", snapshot)
-        RecordingService.refresh(context)
+        val notification = RideNotificationState(ride, phase, activeSince, activeSeconds)
+        if (notification != notificationState) {
+            notificationState = notification
+            RecordingService.refresh(context)
+        }
     }
 
     fun permissionStatus(): Payload {
         val fine = granted(Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = granted(Manifest.permission.ACCESS_COARSE_LOCATION)
         val requested =
-            context
-                .getSharedPreferences("permissions", Context.MODE_PRIVATE)
-                .getBoolean("locationRequested", false)
+            context.getSharedPreferences("permissions", Context.MODE_PRIVATE).getBoolean("locationRequested", false)
         return mapOf(
             "health" to health.status(),
-            "location" to
-                if (fine || coarse) "authorizedWhenInUse"
-                else if (requested) "denied" else "notDetermined",
+            "location" to if (fine || coarse) "authorizedWhenInUse" else if (requested) "denied" else "notDetermined",
             "locationServicesEnabled" to locations.isLocationEnabled,
-            "locationAccuracyAuthorization" to
-                if (fine) "full" else if (coarse) "reduced" else "unknown",
+            "locationAccuracyAuthorization" to if (fine) "full" else if (coarse) "reduced" else "unknown",
         )
     }
 
     fun granted(permission: String) =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
-    fun start(input: Payload): Payload {
+    fun start(input: RideOptions): Payload {
         check(ride == null) { "A ride is already recording." }
-        require(!input.flag("useWatch")) { "Watch recording is unavailable on Android." }
-        if (input.flag("saveToHealth"))
-            check(
-                health.available &&
-                    health
-                        .granted()
-                        .containsAll(
-                            health.permissions(input.flag("recordGPS", !input.flag("indoor")))
-                        )
-            ) {
+        val nextHistoryRevision = RideStore.nextRevision(historyRevision)
+        val effective = input.effective(capabilities())
+        if (effective.saveToHealth)
+            check(health.granted().containsAll(health.permissions(effective.recordGPS))) {
                 "Allow Health Connect access before starting, or turn off Health Connect in Settings."
             }
-        val gps = input.flag("recordGPS", !input.flag("indoor"))
-        check(
-            !gps || granted(Manifest.permission.ACCESS_FINE_LOCATION) && locations.isLocationEnabled
-        ) {
+        val gps = effective.recordGPS
+        check(!gps || granted(Manifest.permission.ACCESS_FINE_LOCATION) && locations.isLocationEnabled) {
             "Allow precise location and turn on Location to record a GPS route."
         }
         if (Build.VERSION.SDK_INT >= 31)
@@ -228,20 +200,27 @@ internal class RecordingEngine private constructor(val context: Context) {
                 "Allow Nearby devices before recording."
             }
         flush()
-        bluetooth.setHz(input.num("sampleHz", 2.0).toInt())
-        options = input + mapOf("recordGPS" to gps)
+        bluetooth.setHz(effective.sampleHz)
+        options = effective
         rideError = null
-        ride = store.create(options)
+        val created = store.create(options)
         phase = "running"
         startClock = SystemClock.elapsedRealtime()
+        ride = created
+        monitor.selectLiveRide(created)
         activeSince = startClock
         activeSeconds = 0.0
         segment++
         telemetrySegment++
+        boundaries.clear()
+        boundaries.add(Boundary(0.0, true, segment))
+        lastLocation = 0L
+        lastLocationValues = emptyMap()
+        gpsUnavailable = false
         rideDevice = bluetooth.deviceId
         distance.reset()
         gpsActive = gps
-        notificationState = state()
+        notificationState = RideNotificationState(ride, phase, activeSince, activeSeconds)
         try {
             ContextCompat.startForegroundService(
                 context,
@@ -267,7 +246,7 @@ internal class RecordingEngine private constructor(val context: Context) {
             cleanup()
             throw error
         }
-        historyRevision++
+        historyRevision = nextHistoryRevision
         publish()
         return state()
     }
@@ -280,37 +259,46 @@ internal class RecordingEngine private constructor(val context: Context) {
 
     fun action(action: String, id: String?): Payload {
         val current = requireRide(id)
+        val nextHistoryRevision =
+            if (action in listOf("stop", "discard")) RideStore.nextRevision(historyRevision) else historyRevision
         flush()
+        val now = SystemClock.elapsedRealtime()
+        val timing = timing(now)
+        val time = timing.elapsed
+        val active = timing.timer
         when (action) {
             "pause" ->
                 if (phase == "running") {
-                    activeSeconds = timer()
+                    store.transition(current, timing, "pause")
+                    activeSeconds = active
                     phase = "paused"
                     segment++
                     telemetrySegment++
-                    distance.reset()
-                    store.lifecycle(current, elapsed(), "pause")
+                    boundary(time)
                 }
             "resume" ->
                 if (phase == "paused") {
-                    activeSince = SystemClock.elapsedRealtime()
+                    store.transition(current, timing, "resume")
+                    activeSince = now
                     phase = "running"
                     segment++
                     telemetrySegment++
-                    distance.reset()
-                    store.lifecycle(current, elapsed(), "resume")
+                    boundary(time)
                 }
             "lap" -> {
                 check(phase == "running") { "Resume the ride before marking a lap." }
-                store.lifecycle(current, elapsed(), "lap")
+                store.transaction {
+                    store.lifecycle(current, timing, "lap")
+                    store.update(current, phase, timing)
+                }
             }
             "stop" -> {
-                store.seal(current, elapsed(), timer())
-                if (options.flag("saveToHealth")) queueHealth(current)
+                store.seal(current, timing)
                 ride = null
                 phase = "idle"
                 cleanup()
-                historyRevision++
+                historyRevision = nextHistoryRevision
+                if (options.saveToHealth) queueHealth(current)
             }
             "discard" -> {
                 store.remove(current)
@@ -318,20 +306,26 @@ internal class RecordingEngine private constructor(val context: Context) {
                 ride = null
                 phase = "idle"
                 cleanup()
-                historyRevision++
+                historyRevision = nextHistoryRevision
             }
             else -> error("Unknown ride action")
         }
-        if (ride != null) store.update(current, phase, elapsed(), timer())
         publish()
         return state()
     }
 
+    private fun boundary(time: Double) {
+        boundaries.add(Boundary(time, phase == "running", segment))
+        // Keep the preceding boundary for every fix still admissible in the ten-second window.
+        while (boundaries.size > 1 && boundaries[1].time <= time - 10) boundaries.removeAt(0)
+    }
+
     fun delete(id: String): Payload {
         check(id != ride) { "Finish or discard the active ride first." }
+        val nextHistoryRevision = RideStore.nextRevision(historyRevision)
         store.metadata(id)
         store.remove(id)
-        historyRevision++
+        historyRevision = nextHistoryRevision
         lastDeleted = id
         publish()
         return state()
@@ -341,29 +335,58 @@ internal class RecordingEngine private constructor(val context: Context) {
         if (id == ride) return state()
         val meta = store.metadata(id)
         check(meta.str("phase") == "completed") { "This ride cannot be recovered." }
-        if (meta.flag("saveToHealth") && meta.str("healthKitState") != "saved") queueHealth(id)
+        if (meta.flag("saveToHealth") && meta.str("healthKitState") == "notSaved") {
+            store.healthStatus(id, HealthExportResult("pending"))
+            queueHealth(id)
+        }
         return state()
     }
 
     private fun queueHealth(id: String) {
+        if (store.metadata(id).str("healthKitState") != "pending") return
         if (!healthPending.add(id)) return
-        store.healthStatus(id, "pending")
-        healthWork.execute {
-            val outcome = runCatching { store.withSavedRide(id) { health.save(id) } }
-            handler.post {
-                healthPending.remove(id)
-                runCatching {
-                    store.healthStatus(id, if (outcome.isSuccess) "saved" else "notSaved")
+        try {
+            healthWork.execute {
+                val outcome = runCatching {
+                    store.withSavedRide(id) {
+                        if (store.metadata(id).str("healthKitState") == "pending") health.save(id) else null
+                    }
                 }
-                historyRevision++
-                publish()
+                    .getOrElse {
+                        HealthExportResult(
+                            "notSaved",
+                            reason = "Health Connect saving failed: ${it.message ?: "Try again."}",
+                        )
+                    }
+                handler.post {
+                    healthPending.remove(id)
+                    val nextHistoryRevision = runCatching {
+                        RideStore.nextRevision(historyRevision)
+                    }
+                        .getOrElse {
+                            rideError = "Health Connect status could not be saved. ${it.message ?: ""}"
+                            publish()
+                            return@post
+                        }
+                    runCatching {
+                        if (outcome != null && store.metadata(id).str("healthKitState") == "pending")
+                            store.healthStatus(id, outcome)
+                    }
+                    historyRevision = nextHistoryRevision
+                    publish()
+                }
             }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            healthPending.remove(id)
+            rideError = "Ride saved locally. Health Connect saving could not be scheduled."
         }
     }
 
     private fun cleanup() {
+        monitor.selectLiveRide(live)
         rideDevice = null
         gpsActive = false
+        boundaries.clear()
         locations.removeUpdates(locationListener)
         if (wake?.isHeld == true) wake?.release()
         wake = null
@@ -375,30 +398,32 @@ internal class RecordingEngine private constructor(val context: Context) {
         values: Map<String, Double>,
         identity: CycProtocol.Identity,
         epoch: String,
+        acquiredAt: Long,
+        timestamp: String,
     ) {
         val now = SystemClock.elapsedRealtime()
-        lastValues = values
-        lastTelemetry = now
-        sequence++
         val id = ride ?: live
-        val time = if (ride == null) (now - liveStart) / 1000.0 else elapsed()
+        val time = if (ride == null) (acquiredAt - liveStart) / 1000.0 else elapsed(acquiredAt)
+        val active = if (ride == null) true else boundaries.lastOrNull { it.time <= time }?.active ?: return
+        lastTelemetry = acquiredAt
+        sequence++
         if (lastEpoch != epoch) {
             telemetrySegment++
             lastEpoch = epoch
         }
-        val stamp = iso()
         val identityText = "${identity.model}|${identity.firmware}|${identity.protocol}"
         pending.add(
             Pending(
                 id,
                 time,
-                stamp,
+                timestamp,
                 "telemetry",
-                ride == null || phase == "running",
+                active,
                 telemetrySegment,
                 values,
                 identityText,
                 epoch,
+                acquiredAt / 1000.0,
             )
         )
         try {
@@ -412,13 +437,15 @@ internal class RecordingEngine private constructor(val context: Context) {
                 "onSample",
                 values +
                     mapOf(
-                        "timestamp" to stamp,
+                        "timestamp" to timestamp,
                         "elapsedSeconds" to time,
+                        "acquiredAtMonotonic" to acquiredAt / 1000.0,
                         "sequence" to sequence,
                         "controllerModel" to identity.model,
                         "firmwareLabel" to identity.firmware,
                         "controllerProtocol" to identity.protocol,
                         "connectionEpoch" to epoch,
+                        "interruptionIndex" to 0,
                     ),
             )
         }
@@ -429,54 +456,61 @@ internal class RecordingEngine private constructor(val context: Context) {
             override fun onLocationChanged(location: Location) {
                 val id = ride ?: return
                 val now = SystemClock.elapsedRealtimeNanos()
-                if (
-                    location.elapsedRealtimeNanos <= 0 ||
-                        now - location.elapsedRealtimeNanos !in 0..10_000_000_000L
-                )
+                if (location.elapsedRealtimeNanos <= 0 || now - location.elapsedRealtimeNanos !in 0..10_000_000_000L)
                     return
                 val time = (location.elapsedRealtimeNanos / 1_000_000 - startClock) / 1000.0
                 if (time < 0) return
+                val boundary = boundaries.lastOrNull { it.time <= time } ?: return
                 val values =
                     mutableMapOf(
                         "latitude" to location.latitude,
                         "longitude" to location.longitude,
                         "horizontalAccuracyM" to location.accuracy.toDouble(),
                     )
-                if (location.hasSpeed() && location.speed in 0f..40f)
-                    values["speedMps"] = location.speed.toDouble()
+                if (location.hasSpeed() && location.speed in 0f..40f) values["speedMps"] = location.speed.toDouble()
                 if (location.hasAltitude()) values["altitudeMeters"] = location.altitude
                 if (location.hasVerticalAccuracy())
                     values["verticalAccuracyM"] = location.verticalAccuracyMeters.toDouble()
                 if (location.hasSpeedAccuracy())
                     values["speedAccuracyMps"] = location.speedAccuracyMetersPerSecond.toDouble()
                 if (location.hasBearing()) values["courseDegrees"] = location.bearing.toDouble()
-                lastLocation = SystemClock.elapsedRealtime()
-                lastLocationValues = values
+                val acquiredAt = location.elapsedRealtimeNanos / 1_000_000
+                if (acquiredAt >= lastLocation) {
+                    lastLocation = acquiredAt
+                    lastLocationValues = values
+                    gpsUnavailable = false
+                }
                 pending.add(
                     Pending(
                         id,
                         time,
                         iso(location.time),
                         "location",
-                        phase == "running",
-                        segment,
+                        boundary.active,
+                        boundary.segment,
                         values,
                         "phone",
                         "gps",
+                        location.elapsedRealtimeNanos / 1e9,
                     )
                 )
             }
 
             override fun onProviderDisabled(provider: String) {
-                lastLocation = 0
+                gpsUnavailable = true
+            }
+
+            override fun onProviderEnabled(provider: String) {
+                gpsUnavailable = false
             }
         }
 
     fun flush() {
         if (pending.isEmpty()) return
+        val timing = ride?.let { timing() }
         // Originals and their distance checkpoints commit atomically.
-        store.transaction {
-            pending.forEach { p ->
+        val committed = store.transaction {
+            val rows = pending.map { p ->
                 val row =
                     store.insert(
                         p.ride,
@@ -489,21 +523,27 @@ internal class RecordingEngine private constructor(val context: Context) {
                         p.identity,
                         p.epoch,
                     )
-                distance.append(
-                    p.ride,
-                    row,
-                    p.time,
-                    p.values,
-                    p.active,
-                    p.segment,
-                    p.epoch,
-                    p.identity,
-                    p.kind == "location",
-                )
+                val distanceColumn =
+                    distance.append(
+                        p.ride,
+                        row,
+                        p.time,
+                        p.values,
+                        p.active,
+                        p.segment,
+                        p.epoch,
+                        p.identity,
+                        p.kind == "location",
+                    )
+                Triple(row, p, p.values.keys + listOfNotNull(distanceColumn))
             }
-            ride?.let { store.update(it, phase, elapsed(), timer()) }
+            ride?.let { store.update(it, phase, checkNotNull(timing)) }
+            rows
         }
         pending.clear()
+        committed.forEach { (row, p, metrics) ->
+            monitor.committedLiveObservation(p.ride, row, p.acquiredAt, metrics)
+        }
     }
 
     private fun captureFailed(error: Exception) {
@@ -512,14 +552,14 @@ internal class RecordingEngine private constructor(val context: Context) {
         rideError = "Recording stopped: storage could not save more data. ${error.message ?: ""}"
         val id = ride
         if (id != null) {
-            runCatching {
-                val (elapsed, timer) = store.timing(id)
-                store.seal(id, elapsed, timer, interrupted = true)
+            val nextHistoryRevision = runCatching { RideStore.nextRevision(historyRevision) }.getOrNull()
+            if (nextHistoryRevision != null) {
+                runCatching { store.seal(id, store.timing(id), interrupted = true) }
+                historyRevision = nextHistoryRevision
             }
             ride = null
             phase = "idle"
             cleanup()
-            historyRevision++
         }
         publish()
     }
@@ -538,21 +578,38 @@ internal class RecordingEngine private constructor(val context: Context) {
         initializationError?.let { throw it }
     }
 
-    fun source(request: Payload) =
-        if (request.str("source") == "workout") request.str("id").also { require(it.isNotBlank()) }
-        else ride ?: live
+    fun source(target: MonitorTarget) =
+        when (target) {
+            MonitorTarget.Live -> ride ?: live
+            is MonitorTarget.Workout -> target.id
+        }
+
+    fun connect(input: ConnectInput, completion: (Throwable?) -> Unit) {
+        checkBike(input.deviceId)
+        bluetooth.connect(input.deviceId, input.sampleHz, completion)
+    }
+
+    private fun monitorOriginSeconds(id: String): Double? {
+        val current = ride
+        val origin =
+            when (id) {
+                current -> startClock
+                live -> liveStart
+                else -> return null
+            }
+        if (current != ride) return null
+        return origin / 1000.0
+    }
 
     init {
         handler.post {
             try {
                 store.recoverOrphans()
-                live = store.create(emptyMap(), true)
+                live = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false), live = true)
+                monitor.selectLiveRide(live)
                 initialized = true
                 tick.run()
-                store
-                    .list(mapOf("limit" to 100))
-                    .filter { it.flag("saveToHealth") && it.str("healthKitState") == "pending" }
-                    .forEach { queueHealth(it.str("id")) }
+                store.pendingHealthJobs().forEach { queueHealth(it) }
             } catch (error: Exception) {
                 initializationError = error
             } finally {

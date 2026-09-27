@@ -14,53 +14,65 @@ async function settingsLayout(page: Page) {
   });
 }
 
-for (const width of [320, 390, 900, 1440]) test(`Settings selectors stay stable and fit ${width}px`, async ({ page }, testInfo) => {
-  await page.setViewportSize({ width, height: 900 });
-  await page.goto('/settings');
-  const distance = page.getByTestId('settings-distance');
-  await expect(distance).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('link', { name: 'Ride', exact: true })).not.toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('switch', { name: 'Use Apple Watch' })).toHaveCount(0);
-  await expect(page.getByRole('switch', { name: 'Save to Apple Health' })).toHaveCount(0);
-  const before = await settingsLayout(page);
-  if (width < 900) expect(before['settings-recording']!.y).toBeGreaterThan(before['settings-display']!.y + before['settings-display']!.height);
-  else expect(before['settings-recording']!.y).toBe(before['settings-display']!.y);
-  for (const link of await page.getByTestId('app-header').getByRole('link').all()) {
-    const box = (await link.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(44);
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(width);
-  }
-  await distance.click();
-  const dialog = page.getByTestId('settings-options');
-  await expect(dialog).toBeVisible();
-  expect(await settingsLayout(page)).toEqual(before);
-  await expect(dialog.getByRole('radio', { name: 'Auto', exact: true })).toHaveAttribute('aria-checked', 'true');
-  await expect(dialog.getByRole('radio')).toHaveCount(6);
-  const labels = await dialog.getByRole('radio').evaluateAll(nodes => nodes.map(node => node.firstElementChild!.getBoundingClientRect().x));
-  expect(new Set(labels).size).toBe(1);
-  await dialog.evaluate(element => {
-    const frames: { height: number; title: string | null }[] = [];
-    Object.assign(window, { settingsDismissalFrames: frames });
-    const record = () => {
-      if (!element.isConnected) return;
-      const height = element.getBoundingClientRect().height;
-      if (height > 0) frames.push({ height, title: element.querySelector('[role="heading"]')?.textContent ?? null });
-      requestAnimationFrame(record);
-    };
-    record();
+for (const width of [320, 390, 900, 1440])
+  test(`Settings selectors stay stable and fit ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/settings');
+    const distance = page.getByTestId('settings-distance');
+    await expect(distance).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('link', { name: 'Ride', exact: true })).not.toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('switch', { name: 'Use Apple Watch' })).toHaveCount(0);
+    await expect(page.getByRole('switch', { name: 'Save to Apple Health' })).toHaveCount(0);
+    const before = await settingsLayout(page);
+    if (width < 900)
+      expect(before['settings-recording']!.y).toBeGreaterThan(
+        before['settings-display']!.y + before['settings-display']!.height,
+      );
+    else expect(before['settings-recording']!.y).toBe(before['settings-display']!.y);
+    for (const link of await page.getByTestId('app-header').getByRole('link').all()) {
+      const box = (await link.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+    }
+    await distance.click();
+    const dialog = page.getByTestId('settings-options');
+    await expect(dialog).toBeVisible();
+    expect(await settingsLayout(page)).toEqual(before);
+    await expect(dialog.getByRole('radio', { name: 'Auto', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await expect(dialog.getByRole('radio')).toHaveCount(2);
+    const labels = await dialog
+      .getByRole('radio')
+      .evaluateAll(nodes => nodes.map(node => node.firstElementChild!.getBoundingClientRect().x));
+    expect(new Set(labels).size).toBe(1);
+    await dialog.evaluate(element => {
+      const frames: { height: number; title: string | null }[] = [];
+      Object.assign(window, { settingsDismissalFrames: frames });
+      const record = () => {
+        if (!element.isConnected) return;
+        const height = element.getBoundingClientRect().height;
+        if (height > 0) frames.push({ height, title: element.querySelector('[role="heading"]')?.textContent ?? null });
+        requestAnimationFrame(record);
+      };
+      record();
+    });
+    await dialog.getByRole('radio', { name: 'Controller estimate', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    const dismissal = await page.evaluate(
+      () =>
+        (window as unknown as { settingsDismissalFrames: { height: number; title: string | null }[] })
+          .settingsDismissalFrames,
+    );
+    expect(dismissal.length).toBeGreaterThan(0);
+    expect(dismissal.every(frame => frame.height === dismissal[0]!.height && frame.title === 'Distance source')).toBe(
+      true,
+    );
+    await expect(distance).toHaveAccessibleName('Distance source, Controller estimate');
+    expect(await settingsLayout(page)).toEqual(before);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`settings-${width}.png`), fullPage: true });
   });
-  await dialog.getByRole('radio', { name: 'Controller estimate', exact: true }).click();
-  await expect(dialog).toBeHidden();
-  const dismissal = await page.evaluate(() => (window as unknown as { settingsDismissalFrames: { height: number; title: string | null }[] }).settingsDismissalFrames);
-  expect(dismissal.length).toBeGreaterThan(0);
-  expect(dismissal.every(frame => frame.height === dismissal[0]!.height && frame.title === 'Distance source')).toBe(true);
-  await expect(distance).toHaveAccessibleName('Distance source, Controller estimate');
-  expect(await settingsLayout(page)).toEqual(before);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath(`settings-${width}.png`), fullPage: true });
-});
 
 test('Settings choices persist and keyboard dismissal returns focus without remounting Ride', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -70,7 +82,8 @@ test('Settings choices persist and keyboard dismissal returns focus without remo
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   const speed = page.getByTestId('settings-speed');
   await expect(speed).toBeVisible();
-  await speed.focus(); await page.keyboard.press('Enter');
+  await speed.focus();
+  await page.keyboard.press('Enter');
   await page.getByRole('radio', { name: 'km/h', exact: true }).focus();
   await page.keyboard.press('End');
   await expect(page.getByRole('radio', { name: 'm/s', exact: true })).toBeFocused();
@@ -82,7 +95,9 @@ test('Settings choices persist and keyboard dismissal returns focus without remo
   await page.getByRole('radio', { name: 'Indoor', exact: true }).click();
   await page.getByTestId('settings-sampleHz').click();
   await page.getByRole('radio', { name: '8 Hz', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('power-log.monitor-preferences.v1')!).sampleHz)).toBe(8);
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('power-log.monitor-preferences.v1')!).sampleHz))
+    .toBe(8);
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await expect(page.getByTestId('tab-transition-1').filter({ visible: true })).toHaveCount(1);
   await page.getByRole('link', { name: 'Ride', exact: true }).click();
@@ -117,14 +132,24 @@ test('Settings hydrate retained choices and expose a failed write without hiding
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   await expect(page.getByTestId('settings-error')).toBeHidden();
   await expect(page.getByTestId('settings-distance')).toBeEnabled();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('power-log.monitor-preferences.v1')!).speedUnit)).toBe('mph');
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem('power-log.monitor-preferences.v1')!).speedUnit),
+  ).toBe('mph');
 });
 
 test('History keeps the same open CSV after Settings, Ride and repeated settled returns', async ({ page }) => {
   await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
-  await (await chooser).setFiles({ name: 'settings-retained.csv', mimeType: 'text/csv', buffer: Buffer.from(exportCsv([0, 1, 2].map(index => syntheticSample(index, index, `2026-09-08T00:00:0${index}.000Z`)))) });
+  await (
+    await chooser
+  ).setFiles({
+    name: 'settings-retained.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      exportCsv([0, 1, 2].map(index => syntheticSample(index, index, `2026-09-08T00:00:0${index}.000Z`))),
+    ),
+  });
   const history = page.getByTestId('tab-transition-1');
   await expect(history.getByTestId('monitor-chart-power')).toBeVisible();
   await history.evaluate(node => node.setAttribute('data-settings-retained-history', 'true'));
@@ -135,7 +160,9 @@ test('History keeps the same open CSV after Settings, Ride and repeated settled 
     await page.getByRole('radio', { name: unit, exact: true }).click();
     await page.getByRole('link', { name: 'History', exact: true }).click();
     await expect(retained).toBeVisible();
-    await expect.poll(() => retained.evaluate(node => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41)).toBe(0);
+    await expect
+      .poll(() => retained.evaluate(node => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41))
+      .toBe(0);
     // A departing stale screen can satisfy text assertions before the next frame hides it.
     await page.waitForTimeout(250);
     await expect(retained.getByTestId('monitor-chart-power')).toBeVisible();
@@ -165,69 +192,123 @@ test('browser Back closes a Settings selector before showing Ride controls', asy
 });
 
 for (const [opener, modal] of [
-  ['monitor-view-picker', 'monitor-menu-dialog'], ['monitor-edit', 'monitor-editor-dialog'],
-  ['monitor-expand', 'monitor-close'], ['ride-setup', 'ride-setup-sheet'],
-] as const) test(`${opener} closes on retained-route Back and stays closed on return`, async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto('/');
-  await page.getByRole('link', { name: 'History', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Ride', exact: true }).click();
-  await page.getByTestId(opener).filter({ visible: true }).click();
-  await expect(page.getByTestId(modal)).toBeVisible();
-  await page.goBack();
-  await expect(page.getByTestId(modal)).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Ride', exact: true }).click();
-  await expect(page.getByTestId(opener).filter({ visible: true })).toBeVisible();
-  await expect(page.getByTestId(modal)).toBeHidden();
-});
+  ['monitor-view-picker', 'monitor-menu-dialog'],
+  ['monitor-edit', 'monitor-editor-dialog'],
+  ['monitor-expand', 'monitor-close'],
+  ['ride-setup', 'ride-setup-sheet'],
+] as const)
+  test(`${opener} closes on retained-route Back and stays closed on return`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('/');
+    await page.getByRole('link', { name: 'History', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Ride', exact: true }).click();
+    await page.getByTestId(opener).filter({ visible: true }).click();
+    await expect(page.getByTestId(modal)).toBeVisible();
+    await page.goBack();
+    await expect(page.getByTestId(modal)).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Ride', exact: true }).click();
+    await expect(page.getByTestId(opener).filter({ visible: true })).toBeVisible();
+    await expect(page.getByTestId(modal)).toBeHidden();
+  });
 
-for (const width of [320, 390]) test(`Settings reserve longest labels with doubled browser text at ${width}px`, async ({ page }, testInfo) => {
-  await page.setViewportSize({ width, height: 900 });
-  await page.goto('/settings');
-  await expect(page.getByTestId('settings-distance')).toBeVisible();
-  const doubleText = async () => page.evaluate(() => {
-    const nodes = [...document.querySelectorAll<HTMLElement>('[dir="auto"],a')].filter(node => !node.dataset.settingsDoubled && node.textContent?.trim() !== 'ϟ');
-    const sizes = nodes.map(node => ({ node, size: parseFloat(getComputedStyle(node).fontSize), line: parseFloat(getComputedStyle(node).lineHeight) }));
-    for (const { node, size, line } of sizes) {
-      node.dataset.settingsDoubled = 'true'; node.style.fontSize = `${size * 2}px`;
-      if (Number.isFinite(line)) node.style.lineHeight = `${line * 2}px`;
-    }
-  });
-  await doubleText();
-  const before = await settingsLayout(page);
-  await page.evaluate(() => {
-    const frames: number[][] = []; Object.assign(window, { settingsFrames: frames, recordSettingsFrames: true });
-    const record = () => {
-      if (!(window as unknown as { recordSettingsFrames: boolean }).recordSettingsFrames) return;
-      frames.push(['settings-display', 'settings-recording', 'settings-distance'].flatMap(id => {
-        const { x, y, width, height } = document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
-        return [x, y, width, height];
-      }));
+for (const width of [320, 390])
+  test(`Settings reserve longest labels with doubled browser text at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/settings');
+    await expect(page.getByTestId('settings-distance')).toBeVisible();
+    const doubleText = async () =>
+      page.evaluate(() => {
+        const nodes = [...document.querySelectorAll<HTMLElement>('[dir="auto"],a')].filter(
+          node => !node.dataset.settingsDoubled && node.textContent?.trim() !== 'ϟ',
+        );
+        const sizes = nodes.map(node => ({
+          node,
+          size: parseFloat(getComputedStyle(node).fontSize),
+          line: parseFloat(getComputedStyle(node).lineHeight),
+        }));
+        for (const { node, size, line } of sizes) {
+          node.dataset.settingsDoubled = 'true';
+          node.style.fontSize = `${size * 2}px`;
+          if (Number.isFinite(line)) node.style.lineHeight = `${line * 2}px`;
+        }
+      });
+    await doubleText();
+    const before = await settingsLayout(page);
+    await page.evaluate(() => {
+      const frames: number[][] = [];
+      Object.assign(window, { settingsFrames: frames, recordSettingsFrames: true });
+      const record = () => {
+        if (!(window as unknown as { recordSettingsFrames: boolean }).recordSettingsFrames) return;
+        frames.push(
+          ['settings-display', 'settings-recording', 'settings-distance'].flatMap(id => {
+            const { x, y, width, height } = document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
+            return [x, y, width, height];
+          }),
+        );
+        requestAnimationFrame(record);
+      };
       requestAnimationFrame(record);
-    };
-    requestAnimationFrame(record);
+    });
+    await page.getByTestId('settings-distance').click();
+    await doubleText();
+    await page.getByRole('radio', { name: 'Controller estimate', exact: true }).click();
+    await expect(page.getByTestId('settings-options')).toBeHidden();
+    expect(await settingsLayout(page)).toEqual(before);
+    const frames = await page.evaluate(() => {
+      Object.assign(window, { recordSettingsFrames: false });
+      return (window as unknown as { settingsFrames: number[][] }).settingsFrames;
+    });
+    expect(frames.length).toBeGreaterThan(2);
+    expect(frames.every(frame => JSON.stringify(frame) === JSON.stringify(frames[0]))).toBe(true);
+    const overflowing = await page
+      .getByTestId('settings-screen')
+      .evaluate(element =>
+        [...element.querySelectorAll<HTMLElement>('[dir="auto"]')]
+          .filter(node => node.scrollWidth > node.clientWidth + 1)
+          .map(node => node.textContent),
+      );
+    expect(overflowing).toEqual([]);
+    for (const link of await page.getByTestId('app-header').getByRole('link').all()) {
+      expect(await link.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+      const box = (await link.boundingBox())!;
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`settings-text2x-${width}.png`), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expect
+      .poll(async () => {
+        const wide = await settingsLayout(page);
+        return wide['settings-recording']!.y === wide['settings-display']!.y;
+      })
+      .toBe(true);
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => settingsLayout(page)).toEqual(before);
   });
-  await page.getByTestId('settings-distance').click(); await doubleText();
-  await page.getByRole('radio', { name: 'Controller estimate', exact: true }).click();
-  await expect(page.getByTestId('settings-options')).toBeHidden();
-  expect(await settingsLayout(page)).toEqual(before);
-  const frames = await page.evaluate(() => {
-    Object.assign(window, { recordSettingsFrames: false });
-    return (window as unknown as { settingsFrames: number[][] }).settingsFrames;
+
+const persistenceText = {
+  persisted: 'Protected from automatic browser cleanup',
+  'not persisted': 'The browser may clear saved rides when storage runs low',
+  unavailable: 'Protection status unavailable in this browser',
+  rejected: 'Protection status unavailable in this browser',
+};
+for (const status of ['persisted', 'not persisted', 'unavailable', 'rejected'] as const)
+  test(`Settings reports browser storage persistence: ${status}`, async ({ page }) => {
+    await page.addInitScript(status => {
+      Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        value:
+          status === 'unavailable'
+            ? undefined
+            : {
+                persisted: async () => {
+                  if (status === 'rejected') throw new Error('Storage unavailable');
+                  return status === 'persisted';
+                },
+              },
+      });
+    }, status);
+    await page.goto('/settings');
+    await expect(page.getByTestId('settings-storage')).toContainText(persistenceText[status]);
   });
-  expect(frames.length).toBeGreaterThan(2);
-  expect(frames.every(frame => JSON.stringify(frame) === JSON.stringify(frames[0]))).toBe(true);
-  const overflowing = await page.getByTestId('settings-screen').evaluate(element => [...element.querySelectorAll<HTMLElement>('[dir="auto"]')].filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
-  expect(overflowing).toEqual([]);
-  for (const link of await page.getByTestId('app-header').getByRole('link').all()) {
-    expect(await link.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-    const box = (await link.boundingBox())!; expect(box.x + box.width).toBeLessThanOrEqual(width);
-  }
-  await page.screenshot({ path: testInfo.outputPath(`settings-text2x-${width}.png`), fullPage: true });
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await expect.poll(async () => { const wide = await settingsLayout(page); return wide['settings-recording']!.y === wide['settings-display']!.y; }).toBe(true);
-  await page.setViewportSize({ width, height: 900 });
-  await expect.poll(() => settingsLayout(page)).toEqual(before);
-});

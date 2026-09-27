@@ -2,19 +2,25 @@ import Foundation
 import CoreGraphics
 
 enum MonitorRasterRenderer {
-  static func draw(scene: MonitorRasterScene, dimensions: MonitorRasterDimensions,
-                   cancelled: () -> Bool) throws -> CGImage {
+  static func draw(
+    scene: MonitorRasterScene, dimensions: MonitorRasterDimensions,
+    cancelled: () -> Bool
+  ) throws -> CGImage {
     let pixels = try dimensions.pixels(laneCount: scene.laneCount)
     guard !cancelled() else { throw MonitorRasterError.cancelled }
-    guard let context = CGContext(data: nil, width: pixels.width, height: pixels.height,
-      bitsPerComponent: 8, bytesPerRow: pixels.width * 4, space: CGColorSpaceCreateDeviceRGB(),
-      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+    guard
+      let context = CGContext(
+        data: nil, width: pixels.width, height: pixels.height,
+        bitsPerComponent: 8, bytesPerRow: pixels.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    else {
       throw MonitorRasterError.invalid("Chart bitmap allocation failed")
     }
     // Match the UIKit top-left coordinates while storing only the clipped plot area.
     context.translateBy(x: 0, y: CGFloat(pixels.height))
-    context.scaleBy(x: CGFloat(pixels.width) / dimensions.plotWidth,
-                    y: -CGFloat(pixels.height) / dimensions.plotHeight)
+    context.scaleBy(
+      x: CGFloat(pixels.width) / dimensions.plotWidth,
+      y: -CGFloat(pixels.height) / dimensions.plotHeight)
     context.clip(to: CGRect(x: 0, y: 0, width: dimensions.plotWidth, height: dimensions.plotHeight))
     context.setLineWidth(1.8)
     context.setLineJoin(.round)
@@ -23,7 +29,8 @@ enum MonitorRasterRenderer {
     for series in scene.series {
       guard !cancelled() else { throw MonitorRasterError.cancelled }
       let color = MonitorRasterScene.color(series.color)!
-      context.setStrokeColor(color); context.setFillColor(color)
+      context.setStrokeColor(color)
+      context.setFillColor(color)
       context.beginPath()
       var previous: CGPoint?
       var lastDrawn: CGPoint?
@@ -36,13 +43,16 @@ enum MonitorRasterRenderer {
           y: y(point.value, scene: scene, height: dimensions.height))
         if previous == nil || point.startsSegment {
           if runCount == 1, let previous { singletons.append(previous) }
-          lastDrawn = nil; runCount = 1
+          lastDrawn = nil
+          runCount = 1
         } else if let previous {
           if series.step {
             let corner = CGPoint(x: position.x, y: previous.y)
             appendLine(from: previous, to: corner, context: context, clip: clip, lastDrawn: &lastDrawn)
             appendLine(from: corner, to: position, context: context, clip: clip, lastDrawn: &lastDrawn)
-          } else { appendLine(from: previous, to: position, context: context, clip: clip, lastDrawn: &lastDrawn) }
+          } else {
+            appendLine(from: previous, to: position, context: context, clip: clip, lastDrawn: &lastDrawn)
+          }
           runCount += 1
         }
         previous = position
@@ -65,24 +75,37 @@ enum MonitorRasterRenderer {
 
   /// Keep huge predecessor/successor coordinates out of CoreGraphics, preserving exact edge crossings.
   /// The two-point margin puts clipping caps beyond the actual bitmap clip.
-  private static func appendLine(from a: CGPoint, to b: CGPoint, context: CGContext,
-                                 clip: CGRect, lastDrawn: inout CGPoint?) {
-    let dx = b.x - a.x, dy = b.y - a.y
-    var lower: CGFloat = 0, upper: CGFloat = 1
-    let edges = [(-dx, a.x - clip.minX), (dx, clip.maxX - a.x),
-                 (-dy, a.y - clip.minY), (dy, clip.maxY - a.y)]
+  private static func appendLine(
+    from a: CGPoint, to b: CGPoint, context: CGContext,
+    clip: CGRect, lastDrawn: inout CGPoint?
+  ) {
+    let dx = b.x - a.x
+    let dy = b.y - a.y
+    var lower: CGFloat = 0
+    var upper: CGFloat = 1
+    let edges = [
+      (-dx, a.x - clip.minX), (dx, clip.maxX - a.x),
+      (-dy, a.y - clip.minY), (dy, clip.maxY - a.y),
+    ]
     for (direction, distance) in edges {
       if direction == 0 {
-        if distance < 0 { lastDrawn = nil; return }
+        if distance < 0 {
+          lastDrawn = nil
+          return
+        }
       } else {
         let fraction = distance / direction
         if direction < 0 { lower = max(lower, fraction) } else { upper = min(upper, fraction) }
-        if lower > upper { lastDrawn = nil; return }
+        if lower > upper {
+          lastDrawn = nil
+          return
+        }
       }
     }
     let start = CGPoint(x: a.x + lower * dx, y: a.y + lower * dy)
     let end = CGPoint(x: a.x + upper * dx, y: a.y + upper * dy)
     if lastDrawn != start { context.move(to: start) }
-    context.addLine(to: end); lastDrawn = end
+    context.addLine(to: end)
+    lastDrawn = end
   }
 }

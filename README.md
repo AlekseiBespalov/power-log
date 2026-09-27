@@ -6,7 +6,7 @@ Cycling rides and CYC X6/X12 telemetry for iPhone, Android, Apple Watch and the 
 
 - Start, pause, resume, lap, save or discard rides; delete saved rides from History.
 - Compare rider/motor power, cadence, speed, battery use and temperatures. Configure numbers and charts per view, inspect exact samples and peaks, and pan/zoom long rides.
-- Set recording defaults, distance source and speed units in Settings. Recording choices apply to the next ride; analysis preferences also apply to saved rides.
+- Set recording defaults, distance source and speed units in Settings. New installations record on the phone; Apple Watch recording is opt-in. Recording choices apply to the next ride; analysis preferences also apply to saved rides.
 - Keep data locally and share only when you choose. [Example screenshots](artifacts/app-store/README.md) use fictional rides.
 
 | Platform | Capabilities |
@@ -16,7 +16,7 @@ Cycling rides and CYC X6/X12 telemetry for iPhone, Android, Apple Watch and the 
 | Apple Watch | HealthKit/GPS, ride controls and automatic transfer to iPhone |
 | Web | Foreground Bluetooth recording, IndexedDB history, CSV import/export and responsive charts |
 
-Web Bluetooth needs a compatible browser, such as Chrome on Android, and HTTPS or localhost. Keep the page active while recording; browser storage can be cleared or evicted.
+Web Bluetooth needs a compatible browser, such as Chrome on Android, and HTTPS or localhost. Keep the page active while recording; browser storage can be cleared or evicted. Browser distance settings offer Auto and Controller estimate.
 
 Motor input power is electrical battery input, separate from rider power. Missing measurements remain unavailable; [measurement rules](docs/measurements.md) explain units and distance sources.
 
@@ -29,7 +29,7 @@ npm ci
 npm run web
 ```
 
-The [website workflow](.github/workflows/pages.yml) builds, checks and deploys pushes to `main` to GitHub Pages. Set the repository's Pages source to **GitHub Actions**. For a local Pages build, run `npm run build:pages`; only `dist/` is published. See [public hosting](docs/security.md) for paths, environment isolation and privacy.
+The [website workflow](.github/workflows/pages.yml) deploys pushes to `main` to GitHub Pages after the full shared, browser, Swift and FIT checks pass for that commit. Set the repository's Pages source to **GitHub Actions**. For a local Pages build, run `npm run build:pages`; only `dist/` is published. See [public hosting](docs/security.md) for paths, environment isolation and privacy.
 
 ## Develop for iPhone and Watch
 
@@ -45,9 +45,11 @@ npm run prebuild:ios
 npm run ios
 ```
 
-Use an Expo development build, not Expo Go. Debug uses Metro (`npm start`); standalone Release builds come from `ios/PowerLog.xcworkspace` with the matching Watch companion. The full phone workout engine requires iOS 26; Watch requires watchOS 10. Edit maintained native sources/configuration, not generated `ios/` or `android/` projects.
+Use an Expo development build, not Expo Go. Debug uses Metro (`npm start`); standalone Release builds come from `ios/PowerLog.xcworkspace` with the matching Watch companion. Phone-owned rides record, show History and export from iOS 16.4; Watch-owned rides need iOS 17 with HealthKit and watchOS 10; phone-owned Health saving and the Live Activity need iOS 26. Edit maintained native sources/configuration, not generated `ios/` or `android/` projects.
 
-Native schema upgrades currently require reinstalling, so export important rides before an incompatible update. [Testing](docs/testing.md) covers bundle/signing checks, installation and physical background-recording acceptance. Run `npm run check` for the shared checks and web build.
+`package.json` supplies the app version for the phone, Watch and Live Activity. Set `POWER_LOG_IOS_BUILD_NUMBER` to a positive integer before prebuild for their shared build number (default `1`).
+
+Until the first public release, storage formats change in place: reinstall the phone and Watch apps together and clear browser site data after an update that changes them. [Testing](docs/testing.md) covers bundle/signing checks, installation and physical background-recording acceptance. Run `npm run check` for the shared checks and web build.
 
 ## Install on Android
 
@@ -69,6 +71,8 @@ This produces an installable release-mode preview APK. [Android setup](docs/andr
 On iPhone or Android: **History → saved ride → Export FIT**, then save the shared file, then **Open Strava upload** and select the file on [Strava's website](https://www.strava.com/upload/select). Export becomes available after saving/syncing finishes. No Strava account setup, API credentials or backend are needed in Power Log. Browser rides export CSV only.
 
 ## Documentation
+
+The [privacy policy](https://AlekseiBespalov.github.io/power-log/privacy) is also available in **Settings → About → Privacy policy** (`/privacy`). About shows the app version and links to GitHub Issues, the source and the published website’s third-party notices.
 
 | Document | Purpose |
 | --- | --- |

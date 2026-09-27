@@ -10,14 +10,19 @@ struct PowerLogCaptureFrame {
 
   func mappedRide(timeline override: WorkoutTimelineAnchor? = nil) throws -> WorkoutEvent? {
     guard let ride, let timestamp = sample["timestamp"] as? String,
-      let observationID = sample["observationId"] as? String else { return nil }
-    let mapping = try (override ?? ride.timeline).map(epoch: sample["clockEpoch"] as? String,
+      let observationID = sample["observationId"] as? String
+    else { return nil }
+    let mapping = try (override ?? ride.timeline).map(
+      epoch: sample["clockEpoch"] as? String,
       acquisition: sample["acquisitionMonotonic"] as? Double, timestamp: WorkoutCoding.date(timestamp))
     guard mapping.eligible else { return nil }
     var payload = sample
     if let uncertainty = mapping.uncertainty { payload["timelineMappingUncertainty"] = uncertainty }
-    return try WorkoutEvent(dictionary: ["schemaVersion": 1, "eventId": observationID, "workoutId": ride.id,
-      "kind": "telemetry", "source": "cyc", "timestamp": timestamp, "elapsedSeconds": mapping.elapsed, "payload": payload])
+    return try WorkoutEvent(dictionary: [
+      "schemaVersion": 1, "eventId": observationID, "workoutId": ride.id,
+      "kind": "telemetry", "source": "cyc", "timestamp": timestamp, "elapsedSeconds": mapping.elapsed,
+      "payload": payload,
+    ])
   }
 }
 
@@ -28,19 +33,14 @@ struct PowerLogCaptureDestination {
 }
 
 enum PowerLogCaptureCutoff {
-  static func owner(_ timeline: WorkoutTimelineAnchor, at date: Date, elapsedSeconds: Double?) throws -> WorkoutTimelineAnchor {
-    if timeline.stopMonotonic != nil, timeline.stopUTC != nil { return timeline }
-    let wallElapsed = date.timeIntervalSince(try WorkoutCoding.date(timeline.startedAt))
-    guard wallElapsed.isFinite, wallElapsed >= 0, wallElapsed <= 2_678_400 else {
-      throw PowerLogStorageError.invalid("Owner stop precedes the ride or exceeds its supported duration")
-    }
-    let elapsed = elapsedSeconds ?? wallElapsed
-    guard elapsed.isFinite, elapsed >= 0, elapsed <= 2_678_400 else {
-      throw PowerLogStorageError.invalid("Owner stop has an invalid elapsed time")
-    }
+  static func owner(_ timeline: WorkoutTimelineAnchor, timing: WorkoutOwnerTiming?) throws
+    -> WorkoutTimelineAnchor
+  {
+    guard let timing else { throw PowerLogStorageError.invalid("Owner stop has no retained timing") }
+    try timing.validate()
     var closed = timeline
-    closed.stopMonotonic = timeline.monotonicOrigin + elapsed
-    closed.stopUTC = WorkoutCoding.timestamp(date)
+    closed.stopMonotonic = timeline.monotonicOrigin + timing.elapsedSeconds
+    closed.stopUTC = timing.timestamp
     return closed
   }
 }
@@ -72,10 +72,12 @@ final class PowerLogCaptureInbox {
   private var admissionFault: PowerLogCaptureFault?
 
   func admit(_ frame: PowerLogCaptureFrame) throws -> Bool {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     guard frames.count < Self.maximumFrames else {
       if admissionFault == nil {
-        admissionFault = PowerLogCaptureFault(id: UUID().uuidString.lowercased(), workoutID: destination?.id,
+        admissionFault = PowerLogCaptureFault(
+          id: UUID().uuidString.lowercased(), workoutID: destination?.id,
           timestamp: frame.sample["timestamp"] as? String ?? WorkoutCoding.timestamp(Date()),
           observationID: frame.sample["observationId"] as? String ?? "",
           message: "Bike recording was interrupted because storage could not keep up.")
@@ -84,28 +86,50 @@ final class PowerLogCaptureInbox {
       throw PowerLogStorageError.busy
     }
     let wake = frames.isEmpty
-    var admitted = frame; admitted.ride = destination
+    var admitted = frame
+    admitted.ride = destination
     frames.append(admitted)
     return wake
   }
 
   func take(upTo limit: Int) -> [PowerLogCaptureFrame] {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     let count = min(max(0, limit), frames.count)
     let result = Array(frames.prefix(count))
     frames.removeFirst(count)
     return result
   }
 
-  var isEmpty: Bool { lock.lock(); defer { lock.unlock() }; return frames.isEmpty }
-  var first: PowerLogCaptureFrame? { lock.lock(); defer { lock.unlock() }; return frames.first }
-  var count: Int { lock.lock(); defer { lock.unlock() }; return frames.count }
-  var fault: PowerLogCaptureFault? { lock.lock(); defer { lock.unlock() }; return admissionFault }
+  var isEmpty: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return frames.isEmpty
+  }
+  var first: PowerLogCaptureFrame? {
+    lock.lock()
+    defer { lock.unlock() }
+    return frames.first
+  }
+  var count: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return frames.count
+  }
+  var fault: PowerLogCaptureFault? {
+    lock.lock()
+    defer { lock.unlock() }
+    return admissionFault
+  }
   func acknowledgeFault(_ id: String) {
-    lock.lock(); defer { lock.unlock() }; if admissionFault?.id == id { admissionFault = nil }
+    lock.lock()
+    defer { lock.unlock() }
+    if admissionFault?.id == id { admissionFault = nil }
   }
   func setDestination(_ value: PowerLogCaptureDestination?) {
-    lock.lock(); defer { lock.unlock() }; destination = admissionFault == nil ? value : nil
+    lock.lock()
+    defer { lock.unlock() }
+    destination = admissionFault == nil ? value : nil
   }
 }
 
@@ -116,13 +140,17 @@ struct PowerLogCaptureRecord {
 
   init(frame: PowerLogCaptureFrame, ride: WorkoutEvent?) throws {
     guard let timestamp = frame.sample["timestamp"] as? String,
-      let observationID = frame.sample["observationId"] as? String else {
+      let observationID = frame.sample["observationId"] as? String
+    else {
       throw PowerLogStorageError.invalid("Capture has no original identity or timestamp")
     }
-    self.frame = frame; self.ride = ride
-    live = try WorkoutEvent(dictionary: ["schemaVersion": 1, "eventId": observationID,
+    self.frame = frame
+    self.ride = ride
+    live = try WorkoutEvent(dictionary: [
+      "schemaVersion": 1, "eventId": observationID,
       "workoutId": frame.liveID, "kind": "telemetry", "source": "cyc", "timestamp": timestamp,
-      "elapsedSeconds": frame.liveElapsed, "payload": frame.sample])
+      "elapsedSeconds": frame.liveElapsed, "payload": frame.sample,
+    ])
   }
 }
 
@@ -149,10 +177,16 @@ final class PowerLogCaptureBatch {
     try store.transaction(priority: .capture) { _ in
       var liveIDs = Set<String>()
       for record in batch where liveIDs.insert(record.frame.liveID).inserted {
-        try store.ensureLiveCollection(id: record.frame.liveID, startedAt: record.frame.liveStartedAt,
+        try store.ensureLiveCollection(
+          id: record.frame.liveID, startedAt: record.frame.liveStartedAt,
           monotonicOrigin: record.frame.liveOrigin)
       }
-      _ = try store.appendBatch(batch.flatMap { [$0.live] + ($0.ride.map { [$0] } ?? []) }, producer: "cyc")
+      let events = batch.flatMap { [$0.live] + ($0.ride.map { [$0] } ?? []) }
+      let acquisitions = Dictionary(
+        events.compactMap { event in
+          event.payload["acquisitionMonotonic"]?.number.map { (event.eventId, $0) }
+        }, uniquingKeysWith: { first, _ in first })
+      _ = try store.appendBatch(events, producer: "cyc", liveAcquisitions: acquisitions)
       for id in Set(rides.map(\.workoutId)) { try register(id) }
     }
     records.removeFirst(batch.count)

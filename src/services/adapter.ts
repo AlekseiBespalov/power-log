@@ -1,13 +1,19 @@
-import type { ConnectionDiagnostics, ConnectionOptions, Device, NativeState, TelemetrySample } from '../core/types';
+import type {
+  ConnectionDiagnostics,
+  ConnectionOptions,
+  Device,
+  NativeState,
+  SampleDelivery,
+  TelemetrySample,
+} from '../core/types';
 
 export interface AdapterEvents {
   device: (device: Device) => void;
   state: (state: NativeState) => void;
-  sample: (sample: TelemetrySample) => void;
+  sample: (sample: TelemetrySample, delivery: SampleDelivery) => void;
 }
 export interface TelemetryAdapter {
   readonly kind: 'native' | 'web' | 'unavailable';
-  readonly description: string;
   subscribe(events: AdapterEvents): () => void;
   getState(): Promise<NativeState>;
   getDiagnostics?(): Promise<ConnectionDiagnostics>;

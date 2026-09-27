@@ -19,14 +19,20 @@ function collect(directory) {
 collect(root);
 
 function executable(bundle) {
-  const name = execFileSync('/usr/bin/plutil', ['-extract', 'CFBundleExecutable', 'raw', '-o', '-', path.join(bundle, 'Info.plist')], { encoding: 'utf8' }).trim();
+  const name = execFileSync(
+    '/usr/bin/plutil',
+    ['-extract', 'CFBundleExecutable', 'raw', '-o', '-', path.join(bundle, 'Info.plist')],
+    { encoding: 'utf8' },
+  ).trim();
   return path.join(bundle, name);
 }
 function loadCommands(binary) {
   return execFileSync('/usr/bin/xcrun', ['otool', '-l', binary], { encoding: 'utf8' }).split(/Load command \d+\n/);
 }
 function runPaths(commands) {
-  return commands.filter(command => /cmd LC_RPATH\b/.test(command)).map(command => command.match(/\n\s+path (.+) \(offset/)[1]);
+  return commands
+    .filter(command => /cmd LC_RPATH\b/.test(command))
+    .map(command => command.match(/\n\s+path (.+) \(offset/)[1]);
 }
 const failures = [];
 let checked = 0;
@@ -37,8 +43,14 @@ for (const bundle of bundles) {
   let owner = bundle;
   while (!/\.(app|appex)$/.test(owner)) owner = path.dirname(owner);
   const ownerBinary = executable(owner);
-  const expand = value => value.replace('@executable_path', path.dirname(ownerBinary)).replace('@loader_path', path.dirname(binary));
-  const searchPaths = [...runPaths(commands).map(expand), ...runPaths(loadCommands(ownerBinary)).map(value => value.replace('@executable_path', path.dirname(ownerBinary)).replace('@loader_path', path.dirname(ownerBinary)))];
+  const expand = value =>
+    value.replace('@executable_path', path.dirname(ownerBinary)).replace('@loader_path', path.dirname(binary));
+  const searchPaths = [
+    ...runPaths(commands).map(expand),
+    ...runPaths(loadCommands(ownerBinary)).map(value =>
+      value.replace('@executable_path', path.dirname(ownerBinary)).replace('@loader_path', path.dirname(ownerBinary)),
+    ),
+  ];
   for (const command of commands) {
     if (!/cmd LC_(LOAD_DYLIB|REEXPORT_DYLIB|LOAD_UPWARD_DYLIB)\b/.test(command)) continue;
     const dependency = command.match(/\n\s+name (.+) \(offset/)?.[1];
@@ -56,4 +68,6 @@ if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
-console.log(`Bundle framework dependencies passed: ${bundles.length} executables, ${checked} required framework references. Device launch remains a separate check.`);
+console.log(
+  `Bundle framework dependencies passed: ${bundles.length} executables, ${checked} required framework references. Device launch remains a separate check.`,
+);

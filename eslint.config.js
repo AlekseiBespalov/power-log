@@ -1,5 +1,16 @@
 const { defineConfig } = require('eslint/config');
 const expo = require('eslint-config-expo/flat');
-module.exports = defineConfig([expo, {
-  ignores: ['dist/**', '.expo/**', 'ios/**', 'android/**', 'modules/cyc-bridge/android/build/**', 'playwright-report/**', 'test-results/**'],
-}]);
+module.exports = defineConfig([
+  expo,
+  {
+    ignores: [
+      'dist/**',
+      '.expo/**',
+      'ios/**',
+      'android/**',
+      'modules/cyc-bridge/android/build/**',
+      'playwright-report/**',
+      'test-results/**',
+    ],
+  },
+]);

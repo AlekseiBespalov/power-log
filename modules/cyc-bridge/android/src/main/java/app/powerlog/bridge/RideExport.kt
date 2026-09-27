@@ -3,6 +3,7 @@ package app.powerlog.bridge
 import android.content.Context
 import java.io.File
 import java.io.RandomAccessFile
+import java.time.Duration
 import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -17,18 +18,19 @@ internal class RideExport(
     @Suppress("UNCHECKED_CAST")
     fun detail(id: String, source: String): Payload {
         val metadata = store.metadata(id)
-        val (elapsed, timer) = store.timing(id)
+        val (elapsed, timer, timestamp) = store.timing(id)
         val query =
             monitor.query(
-                "stats",
                 id,
-                mapOf(
-                    "generation" to 0,
-                    "expectedRevision" to store.revision(id).toString(),
-                    "distanceSource" to source,
-                    "metrics" to listOf("humanPowerW", "cadenceRpm", "speedMps"),
-                    "startSeconds" to 0,
-                    "endSeconds" to elapsed,
+                MonitorInput(
+                    operation = MonitorOperation.Stats,
+                    target = MonitorTarget.Workout(id),
+                    generation = 0,
+                    expectedRevision = store.revision(id).toString(),
+                    distanceSource = BridgeInputs.distanceSource(source),
+                    metrics = listOf("humanPowerW", "cadenceRpm", "speedMps"),
+                    startSeconds = 0.0,
+                    endSeconds = elapsed,
                 ),
             )
         check(query["status"] == "ok") { "Ride changed. Try again." }
@@ -63,8 +65,7 @@ internal class RideExport(
             }
         fun mean(metric: String): Double? {
             val s = stats[metric] ?: return null
-            return if (s.num("coveredSeconds") > 0) s.num("integral") / s.num("coveredSeconds")
-            else null
+            return if (s.num("coveredSeconds") > 0) s.num("integral") / s.num("coveredSeconds") else null
         }
         fun maximum(metric: String) = (stats[metric]?.get("max") as? Map<*, *>)?.get("value")
         val power = stats["humanPowerW"] ?: emptyMap()
@@ -73,16 +74,14 @@ internal class RideExport(
                 "schemaVersion" to 1,
                 "id" to id,
                 "startedAt" to metadata["startedAt"],
-                "endedAt" to (metadata["endedAt"] ?: iso()),
+                "endedAt" to (metadata["endedAt"] ?: timestamp),
                 "elapsedSeconds" to elapsed,
                 "timerSeconds" to timer,
                 "distance" to distanceInfo,
                 "distanceMeters" to selected?.get("distanceMeters"),
                 "averageSpeedMps" to
                     selected?.let {
-                        if (it.num("coveredSeconds") > 0)
-                            it.num("distanceMeters") / it.num("coveredSeconds")
-                        else null
+                        if (it.num("coveredSeconds") > 0) it.num("distanceMeters") / it.num("coveredSeconds") else null
                     },
                 "maximumSpeedMps" to maximum("speedMps"),
                 "averageRiderPowerW" to mean("humanPowerW"),
@@ -96,11 +95,16 @@ internal class RideExport(
                 "telemetryCount" to store.count(id, "telemetry"),
                 "locationCount" to store.count(id, "location"),
                 "healthCount" to 0,
-                "lapCount" to store.events(id).count { it.second == "lap" } + 1,
+                "lapCount" to store.events(id).count { it.action == "lap" } + 1,
                 "routePreview" to route,
                 "warnings" to
-                    if (selected?.flag("partial") == true) listOf("Distance is partial.")
-                    else emptyList<String>(),
+                    buildList {
+                        if (selected?.flag("partial") == true) add("Distance is partial.")
+                        if (clockDiffers(id, metadata.str("startedAt"), elapsed, timestamp))
+                            add(
+                                "The device clock changed during this ride. FIT uses measured elapsed time; original timestamps are preserved in ZIP."
+                            )
+                    },
                 "provenance" to
                     mapOf(
                         "riderPower" to "CYC rider power",
@@ -111,12 +115,26 @@ internal class RideExport(
         return mapOf("metadata" to metadata, "summary" to summary.filterValues { it != null })
     }
 
+    private fun clockDiffers(id: String, startedAt: String, elapsed: Double, timestamp: String): Boolean {
+        val start = Instant.parse(startedAt)
+        fun differs(time: Double, stamp: String) =
+            abs(Duration.between(start, Instant.parse(stamp)).toMillis() / 1000.0 - time) > 2.5
+        if (differs(elapsed, timestamp)) return true
+        if (store.events(id).any { differs(it.time, it.timestamp) }) return true
+        return store.readableDatabase
+            .rawQuery(
+                "SELECT time,timestamp FROM observations WHERE ride=? ORDER BY id",
+                arrayOf(id),
+            )
+            .use { c ->
+                while (c.moveToNext()) if (differs(c.getDouble(0), c.getString(1))) return true
+                false
+            }
+    }
+
     private fun destination(id: String, extension: String): File {
         val metadata = store.metadata(id)
-        check(
-            metadata.str("phase") == "completed" &&
-                metadata["sealRevision"] == metadata["verifiedSealRevision"]
-        ) {
+        check(metadata.str("phase") == "completed" && metadata["sealRevision"] == metadata["verifiedSealRevision"]) {
             "Finish saving this ride before exporting."
         }
         return File(File(context.cacheDir, "exports").apply { mkdirs() }, "PowerLog-$id.$extension")
@@ -139,8 +157,8 @@ internal class RideExport(
                     it.write(
                         org.json
                             .JSONArray(
-                                store.events(id).map { (time, action) ->
-                                    mapOf("elapsedSeconds" to time, "action" to action)
+                                store.events(id).map { (time, action, timestamp) ->
+                                    mapOf("elapsedSeconds" to time, "action" to action, "timestamp" to timestamp)
                                 }
                             )
                             .toString()
@@ -155,6 +173,7 @@ internal class RideExport(
                             "firmwareLabel",
                             "controllerProtocol",
                             "connectionEpoch",
+                            "interruptionIndex",
                         )
                 entry("telemetry.csv") { writer ->
                     writer.write(columns.joinToString(",") + "\n")
@@ -172,19 +191,14 @@ internal class RideExport(
                                         "firmwareLabel" to identity.getOrNull(1),
                                         "controllerProtocol" to identity.getOrNull(2),
                                         "connectionEpoch" to row.epoch,
+                                        "interruptionIndex" to 0,
                                     )
-                            writer.write(
-                                columns.joinToString(",") { values[it]?.toString() ?: "" } + "\n"
-                            )
+                            writer.write(columns.joinToString(",") { values[it]?.toString() ?: "" } + "\n")
                         }
                     }
                 }
                 entry("locations.csv") { writer ->
-                    writer.write(
-                        "timestamp,elapsedSeconds,active,segment," +
-                            locationMetrics.joinToString(",") +
-                            "\n"
-                    )
+                    writer.write("timestamp,elapsedSeconds,active,segment," + locationMetrics.joinToString(",") + "\n")
                     store.each(id) { row ->
                         if (row.kind == "location")
                             writer.write(
@@ -233,7 +247,7 @@ internal class RideExport(
                     ),
                 )
                 fun eventsThrough(time: Double) {
-                    while (eventIndex < events.size && events[eventIndex].first <= time) {
+                    while (eventIndex < events.size && events[eventIndex].time <= time) {
                         val (t, action) = events[eventIndex++]
                         if (action in listOf("start", "resume", "pause", "stop"))
                             writer.message(
@@ -258,13 +272,13 @@ internal class RideExport(
                     if (second < 0) return
                     eventsThrough(second.toDouble())
                     val fields = mutableListOf(Field.u32(253, (epoch + second).toDouble()))
-                    if (powerCount > 0)
-                        fields.add(Field.u16(7, bin.getValue("humanPowerW") / powerCount))
-                    if (cadenceCount > 0)
-                        fields.add(Field.u8(4, bin.getValue("cadenceRpm") / cadenceCount))
+                    if (powerCount > 0) fields.add(Field.u16(7, bin.getValue("humanPowerW") / powerCount))
+                    if (cadenceCount > 0) fields.add(Field.u8(4, bin.getValue("cadenceRpm") / cadenceCount))
                     if (bin["latitude"] != null && bin["longitude"] != null) {
                         fields.add(Field.s32(0, bin.getValue("latitude") / 180 * 2147483648))
-                        fields.add(Field.s32(1, bin.getValue("longitude") / 180 * 2147483648))
+                        val longitude = bin.getValue("longitude") / 180 * 2147483648
+                        // Rounded positive semicircles at the antimeridian collide with FIT's invalid sentinel.
+                        fields.add(Field.s32(1, if (longitude >= 2147483646.5) -2147483648.0 else longitude))
                     }
                     bin["speedMps"]?.let { fields.add(Field.u32(73, it * 1000)) }
                     bin["altitudeMeters"]?.let { fields.add(Field.u32(78, (it + 500) * 5)) }
@@ -308,15 +322,14 @@ internal class RideExport(
                 eventsThrough(Double.MAX_VALUE)
                 val end = epoch + floor(summary.num("elapsedSeconds"))
                 val boundaries =
-                    listOf(0.0) +
-                        events.filter { it.second == "lap" }.map { it.first } +
-                        summary.num("elapsedSeconds")
+                    listOf(0.0) + events.filter { it.action == "lap" }.map { it.time } + summary.num("elapsedSeconds")
                 val laps = boundaries.zipWithNext().filter { (a, b) -> b > a }
                 fun activeTime(a: Double, b: Double): Double {
                     var active = true
                     var prior = 0.0
                     var total = 0.0
-                    (events + (summary.num("elapsedSeconds") to "stop")).forEach { (t, event) ->
+                    (events + RideEvent(summary.num("elapsedSeconds"), "stop", summary.str("endedAt"))).forEach {
+                        (t, event) ->
                         if (active) total += max(0.0, min(t, b) - max(prior, a))
                         if (event in listOf("pause", "stop")) active = false
                         else if (event in listOf("start", "resume")) active = true
@@ -389,13 +402,13 @@ internal class RideExport(
 internal data class Field(val number: Int, val type: Int, val bytes: ByteArray) {
     companion object {
         fun value(n: Int, t: Int, value: Number?, size: Int, signed: Boolean = false): Field {
-            val v = value?.toDouble()?.let { round(it) }
+            val v = value?.toDouble()?.let { if (it < 0) ceil(it - 0.5) else floor(it + 0.5) }
             val valid =
                 v != null &&
                     v.isFinite() &&
                     v >= (if (signed) -2147483648.0 else 0.0) &&
                     v < (if (signed) 2147483647.0 else 2.0.pow(size * 8) - 1)
-            val bits = if (valid) round(v!!).toLong() else if (signed) 2147483647L else -1L
+            val bits = if (valid) v!!.toLong() else if (signed) 2147483647L else -1L
             return Field(n, t, ByteArray(size) { (bits shr (8 * it)).toByte() })
         }
 

@@ -7,10 +7,14 @@ for (const outcome of ['cancel', 'timeout'] as const) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.addInitScript(() => {
       const device = Object.assign(new EventTarget(), {
-        id: 'synthetic-stalled-bike', name: 'CYC test bike',
+        id: 'synthetic-stalled-bike',
+        name: 'CYC test bike',
         gatt: { connected: false, connect: () => new Promise(() => {}), disconnect: () => {} },
       });
-      Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => device } });
+      Object.defineProperty(navigator, 'bluetooth', {
+        configurable: true,
+        value: { requestDevice: async () => device },
+      });
     });
     await page.goto('/');
     await page.getByTestId('ride-setup').click();
@@ -25,7 +29,9 @@ for (const outcome of ['cancel', 'timeout'] as const) {
     if (outcome === 'cancel') await cancel.click();
     else {
       await page.clock.runFor(15001);
-      await expect(page.getByTestId('ride-setup-sheet').getByRole('alert')).toContainText('Bluetooth connection timed out');
+      await expect(page.getByTestId('ride-setup-sheet').getByRole('alert')).toContainText(
+        'Bluetooth connection timed out',
+      );
     }
     await expect(page.getByTestId('bike-connection-status')).toHaveText('Not connected');
     await expect(connect).toBeEnabled();
@@ -41,22 +47,30 @@ for (const outcome of ['cancel', 'timeout'] as const) {
 async function storedRide(page: Page): Promise<{ rides: BrowserRide[]; rows: RideRow[] }> {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('power-log'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      const request = indexedDB.open('power-log');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
     });
     try {
       const transaction = db.transaction(['recordings', 'samples']);
-      const read = <T>(name: string) => new Promise<T[]>((resolve, reject) => {
-        const request = transaction.objectStore(name).getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
-      });
+      const read = <T>(name: string) =>
+        new Promise<T[]>((resolve, reject) => {
+          const request = transaction.objectStore(name).getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
       const [rides, rows] = await Promise.all([read<BrowserRide>('recordings'), read<RideRow>('samples')]);
       return { rides, rows };
-    } finally { db.close(); }
+    } finally {
+      db.close();
+    }
   });
 }
 
 test('a ride survives short and long bike outages, keeping actual gaps and resuming its charts', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await syntheticBike(page); await page.goto('/');
+  await syntheticBike(page);
+  await page.goto('/');
   await page.getByTestId('ride-setup').click();
   await page.getByRole('button', { name: 'Find bike', exact: true }).click();
   await page.clock.install();
@@ -70,19 +84,27 @@ test('a ride survives short and long bike outages, keeping actual gaps and resum
   await expect(page.getByTestId('monitor-chart-power').locator('path').first()).toHaveAttribute('d', /L/);
   const before = await storedRide(page);
   await page.getByTestId('ride-setup').click();
-  await page.evaluate(() => { window.testBike.available = false; window.testBike.drop(); });
+  await page.evaluate(() => {
+    window.testBike.available = false;
+    window.testBike.drop();
+  });
   await page.clock.runFor(1500);
   await expect(status).toHaveText('Connected');
   await expect(page.getByRole('alert')).toHaveCount(0);
   // The first retry failed; the next one succeeds within the six-second display hold.
-  await page.evaluate(() => { window.testBike.available = true; });
+  await page.evaluate(() => {
+    window.testBike.available = true;
+  });
   await page.clock.runFor(2500);
   await expect(status).toHaveText('Connected');
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect.poll(async () => (await storedRide(page)).rows.length).toBeGreaterThan(before.rows.length);
   expect(await page.evaluate(() => window.testBike.picks)).toBe(1);
 
-  await page.evaluate(() => { window.testBike.available = false; window.testBike.drop(); });
+  await page.evaluate(() => {
+    window.testBike.available = false;
+    window.testBike.drop();
+  });
   await page.clock.runFor(1000);
   const beforeLongGap = await storedRide(page);
   await page.clock.runFor(6000);
@@ -90,7 +112,9 @@ test('a ride survives short and long bike outages, keeping actual gaps and resum
   await expect(page.getByTestId('ride-setup-sheet').getByRole('alert')).toBeVisible();
   expect((await storedRide(page)).rows).toEqual(beforeLongGap.rows);
   expect((await storedRide(page)).rides[0]?.phase).toBe('running');
-  await page.evaluate(() => { window.testBike.available = true; });
+  await page.evaluate(() => {
+    window.testBike.available = true;
+  });
   await page.clock.runFor(7000);
   await expect(status).toHaveText('Connected');
   await expect(page.getByRole('alert')).toHaveCount(0);

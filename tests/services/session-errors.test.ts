@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { initialSessionErrors, sessionErrorMessage, sessionErrorReducer, type SessionErrorAction } from '../../src/services/session-errors';
+import {
+  initialSessionErrors,
+  sessionErrorMessage,
+  sessionErrorReducer,
+  type SessionErrorAction,
+} from '../../src/services/session-errors';
 import { telemetryDisplay } from '../../src/core/telemetry-display';
 
 function replay(...actions: SessionErrorAction[]) {
@@ -9,9 +14,10 @@ function replay(...actions: SessionErrorAction[]) {
 describe('session error lifecycle', () => {
   it('defers an ongoing reconnect banner only until the held readings expire', () => {
     const errors = replay({ type: 'native', error: 'Bike disconnected. Reconnecting…' });
-    const renderAt = (now: number) => sessionErrorMessage(errors, {
-      deferNative: telemetryDisplay('reconnecting', 10, now) === 'held',
-    });
+    const renderAt = (now: number) =>
+      sessionErrorMessage(errors, {
+        deferNative: telemetryDisplay('reconnecting', 10, now) === 'held',
+      });
     expect(renderAt(10.3)).toBeNull();
     expect(renderAt(15.999)).toBeNull();
     expect(renderAt(16)).toBe('Bike disconnected. Reconnecting…');
@@ -42,7 +48,8 @@ describe('session error lifecycle', () => {
   it('keeps a dismissed occurrence hidden through repeated native state snapshots', () => {
     const dismissed = replay({ type: 'native', error: 'Link lost' }, { type: 'dismiss' });
     let current = dismissed;
-    for (let index = 0; index < 100; index++) current = sessionErrorReducer(current, { type: 'native', error: 'Link lost' });
+    for (let index = 0; index < 100; index++)
+      current = sessionErrorReducer(current, { type: 'native', error: 'Link lost' });
     expect(current).toBe(dismissed);
     expect(sessionErrorMessage(current)).toBeNull();
     expect(current.native).toBe('Link lost');
@@ -50,7 +57,9 @@ describe('session error lifecycle', () => {
 
   it('shows a new error, including the same text after a clean state', () => {
     const dismissed = replay({ type: 'native', error: 'Link lost' }, { type: 'dismiss' });
-    expect(sessionErrorMessage(sessionErrorReducer(dismissed, { type: 'native', error: 'Bluetooth unavailable' }))).toBe('Bluetooth unavailable');
+    expect(
+      sessionErrorMessage(sessionErrorReducer(dismissed, { type: 'native', error: 'Bluetooth unavailable' })),
+    ).toBe('Bluetooth unavailable');
     const cleared = sessionErrorReducer(dismissed, { type: 'native', error: null });
     expect(sessionErrorMessage(sessionErrorReducer(cleared, { type: 'native', error: 'Link lost' }))).toBe('Link lost');
   });
@@ -81,6 +90,8 @@ describe('session error lifecycle', () => {
       { type: 'native', error: 'Link lost' },
     );
     expect(sessionErrorMessage(state)).toBeNull();
-    expect(sessionErrorMessage(sessionErrorReducer(state, { type: 'operation', error: 'Connection failed' }))).toBe('Connection failed');
+    expect(sessionErrorMessage(sessionErrorReducer(state, { type: 'operation', error: 'Connection failed' }))).toBe(
+      'Connection failed',
+    );
   });
 });

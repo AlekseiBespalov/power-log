@@ -1,4 +1,5 @@
 import bridge from '../../modules/cyc-bridge';
+import { nativeMonotonicClock, subscribeNativeClock } from './native-monotonic-clock';
 import { idleState, type TelemetryAdapter } from './adapter';
 
 function native() {
@@ -7,14 +8,31 @@ function native() {
 }
 export const deviceAdapter: TelemetryAdapter = {
   kind: bridge ? 'native' : 'unavailable',
-  description: 'Your phone records with the native Bluetooth engine, including while the screen is locked.',
   subscribe(events) {
     if (!bridge) return () => {};
-    const subscriptions = [bridge.addListener('onDevice', events.device), bridge.addListener('onState', events.state), bridge.addListener('onSample', events.sample)];
-    return () => subscriptions.forEach(subscription => subscription.remove());
+    const unsubscribeClock = subscribeNativeClock();
+    const subscriptions = [
+      bridge.addListener('onDevice', events.device),
+      bridge.addListener('onState', events.state),
+      bridge.addListener('onSample', ({ acquiredAtMonotonic, ...sample }) =>
+        events.sample(
+          { ...sample, interruptionIndex: 0 },
+          {
+            acquiredAtMonotonic,
+            clock: nativeMonotonicClock,
+          },
+        ),
+      ),
+    ];
+    return () => {
+      subscriptions.forEach(subscription => subscription.remove());
+      unsubscribeClock();
+    };
   },
   getState: () => bridge?.getState() ?? Promise.resolve(idleState()),
   getDiagnostics: bridge ? () => native().getDiagnostics() : undefined,
-  startScan: () => native().startScan(), stopScan: () => native().stopScan(),
-  connect: options => native().connect(options), disconnect: () => native().disconnect(),
+  startScan: () => native().startScan(),
+  stopScan: () => native().stopScan(),
+  connect: options => native().connect(options),
+  disconnect: () => native().disconnect(),
 };

@@ -1,5 +1,4 @@
 {
-  "policyVersion": 1,
   "defaults": {
     "model": "X6",
     "protocol": "5.3",

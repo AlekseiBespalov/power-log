@@ -18,7 +18,9 @@ private func rejectRead(_ promise: Promise, _ error: Error) {
     promise.reject(BridgeException(code: code, message: storage.localizedDescription))
   } else if error is CycError || error is WorkoutDataError {
     promise.reject(BridgeException(code: "E_WORKOUT", message: error.localizedDescription))
-  } else { promise.reject(error) }
+  } else {
+    promise.reject(error)
+  }
 }
 
 struct CatalogPageOptions: Record {
@@ -29,13 +31,13 @@ struct CatalogPageOptions: Record {
 
 struct CycConnectOptions: Record {
   @Field var deviceId: String = ""
-  @Field var hz: Double = 2
+  @Field var hz: Double?
 }
 
 struct WorkoutStartOptions: Record {
-  @Field var indoor: Bool = false
-  @Field var useWatch: Bool = true
-  @Field var saveToHealth: Bool = true
+  @Field(.required) var indoor: Bool = false
+  @Field var useWatch: Bool?
+  @Field var saveToHealth: Bool?
   @Field var recordGPS: Bool?
   @Field var sampleHz: Double?
 }
@@ -64,10 +66,12 @@ struct MonitorReadOptions: Record {
   @Field var endAnchor: MonitorAnchorOptions?
   @Field var distanceSource: String = "auto"
   var request: MonitorRequest {
-    MonitorRequest(source: source, id: id, generation: generation, expectedRevision: expectedRevision,
+    MonitorRequest(
+      source: source, id: id, generation: generation, expectedRevision: expectedRevision,
       sinceRevision: sinceRevision, startSeconds: startSeconds, endSeconds: endSeconds, seconds: seconds,
       metrics: metrics, buckets: buckets, pixelWidth: pixelWidth, includeEndpoints: includeEndpoints,
-      anchor: anchor?.anchor, startAnchor: startAnchor?.anchor, endAnchor: endAnchor?.anchor, distanceSource: distanceSource)
+      anchor: anchor?.anchor, startAnchor: startAnchor?.anchor, endAnchor: endAnchor?.anchor,
+      distanceSource: distanceSource)
   }
 }
 
@@ -78,6 +82,7 @@ public final class CycBridgeModule: Module {
     let engine = CycEngine.shared
     Name("CycBridge")
     Events("onDevice", "onState", "onSample", "onWorkoutState")
+    AsyncFunction("getMonotonicSeconds") { ProcessInfo.processInfo.systemUptime }
 
     View(MonitorRasterView.self) {
       Events("onRenderStatus")
@@ -90,8 +95,10 @@ public final class CycBridgeModule: Module {
     }
     Function("getMonitorRasterDiagnostics") { MonitorRasterWorker.shared.diagnostics() }
     Function("resetMonitorRasterDiagnostics") { MonitorRasterWorker.shared.diagnostics(reset: true) }
-    AsyncFunction("startMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.start() }.runOnQueue(.main)
-    AsyncFunction("getMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.snapshot() }.runOnQueue(.main)
+    AsyncFunction("startMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.start() }.runOnQueue(
+      .main)
+    AsyncFunction("getMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.snapshot() }.runOnQueue(
+      .main)
     AsyncFunction("stopMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.stop() }.runOnQueue(.main)
 
     AsyncFunction("describeMonitorSource") { (options: MonitorReadOptions, promise: Promise) in
@@ -146,145 +153,142 @@ public final class CycBridgeModule: Module {
     OnCreate { [weak self] in
       guard let self else { return }
       let id = self.observerID
-      if #available(iOS 26.0, *) {
-        let workout = WorkoutEngine.shared
-        workout.queue.async { [weak self] in
-          workout.addSink(id: id) { [weak self] body in
-            DispatchQueue.main.async { [weak self] in self?.sendEvent("onWorkoutState", body) }
-          }
+      let workout = WorkoutEngine.shared
+      workout.queue.async { [weak self] in
+        workout.addSink(id: id) { [weak self] body in
+          DispatchQueue.main.async { [weak self] in self?.sendEvent("onWorkoutState", body) }
         }
       }
       engine.queue.async { [weak self] in
         engine.addSink(id: id) { [weak self] event, body in
           // Events carry copies; Bluetooth and disk work stay on the native serial queue.
-          DispatchQueue.main.async { [weak self] in self?.sendEvent(event, body) }
+          DispatchQueue.main.async { [weak self] in
+            self?.sendEvent(event, body)
+          }
         }
       }
     }
     OnDestroy { [weak self] in
       guard let id = self?.observerID else { return }
       engine.queue.async { engine.removeSink(id: id) }
-      if #available(iOS 26.0, *) {
-        let workout = WorkoutEngine.shared
-        workout.queue.async { workout.removeSink(id: id) }
-      }
+      let workout = WorkoutEngine.shared
+      workout.queue.async { workout.removeSink(id: id) }
     }
 
     AsyncFunction("getState") { () -> [String: Any] in engine.state() }.runOnQueue(engine.queue)
     AsyncFunction("getDiagnostics") { () -> [String: Any] in engine.diagnostics() }.runOnQueue(engine.queue)
-    AsyncFunction("readDiagnostics") { (promise: Promise) in
-      engine.readDiagnostics { result in
-        switch result {
-        case .success(let jsonl): promise.resolve(jsonl)
-        case .failure(let error): promise.reject(error)
-        }
-      }
-    }.runOnQueue(engine.queue)
     AsyncFunction("startScan") { () throws in try engine.startScan() }.runOnQueue(engine.queue)
     AsyncFunction("stopScan") { () in engine.stopScan() }.runOnQueue(engine.queue)
     AsyncFunction("connect") { (options: CycConnectOptions) throws in
-      try engine.connect(deviceID: options.deviceId, rate: options.hz)
+      try engine.connect(deviceID: options.deviceId, rate: options.hz ?? 2)
     }.runOnQueue(engine.queue)
     AsyncFunction("disconnect") { () throws in try engine.disconnect() }.runOnQueue(engine.queue)
 
     AsyncFunction("getWorkoutState") { (promise: Promise) in
-      if #available(iOS 26.0, *) {
-        let workout = WorkoutEngine.shared
-        workout.queue.async { promise.resolve(workout.state()) }
-      } else {
-        promise.resolve(["supported": false, "phase": "unavailable", "error": "Complete workout recording requires iOS 26 or newer."])
-      }
+      let workout = WorkoutEngine.shared
+      workout.queue.async { promise.resolve(workout.state()) }
     }
     AsyncFunction("getWorkoutPermissions") { (promise: Promise) in
-      if #available(iOS 26.0, *) {
-        WorkoutEngine.shared.getPermissions { result in
-          switch result { case .success(let state): promise.resolve(state); case .failure(let error): promise.reject(error) }
+      WorkoutEngine.shared.getPermissions { result in
+        switch result {
+        case .success(let state): promise.resolve(state)
+        case .failure(let error): promise.reject(error)
         }
-      } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      }
     }
-    AsyncFunction("requestWorkoutPermissionsForOptions") { (options: WorkoutStartOptions, promise: Promise) in
-      if #available(iOS 26.0, *) {
-        WorkoutEngine.shared.requestPermissions(indoor: options.indoor, useWatch: options.useWatch, saveToHealth: options.saveToHealth, recordGPS: options.recordGPS) { result in
-          switch result { case .success(let state): promise.resolve(state); case .failure(let error): promise.reject(error) }
+    AsyncFunction("requestWorkoutPermissions") { (options: WorkoutStartOptions, promise: Promise) in
+      do { if let rate = options.sampleHz { _ = try WorkoutRecordingPolicy.sampleHz(rate) } } catch {
+        promise.reject(error)
+        return
+      }
+      WorkoutEngine.shared.requestPermissions(
+        indoor: options.indoor, useWatch: options.useWatch ?? false, saveToHealth: options.saveToHealth ?? true,
+        recordGPS: options.recordGPS
+      ) { result in
+        switch result {
+        case .success(let state): promise.resolve(state)
+        case .failure(let error): promise.reject(error)
         }
-      } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
-    }
-    AsyncFunction("requestWorkoutPermissions") { (promise: Promise) in
-      if #available(iOS 26.0, *) {
-        WorkoutEngine.shared.requestPermissions { result in
-          switch result { case .success(let state): promise.resolve(state); case .failure(let error): promise.reject(error) }
-        }
-      } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      }
     }
     AsyncFunction("startWorkout") { (options: WorkoutStartOptions, promise: Promise) in
-      if #available(iOS 26.0, *) {
-        let workout = WorkoutEngine.shared
-        workout.queue.async {
-          workout.start(indoor: options.indoor, useWatch: options.useWatch, saveToHealth: options.saveToHealth, recordGPS: options.recordGPS, sampleHz: options.sampleHz) { result in
-            switch result { case .success(let state): promise.resolve(state); case .failure(let error): promise.reject(error) }
+      let workout = WorkoutEngine.shared
+      workout.queue.async {
+        workout.start(
+          indoor: options.indoor, useWatch: options.useWatch ?? false, saveToHealth: options.saveToHealth ?? true,
+          recordGPS: options.recordGPS, sampleHz: options.sampleHz ?? 2
+        ) { result in
+          switch result {
+          case .success(let state): promise.resolve(state)
+          case .failure(let error): promise.reject(error)
           }
         }
-      } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      }
     }
     AsyncFunction("recoverWorkout") { (id: String, promise: Promise) in
-      if #available(iOS 26.0, *) {
-        let workout = WorkoutEngine.shared
-        workout.queue.async { workout.recover(id) { result in
-          switch result { case .success(let state): promise.resolve(state); case .failure(let error): promise.reject(error) }
-        } }
-      } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      let workout = WorkoutEngine.shared
+      workout.queue.async {
+        workout.recover(id) { result in
+          switch result {
+          case .success(let state): promise.resolve(state)
+          case .failure(let error): promise.reject(error)
+          }
+        }
+      }
     }
     AsyncFunction("pauseWorkout") { (id: String?, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.pause(expectedID: id) } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutAction(promise) { try $0.pause(expectedID: id) }
     }
     AsyncFunction("resumeWorkout") { (id: String?, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.resume(expectedID: id) } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutAction(promise) { try $0.resume(expectedID: id) }
     }
     AsyncFunction("markWorkoutLap") { (id: String?, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.lap(expectedID: id) } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutAction(promise) { try $0.lap(expectedID: id) }
     }
     AsyncFunction("stopWorkout") { (id: String?, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.stop(expectedID: id) } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutAction(promise) { try $0.stop(expectedID: id) }
     }
     AsyncFunction("discardWorkout") { (id: String, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.stop(expectedID: id, discard: true) } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutAction(promise) { try $0.stop(expectedID: id, discard: true) }
     }
     AsyncFunction("deleteWorkout") { (id: String, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.deleteWorkout(id) } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutAction(promise) { try $0.deleteWorkout(id) }
     }
     AsyncFunction("listWorkouts") { (options: CatalogPageOptions?, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.list(limit: options?.limit ?? 100, beforeStartedAt: options?.beforeStartedAt, beforeID: options?.beforeID ?? "") } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutAction(promise) {
+        try $0.list(
+          limit: options?.limit ?? 100, beforeStartedAt: options?.beforeStartedAt, beforeID: options?.beforeID ?? "")
+      }
     }
     #if DEBUG
-    AsyncFunction("addExampleRides") { (promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutAction(promise) { try $0.addExampleRides() } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
-    }
+      AsyncFunction("addExampleRides") { (promise: Promise) in
+        self.workoutAction(promise) { try $0.addExampleRides() }
+      }
     #endif
     AsyncFunction("readWorkout") { (id: String, distanceSource: String?, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutFileAction(promise) { try $0.read(id, distanceSource: distanceSource ?? "auto") } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutFileAction(promise) { try $0.read(id, distanceSource: distanceSource ?? "auto") }
     }
     AsyncFunction("exportWorkoutArchive") { (id: String, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutFileAction(promise) { try $0.exportOriginal(id) } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutFileAction(promise) { try $0.exportOriginal(id) }
     }
     AsyncFunction("exportWorkout") { (id: String, distanceSource: String?, promise: Promise) in
-      if #available(iOS 26.0, *) { self.workoutFileAction(promise) { try $0.export(id, distanceSource: distanceSource ?? "auto") } } else { promise.reject(CycError.invalid("Complete workout recording requires iOS 26 or newer.")) }
+      self.workoutFileAction(promise) { try $0.export(id, distanceSource: distanceSource ?? "auto") }
     }
   }
 
-  @available(iOS 26.0, *)
   private func workoutAction(_ promise: Promise, action: @escaping (WorkoutEngine) throws -> Any) {
     let engine = WorkoutEngine.shared
     engine.queue.async { do { promise.resolve(try action(engine)) } catch { rejectRead(promise, error) } }
   }
 
-  @available(iOS 26.0, *)
   private func workoutFileAction(_ promise: Promise, action: @escaping (WorkoutEngine) throws -> Any) {
     let engine = WorkoutEngine.shared
     let deadline = ProcessInfo.processInfo.systemUptime + 60
     func attempt() {
       engine.fileQueue.async {
-        do { promise.resolve(try action(engine)) }
-        catch WorkoutDistanceError.pending where ProcessInfo.processInfo.systemUptime < deadline {
+        do { promise.resolve(try action(engine)) } catch WorkoutDistanceError.pending
+          where ProcessInfo.processInfo.systemUptime < deadline
+        {
           engine.fileQueue.asyncAfter(deadline: .now() + 0.25) { attempt() }
         } catch WorkoutDistanceError.expired where ProcessInfo.processInfo.systemUptime < deadline {
           engine.fileQueue.asyncAfter(deadline: .now() + 0.25) { attempt() }

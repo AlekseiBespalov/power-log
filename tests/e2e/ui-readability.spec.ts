@@ -3,39 +3,71 @@ import { crc16Xmodem, UART_WRITE } from '../../src/core/protocol';
 import fixture from '../fixtures/protocol.json';
 
 async function syntheticBike(page: Page) {
-  const payload = Uint8Array.from(Buffer.from(fixture.identity.payloadHex, 'hex')), crc = crc16Xmodem(payload);
-  await page.addInitScript(({ identity, telemetry, writerID }) => {
-    class Characteristic extends EventTarget {
-      value?: DataView;
-      properties = { writeWithoutResponse: true };
-      async startNotifications() { return this; }
-      async writeValueWithoutResponse(bytes: Uint8Array) {
-        const frame = bytes[2] === 111 ? identity : bytes[2] === 50 ? telemetry : null;
-        if (!frame) throw new Error('Unexpected controller command');
-        reader.value = new DataView(Uint8Array.from(frame).buffer);
-        reader.dispatchEvent(new Event('characteristicvaluechanged'));
+  const payload = Uint8Array.from(Buffer.from(fixture.identity.payloadHex, 'hex')),
+    crc = crc16Xmodem(payload);
+  await page.addInitScript(
+    ({ identity, telemetry, writerID }) => {
+      class Characteristic extends EventTarget {
+        value?: DataView;
+        properties = { writeWithoutResponse: true };
+        async startNotifications() {
+          return this;
+        }
+        async writeValueWithoutResponse(bytes: Uint8Array) {
+          const frame = bytes[2] === 111 ? identity : bytes[2] === 50 ? telemetry : null;
+          if (!frame) throw new Error('Unexpected controller command');
+          reader.value = new DataView(Uint8Array.from(frame).buffer);
+          reader.dispatchEvent(new Event('characteristicvaluechanged'));
+        }
       }
-    }
-    const reader = new Characteristic(), writer = new Characteristic();
-    const device = Object.assign(new EventTarget(), { id: 'synthetic-layout-bike', name: 'CYC layout bike', gatt: {
-      connected: false,
-      async connect() { this.connected = true; return this; },
-      async getPrimaryService() { return { getCharacteristic: async (id: string) => id === writerID ? writer : reader }; },
-      disconnect() { this.connected = false; device.dispatchEvent(new Event('gattserverdisconnected')); },
-    } });
-    Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => device } });
-  }, { identity: [2, payload.length, ...payload, crc >> 8, crc & 255, 3], telemetry: [...Buffer.from(fixture.telemetry[3]!.frameHex!, 'hex')], writerID: UART_WRITE });
+      const reader = new Characteristic(),
+        writer = new Characteristic();
+      const device = Object.assign(new EventTarget(), {
+        id: 'synthetic-layout-bike',
+        name: 'CYC layout bike',
+        gatt: {
+          connected: false,
+          async connect() {
+            this.connected = true;
+            return this;
+          },
+          async getPrimaryService() {
+            return { getCharacteristic: async (id: string) => (id === writerID ? writer : reader) };
+          },
+          disconnect() {
+            this.connected = false;
+            device.dispatchEvent(new Event('gattserverdisconnected'));
+          },
+        },
+      });
+      Object.defineProperty(navigator, 'bluetooth', {
+        configurable: true,
+        value: { requestDevice: async () => device },
+      });
+    },
+    {
+      identity: [2, payload.length, ...payload, crc >> 8, crc & 255, 3],
+      telemetry: [...Buffer.from(fixture.telemetry[3]!.frameHex!, 'hex')],
+      writerID: UART_WRITE,
+    },
+  );
 }
 
 async function settled(dialog: Locator) {
   await expect(dialog).toBeVisible();
-  await expect.poll(() => dialog.evaluate(element => {
-    for (let node: Element | null = element; node; node = node.parentElement) {
-      const style = getComputedStyle(node), transform = new DOMMatrixReadOnly(style.transform);
-      if (Number(style.opacity) < 0.999 || Math.abs(transform.m41) > 0.1 || Math.abs(transform.m42) > 0.1) return false;
-    }
-    return true;
-  })).toBe(true);
+  await expect
+    .poll(() =>
+      dialog.evaluate(element => {
+        for (let node: Element | null = element; node; node = node.parentElement) {
+          const style = getComputedStyle(node),
+            transform = new DOMMatrixReadOnly(style.transform);
+          if (Number(style.opacity) < 0.999 || Math.abs(transform.m41) > 0.1 || Math.abs(transform.m42) > 0.1)
+            return false;
+        }
+        return true;
+      }),
+    )
+    .toBe(true);
 }
 
 async function boundedDialog(page: Page, id: string, inset: number) {
@@ -55,7 +87,11 @@ async function doubleText(root: Locator) {
   await root.evaluate(element => {
     const nodes = [...new Set([element, ...element.querySelectorAll('[dir="auto"],a')])]
       .filter(node => node.textContent?.trim() !== 'ϟ')
-      .map(node => ({ node: node as HTMLElement, size: parseFloat(getComputedStyle(node).fontSize), line: parseFloat(getComputedStyle(node).lineHeight) }));
+      .map(node => ({
+        node: node as HTMLElement,
+        size: parseFloat(getComputedStyle(node).fontSize),
+        line: parseFloat(getComputedStyle(node).lineHeight),
+      }));
     for (const { node, size, line } of nodes) {
       node.style.fontSize = `${size * 2}px`;
       if (Number.isFinite(line)) node.style.lineHeight = `${line * 2}px`;
@@ -73,7 +109,12 @@ test('full metric labels fit narrow number cells without moving value baselines'
   for (const id of temperatures) {
     const tile = page.getByTestId(`monitor-number-${id}`);
     const label = tile.locator('[aria-label]').first();
-    const bounds = await label.evaluate(element => ({ width: element.clientWidth, contentWidth: element.scrollWidth, height: element.clientHeight, contentHeight: element.scrollHeight }));
+    const bounds = await label.evaluate(element => ({
+      width: element.clientWidth,
+      contentWidth: element.scrollWidth,
+      height: element.clientHeight,
+      contentHeight: element.scrollHeight,
+    }));
     expect(bounds.contentWidth).toBeLessThanOrEqual(bounds.width);
     expect(bounds.contentHeight).toBeLessThanOrEqual(bounds.height);
     baseline.push((await tile.getByText('—', { exact: true }).boundingBox())!.y);
@@ -95,7 +136,9 @@ test('Finish and Delete keep their text and actions reachable in a short window'
   await page.getByRole('button', { name: 'Finish', exact: true }).click();
   await page.setViewportSize({ width: 760, height: 240 });
   let dialog = await boundedDialog(page, 'finish-ride-sheet', 24);
-  expect(await page.getByTestId('finish-ride-scroll').evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(
+    await page.getByTestId('finish-ride-scroll').evaluate(element => element.scrollHeight > element.clientHeight),
+  ).toBe(true);
   await dialog.getByRole('button', { name: 'Keep recording', exact: true }).click();
   await expect(page.getByTestId('finish-ride-sheet')).toHaveCount(0);
   await page.getByRole('button', { name: 'Finish', exact: true }).click();
@@ -106,7 +149,9 @@ test('Finish and Delete keep their text and actions reachable in a short window'
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByRole('button', { name: /^Delete ride,/ }).click();
   dialog = await boundedDialog(page, 'delete-ride-sheet', 24);
-  expect(await page.getByTestId('delete-ride-scroll').evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(
+    await page.getByTestId('delete-ride-scroll').evaluate(element => element.scrollHeight > element.clientHeight),
+  ).toBe(true);
   await dialog.getByRole('button', { name: 'Keep ride', exact: true }).click();
   await expect(page.getByRole('button', { name: /^Open ride,/ })).toHaveCount(1);
   await page.getByRole('button', { name: /^Delete ride,/ }).click();
@@ -158,10 +203,15 @@ test('short editor keeps enlarged title/actions and repeated accessible reorder 
   const scroll = page.getByTestId('monitor-editor-scroll');
   expect(await scroll.getByRole('textbox', { name: 'Search metrics', exact: true }).count()).toBe(1);
   const handle = page.getByTestId('monitor-drag-controllerTempC');
-  for (const [key, position] of [['Home', '1'], ['End', '3'], ['Home', '1']] as const) {
+  for (const [key, position] of [
+    ['Home', '1'],
+    ['End', '3'],
+    ['Home', '1'],
+  ] as const) {
     await handle.scrollIntoViewIfNeeded();
     expect(await scroll.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-    await handle.focus(); await handle.press(key);
+    await handle.focus();
+    await handle.press(key);
     await expect(handle).toHaveAttribute('aria-valuenow', position);
   }
   await editor.getByRole('button', { name: 'Done', exact: true }).click();

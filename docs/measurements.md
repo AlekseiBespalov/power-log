@@ -4,7 +4,7 @@ Power Log retains original observations and derives analysis from a fixed record
 
 ## Ride distance
 
-**Ride distance** is the covered subtotal from one selected producer. Chart points, range statistics, saved totals, lap distances and FIT use the same versioned distance profile. Distance is cumulative; its mean and time integral are not useful ride statistics. A selected range reports the distance travelled over supported intervals and their coverage.
+**Ride distance** is the covered subtotal from one selected producer. Chart points, range statistics, saved totals, lap distances and FIT use the same distance profile. Distance is cumulative; its mean and time integral are not useful ride statistics. A selected range reports the distance travelled over supported intervals and their coverage.
 
 Automatic selection uses this order:
 
@@ -17,13 +17,13 @@ The owner is the Watch when Watch recording was selected, otherwise the iPhone. 
 
 Settings provides one distance source preference for current and saved rides on this installation. Auto chooses by the rules above; an explicitly chosen source remains unavailable if it has no eligible intervals. Each summary, chart request and export captures this selection; historical per-ride selections do not override it. Selection changes derived analysis, not original data, Apple Health or previously uploaded activities. Browser rides currently provide controller distance only.
 
-Each profile carries source, method, policy version, covered seconds and missing coverage. The UI identifies partial distance and controller estimates. Average speed is distance divided by covered active time. When coverage is partial, FIT omits the ordinary session average-speed field rather than presenting that average as covering the whole ride.
+Each profile carries source, method, covered seconds and missing coverage. Controller distance requires a connection epoch; telemetry without continuity evidence is unavailable, not estimated. The UI identifies partial distance and controller estimates. Average speed is distance divided by covered active time. When coverage is partial, FIT omits the ordinary session average-speed field rather than presenting that average as covering the whole ride.
 
 ## GPS distance
 
 The common native GPS accumulator accepts finite coordinates with horizontal accuracy from 0 to 50 meters. Adjacent observations must lie in the same active interval and capture epoch, be at most 10 seconds apart and imply no more than 40 m/s. These are application filters, not guarantees of sensor accuracy.
 
-Distance uses the great-circle surface distance between accepted fixes. Both endpoints with valid speed below 0.5 m/s identify a stationary interval with zero increment. Missing speed does not establish stationarity. Pauses, rejected fixes, discontinuities and gaps break the sequence. Capture preserves quality failures or a continuity barrier so a later read cannot bridge around a discarded location. Older archives cannot recover rejection evidence that their recorder never stored.
+Distance uses the great-circle surface distance between accepted fixes. Both endpoints with valid speed below 0.5 m/s identify a stationary interval with zero increment. Missing speed does not establish stationarity. Pauses, rejected fixes, discontinuities and gaps break the sequence. Capture preserves quality failures or a continuity barrier so a later read cannot bridge around a discarded location.
 
 Phone Health writes use accepted GPS increments. Saving to Health does not change the independently derived local distance. Watch and iPhone live distance read the same local projection off the recording executor; recovery rebuilds or advances that projection from retained inputs.
 
@@ -53,7 +53,7 @@ Known units do not prove wheel circumference, tire calibration or ground travel.
 | Battery and throttle voltage | Distinct scales and circuits. |
 | Battery charge used (Ah) / energy used (Wh) | Consumption reported by the controller, not automatically ride consumption; reset and baseline scope are controller-defined. |
 | Component temperatures | Controller or motor temperature, not ambient or body temperature. |
-| Heart rate | Available Health observations; raw quantity/series data takes precedence over builder snapshots. |
+| Heart rate | Available Health observations. Charts, statistics and saved rides give raw quantity/series data precedence over builder snapshots; a live readout shows the newest reading received during the ride (builder snapshot or Watch-forwarded). |
 | Active/resting energy | Cumulative Health metabolic estimates, separate from electrical Wh and mechanical joules. Snapshots are not summed. |
 | GPS speed | Core Location instantaneous speed; explicit negative speed accuracy invalidates it. Missing historical accuracy is unknown. |
 | Controller speed | Normalized known-profile speed, or a separate unit-unknown raw channel. |
@@ -65,6 +65,8 @@ Known units do not prove wheel circumference, tire calibration or ground travel.
 Physical speed sources may share a chart axis after conversion to the same display unit. Their observations, times, provenance and gaps remain separate.
 
 ## Evidence and limits
+
+A wall-clock change during a ride can leave Health samples outside the final workout interval. HealthKit automatically collected measurements are not intercepted. Local controller telemetry, GPS and lifecycle events use measured elapsed time, while Health-sourced observations (HealthKit backfill and Watch series) are placed by their UTC offset from the retained start. After a clock change, their chart and FIT placement can therefore be off. Their original timestamps and values remain unchanged; FIT reports clock differences without reconstructing the historical clock.
 
 Apple documents [coordinate accuracy](https://developer.apple.com/documentation/corelocation/cllocation/horizontalaccuracy) and [speed accuracy](https://developer.apple.com/documentation/corelocation/cllocation/speedaccuracy) separately. Its [cycling distance type](https://developer.apple.com/documentation/healthkit/hkquantitytypeidentifier/distancecycling) is cumulative; [condensed workout samples](https://developer.apple.com/documentation/healthkit/accessing-condensed-workout-samples) require distinguishing parent quantities from their series. [Strava's distance documentation](https://support.strava.com/en-us/articles/15401893-how-distance-is-calculated) similarly distinguishes recorded distance streams from GPS calculations and wheel circumference effects.
 

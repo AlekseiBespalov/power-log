@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { useSyncExternalStore } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, View } from 'react-native';
@@ -10,6 +10,7 @@ import { MonitorPreferencesProvider } from '../services/monitor-preferences';
 import { TabTransitionProvider } from '../components/tab-transition';
 import { AppHeader } from '../components/app-header';
 import { TabBar } from '../components/tab-bar';
+import { PrivacyPolicy } from '../features/privacy/privacy-screen';
 
 const native = Platform.OS !== 'web';
 const subscribe = () => () => {};
@@ -17,12 +18,36 @@ const clientSnapshot = () => true;
 const serverSnapshot = () => false;
 export default function RootLayout() {
   const hydrated = useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot);
-  // Static HTML cannot know the browser viewport or its locally stored rides/settings.
-  if (Platform.OS === 'web' && !hydrated) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
-  return <SafeAreaProvider><MonitorPreferencesProvider><SessionProvider><WorkoutProvider><TabTransitionProvider><StatusBar style="light" />
-    <SafeAreaView edges={native ? ['left', 'right'] : ['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      {!native && <AppHeader />}
-      <Tabs tabBar={native ? props => <TabBar {...props} /> : () => null} backBehavior="fullHistory" screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: colors.bg } }} />
-    </SafeAreaView>
-  </TabTransitionProvider></WorkoutProvider></SessionProvider></MonitorPreferencesProvider></SafeAreaProvider>;
+  const pathname = usePathname();
+  // Static HTML cannot know the browser viewport or its locally stored rides/settings; the policy needs neither.
+  if (Platform.OS === 'web' && !hydrated)
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, padding: 16 }}>
+        {pathname === '/privacy' && <PrivacyPolicy />}
+      </View>
+    );
+  return (
+    <SafeAreaProvider>
+      <MonitorPreferencesProvider>
+        <SessionProvider>
+          <WorkoutProvider>
+            <TabTransitionProvider>
+              <StatusBar style="light" />
+              <SafeAreaView
+                edges={native ? ['left', 'right'] : ['top', 'left', 'right']}
+                style={{ flex: 1, backgroundColor: colors.bg }}
+              >
+                {!native && <AppHeader />}
+                <Tabs
+                  tabBar={native ? props => <TabBar {...props} /> : () => null}
+                  backBehavior="fullHistory"
+                  screenOptions={{ headerShown: false, animation: 'none', sceneStyle: { backgroundColor: colors.bg } }}
+                />
+              </SafeAreaView>
+            </TabTransitionProvider>
+          </WorkoutProvider>
+        </SessionProvider>
+      </MonitorPreferencesProvider>
+    </SafeAreaProvider>
+  );
 }

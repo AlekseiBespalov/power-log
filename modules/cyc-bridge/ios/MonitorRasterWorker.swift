@@ -47,14 +47,19 @@ final class MonitorRasterWorker {
   private var scratchBytes = 0
   private var peakBytes = 0
 
-  init(completionQueue: DispatchQueue = .main,
-       renderer: @escaping Renderer = { try MonitorRasterRenderer.draw(scene: $0, dimensions: $1, cancelled: $2) }) {
-    self.completionQueue = completionQueue; self.renderer = renderer
+  init(
+    completionQueue: DispatchQueue = .main,
+    renderer: @escaping Renderer = { try MonitorRasterRenderer.draw(scene: $0, dimensions: $1, cancelled: $2) }
+  ) {
+    self.completionQueue = completionQueue
+    self.renderer = renderer
   }
 
-  func submit(owner: UUID, json: String, sourceID: String, dimensions: MonitorRasterDimensions,
-              requestKey: String? = nil,
-              completion: @escaping (Result<MonitorRasterResult, Error>) -> Void) {
+  func submit(
+    owner: UUID, json: String, sourceID: String, dimensions: MonitorRasterDimensions,
+    requestKey: String? = nil,
+    completion: @escaping (Result<MonitorRasterResult, Error>) -> Void
+  ) {
     // Bound retained input before it can enter the queue. Parsing and validation remain on the worker.
     guard json.utf8.count <= MonitorRasterScene.maximumJSONBytes else {
       cancel(owner: owner)
@@ -71,8 +76,9 @@ final class MonitorRasterWorker {
     current[owner] = token
     submitted += 1
     if pending[owner] != nil { discarded += 1 } else { order.append(owner) }
-    pending[owner] = Request(owner: owner, token: token, json: json, sourceID: sourceID,
-                             requestKey: requestKey, dimensions: dimensions, completion: completion)
+    pending[owner] = Request(
+      owner: owner, token: token, json: json, sourceID: sourceID,
+      requestKey: requestKey, dimensions: dimensions, completion: completion)
     let shouldStart = !running
     running = true
     lock.unlock()
@@ -80,29 +86,45 @@ final class MonitorRasterWorker {
   }
 
   func cancel(owner: UUID) {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     current.removeValue(forKey: owner)
     if pending.removeValue(forKey: owner) != nil { discarded += 1 }
     order.removeAll { $0 == owner }
   }
 
   func diagnostics(reset: Bool = false) -> [String: Int] {
-    lock.lock(); defer { lock.unlock() }
-    if reset { submitted = 0; started = 0; completed = 0; discarded = 0; failures = 0; peakBytes = bitmapBytes + scratchBytes }
-    return ["submitted": submitted, "started": started, "completed": completed, "discarded": discarded,
-            "errors": failures, "pending": pending.count, "running": running ? 1 : 0,
-            "bitmapBytes": bitmapBytes, "scratchBytes": scratchBytes, "peakBytes": peakBytes,
-            "mountedLanes": current.count]
+    lock.lock()
+    defer { lock.unlock() }
+    if reset {
+      submitted = 0
+      started = 0
+      completed = 0
+      discarded = 0
+      failures = 0
+      peakBytes = bitmapBytes + scratchBytes
+    }
+    return [
+      "submitted": submitted, "started": started, "completed": completed, "discarded": discarded,
+      "errors": failures, "pending": pending.count, "running": running ? 1 : 0,
+      "bitmapBytes": bitmapBytes, "scratchBytes": scratchBytes, "peakBytes": peakBytes,
+      "mountedLanes": current.count,
+    ]
   }
 
   private func isCurrent(_ request: Request) -> Bool {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     return current[request.owner] == request.token
   }
 
   private func next() -> Request? {
-    lock.lock(); defer { lock.unlock() }
-    guard !order.isEmpty else { running = false; return nil }
+    lock.lock()
+    defer { lock.unlock() }
+    guard !order.isEmpty else {
+      running = false
+      return nil
+    }
     return pending.removeValue(forKey: order.removeFirst())
   }
 
@@ -111,12 +133,19 @@ final class MonitorRasterWorker {
       autoreleasepool {
         let result: Result<MonitorRasterResult, Error>
         do { result = .success(try render(request)) } catch {
-          if case MonitorRasterError.cancelled = error {} else { lock.lock(); failures += 1; lock.unlock() }
+          if case MonitorRasterError.cancelled = error {
+          } else {
+            lock.lock()
+            failures += 1
+            lock.unlock()
+          }
           result = .failure(error)
         }
         completionQueue.async {
           guard self.isCurrent(request) else {
-            self.lock.lock(); self.discarded += 1; self.lock.unlock()
+            self.lock.lock()
+            self.discarded += 1
+            self.lock.unlock()
             return
           }
           request.completion(result)
@@ -135,26 +164,40 @@ final class MonitorRasterWorker {
     let vertices = MonitorRasterVertexIndex(scene: scene)
     guard isCurrent(request) else { throw MonitorRasterError.cancelled }
     let lease = try reserve(bytes: pixels.bytes)
-    defer { lock.lock(); scratchBytes = 0; lock.unlock() }
-    lock.lock(); started += 1; lock.unlock()
+    defer {
+      lock.lock()
+      scratchBytes = 0
+      lock.unlock()
+    }
+    lock.lock()
+    started += 1
+    lock.unlock()
     let image = try renderer(scene, request.dimensions, { !self.isCurrent(request) })
-    lock.lock(); completed += 1; lock.unlock()
-    return MonitorRasterResult(scene: scene, dimensions: request.dimensions,
-                               image: image, bytes: pixels.bytes, vertices: vertices, lease: lease)
+    lock.lock()
+    completed += 1
+    lock.unlock()
+    return MonitorRasterResult(
+      scene: scene, dimensions: request.dimensions,
+      image: image, bytes: pixels.bytes, vertices: vertices, lease: lease)
   }
 
   private func reserve(bytes: Int) throws -> MonitorRasterBitmapLease {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     // Two collection budgets cover accepted plus replacements; the one worker adds one scratch context.
     guard bitmapBytes + bytes <= 2 * MonitorRasterDimensions.collectionBytes,
-          bytes <= MonitorRasterDimensions.maximumBitmapBytes else {
+      bytes <= MonitorRasterDimensions.maximumBitmapBytes
+    else {
       throw MonitorRasterError.invalid("Chart collection bitmap budget exceeded")
     }
-    bitmapBytes += bytes; scratchBytes = bytes
+    bitmapBytes += bytes
+    scratchBytes = bytes
     peakBytes = max(peakBytes, bitmapBytes + scratchBytes)
     return MonitorRasterBitmapLease { [weak self] in
       guard let self else { return }
-      self.lock.lock(); self.bitmapBytes -= bytes; self.lock.unlock()
+      self.lock.lock()
+      self.bitmapBytes -= bytes
+      self.lock.unlock()
     }
   }
 }

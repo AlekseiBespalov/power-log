@@ -6,15 +6,22 @@ const targetName = 'PowerLogWatch';
 const unquote = value => String(value ?? '').replace(/^"|"$/g, '');
 
 /** Maintained Swift sources stay outside Expo's generated ios directory. */
-function configureWatchProject(project, projectRoot, bundleIdentifier, teamId) {
+function configureWatchProject(project, projectRoot, config) {
+  const {
+    version,
+    ios: { bundleIdentifier, appleTeamId: teamId, buildNumber },
+  } = config;
   const objects = project.hash.project.objects;
   // xcode.addTargetDependency silently does nothing if these sections are absent
   // from the original one-target Expo template.
   objects.PBXTargetDependency ??= {};
   objects.PBXContainerItemProxy ??= {};
   const nativeTargets = project.pbxNativeTargetSection();
-  let targetId = Object.keys(nativeTargets).find(key => nativeTargets[key]?.isa === 'PBXNativeTarget' && unquote(nativeTargets[key].name) === targetName);
-  if (!targetId) targetId = project.addTarget(targetName, 'watch2_app', targetName, `${bundleIdentifier}.watchkitapp`).uuid;
+  let targetId = Object.keys(nativeTargets).find(
+    key => nativeTargets[key]?.isa === 'PBXNativeTarget' && unquote(nativeTargets[key].name) === targetName,
+  );
+  if (!targetId)
+    targetId = project.addTarget(targetName, 'watch2_app', targetName, `${bundleIdentifier}.watchkitapp`).uuid;
   const target = nativeTargets[targetId];
   const phoneId = project.getFirstTarget().uuid;
   const phone = nativeTargets[phoneId];
@@ -35,11 +42,16 @@ function configureWatchProject(project, projectRoot, bundleIdentifier, teamId) {
       CODE_SIGN_ENTITLEMENTS: '"../apple/WatchApp/PowerLogWatch.entitlements"',
       CODE_SIGN_STYLE: 'Automatic',
       GENERATE_INFOPLIST_FILE: 'NO',
-      SDKROOT: 'watchos', SUPPORTED_PLATFORMS: '"watchos watchsimulator"',
-      WATCHOS_DEPLOYMENT_TARGET: '10.0', TARGETED_DEVICE_FAMILY: '4',
-      SWIFT_VERSION: '5.0', SWIFT_STRICT_CONCURRENCY: 'targeted',
-      MARKETING_VERSION: '0.1.0', CURRENT_PROJECT_VERSION: '1',
-      ENABLE_BITCODE: 'NO', SKIP_INSTALL: 'YES',
+      SDKROOT: 'watchos',
+      SUPPORTED_PLATFORMS: '"watchos watchsimulator"',
+      WATCHOS_DEPLOYMENT_TARGET: '10.0',
+      TARGETED_DEVICE_FAMILY: '4',
+      SWIFT_VERSION: '5.0',
+      SWIFT_STRICT_CONCURRENCY: 'targeted',
+      MARKETING_VERSION: version,
+      CURRENT_PROJECT_VERSION: buildNumber,
+      ENABLE_BITCODE: 'NO',
+      SKIP_INSTALL: 'YES',
       ASSETCATALOG_COMPILER_APPICON_NAME: 'AppIcon',
       LD_RUNPATH_SEARCH_PATHS: '"$(inherited) @executable_path/Frameworks"',
       OTHER_LDFLAGS: '"$(inherited) -lsqlite3 -lcompression"',
@@ -48,9 +60,23 @@ function configureWatchProject(project, projectRoot, bundleIdentifier, teamId) {
     if (teamId) configuration.buildSettings.DEVELOPMENT_TEAM = teamId;
     delete configuration.buildSettings.IPHONEOS_DEPLOYMENT_TARGET;
   }
-  const sourcePaths = fs.readdirSync(path.join(projectRoot, 'apple/WatchApp'))
-    .filter(file => file.endsWith('.swift')).sort().map(file => `../apple/WatchApp/${file}`);
-  sourcePaths.push(...['WorkoutDistance', 'WorkoutDistanceStore', 'WorkoutTypes', 'PowerLogStore', 'WorkoutArchive', 'WorkoutControl', 'WorkoutTransfer', 'WorkoutSync'].map(name => `../modules/cyc-bridge/ios/${name}.swift`));
+  const sourcePaths = fs
+    .readdirSync(path.join(projectRoot, 'apple/WatchApp'))
+    .filter(file => file.endsWith('.swift'))
+    .sort()
+    .map(file => `../apple/WatchApp/${file}`);
+  sourcePaths.push(
+    ...[
+      'WorkoutDistance',
+      'WorkoutDistanceStore',
+      'WorkoutTypes',
+      'PowerLogStore',
+      'WorkoutArchive',
+      'WorkoutControl',
+      'WorkoutTransfer',
+      'WorkoutSync',
+    ].map(name => `../modules/cyc-bridge/ios/${name}.swift`),
+  );
 
   // Rebuild only this target's source phase so subsequent prebuilds pick up new
   // maintained files without duplicate compilation or stale source references.
@@ -60,29 +86,59 @@ function configureWatchProject(project, projectRoot, bundleIdentifier, teamId) {
       const phase = section[reference.value];
       if (!phase) return true;
       for (const file of phase.files ?? []) {
+        const fileRef = objects.PBXBuildFile[file.value]?.fileRef;
+        if (fileRef) {
+          delete objects.PBXFileReference[fileRef];
+          delete objects.PBXFileReference[`${fileRef}_comment`];
+        }
         delete objects.PBXBuildFile[file.value];
         delete objects.PBXBuildFile[`${file.value}_comment`];
       }
-      delete section[reference.value]; delete section[`${reference.value}_comment`];
+      delete section[reference.value];
+      delete section[`${reference.value}_comment`];
       return false;
     });
   }
-  project.addBuildPhase(sourcePaths, 'PBXSourcesBuildPhase', 'Sources', targetId);
-  project.addBuildPhase(['../assets/Assets.xcassets'], 'PBXResourcesBuildPhase', 'Resources', targetId);
+  const phases = [
+    project.addBuildPhase(sourcePaths, 'PBXSourcesBuildPhase', 'Sources', targetId),
+    project.addBuildPhase(
+      ['../assets/Assets.xcassets', '../apple/WatchApp/PrivacyInfo.xcprivacy'],
+      'PBXResourcesBuildPhase',
+      'Resources',
+      targetId,
+    ),
+  ];
   project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', targetId);
+  // CocoaPods resolves a file's path through its group; an ungrouped reference makes
+  // React Native's privacy manifest aggregation fail during pod install.
+  let groupKey = Object.keys(objects.PBXGroup).find(key => unquote(objects.PBXGroup[key]?.name) === targetName);
+  if (!groupKey) {
+    groupKey = project.pbxCreateGroup(targetName);
+    objects.PBXGroup[project.getFirstProject().firstProject.mainGroup].children.push({
+      value: groupKey,
+      comment: targetName,
+    });
+  }
+  objects.PBXGroup[groupKey].children = phases.flatMap(({ buildPhase }) =>
+    buildPhase.files.map(file => {
+      const fileRef = objects.PBXBuildFile[file.value].fileRef;
+      return { value: fileRef, comment: objects.PBXFileReference[`${fileRef}_comment`] };
+    }),
+  );
   const attributes = project.getFirstProject().firstProject.attributes;
   attributes.TargetAttributes ??= {};
   attributes.TargetAttributes[targetId] = {
-    CreatedOnToolsVersion: '26.0', ProvisioningStyle: 'Automatic',
+    CreatedOnToolsVersion: '26.0',
+    ProvisioningStyle: 'Automatic',
     SystemCapabilities: { 'com.apple.HealthKit': { enabled: 1 } },
     ...(teamId ? { DevelopmentTeam: teamId } : {}),
   };
   return project;
 }
 
-module.exports = config => withXcodeProject(config, config => {
-  configureWatchProject(config.modResults, config.modRequest.projectRoot,
-    config.ios.bundleIdentifier, config.ios.appleTeamId);
-  return config;
-});
+module.exports = config =>
+  withXcodeProject(config, config => {
+    configureWatchProject(config.modResults, config.modRequest.projectRoot, config);
+    return config;
+  });
 module.exports.configureWatchProject = configureWatchProject;

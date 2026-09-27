@@ -10,7 +10,10 @@ struct WatchQueryDrain {
   /// Returns true only when the caller must launch the first page of a new drain.
   mutating func invalidate() -> Bool {
     guard !isStopped else { return false }
-    if isReading { invalidated = true; return false }
+    if isReading {
+      invalidated = true
+      return false
+    }
     isReading = true
     return true
   }
@@ -18,7 +21,10 @@ struct WatchQueryDrain {
   /// A notification received during even a short final page requires another anchored read.
   mutating func finishPage(hasMore: Bool) -> Bool {
     guard isReading, !isStopped else { return false }
-    if hasMore || invalidated { invalidated = false; return true }
+    if hasMore || invalidated {
+      invalidated = false
+      return true
+    }
     isReading = false
     return false
   }

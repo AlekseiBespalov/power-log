@@ -1,5 +1,14 @@
 name: Check
-on: [push, pull_request]
+on:
+  push:
+    branches-ignore: [main]
+    tags-ignore: ['v*']
+  pull_request:
+  workflow_call:
+    inputs:
+      upload-pages-artifact:
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -26,11 +35,27 @@ jobs:
           if-no-files-found: ignore
       - run: npm run test:browser
       - run: npm run test:public-web
+      - uses: actions/upload-pages-artifact@v4
+        if: inputs.upload-pages-artifact
+        with:
+          path: dist
   swift-protocol:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sh scripts/format.sh --swift --check
       - run: bash scripts/test-swift.sh
+  ios-linked-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: bundle install
+      - run: npm run build:ios-simulator
   workout-fit:
     runs-on: macos-latest
     steps:

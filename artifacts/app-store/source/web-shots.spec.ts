@@ -38,14 +38,11 @@ function shape(fraction: number) {
 /** Encodes the wire layout the app decodes: command 50, the mask, then each selected field. */
 function selectivePayload(values: Record<string, number>) {
   const bytes: number[] = [50, (SELECTED_MASK >>> 24) & 255, (SELECTED_MASK >>> 16) & 255, (SELECTED_MASK >>> 8) & 255, SELECTED_MASK & 255];
-  for (let bit = 0; bit < TELEMETRY_FIELDS.length; bit += 1) {
-    if (!(SELECTED_MASK & (1 << bit))) continue;
-    for (const [name, format, divisor] of TELEMETRY_FIELDS[bit]!) {
-      const raw = Math.round((values[name] ?? 0) * divisor);
-      if (format === 'u8') bytes.push(raw & 255);
-      else if (format === 'i16') bytes.push((raw >>> 8) & 255, raw & 255);
-      else bytes.push((raw >>> 24) & 255, (raw >>> 16) & 255, (raw >>> 8) & 255, raw & 255);
-    }
+  for (const [name, format, divisor] of TELEMETRY_FIELDS) {
+    const raw = Math.round((values[name] ?? 0) * divisor);
+    if (format === 'u8') bytes.push(raw & 255);
+    else if (format === 'i16') bytes.push((raw >>> 8) & 255, raw & 255);
+    else bytes.push((raw >>> 24) & 255, (raw >>> 16) & 255, (raw >>> 8) & 255, raw & 255);
   }
   return bytes;
 }

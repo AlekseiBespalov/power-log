@@ -1,18 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { MONITOR_METRICS, defaultMonitorPreferences } from '../../src/core/monitor';
-import { reorderMonitorMetric, searchMonitorMetrics, toggleMonitorMetric } from '../../src/features/monitor/monitor-editor-model';
+import {
+  reorderMonitorMetric,
+  searchMonitorMetrics,
+  toggleMonitorMetric,
+} from '../../src/features/monitor/monitor-editor-model';
 
 describe('monitor editor choices', () => {
   it('permits every metric in each view without duplicates or mutating defaults', () => {
     const defaults = defaultMonitorPreferences();
     expect(new Set(MONITOR_METRICS.map(metric => metric.id)).size).toBe(MONITOR_METRICS.length);
-    for (const view of Object.values(defaults.views)) for (const list of ['numbers', 'charts'] as const) {
-      let chosen: string[] = [];
-      for (const metric of MONITOR_METRICS) chosen = toggleMonitorMetric(chosen, metric.id);
-      expect(chosen).toEqual(MONITOR_METRICS.map(metric => metric.id));
-      chosen = toggleMonitorMetric(chosen, 'motorTempC'); expect(chosen).not.toContain('motorTempC');
-      expect(view[list]).toEqual(defaultMonitorPreferences().views[view.id][list]);
-    }
+    for (const view of Object.values(defaults.views))
+      for (const list of ['numbers', 'charts'] as const) {
+        let chosen: string[] = [];
+        for (const metric of MONITOR_METRICS) chosen = toggleMonitorMetric(chosen, metric.id);
+        expect(chosen).toEqual(MONITOR_METRICS.map(metric => metric.id));
+        chosen = toggleMonitorMetric(chosen, 'motorTempC');
+        expect(chosen).not.toContain('motorTempC');
+        expect(view[list]).toEqual(defaultMonitorPreferences().views[view.id][list]);
+      }
   });
   it('reorders only the requested list and handles first/last/unknown boundaries', () => {
     const chosen = Object.freeze(['motorTempC', 'batteryCurrentA', 'cadenceRpm']);

@@ -7,15 +7,22 @@ const native = vi.hoisted(() => ({
 }));
 vi.mock('react-native', () => native);
 
-afterEach(() => { native.AppState.currentState = null; native.Platform.OS = 'ios'; vi.unstubAllGlobals(); });
+afterEach(() => {
+  native.AppState.currentState = null;
+  native.Platform.OS = 'ios';
+  vi.unstubAllGlobals();
+});
 
 describe('app visibility', () => {
-  it.each([null, 'unknown', 'background', 'inactive'])('does not start native presentation before an active lifecycle state (%s)', state => {
-    native.AppState.currentState = state;
-    expect(appIsForeground()).toBe(false);
-    native.AppState.currentState = 'active';
-    expect(appIsForeground()).toBe(true);
-  });
+  it.each([null, 'unknown', 'background', 'inactive'])(
+    'does not start native presentation before an active lifecycle state (%s)',
+    state => {
+      native.AppState.currentState = state;
+      expect(appIsForeground()).toBe(false);
+      native.AppState.currentState = 'active';
+      expect(appIsForeground()).toBe(true);
+    },
+  );
   it('uses document visibility on web when the native lifecycle is unavailable', () => {
     native.Platform.OS = 'web';
     vi.stubGlobal('document', { visibilityState: 'visible' });

@@ -3,23 +3,23 @@ import Foundation
 /// A launch opens the Watch before the separate, identified start command can arrive.
 /// This is presentation only: it never owns a workout or changes command admission.
 struct WatchStartHandoff {
-  private(set) var beganAt: Date?
+  private(set) var beganAt: Double?
   static let timeout: TimeInterval = 45
 
-  mutating func begin(at now: Date, phase: String, hasRide: Bool, canStart: Bool, hasIssue: Bool) {
+  mutating func begin(at now: Double, phase: String, hasRide: Bool, canStart: Bool, hasIssue: Bool) {
     guard !isWaiting(at: now), phase == "ready", !hasRide, canStart, !hasIssue else { return }
     beganAt = now
   }
 
   mutating func clear() { beganAt = nil }
 
-  mutating func expire(at now: Date) {
+  mutating func expire(at now: Double) {
     if beganAt != nil && !isWaiting(at: now) { clear() }
   }
 
-  func isWaiting(at now: Date) -> Bool {
+  func isWaiting(at now: Double) -> Bool {
     guard let beganAt else { return false }
-    let age = now.timeIntervalSince(beganAt)
+    let age = now - beganAt
     return age >= 0 && age < Self.timeout
   }
 }
@@ -27,9 +27,11 @@ struct WatchStartHandoff {
 enum WatchWorkoutPresentation: Equatable {
   case ready, preparing, saving, discarding, saved, discarded, startFailed, attention
 
-  static func idle(phase: String, busy: Bool, recovering: Bool, finishing: Bool,
+  static func idle(
+    phase: String, busy: Bool, recovering: Bool, finishing: Bool,
     stopPending: Bool, hasNativeSession: Bool, discarded: Bool, discardPending: Bool,
-    hasIssue: Bool, awaitingStart: Bool) -> Self {
+    hasIssue: Bool, awaitingStart: Bool
+  ) -> Self {
     if finishing { return discardPending ? .discarding : .saving }
     if phase == "finished" {
       if discarded { return .discarded }

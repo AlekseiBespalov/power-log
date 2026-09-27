@@ -1,0 +1,290 @@
+{
+  "capabilities": {
+    "iphone26": {
+      "phoneWorkout": true,
+      "watchWorkout": true,
+      "phoneHealth": true,
+      "watchHealth": true,
+      "healthProvider": "appleHealth",
+      "gps": true,
+      "foregroundOnly": false
+    },
+    "iphone17": {
+      "phoneWorkout": true,
+      "watchWorkout": true,
+      "phoneHealth": false,
+      "watchHealth": true,
+      "healthProvider": "appleHealth",
+      "gps": true,
+      "foregroundOnly": false
+    },
+    "iphoneWithoutHealth": {
+      "phoneWorkout": true,
+      "watchWorkout": false,
+      "phoneHealth": false,
+      "watchHealth": false,
+      "healthProvider": null,
+      "gps": true,
+      "foregroundOnly": false
+    },
+    "android": {
+      "phoneWorkout": true,
+      "watchWorkout": false,
+      "phoneHealth": true,
+      "watchHealth": false,
+      "healthProvider": "healthConnect",
+      "gps": true,
+      "foregroundOnly": false
+    },
+    "androidWithoutHealth": {
+      "phoneWorkout": true,
+      "watchWorkout": false,
+      "phoneHealth": false,
+      "watchHealth": false,
+      "healthProvider": null,
+      "gps": true,
+      "foregroundOnly": false
+    },
+    "browser": {
+      "phoneWorkout": false,
+      "watchWorkout": false,
+      "phoneHealth": false,
+      "watchHealth": false,
+      "healthProvider": null,
+      "gps": false,
+      "foregroundOnly": true
+    }
+  },
+  "cases": [
+    {
+      "name": "outdoor defaults",
+      "capabilities": "iphone26",
+      "input": {
+        "indoor": false
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "indoor excludes GPS by default",
+      "capabilities": "iphone26",
+      "input": {
+        "indoor": true
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": true,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": false
+      }
+    },
+    {
+      "name": "explicit indoor GPS",
+      "capabilities": "iphone26",
+      "input": {
+        "indoor": true,
+        "recordGPS": true
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": true,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "explicit outdoor without GPS",
+      "capabilities": "iphone26",
+      "input": {
+        "indoor": false,
+        "recordGPS": false
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": false
+      }
+    },
+    {
+      "name": "Health turned off",
+      "capabilities": "iphone26",
+      "input": {
+        "indoor": false,
+        "saveToHealth": false
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "Watch ride below iOS 26 saves through the Watch",
+      "capabilities": "iphone17",
+      "input": {
+        "indoor": false,
+        "useWatch": true
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": true,
+        "saveToHealth": true,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "phone ride below iOS 26 has no phone Health",
+      "capabilities": "iphone17",
+      "input": {
+        "indoor": false
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "Watch requested without Watch support",
+      "capabilities": "iphoneWithoutHealth",
+      "input": {
+        "indoor": false,
+        "useWatch": true
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "Android ignores Watch and saves to Health Connect",
+      "capabilities": "android",
+      "input": {
+        "indoor": false,
+        "useWatch": true
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "Android without Health Connect",
+      "capabilities": "androidWithoutHealth",
+      "input": {
+        "indoor": true
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": true,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": false
+      }
+    },
+    {
+      "name": "browser records neither Health nor GPS",
+      "capabilities": "browser",
+      "input": {
+        "indoor": false,
+        "recordGPS": true
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": false
+      }
+    },
+    {
+      "name": "4 Hz",
+      "capabilities": "iphone26",
+      "input": {
+        "indoor": false,
+        "sampleHz": 4
+      },
+      "expected": {
+        "sampleHz": 4,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "8 Hz",
+      "capabilities": "android",
+      "input": {
+        "indoor": false,
+        "sampleHz": 8
+      },
+      "expected": {
+        "sampleHz": 8,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": true
+      }
+    },
+    {
+      "name": "explicit 2 Hz",
+      "capabilities": "android",
+      "input": {
+        "indoor": true,
+        "sampleHz": 2
+      },
+      "expected": {
+        "sampleHz": 2,
+        "indoor": true,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": false
+      }
+    }
+  ],
+  "rejectedSampleRates": [0, 1, 3, 2.5, 4.5, 8.1, -2, 16, 1000000000.0],
+  "rejectedSampleRateTypes": ["8", true, {}, [8]],
+  "rejectedOptionValues": [
+    {
+      "field": "indoor",
+      "value": "false"
+    },
+    {
+      "field": "indoor",
+      "value": null
+    },
+    {
+      "field": "useWatch",
+      "value": "yes"
+    },
+    {
+      "field": "saveToHealth",
+      "value": 1
+    },
+    {
+      "field": "recordGPS",
+      "value": "true"
+    }
+  ]
+}

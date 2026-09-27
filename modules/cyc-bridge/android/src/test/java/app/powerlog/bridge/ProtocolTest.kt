@@ -43,24 +43,19 @@ class ProtocolTest {
         }
         val framing = fixture.getJSONObject("framing")
         val result =
-            CycProtocol.Decoder()
-                .feed(
-                    bytes("aabbcc" + framing.getString("corrupted") + framing.getString("single"))
-                )
+            CycProtocol.Decoder().feed(bytes("aabbcc" + framing.getString("corrupted") + framing.getString("single")))
         assertEquals(1, result.size)
         assertArrayEquals(byteArrayOf(4), result.single())
     }
 
     @Test
     fun sameIdentityAndMeasurementsAsTypeScript() {
-        val identity =
-            CycProtocol.identity(bytes(fixture.getJSONObject("identity").getString("payloadHex")))
+        val identity = CycProtocol.identity(bytes(fixture.getJSONObject("identity").getString("payloadHex")))
         assertEquals(fixture.getJSONObject("identity").getString("controllerModel"), identity.model)
         val frames = fixture.getJSONArray("telemetry")
         for (i in 0 until frames.length()) {
             val frame = frames.getJSONObject(i)
-            if (!frame.has("expected") || frame.optLong("mask") != CycProtocol.MASK.toLong())
-                continue
+            if (!frame.has("expected") || frame.optLong("mask") != CycProtocol.MASK.toLong()) continue
             val values = CycProtocol.telemetry(bytes(frame.getString("payloadHex")), identity)
             val expected = frame.getJSONObject("expected")
             for (key in expected.keys()) if (key in values)

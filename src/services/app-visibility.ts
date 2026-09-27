@@ -2,8 +2,11 @@ import { AppState, Platform } from 'react-native';
 
 export function appIsForeground(): boolean {
   if (Platform.OS !== 'web') return AppState.currentState === 'active';
-  return AppState.currentState !== 'background' && AppState.currentState !== 'inactive'
-    && (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+  return (
+    AppState.currentState !== 'background' &&
+    AppState.currentState !== 'inactive' &&
+    (typeof document === 'undefined' || document.visibilityState !== 'hidden')
+  );
 }
 
 export function subscribeAppVisibility(listener: (active: boolean) => void): () => void {
@@ -11,5 +14,8 @@ export function subscribeAppVisibility(listener: (active: boolean) => void): () 
   const subscription = AppState.addEventListener('change', receive);
   const browser = Platform.OS === 'web' && typeof document !== 'undefined' ? document : null;
   browser?.addEventListener('visibilitychange', receive);
-  return () => { subscription.remove(); browser?.removeEventListener('visibilitychange', receive); };
+  return () => {
+    subscription.remove();
+    browser?.removeEventListener('visibilitychange', receive);
+  };
 }

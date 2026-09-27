@@ -15,6 +15,47 @@ function segments(points: readonly ChartPoint[]): ChartPoint[][] {
 }
 
 describe('telemetry chart decimation', () => {
+  it.each([false, true])(
+    'preserves equal-time boundary observations with an explicit interruption: %s',
+    interrupted => {
+      const input = readings([0, 1, 1, 2], [100, 100, 200, 300]).map((point, index) => ({
+        ...point,
+        startsSegment: interrupted && index === 2,
+      }));
+      const reduced = decimateChart(input, watts, 1);
+      expect(reduced.map(point => point.value)).toEqual([100, 100, 200, 300]);
+      expect(segments(reduced).map(run => run.map(point => point.sampleIndex))).toEqual([
+        [0, 1],
+        [2, 3],
+      ]);
+      expect(
+        segments(decimateChart(reduced, point => point.value, 1)).map(run => run.map(point => point.sampleIndex)),
+      ).toEqual([
+        [0, 1],
+        [2, 3],
+      ]);
+      const series: { elapsedSeconds: number; startsSegment: boolean }[][] = [input, reduced];
+      for (const points of series) {
+        expect(findChartSample(points, 0.75).sample).toBe(points[1]);
+        expect(findChartSample(points, 1).sample).toBe(points[1]);
+        expect(findChartSample(points, 1.25).sample).toBe(points[2]);
+        expect(findChartSample(points, 1.5).sample).toBe(points[2]);
+        expect(findChartSample(points, 1.75).sample).toBe(points[3]);
+      }
+    },
+  );
+  it('retains explicit hard boundaries within one reduction bucket and during inspection', () => {
+    const input = readings([0, 1, 2, 3]).map((point, index) => ({ ...point, startsSegment: index === 2 }));
+    const reduced = decimateChart(input, watts, 1);
+    expect(segments(reduced).map(run => run.map(point => point.sampleIndex))).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+    expect(findChartSample(input, 1.5)).toMatchObject({ sample: null, unavailable: 'gap' });
+    expect(findChartSample(input, 1).sample).toBe(input[1]);
+    expect(findChartSample(input, 2).sample).toBe(input[2]);
+    expect(segments(decimateChart(reduced, point => point.value, 1))).toHaveLength(2);
+  });
   it('does not invent gaps when irregular adjacent samples are continuous but retained points are far apart', () => {
     const input = readings([0, 0.125, 0.25, 1.75, 2, 4.5, 4.75, 7.25, 7.5, 10]);
     const points = decimateChart(input, watts, 1);
@@ -26,7 +67,10 @@ describe('telemetry chart decimation', () => {
   it('retains exactly one real gap at a bucket edge without discarding the first post-gap segment', () => {
     const input = readings([0, 0.5, 1, 1.5, 2, 8, 8.5, 9, 9.5, 10]);
     const points = decimateChart(input, watts, 2);
-    expect(segments(points).map(run => run.map(point => point.sampleIndex))).toEqual([[0, 4], [5, 9]]);
+    expect(segments(points).map(run => run.map(point => point.sampleIndex))).toEqual([
+      [0, 4],
+      [5, 9],
+    ]);
     expect(points.map(point => point.startsSegment)).toEqual([true, false, true, false]);
     expect(points[1]!.elapsedSeconds).toBe(2);
     expect(points[2]!.elapsedSeconds).toBe(8);
@@ -63,7 +107,9 @@ describe('telemetry chart decimation', () => {
     const input = readings([0, 6, 6.5, 12.5], [10, 20, 25, 30]);
     const points = decimateChart(input, watts, 1);
     expect(segments(points).map(run => run.map(point => point.sampleIndex))).toEqual([[0], [1, 2], [3]]);
-    expect(decimateChart(readings([4], [0]), watts, 64)).toEqual([{ sampleIndex: 0, elapsedSeconds: 4, value: 0, startsSegment: true }]);
+    expect(decimateChart(readings([4], [0]), watts, 64)).toEqual([
+      { sampleIndex: 0, elapsedSeconds: 4, value: 0, startsSegment: true },
+    ]);
     expect(decimateChart([], watts, 64)).toEqual([]);
   });
 
@@ -75,12 +121,20 @@ describe('telemetry chart decimation', () => {
   it('retains every real break even if several gaps occupy one pixel bucket', () => {
     const input = readings([0, 0.5, 6.5, 7, 13, 13.5, 19.5, 20]);
     const runs = segments(decimateChart(input, watts, 1));
-    expect(runs.map(run => run.map(point => point.sampleIndex))).toEqual([[0, 1], [2, 3], [4, 5], [6, 7]]);
+    expect(runs.map(run => run.map(point => point.sampleIndex))).toEqual([
+      [0, 1],
+      [2, 3],
+      [4, 5],
+      [6, 7],
+    ]);
   });
 
   it('treats invalid values or elapsed-time rollback as breaks, not synthetic zeros or connecting lines', () => {
     const invalidValues = decimateChart(readings([0, 0.5, 1, 1.5, 2], [0, 2, Number.NaN, 3, 0]), watts, 1);
-    expect(segments(invalidValues).map(run => run.map(point => point.sampleIndex))).toEqual([[0, 1], [3, 4]]);
+    expect(segments(invalidValues).map(run => run.map(point => point.sampleIndex))).toEqual([
+      [0, 1],
+      [3, 4],
+    ]);
     const invalidTime = decimateChart(readings([0, 0.5, Number.NaN, 1.5, 2]), watts, 1);
     expect(segments(invalidTime)).toHaveLength(2);
     expect(segments(decimateChart(readings([0, 1, 0.5, 1.5]), watts, 1))).toHaveLength(2);
@@ -88,13 +142,22 @@ describe('telemetry chart decimation', () => {
   });
 
   it('bounds retained output for more than 200,000 readings while preserving spikes and gap endpoints', () => {
-    const count = 250_001; const gapIndex = 125_000; const bucketCount = 256;
+    const count = 250_001;
+    const gapIndex = 125_000;
+    const bucketCount = 256;
     const input = Array.from({ length: count }, (_, index) => ({
       elapsedSeconds: index / 8 + (index >= gapIndex ? 6 : 0),
       watts: index === 100_001 ? 900 : index === 220_001 ? 4000 : 0,
     }));
     let reads = 0;
-    const points = decimateChart(input, sample => { reads += 1; return sample.watts; }, bucketCount);
+    const points = decimateChart(
+      input,
+      sample => {
+        reads += 1;
+        return sample.watts;
+      },
+      bucketCount,
+    );
     const retained = points.map(point => point.sampleIndex);
     expect(reads).toBe(count);
     expect(points.length).toBeLessThanOrEqual(4 * (bucketCount + 1));
@@ -105,7 +168,8 @@ describe('telemetry chart decimation', () => {
   });
 
   it('rejects unusable options instead of producing invalid geometry', () => {
-    for (const buckets of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => decimateChart([], watts, buckets)).toThrow('bucket');
+    for (const buckets of [0, -1, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(() => decimateChart([], watts, buckets)).toThrow('bucket');
     for (const gap of [0, -1, Number.NaN]) expect(() => decimateChart([], watts, 1, gap)).toThrow('gap');
   });
 });
@@ -142,15 +206,28 @@ describe('source-sample chart inspection', () => {
     expect(findChartSample(input, 4).sample?.watts).toBe(0);
     for (const time of [0, 3.999999, 4.000001, 10]) expect(findChartSample(input, time).unavailable).toBe('outside');
     expect(findChartSample([], 0).unavailable).toBe('empty');
-    for (const time of [Number.NaN, Number.POSITIVE_INFINITY]) expect(findChartSample(input, time).unavailable).toBe('invalid');
+    for (const time of [Number.NaN, Number.POSITIVE_INFINITY])
+      expect(findChartSample(input, time).unavailable).toBe('invalid');
     expect(findChartSample(readings([Number.NaN]), 0).unavailable).toBe('invalid');
     expect(findChartSample(input, 4, 0).unavailable).toBe('invalid');
   });
 
   it('uses elapsed capture time rather than a corrected wall clock and keeps all selected channel values together', () => {
     const input = [
-      { elapsedSeconds: 50, timestamp: '2026-01-01T12:00:00.000Z', humanPowerW: 219, cadenceRpm: 87.1256, motorInputPowerW: 453.9876 },
-      { elapsedSeconds: 50.125, timestamp: '2026-01-01T11:59:59.000Z', humanPowerW: 225, cadenceRpm: 88.1234, motorInputPowerW: 456.1234 },
+      {
+        elapsedSeconds: 50,
+        timestamp: '2026-01-01T12:00:00.000Z',
+        humanPowerW: 219,
+        cadenceRpm: 87.1256,
+        motorInputPowerW: 453.9876,
+      },
+      {
+        elapsedSeconds: 50.125,
+        timestamp: '2026-01-01T11:59:59.000Z',
+        humanPowerW: 225,
+        cadenceRpm: 88.1234,
+        motorInputPowerW: 456.1234,
+      },
     ];
     expect(findChartSample(input, 50.1).sample).toBe(input[1]);
   });
@@ -159,7 +236,10 @@ describe('source-sample chart inspection', () => {
     let reads = 0;
     const count = 250_001;
     const input = Array.from({ length: count }, (_, index) => ({
-      get elapsedSeconds() { reads += 1; return index / 8; },
+      get elapsedSeconds() {
+        reads += 1;
+        return index / 8;
+      },
       watts: index,
     }));
     const result = findChartSample(input, 212_345 / 8 + 0.01);

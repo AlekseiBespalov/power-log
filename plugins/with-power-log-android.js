@@ -22,8 +22,9 @@ android {
 }
 `;
 }
-module.exports = config => withAppBuildGradle(config, mod => {
-  mod.modResults.contents = configureSigning(mod.modResults.contents);
-  return mod;
-});
+module.exports = config =>
+  withAppBuildGradle(config, mod => {
+    mod.modResults.contents = configureSigning(mod.modResults.contents);
+    return mod;
+  });
 module.exports.configureSigning = configureSigning;

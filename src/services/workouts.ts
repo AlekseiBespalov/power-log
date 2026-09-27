@@ -1,1 +1,1 @@
-export { workouts, setWorkoutTelemetrySource } from './workouts.native';
+export { workouts } from './workouts.native';

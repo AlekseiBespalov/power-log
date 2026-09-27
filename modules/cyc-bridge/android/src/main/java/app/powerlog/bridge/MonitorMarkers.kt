@@ -54,11 +54,7 @@ internal class MonitorMarkers {
     fun receive(selection: JSONObject, metrics: Set<String>) {
         if (selection.optString("sourceId") != source || !eligible(selection)) return
         val next = selection.optDouble("sequence")
-        if (
-            next < selected ||
-                (next == selected && !pending && selection.optBoolean("cursorPending"))
-        )
-            return
+        if (next < selected || (next == selected && !pending && selection.optBoolean("cursorPending"))) return
         selected = next
         pending = selection.optBoolean("cursorPending")
         originals.keys.retainAll(metrics)
@@ -75,8 +71,7 @@ internal class MonitorMarkers {
                 }
             }
         if (!pending)
-            for (metric in metrics - present) unavailable[metric] =
-                maxOf(unavailable[metric] ?: -1.0, selected)
+            for (metric in metrics - present) unavailable[metric] = maxOf(unavailable[metric] ?: -1.0, selected)
     }
 
     fun target(packet: JSONObject) {

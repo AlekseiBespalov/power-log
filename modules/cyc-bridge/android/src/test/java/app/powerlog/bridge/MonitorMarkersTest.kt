@@ -12,8 +12,7 @@ class MonitorMarkersTest {
     @Test
     fun holdsOriginalsThroughPendingReadsButRejectsClearedAndUnavailableTargets() {
         val state = MonitorMarkers()
-        val point =
-            mapOf("id" to "humanPowerW", "seconds" to 1.0, "value" to 250.0, "key" to "view:1")
+        val point = mapOf("id" to "humanPowerW", "seconds" to 1.0, "value" to 250.0, "key" to "view:1")
         fun move(seq: Int, active: Boolean = true) =
             state.synchronize(
                 "ride",

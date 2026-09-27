@@ -8,6 +8,10 @@ for (const [label, command, args] of [
 ]) {
   const result = spawnSync(command, args, { encoding: 'utf8' });
   console.log(`\n${label}: ${result.status === 0 ? 'available' : 'missing / not selected'}`);
-  console.log((result.stdout || result.stderr || result.error?.message || '').trim().split('\n').slice(0, 3).join('\n'));
+  console.log(
+    (result.stdout || result.stderr || result.error?.message || '').trim().split('\n').slice(0, 3).join('\n'),
+  );
 }
-console.log('\nBluetooth testing needs a physical iPhone, Developer Mode, a cable for initial installation, and Xcode signing with your Apple ID. Android tooling is deferred.');
+console.log(
+  '\nBluetooth testing on iPhone needs a physical device, Developer Mode, a cable for initial installation, and Xcode signing with your Apple ID. Android builds and tests need JDK 17 and Android Studio’s SDK/platform tools; set JAVA_HOME and ANDROID_HOME if they are not detected.',
+);

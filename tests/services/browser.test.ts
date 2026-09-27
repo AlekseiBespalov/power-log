@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BrowserWorkoutRecorder } from '../../src/services/browser-workout-recorder';
+import { BrowserRideStore, type RideRow } from '../../src/services/browser-ride-store';
+import { browserRide } from '../support/browser-ride';
 import { BrowserAdapter } from '../../src/services/device.web';
 import { SessionPresentation } from '../../src/services/session-presentation';
 import { crc16Xmodem, UART_NOTIFY, UART_WRITE } from '../../src/core/protocol';
@@ -6,11 +9,17 @@ import fixture from '../fixtures/protocol.json';
 import { hex, toHex } from '../core/helpers';
 
 function deferred<T>() {
-  let resolve!: (value: T) => void; let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((success, failure) => { resolve = success; reject = failure; });
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((success, failure) => {
+    resolve = success;
+    reject = failure;
+  });
   return { promise, resolve, reject };
 }
-async function flush(): Promise<void> { for (let turn = 0; turn < 24; turn += 1) await Promise.resolve(); }
+async function flush(): Promise<void> {
+  for (let turn = 0; turn < 24; turn += 1) await Promise.resolve();
+}
 
 /** Synthetic peripheral. Tests exercise adapter lifecycle, not the platform Bluetooth implementation. */
 class FakeCharacteristic extends EventTarget {
@@ -18,21 +27,31 @@ class FakeCharacteristic extends EventTarget {
   properties = { writeWithoutResponse: true };
   onWrite?: (bytes: Uint8Array) => void;
   startNotifications = vi.fn(async () => this);
-  writeValueWithoutResponse = vi.fn(async (bytes: Uint8Array) => { this.onWrite?.(bytes); });
-  writeValueWithResponse = vi.fn(async (bytes: Uint8Array) => { this.onWrite?.(bytes); });
+  writeValueWithoutResponse = vi.fn(async (bytes: Uint8Array) => {
+    this.onWrite?.(bytes);
+  });
+  writeValueWithResponse = vi.fn(async (bytes: Uint8Array) => {
+    this.onWrite?.(bytes);
+  });
   notify(bytes: Uint8Array): void {
     this.value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.dispatchEvent(new Event('characteristicvaluechanged'));
   }
   identity(command = 111, model?: string): void {
-    const payload = model ? Uint8Array.of(command, 5, 3, ...Array.from(`${model} 20250604 `, char => char.charCodeAt(0)), 0x80, 0xff, 0) : hex(fixture.identity.payloadHex); payload[0] = command;
+    const payload = model
+      ? Uint8Array.of(command, 5, 3, ...Array.from(`${model} 20250604 `, char => char.charCodeAt(0)), 0x80, 0xff, 0)
+      : hex(fixture.identity.payloadHex);
+    payload[0] = command;
     const crc = crc16Xmodem(payload);
     this.notify(Uint8Array.of(2, payload.length, ...payload, crc >> 8, crc & 255, 3));
   }
-  telemetry(): void { this.notify(hex(fixture.telemetry[3]!.frameHex!)); }
+  telemetry(): void {
+    this.notify(hex(fixture.telemetry[3]!.frameHex!));
+  }
 }
 class FakeService {
-  writer = new FakeCharacteristic(); reader = new FakeCharacteristic();
+  writer = new FakeCharacteristic();
+  reader = new FakeCharacteristic();
   getCharacteristic = vi.fn(async (uuid: string) => {
     if (uuid === UART_WRITE) return this.writer;
     if (uuid === UART_NOTIFY) return this.reader;
@@ -43,21 +62,33 @@ class FakeGatt {
   connected = false;
   service = new FakeService();
   constructor(private readonly device: FakeDevice) {}
-  connect = vi.fn(async () => { this.connected = true; return this; });
+  connect = vi.fn(async () => {
+    this.connected = true;
+    return this;
+  });
   getPrimaryService = vi.fn(async () => this.service);
-  disconnect = vi.fn(() => { this.connected = false; this.device.dispatchEvent(new Event('gattserverdisconnected')); });
+  disconnect = vi.fn(() => {
+    this.connected = false;
+    this.device.dispatchEvent(new Event('gattserverdisconnected'));
+  });
 }
 class FakeDevice extends EventTarget {
-  id = 'synthetic-test-device'; name = 'CYC synthetic test device';
+  id = 'synthetic-test-device';
+  name = 'CYC synthetic test device';
   gatt = new FakeGatt(this);
-  asBluetooth(): BluetoothDevice { return this as unknown as BluetoothDevice; }
+  asBluetooth(): BluetoothDevice {
+    return this as unknown as BluetoothDevice;
+  }
 }
 
 const adapters: BrowserAdapter[] = [];
 function harness() {
-  const device = new FakeDevice(); const clock = { seconds: 0 };
-  const adapter = new BrowserAdapter(() => clock.seconds); adapters.push(adapter);
-  const events = { device: vi.fn(), state: vi.fn(), sample: vi.fn() }; adapter.subscribe(events);
+  const device = new FakeDevice();
+  const clock = { seconds: 0 };
+  const adapter = new BrowserAdapter(() => clock.seconds);
+  adapters.push(adapter);
+  const events = { device: vi.fn(), state: vi.fn(), sample: vi.fn() };
+  adapter.subscribe(events);
   const requestDevice = vi.fn(async () => device.asBluetooth());
   vi.stubGlobal('navigator', { bluetooth: { requestDevice } });
   return { adapter, device, clock, events, requestDevice, service: device.gatt.service };
@@ -70,36 +101,172 @@ function replyAutomatically(service: FakeService, identityCommand = 111): void {
   };
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => {
+  vi.useFakeTimers();
+});
 afterEach(async () => {
   for (const adapter of adapters.splice(0)) await adapter.disconnect();
-  vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('foreground browser BLE lifecycle', () => {
+  it('admits a notification before Pause while its write completion is still pending', async () => {
+    const h = harness();
+    const write = deferred<void>();
+    h.service.writer.writeValueWithoutResponse.mockImplementation(async bytes => {
+      if (bytes[2] === 111) h.service.reader.identity();
+      else await write.promise;
+    });
+    vi.stubGlobal('indexedDB', {});
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: { request: (_name: string, _options: unknown, work: (lock: object) => Promise<void>) => work({}) },
+    });
+    const store = new BrowserRideStore();
+    const record = browserRide();
+    const rows: RideRow[] = [];
+    vi.spyOn(store, 'recoverOrphan').mockResolvedValue(null);
+    vi.spyOn(store, 'begin').mockResolvedValue(record);
+    vi.spyOn(store, 'remove').mockResolvedValue();
+    vi.spyOn(store, 'append').mockImplementation(async (_id, _token, batch, elapsed, timer, at) => {
+      expect(batch[0]!.elapsedSeconds).toBeGreaterThanOrEqual(record.elapsedSeconds);
+      expect(elapsed).toBe(batch.at(-1)!.elapsedSeconds);
+      rows.push(...batch);
+      return Object.assign(record, {
+        samples: rows.length,
+        elapsedSeconds: elapsed,
+        timerSeconds: timer,
+        checkpointAt: at,
+      });
+    });
+    vi.spyOn(store, 'transition').mockImplementation(async (_id, _token, action, elapsed, timer, at) => {
+      expect(elapsed).toBeGreaterThanOrEqual(record.elapsedSeconds);
+      return Object.assign(record, {
+        phase: action === 'pause' ? 'paused' : 'completed',
+        elapsedSeconds: elapsed,
+        timerSeconds: timer,
+        checkpointAt: at,
+      });
+    });
+    const recorder = new BrowserWorkoutRecorder(store, () => h.clock.seconds);
+    recorder.setTelemetrySource(h.adapter);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await recorder.start({ indoor: true, useWatch: false });
+    try {
+      h.clock.seconds = 1;
+      h.service.reader.telemetry();
+      h.clock.seconds = 2;
+      await recorder.pause();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ elapsedSeconds: 1, originalElapsedSeconds: 1, active: true, interval: 0 });
+      expect(record).toMatchObject({ elapsedSeconds: 2, timerSeconds: 2, phase: 'paused' });
+      h.clock.seconds = 2.25;
+      write.resolve();
+      await flush();
+      expect(h.events.sample).toHaveBeenCalledTimes(1);
+      expect((await recorder.getState()).streams.cyc.status).toBe('receiving');
+    } finally {
+      await recorder.discard(record.id);
+    }
+  });
+
+  it.each([true, false])(
+    'publishes acquisition before a two-second write completion without renewing it: withoutResponse=%s',
+    async withoutResponse => {
+      const h = harness();
+      const write = deferred<void>();
+      h.service.writer.properties.writeWithoutResponse = withoutResponse;
+      const send = async (bytes: Uint8Array) => {
+        if (bytes[2] === 111) h.service.reader.identity();
+        else {
+          h.clock.seconds = 0.25;
+          h.service.reader.telemetry();
+          await write.promise;
+        }
+      };
+      h.service.writer.writeValueWithoutResponse.mockImplementation(send);
+      h.service.writer.writeValueWithResponse.mockImplementation(send);
+      const presentation = new SessionPresentation(() => h.clock.seconds);
+      presentation.setActive(true);
+      const unsubscribe = h.adapter.subscribe({
+        device: () => {},
+        state: state => presentation.receiveState(state),
+        sample: (sample, delivery) => presentation.receiveSample(sample, delivery),
+      });
+      try {
+        await h.adapter.startScan();
+        await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+        await flush();
+        const timestamp = new Date().toISOString();
+        expect(h.events.sample).toHaveBeenCalledTimes(1);
+        h.clock.seconds = 2.25;
+        vi.setSystemTime(Date.now() - 3_600_000);
+        write.resolve();
+        await flush();
+        expect(h.events.sample).toHaveBeenCalledTimes(1);
+        expect(h.events.sample.mock.calls[0]![0]).toMatchObject({ elapsedSeconds: 0.25, timestamp });
+        expect(h.events.sample.mock.calls[0]![1]).toEqual({ receivedAtSeconds: 0.25 });
+        expect(presentation.getSnapshot().display).toBe('live');
+        h.service.writer.writeValueWithoutResponse.mockImplementation(() => new Promise(() => {}));
+        h.service.writer.writeValueWithResponse.mockImplementation(() => new Promise(() => {}));
+        h.clock.seconds = 6.249;
+        await vi.advanceTimersByTimeAsync(2501);
+        expect(presentation.getSnapshot().display).toBe('held');
+        h.clock.seconds = 6.25;
+        await vi.advanceTimersByTimeAsync(1);
+        expect(presentation.getSnapshot().display).toBe('unavailable');
+      } finally {
+        presentation.setActive(false);
+        unsubscribe();
+      }
+    },
+  );
+
   it('keeps the admitted sample rate on an active same-bike reconnect and uses the new default after release', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 4 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 4 });
+    await flush();
     h.adapter.setWorkoutOwner(h.device.id);
     await expect(h.adapter.setSampleRate(8)).rejects.toThrow('Finish the ride');
-    h.device.gatt.disconnect(); await h.adapter.connect({ deviceId: h.device.id, hz: 8 }); await flush();
+    h.device.gatt.disconnect();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 8 });
+    await flush();
     const before = h.events.sample.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(249); expect(h.events.sample).toHaveBeenCalledTimes(before);
-    await vi.advanceTimersByTimeAsync(1); expect(h.events.sample).toHaveBeenCalledTimes(before + 1);
-    h.adapter.setWorkoutOwner(null); await h.adapter.disconnect(); await h.adapter.connect({ deviceId: h.device.id, hz: 8 }); await flush();
+    await vi.advanceTimersByTimeAsync(249);
+    expect(h.events.sample).toHaveBeenCalledTimes(before);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.events.sample).toHaveBeenCalledTimes(before + 1);
+    h.adapter.setWorkoutOwner(null);
+    await h.adapter.disconnect();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 8 });
+    await flush();
     const next = h.events.sample.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(124); expect(h.events.sample).toHaveBeenCalledTimes(next);
-    await vi.advanceTimersByTimeAsync(1); expect(h.events.sample).toHaveBeenCalledTimes(next + 1);
+    await vi.advanceTimersByTimeAsync(124);
+    expect(h.events.sample).toHaveBeenCalledTimes(next);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.events.sample).toHaveBeenCalledTimes(next + 1);
   });
 
   it.each([0, 111])('accepts identity response %i and sends only allowlisted reads', async command => {
-    const h = harness(); replyAutomatically(h.service, command);
+    const h = harness();
+    replyAutomatically(h.service, command);
     const selection = h.adapter.startScan();
     expect(h.requestDevice).toHaveBeenCalledTimes(1); // Called synchronously within the user's gesture.
-    await selection; await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    await selection;
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     expect((await h.adapter.getState()).status).toBe('connected');
     expect(h.events.sample).toHaveBeenCalledTimes(1);
-    expect(h.service.writer.writeValueWithoutResponse.mock.calls.map(([bytes]) => toHex(bytes))).toEqual([fixture.requests.identity, fixture.requests.selective]);
+    expect(h.service.writer.writeValueWithoutResponse.mock.calls.map(([bytes]) => toHex(bytes))).toEqual([
+      fixture.requests.identity,
+      fixture.requests.selective,
+    ]);
   });
 
   it('identifies X12 on this connection, retains its scan label, and uses only approved reads', async () => {
@@ -109,10 +276,18 @@ describe('foreground browser BLE lifecycle', () => {
       else if (bytes[2] === 50) h.service.reader.telemetry();
       else throw new Error('Forbidden controller request');
     };
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    expect(await h.adapter.getState()).toMatchObject({ status: 'connected', deviceId: h.device.id, controllerModel: 'X12', firmwareLabel: '20250604' });
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    expect(await h.adapter.getState()).toMatchObject({
+      status: 'connected',
+      deviceId: h.device.id,
+      controllerModel: 'X12',
+      firmwareLabel: '20250604',
+    });
     expect(h.events.sample).toHaveBeenCalledTimes(1);
-    await h.adapter.disconnect(); await h.adapter.startScan();
+    await h.adapter.disconnect();
+    await h.adapter.startScan();
     expect(h.events.device.mock.lastCall![0]).toMatchObject({ id: h.device.id, controllerModel: 'X12' });
     // Remembered display metadata must never bypass a fresh identity handshake.
     h.service.writer.onWrite = () => h.service.reader.identity(111, 'X120');
@@ -122,40 +297,56 @@ describe('foreground browser BLE lifecycle', () => {
   });
 
   it('uses write-with-response when the characteristic requires it', async () => {
-    const h = harness(); h.service.writer.properties.writeWithoutResponse = false; replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    h.service.writer.properties.writeWithoutResponse = false;
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     expect(h.service.writer.writeValueWithResponse).toHaveBeenCalledTimes(2);
     expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
   });
 
   it('ignores a chooser result after Stop and never replaces a newer selected device', async () => {
-    const h = harness(); const oldChoice = deferred<BluetoothDevice>();
+    const h = harness();
+    const oldChoice = deferred<BluetoothDevice>();
     h.requestDevice.mockReturnValueOnce(oldChoice.promise);
-    const oldScan = h.adapter.startScan(); await h.adapter.stopScan();
-    const newer = new FakeDevice(); newer.id = 'synthetic-new-device';
+    const oldScan = h.adapter.startScan();
+    await h.adapter.stopScan();
+    const newer = new FakeDevice();
+    newer.id = 'synthetic-new-device';
     h.requestDevice.mockResolvedValueOnce(newer.asBluetooth());
-    await h.adapter.startScan(); oldChoice.resolve(h.device.asBluetooth()); await oldScan;
+    await h.adapter.startScan();
+    oldChoice.resolve(h.device.asBluetooth());
+    await oldScan;
     expect(h.events.device).toHaveBeenCalledTimes(1);
     expect(h.events.device.mock.calls[0]![0].id).toBe(newer.id);
     await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toThrow('Choose');
   });
 
   it('ignores a rejected chooser from an older generation', async () => {
-    const h = harness(); const oldChoice = deferred<BluetoothDevice>();
+    const h = harness();
+    const oldChoice = deferred<BluetoothDevice>();
     h.requestDevice.mockReturnValueOnce(oldChoice.promise);
-    const oldScan = h.adapter.startScan(); await h.adapter.stopScan();
-    await h.adapter.startScan(); replyAutomatically(h.service);
+    const oldScan = h.adapter.startScan();
+    await h.adapter.stopScan();
+    await h.adapter.startScan();
+    replyAutomatically(h.service);
     await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
-    oldChoice.reject(new Error('Old picker cancelled')); await oldScan;
+    oldChoice.reject(new Error('Old picker cancelled'));
+    await oldScan;
     expect((await h.adapter.getState()).status).toBe('connected');
   });
 
   it('rejects a response arriving past the monotonic deadline before the delayed timeout callback runs', async () => {
-    const h = harness(); await h.adapter.startScan();
+    const h = harness();
+    await h.adapter.startScan();
     const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
-    await flush(); expect(h.service.writer.writeValueWithoutResponse).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(h.service.writer.writeValueWithoutResponse).toHaveBeenCalledTimes(1);
     h.clock.seconds = 2.501; // Simulate a suspended tab without running its queued timer.
-    h.service.reader.identity(); await flush();
+    h.service.reader.identity();
+    await flush();
     expect(await connecting).toBeInstanceOf(Error);
     expect((await h.adapter.getState()).status).toBe('error');
     expect(h.service.writer.writeValueWithoutResponse).toHaveBeenCalledTimes(1);
@@ -163,102 +354,184 @@ describe('foreground browser BLE lifecycle', () => {
   });
 
   it('drops late telemetry instead of publishing it as a fresh sample', async () => {
-    const h = harness(); h.service.writer.onWrite = bytes => { if (bytes[2] === 111) h.service.reader.identity(); };
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    h.clock.seconds = 3; h.service.reader.telemetry(); await flush();
-    expect(h.events.sample).not.toHaveBeenCalled(); expect((await h.adapter.getState()).status).toBe('reconnecting');
+    const h = harness();
+    h.service.writer.onWrite = bytes => {
+      if (bytes[2] === 111) h.service.reader.identity();
+    };
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    h.clock.seconds = 3;
+    h.service.reader.telemetry();
+    await flush();
+    expect(h.events.sample).not.toHaveBeenCalled();
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
   });
 
   it('applies the deadline if an on-time response waits behind a delayed write continuation', async () => {
-    const h = harness(); const write = deferred<void>();
-    h.service.writer.writeValueWithoutResponse.mockImplementationOnce(async () => { h.service.reader.identity(); await write.promise; });
+    const h = harness();
+    const write = deferred<void>();
+    h.service.writer.writeValueWithoutResponse.mockImplementationOnce(async () => {
+      h.service.reader.identity();
+      await write.promise;
+    });
     await h.adapter.startScan();
     const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
-    await flush(); h.clock.seconds = 3; write.resolve(); await flush();
-    expect(await connecting).toBeInstanceOf(Error); expect((await h.adapter.getState()).status).toBe('error');
+    await flush();
+    h.clock.seconds = 3;
+    write.resolve();
+    await flush();
+    expect(await connecting).toBeInstanceOf(Error);
+    expect((await h.adapter.getState()).status).toBe('error');
     expect(h.events.sample).not.toHaveBeenCalled();
   });
 
   it('times out a hanging write even if its response already arrived', async () => {
-    const h = harness(); const write = deferred<void>();
-    h.service.writer.writeValueWithoutResponse.mockImplementationOnce(async () => { h.service.reader.identity(); await write.promise; });
-    await h.adapter.startScan();
-    const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
-    await flush(); h.clock.seconds = 2.5; await vi.advanceTimersByTimeAsync(2500);
-    expect(await connecting).toBeInstanceOf(Error); expect((await h.adapter.getState()).status).toBe('error');
-    write.resolve(); await flush();
-    expect(h.events.sample).not.toHaveBeenCalled();
-  });
-
-  it.each(['gatt', 'service', 'writer', 'reader', 'notifications'] as const)('does not issue writes after cancellation during %s discovery', async stage => {
-    const h = harness(); const gate = deferred<void>();
-    if (stage === 'gatt') h.device.gatt.connect.mockImplementationOnce(async () => { await gate.promise; return h.device.gatt; });
-    if (stage === 'service') h.device.gatt.getPrimaryService.mockImplementationOnce(async () => { await gate.promise; return h.service; });
-    if (stage === 'writer' || stage === 'reader') h.service.getCharacteristic.mockImplementation(async uuid => {
-      if ((stage === 'writer' && uuid === UART_WRITE) || (stage === 'reader' && uuid === UART_NOTIFY)) await gate.promise;
-      return uuid === UART_WRITE ? h.service.writer : h.service.reader;
+    const h = harness();
+    const write = deferred<void>();
+    h.service.writer.writeValueWithoutResponse.mockImplementationOnce(async () => {
+      h.service.reader.identity();
+      await write.promise;
     });
-    if (stage === 'notifications') h.service.reader.startNotifications.mockImplementationOnce(async () => { await gate.promise; return h.service.reader; });
-    await h.adapter.startScan(); const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
-    await flush(); await h.adapter.disconnect(); await connecting;
-    expect(vi.getTimerCount()).toBe(0);
-    gate.resolve(); await flush();
-    expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
-    expect((await h.adapter.getState()).status).toBe('idle');
+    await h.adapter.startScan();
+    const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
+    await flush();
+    h.clock.seconds = 2.5;
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(await connecting).toBeInstanceOf(Error);
+    expect((await h.adapter.getState()).status).toBe('error');
+    write.resolve();
+    await flush();
     expect(h.events.sample).not.toHaveBeenCalled();
   });
 
-  it.each(['gatt', 'service', 'writer', 'reader', 'notifications'] as const)('times out stalled %s setup and allows a fresh connection', async stage => {
-    const h = harness(); const gate = deferred<void>();
-    if (stage === 'gatt') h.device.gatt.connect.mockImplementationOnce(async () => { await gate.promise; h.device.gatt.connected = true; return h.device.gatt; });
-    if (stage === 'service') h.device.gatt.getPrimaryService.mockImplementationOnce(async () => { await gate.promise; return h.service; });
-    if (stage === 'writer' || stage === 'reader') {
-      const lookup = h.service.getCharacteristic.getMockImplementation()!;
-      let delayed = false;
-      h.service.getCharacteristic.mockImplementation(async uuid => {
-        if (!delayed && uuid === (stage === 'writer' ? UART_WRITE : UART_NOTIFY)) { delayed = true; await gate.promise; }
-        return lookup(uuid);
-      });
-    }
-    if (stage === 'notifications') h.service.reader.startNotifications.mockImplementationOnce(async () => { await gate.promise; return h.service.reader; });
-    await h.adapter.startScan();
-    const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
-    await flush(); await vi.advanceTimersByTimeAsync(14999);
-    expect((await h.adapter.getState()).status).toBe('connecting');
-    await vi.advanceTimersByTimeAsync(1);
-    expect(await connecting).toBeInstanceOf(Error);
-    expect(await h.adapter.getState()).toMatchObject({ status: 'error', error: expect.stringContaining('timed out') });
-    expect(h.device.gatt.connected).toBe(false);
-    expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+  it.each(['gatt', 'service', 'writer', 'reader', 'notifications'] as const)(
+    'does not issue writes after cancellation during %s discovery',
+    async stage => {
+      const h = harness();
+      const gate = deferred<void>();
+      if (stage === 'gatt')
+        h.device.gatt.connect.mockImplementationOnce(async () => {
+          await gate.promise;
+          return h.device.gatt;
+        });
+      if (stage === 'service')
+        h.device.gatt.getPrimaryService.mockImplementationOnce(async () => {
+          await gate.promise;
+          return h.service;
+        });
+      if (stage === 'writer' || stage === 'reader')
+        h.service.getCharacteristic.mockImplementation(async uuid => {
+          if ((stage === 'writer' && uuid === UART_WRITE) || (stage === 'reader' && uuid === UART_NOTIFY))
+            await gate.promise;
+          return uuid === UART_WRITE ? h.service.writer : h.service.reader;
+        });
+      if (stage === 'notifications')
+        h.service.reader.startNotifications.mockImplementationOnce(async () => {
+          await gate.promise;
+          return h.service.reader;
+        });
+      await h.adapter.startScan();
+      const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+      await flush();
+      await h.adapter.disconnect();
+      await connecting;
+      expect(vi.getTimerCount()).toBe(0);
+      gate.resolve();
+      await flush();
+      expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
+      expect((await h.adapter.getState()).status).toBe('idle');
+      expect(h.events.sample).not.toHaveBeenCalled();
+    },
+  );
 
-    replyAutomatically(h.service);
-    await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    const disconnects = h.device.gatt.disconnect.mock.calls.length;
-    gate.resolve(); await flush();
-    expect(h.device.gatt.disconnect).toHaveBeenCalledTimes(disconnects);
-    expect((await h.adapter.getState()).status).toBe('connected');
-    expect(h.events.sample).toHaveBeenCalledTimes(1);
-  });
+  it.each(['gatt', 'service', 'writer', 'reader', 'notifications'] as const)(
+    'times out stalled %s setup and allows a fresh connection',
+    async stage => {
+      const h = harness();
+      const gate = deferred<void>();
+      if (stage === 'gatt')
+        h.device.gatt.connect.mockImplementationOnce(async () => {
+          await gate.promise;
+          h.device.gatt.connected = true;
+          return h.device.gatt;
+        });
+      if (stage === 'service')
+        h.device.gatt.getPrimaryService.mockImplementationOnce(async () => {
+          await gate.promise;
+          return h.service;
+        });
+      if (stage === 'writer' || stage === 'reader') {
+        const lookup = h.service.getCharacteristic.getMockImplementation()!;
+        let delayed = false;
+        h.service.getCharacteristic.mockImplementation(async uuid => {
+          if (!delayed && uuid === (stage === 'writer' ? UART_WRITE : UART_NOTIFY)) {
+            delayed = true;
+            await gate.promise;
+          }
+          return lookup(uuid);
+        });
+      }
+      if (stage === 'notifications')
+        h.service.reader.startNotifications.mockImplementationOnce(async () => {
+          await gate.promise;
+          return h.service.reader;
+        });
+      await h.adapter.startScan();
+      const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
+      await flush();
+      await vi.advanceTimersByTimeAsync(14999);
+      expect((await h.adapter.getState()).status).toBe('connecting');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await connecting).toBeInstanceOf(Error);
+      expect(await h.adapter.getState()).toMatchObject({
+        status: 'error',
+        error: expect.stringContaining('timed out'),
+      });
+      expect(h.device.gatt.connected).toBe(false);
+      expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+
+      replyAutomatically(h.service);
+      await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+      await flush();
+      const disconnects = h.device.gatt.disconnect.mock.calls.length;
+      gate.resolve();
+      await flush();
+      expect(h.device.gatt.disconnect).toHaveBeenCalledTimes(disconnects);
+      expect((await h.adapter.getState()).status).toBe('connected');
+      expect(h.events.sample).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('closes a GATT connection that succeeds after its timeout when there is no retry', async () => {
-    const h = harness(); const gate = deferred<void>();
-    h.device.gatt.connect.mockImplementationOnce(async () => { await gate.promise; h.device.gatt.connected = true; return h.device.gatt; });
+    const h = harness();
+    const gate = deferred<void>();
+    h.device.gatt.connect.mockImplementationOnce(async () => {
+      await gate.promise;
+      h.device.gatt.connected = true;
+      return h.device.gatt;
+    });
     await h.adapter.startScan();
     const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
-    await vi.advanceTimersByTimeAsync(15000); await connecting;
-    gate.resolve(); await flush();
+    await vi.advanceTimersByTimeAsync(15000);
+    await connecting;
+    gate.resolve();
+    await flush();
     expect(h.device.gatt.connected).toBe(false);
     expect(h.device.gatt.getPrimaryService).not.toHaveBeenCalled();
     expect((await h.adapter.getState()).status).toBe('error');
   });
 
   it('enforces the setup deadline after tab suspension even before its timeout callback runs', async () => {
-    const h = harness(); const service = deferred<FakeService>();
+    const h = harness();
+    const service = deferred<FakeService>();
     h.device.gatt.getPrimaryService.mockReturnValueOnce(service.promise);
     await h.adapter.startScan();
     const connecting = h.adapter.connect({ deviceId: h.device.id, hz: 2 }).catch(error => error as Error);
-    await flush(); h.clock.seconds = 15.001; service.resolve(h.service);
+    await flush();
+    h.clock.seconds = 15.001;
+    service.resolve(h.service);
     expect(await connecting).toBeInstanceOf(Error);
     expect((await h.adapter.getState()).status).toBe('error');
     expect(h.service.getCharacteristic).not.toHaveBeenCalled();
@@ -266,74 +539,118 @@ describe('foreground browser BLE lifecycle', () => {
   });
 
   it('does not let an old delayed setup failure disconnect a successful newer connection', async () => {
-    const h = harness(); const oldService = deferred<FakeService>();
-    h.device.gatt.getPrimaryService.mockReturnValueOnce(oldService.promise); replyAutomatically(h.service);
-    await h.adapter.startScan(); const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    const oldService = deferred<FakeService>();
+    h.device.gatt.getPrimaryService.mockReturnValueOnce(oldService.promise);
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     const disconnects = h.device.gatt.disconnect.mock.calls.length;
-    oldService.reject(new Error('Stale service discovery failed')); await oldConnect; await flush();
+    oldService.reject(new Error('Stale service discovery failed'));
+    await oldConnect;
+    await flush();
     expect(h.device.gatt.disconnect).toHaveBeenCalledTimes(disconnects);
-    expect((await h.adapter.getState()).status).toBe('connected'); expect(h.events.sample).toHaveBeenCalledTimes(1);
-    h.clock.seconds = 0.5; await vi.advanceTimersByTimeAsync(500);
+    expect((await h.adapter.getState()).status).toBe('connected');
+    expect(h.events.sample).toHaveBeenCalledTimes(1);
+    h.clock.seconds = 0.5;
+    await vi.advanceTimersByTimeAsync(500);
     expect(h.events.sample).toHaveBeenCalledTimes(2);
   });
 
   it('does not let a late connect completion close the newer connection on the same GATT device', async () => {
-    const h = harness(); const oldServer = deferred<FakeGatt>();
-    h.device.gatt.connect.mockReturnValueOnce(oldServer.promise); replyAutomatically(h.service);
-    await h.adapter.startScan(); const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    const oldServer = deferred<FakeGatt>();
+    h.device.gatt.connect.mockReturnValueOnce(oldServer.promise);
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     const disconnects = h.device.gatt.disconnect.mock.calls.length;
-    oldServer.resolve(h.device.gatt); await oldConnect;
+    oldServer.resolve(h.device.gatt);
+    await oldConnect;
     expect(h.device.gatt.disconnect).toHaveBeenCalledTimes(disconnects);
     expect(h.device.gatt.getPrimaryService).toHaveBeenCalledTimes(1);
     expect((await h.adapter.getState()).status).toBe('connected');
   });
 
   it('cancels a pending write immediately and ignores its later rejection', async () => {
-    const h = harness(); const oldWrite = deferred<void>();
+    const h = harness();
+    const oldWrite = deferred<void>();
     h.service.writer.writeValueWithoutResponse.mockImplementationOnce(() => oldWrite.promise);
-    await h.adapter.startScan(); const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    await h.adapter.disconnect(); await oldConnect;
-    replyAutomatically(h.service); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    await h.adapter.startScan();
+    const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    await h.adapter.disconnect();
+    await oldConnect;
+    replyAutomatically(h.service);
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     const disconnects = h.device.gatt.disconnect.mock.calls.length;
-    oldWrite.reject(new Error('Old write rejected')); await flush();
+    oldWrite.reject(new Error('Old write rejected'));
+    await flush();
     expect(h.device.gatt.disconnect).toHaveBeenCalledTimes(disconnects);
     expect((await h.adapter.getState()).status).toBe('connected');
   });
 
   it('clears polling and event listeners on a real disconnect without accepting stale notifications', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     expect(h.events.sample).toHaveBeenCalledTimes(1);
-    h.device.gatt.disconnect(); h.service.reader.telemetry(); await vi.advanceTimersByTimeAsync(999);
+    h.device.gatt.disconnect();
+    h.service.reader.telemetry();
+    await vi.advanceTimersByTimeAsync(999);
     expect((await h.adapter.getState()).status).toBe('reconnecting');
     expect(h.events.sample).toHaveBeenCalledTimes(1);
     expect(h.service.writer.writeValueWithoutResponse).toHaveBeenCalledTimes(2);
   });
 
   it('ignores an old queued disconnect event after GATT has already reconnected', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     expect(h.device.gatt.connected).toBe(true);
     h.device.dispatchEvent(new Event('gattserverdisconnected'));
     expect((await h.adapter.getState()).status).toBe('connected');
-    h.clock.seconds = 0.5; await vi.advanceTimersByTimeAsync(500);
+    h.clock.seconds = 0.5;
+    await vi.advanceTimersByTimeAsync(500);
     expect(h.events.sample).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('automatic browser BLE recovery', () => {
   it('recovers repeated 90-second drops without a picker, resetting stable retry budgets but not the sample timeline', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     for (let cycle = 1; cycle <= 8; cycle += 1) {
-      h.clock.seconds = cycle * 90; await vi.advanceTimersByTimeAsync(500);
+      h.clock.seconds = cycle * 90;
+      await vi.advanceTimersByTimeAsync(500);
       const before = h.events.sample.mock.lastCall![0];
       h.device.gatt.disconnect();
-      expect(await h.adapter.getState()).toMatchObject({ status: 'reconnecting', recoverableConnectionError: true, deviceId: h.device.id });
-      h.clock.seconds += 0.2; await vi.advanceTimersByTimeAsync(0);
-      expect(await h.adapter.getState()).toMatchObject({ status: 'connected', error: undefined, recoverableConnectionError: false });
+      expect(await h.adapter.getState()).toMatchObject({
+        status: 'reconnecting',
+        recoverableConnectionError: true,
+        deviceId: h.device.id,
+      });
+      h.clock.seconds += 0.2;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await h.adapter.getState()).toMatchObject({
+        status: 'connected',
+        error: undefined,
+        recoverableConnectionError: false,
+      });
       expect(h.device.gatt.connect).toHaveBeenCalledTimes(cycle + 1);
       const after = h.events.sample.mock.lastCall![0];
       expect(after.elapsedSeconds).toBeCloseTo(cycle * 90 + 0.2);
@@ -346,37 +663,66 @@ describe('automatic browser BLE recovery', () => {
   });
 
   it('holds presentation for six seconds without inventing samples and ends recovery only on fresh telemetry', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    const presentation = new SessionPresentation(() => h.clock.seconds); presentation.setActive(true);
-    const unsubscribe = h.adapter.subscribe({ state: state => presentation.receiveState(state), sample: sample => presentation.receiveSample(sample), device: () => {} });
+    const h = harness();
+    replyAutomatically(h.service);
+    const presentation = new SessionPresentation(() => h.clock.seconds);
+    presentation.setActive(true);
+    const unsubscribe = h.adapter.subscribe({
+      state: state => presentation.receiveState(state),
+      sample: (sample, delivery) => presentation.receiveSample(sample, delivery),
+      device: () => {},
+    });
     try {
-      await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-      h.clock.seconds = 0.25; await vi.advanceTimersByTimeAsync(250);
-      const connect = deferred<FakeGatt>(); h.device.gatt.connect.mockReturnValueOnce(connect.promise);
+      await h.adapter.startScan();
+      await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+      await flush();
+      h.clock.seconds = 0.25;
+      await vi.advanceTimersByTimeAsync(250);
+      const connect = deferred<FakeGatt>();
+      h.device.gatt.connect.mockReturnValueOnce(connect.promise);
       h.device.gatt.disconnect();
       expect(presentation.getSnapshot().display).toBe('held');
-      h.clock.seconds = 5.999; await vi.advanceTimersByTimeAsync(5749);
+      h.clock.seconds = 5.999;
+      await vi.advanceTimersByTimeAsync(5749);
       expect(presentation.getSnapshot().display).toBe('held');
       expect(h.events.sample).toHaveBeenCalledTimes(1);
-      h.clock.seconds = 6; await vi.advanceTimersByTimeAsync(1);
+      h.clock.seconds = 6;
+      await vi.advanceTimersByTimeAsync(1);
       expect(presentation.getSnapshot().display).toBe('unavailable');
-      h.service.writer.onWrite = bytes => { if (bytes[2] === 111) h.service.reader.identity(); };
-      h.device.gatt.connected = true; connect.resolve(h.device.gatt); await flush();
+      h.service.writer.onWrite = bytes => {
+        if (bytes[2] === 111) h.service.reader.identity();
+      };
+      h.device.gatt.connected = true;
+      connect.resolve(h.device.gatt);
+      await flush();
       expect(await h.adapter.getState()).toMatchObject({ status: 'reconnecting', recoverableConnectionError: true });
       expect(presentation.getSnapshot().display).toBe('unavailable');
       expect(h.events.sample).toHaveBeenCalledTimes(1);
-      h.clock.seconds = 6.1; h.service.reader.telemetry(); await flush();
-      expect(await h.adapter.getState()).toMatchObject({ status: 'connected', recoverableConnectionError: false, error: undefined });
+      h.clock.seconds = 6.1;
+      h.service.reader.telemetry();
+      await flush();
+      expect(await h.adapter.getState()).toMatchObject({
+        status: 'connected',
+        recoverableConnectionError: false,
+        error: undefined,
+      });
       expect(h.events.sample).toHaveBeenCalledTimes(2);
       expect(h.events.sample.mock.lastCall![0]).toMatchObject({ sequence: 1, elapsedSeconds: 6.1 });
-      h.clock.seconds = 6.35; await vi.advanceTimersByTimeAsync(250);
+      h.clock.seconds = 6.35;
+      await vi.advanceTimersByTimeAsync(250);
       expect(presentation.getSnapshot().display).toBe('live');
-    } finally { unsubscribe(); presentation.setActive(false); }
+    } finally {
+      unsubscribe();
+      presentation.setActive(false);
+    }
   });
 
   it('backs off 1, 2, 4, 8, 16 seconds and stops after five failed retries outside a ride', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     h.device.gatt.connect.mockRejectedValue(new Error('GATT unavailable'));
     h.device.gatt.disconnect();
     for (const [index, seconds] of [1, 2, 4, 8, 16].entries()) {
@@ -388,23 +734,34 @@ describe('automatic browser BLE recovery', () => {
     expect(await h.adapter.getState()).toMatchObject({ status: 'error', recoverableConnectionError: false });
     expect(vi.getTimerCount()).toBe(0);
     expect(h.events.sample).toHaveBeenCalledTimes(1);
-    await h.adapter.startScan(); expect(h.requestDevice).toHaveBeenCalledTimes(2);
+    await h.adapter.startScan();
+    expect(h.requestDevice).toHaveBeenCalledTimes(2);
   });
 
   it('continues every 30 seconds during a ride, preserves its rate and stops recovery when the ride releases ownership', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 4 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 4 });
+    await flush();
     h.adapter.setWorkoutOwner(h.device.id);
-    h.device.gatt.connect.mockRejectedValue(new Error('GATT unavailable')); h.device.gatt.disconnect();
+    h.device.gatt.connect.mockRejectedValue(new Error('GATT unavailable'));
+    h.device.gatt.disconnect();
     await vi.advanceTimersByTimeAsync(31000);
     expect(h.device.gatt.connect).toHaveBeenCalledTimes(6);
-    await vi.advanceTimersByTimeAsync(29999); expect(h.device.gatt.connect).toHaveBeenCalledTimes(6);
-    h.device.gatt.connect.mockImplementation(async () => { h.device.gatt.connected = true; return h.device.gatt; });
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(6);
+    h.device.gatt.connect.mockImplementation(async () => {
+      h.device.gatt.connected = true;
+      return h.device.gatt;
+    });
     await vi.advanceTimersByTimeAsync(1);
     expect(h.device.gatt.connect).toHaveBeenCalledTimes(7);
     const samples = h.events.sample.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(249); expect(h.events.sample).toHaveBeenCalledTimes(samples);
-    await vi.advanceTimersByTimeAsync(1); expect(h.events.sample).toHaveBeenCalledTimes(samples + 1);
+    await vi.advanceTimersByTimeAsync(249);
+    expect(h.events.sample).toHaveBeenCalledTimes(samples);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.events.sample).toHaveBeenCalledTimes(samples + 1);
     h.device.gatt.disconnect();
     await expect(h.adapter.setSampleRate(8)).rejects.toThrow('Finish the ride');
     await expect(h.adapter.startScan()).rejects.toThrow('Finish the ride');
@@ -417,9 +774,14 @@ describe('automatic browser BLE recovery', () => {
   });
 
   it('does not reset the retry budget just because identity succeeds on a flapping connection', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    h.service.writer.onWrite = bytes => { if (bytes[2] === 111) h.service.reader.identity(); };
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    h.service.writer.onWrite = bytes => {
+      if (bytes[2] === 111) h.service.reader.identity();
+    };
     h.device.gatt.disconnect();
     for (const seconds of [1, 2, 4, 8, 16]) {
       await vi.advanceTimersByTimeAsync(seconds * 1000);
@@ -433,28 +795,38 @@ describe('automatic browser BLE recovery', () => {
   });
 
   it.each(['timeout', 'write failure'])('recovers a telemetry %s without a disconnect event', async failure => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     if (failure === 'timeout') h.service.writer.onWrite = () => {};
     else h.service.writer.writeValueWithoutResponse.mockRejectedValueOnce(new Error('GATT write failed'));
     await vi.advanceTimersByTimeAsync(failure === 'timeout' ? 3000 : 500);
     expect((await h.adapter.getState()).status).toBe('reconnecting');
-    replyAutomatically(h.service); await vi.advanceTimersByTimeAsync(1000);
+    replyAutomatically(h.service);
+    await vi.advanceTimersByTimeAsync(1000);
     expect((await h.adapter.getState()).status).toBe('connected');
     expect(h.events.sample).toHaveBeenCalledTimes(2);
     expect(h.requestDevice).toHaveBeenCalledTimes(1);
   });
 
   it.each(['backoff', 'setup'])('cancels recovery during %s and ignores late completion', async stage => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
-    const gate = deferred<FakeGatt>(); h.device.gatt.connect.mockReturnValueOnce(gate.promise);
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    const gate = deferred<FakeGatt>();
+    h.device.gatt.connect.mockReturnValueOnce(gate.promise);
     h.device.gatt.disconnect();
     await expect(h.adapter.startScan()).rejects.toThrow('Disconnect');
     if (stage === 'setup') await vi.advanceTimersByTimeAsync(1000);
     const connects = h.device.gatt.connect.mock.calls.length;
     await h.adapter.disconnect();
-    h.device.gatt.connected = true; gate.resolve(h.device.gatt); await flush();
+    h.device.gatt.connected = true;
+    gate.resolve(h.device.gatt);
+    await flush();
     await vi.advanceTimersByTimeAsync(60000);
     expect((await h.adapter.getState()).status).toBe('idle');
     expect(h.device.gatt.connect).toHaveBeenCalledTimes(connects);
@@ -464,21 +836,31 @@ describe('automatic browser BLE recovery', () => {
   });
 
   it('treats an unsupported identity on recovery as terminal rather than retrying unsafe telemetry', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     h.device.gatt.disconnect();
     h.service.writer.onWrite = () => h.service.reader.identity(111, 'X120');
     await vi.advanceTimersByTimeAsync(1000);
-    expect(await h.adapter.getState()).toMatchObject({ status: 'error', error: expect.stringContaining('Unsupported controller') });
+    expect(await h.adapter.getState()).toMatchObject({
+      status: 'error',
+      error: expect.stringContaining('Unsupported controller'),
+    });
     expect(h.events.sample).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it('rejects malformed telemetry without automatic retries', async () => {
-    const h = harness(); replyAutomatically(h.service);
-    await h.adapter.startScan(); await h.adapter.connect({ deviceId: h.device.id, hz: 2 }); await flush();
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
     h.service.writer.onWrite = () => {
-      const payload = Uint8Array.of(50, 0); const crc = crc16Xmodem(payload);
+      const payload = Uint8Array.of(50, 0);
+      const crc = crc16Xmodem(payload);
       h.service.reader.notify(Uint8Array.of(2, payload.length, ...payload, crc >> 8, crc & 255, 3));
     };
     await vi.advanceTimersByTimeAsync(500);

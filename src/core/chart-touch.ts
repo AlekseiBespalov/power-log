@@ -11,7 +11,13 @@ export type ChartTransform = {
   width: number;
 };
 
-export function beginChartTransform(touches: readonly ChartTouch[], view: ChartViewport, domain: ChartViewport, left: number, width: number): ChartTransform | null {
+export function beginChartTransform(
+  touches: readonly ChartTouch[],
+  view: ChartViewport,
+  domain: ChartViewport,
+  left: number,
+  width: number,
+): ChartTransform | null {
   'worklet';
   if (touches.length !== 2 || !Number.isFinite(left) || !Number.isFinite(width) || width <= 0) return null;
   const [a, b] = touches as readonly [ChartTouch, ChartTouch];

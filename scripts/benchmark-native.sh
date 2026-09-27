@@ -13,6 +13,7 @@ case "${1:-}" in
   --projection) power_log_benchmark_source=modules/cyc-bridge/ios/Tests/ProjectionPerformance/main.swift; shift ;;
   --exports) power_log_benchmark_source=modules/cyc-bridge/ios/Tests/ExportPerformance/main.swift; shift ;;
   --chart-navigation) power_log_benchmark_source=modules/cyc-bridge/ios/Tests/ChartNavigationPerformance/main.swift; shift ;;
+  --watch-sync) power_log_benchmark_source=modules/cyc-bridge/ios/Tests/WatchSyncPerformance/main.swift; shift ;;
 esac
 /usr/bin/xcrun swiftc -O -swift-version 5 -module-cache-path "$power_log_tmp/modules" \
   modules/cyc-bridge/ios/CycProtocol.swift modules/cyc-bridge/ios/CycCaptureClock.swift \

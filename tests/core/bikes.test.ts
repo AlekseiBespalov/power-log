@@ -7,9 +7,13 @@ describe('bike identification', () => {
     const second = { ...first, id: 'SYNTHETIC-B' };
     expect(bikeDisplayName(first)).not.toBe(bikeDisplayName(second));
     expect(bikeDisplayName(first)).toBe(bikeDisplayName({ ...first, id: first.id.toLowerCase() }));
-    expect(bikeDisplayName({ ...first, controllerModel: 'X12' })).toBe(bikeDisplayName(first).replace('CYC bike', 'CYC X12'));
+    expect(bikeDisplayName({ ...first, controllerModel: 'X12' })).toBe(
+      bikeDisplayName(first).replace('CYC bike', 'CYC X12'),
+    );
     expect(bikeDetails(first)).toBe('Model identified on connection · Strong signal');
-    expect(bikeDetails({ ...second, controllerModel: 'X6', firmwareLabel: '20250604', rssi: -77 })).toBe('Firmware 20250604 · Fair signal');
+    expect(bikeDetails({ ...second, controllerModel: 'X6', firmwareLabel: '20250604', rssi: -77 })).toBe(
+      'Firmware 20250604 · Fair signal',
+    );
   });
   it('does not invent a model or signal and preserves plain names', () => {
     expect(bikeDisplayName({ name: 'Garage bike' })).toBe('Garage bike');

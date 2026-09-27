@@ -18,7 +18,7 @@ class LongRideTest {
         val distance = RideDistance(store)
         val monitor = RideMonitor(store, distance)
         try {
-            val id = store.create(mapOf("recordGPS" to false))
+            val id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
             val samples = 8 * 60 * 60 * 8
             val write = measureTimeMillis {
                 for (batch in 0 until samples step 512) store.transaction {
@@ -57,7 +57,7 @@ class LongRideTest {
                         )
                     }
                 }
-                store.seal(id, 28800.0, 28800.0)
+                store.seal(id, RideTiming(28800.0, 28800.0, iso()))
             }
             assertEquals(samples.toLong(), store.count(id))
             var points = emptyList<Payload>()
@@ -72,18 +72,39 @@ class LongRideTest {
                 )
             val plot = measureTimeMillis {
                 points =
-                    (monitor.query("plot", id, request)["series"] as Map<String, List<Payload>>)
+                    (monitor
+                            .query(
+                                id,
+                                BridgeInputs.monitor(
+                                    MonitorOperation.Plot,
+                                    mapOf(
+                                        "source" to "workout",
+                                        "id" to id,
+                                        "generation" to 0,
+                                        "sinceRevision" to "0",
+                                    ) + request,
+                                ),
+                            )["series"]
+                            as Map<String, List<Payload>>)
                         .getValue("humanPowerW")
             }
             assertTrue(points.size <= 520)
             assertTrue(points.any { it.num("value") == 999.0 })
             val cursor = measureTimeMillis {
                 repeat(100) {
-                    monitor.query("inspect", id, request + mapOf("seconds" to 10000.0 + it))
+                    monitor.query(
+                        id,
+                        BridgeInputs.monitor(
+                            MonitorOperation.Inspect,
+                            mapOf("source" to "workout", "id" to id, "generation" to 0, "sinceRevision" to "0") +
+                                request +
+                                mapOf("seconds" to 10000.0 + it),
+                        ),
+                    )
                 }
             }
             val catalog = measureTimeMillis {
-                repeat(20) { assertEquals(1, store.list(emptyMap()).size) }
+                repeat(20) { assertEquals(1, store.list(CatalogInput()).size) }
             }
             android.util.Log.i(
                 "PowerLogBenchmark",

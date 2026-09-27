@@ -12,10 +12,14 @@ struct CycCaptureClock {
   private var previousWall: Date?
   private var previousMonotonic: Double?
 
-  init(origin: Double, wallOrigin: Date = Date(), sessionID: String = UUID().uuidString.lowercased(),
-       epochID: String = CycCaptureClock.processEpoch) {
-    self.origin = origin; self.wallOrigin = wallOrigin
-    self.sessionID = sessionID; self.epochID = epochID
+  init(
+    origin: Double, wallOrigin: Date = Date(), sessionID: String = UUID().uuidString.lowercased(),
+    epochID: String = CycCaptureClock.processEpoch
+  ) {
+    self.origin = origin
+    self.wallOrigin = wallOrigin
+    self.sessionID = sessionID
+    self.epochID = epochID
   }
 
   mutating func observation(_ values: [String: Double], monotonic: Double, wall: Date = Date()) -> [String: Any] {
@@ -34,7 +38,8 @@ struct CycCaptureClock {
       let discontinuity = wall.timeIntervalSince(previousWall) - (monotonic - previousMonotonic)
       if abs(discontinuity) > 0.25 { sample["clockDiscontinuitySeconds"] = discontinuity }
     }
-    previousWall = wall; previousMonotonic = monotonic
+    previousWall = wall
+    previousMonotonic = monotonic
     return sample
   }
 }

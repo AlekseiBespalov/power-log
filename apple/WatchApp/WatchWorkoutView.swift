@@ -10,7 +10,7 @@ struct WatchWorkoutView: View {
   @State private var showOptions = false
   @State private var page = 0
 
-  private var recordGPS: Bool? { recordGPSSetting == 0 ? nil : recordGPSSetting == 1 }
+  private var recordGPS: Bool { recordGPSSetting == 0 ? !indoor : recordGPSSetting == 1 }
 
   var body: some View {
     NavigationStack {
@@ -23,7 +23,10 @@ struct WatchWorkoutView: View {
           .tabViewStyle(.verticalPage)
         } else {
           ScrollView(showsIndicators: false) {
-            VStack(spacing: 12) { startWorkout; issues }.padding(.horizontal, 4)
+            VStack(spacing: 12) {
+              startWorkout
+              issues
+            }.padding(.horizontal, 4)
           }
         }
       }
@@ -39,7 +42,7 @@ struct WatchWorkoutView: View {
           Form {
             Toggle("Indoor ride", isOn: $indoor)
             Toggle("Save to Health", isOn: $saveToHealth)
-            Toggle("Record GPS", isOn: Binding(get: { recordGPS ?? !indoor }, set: { recordGPSSetting = $0 ? 1 : 2 }))
+            Toggle("Record GPS", isOn: Binding(get: { recordGPS }, set: { recordGPSSetting = $0 ? 1 : 2 }))
           }
           .navigationTitle("Ride options")
           .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showOptions = false } } }
@@ -65,8 +68,7 @@ struct WatchWorkoutView: View {
   // Keep controls in the normal observed view. Watch timelines can pre-render
   // future content; only the read-only active measurements below use them.
   private var startWorkout: some View {
-    let date = Date()
-    let presentation = engine.idlePresentation(at: date)
+    let presentation = engine.idlePresentation()
     return VStack(spacing: 12) {
       if presentation.showsProgress {
         ProgressView().tint(.orange).padding(.vertical, 10)
@@ -76,19 +78,21 @@ struct WatchWorkoutView: View {
       }
       Text(presentation.title).font(.headline).multilineTextAlignment(.center)
       if presentation == .saved {
-        Text(engine.elapsed(at: date)).font(.system(.title2, design: .rounded).monospacedDigit())
+        Text(engine.elapsed()).font(.system(.title2, design: .rounded).monospacedDigit())
         Text(engine.savedStatusLabel).font(.caption2).foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
       }
       if !presentation.showsProgress {
         Button {
-          Task { await engine.start(indoor: indoor, eBike: true, saveToHealth: saveToHealth, recordGPS: recordGPS) }
+          Task { await engine.start(indoor: indoor, saveToHealth: saveToHealth, recordGPS: recordGPS) }
         } label: {
           Label("Start ride", systemImage: "play.fill").frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .disabled(!engine.canStart)
-        Button { showOptions = true } label: {
+        Button {
+          showOptions = true
+        } label: {
           HStack {
             Text(indoor ? "Indoor ride" : "Outdoor ride")
             Spacer()
@@ -109,8 +113,8 @@ struct WatchWorkoutView: View {
       Text(paused ? "PAUSED" : "RIDING")
         .font(.caption2.weight(.semibold)).foregroundStyle(paused ? Color.gray : Color.orange)
       Spacer()
-      TimelineView(.periodic(from: .now, by: luminanceReduced ? 60.0 : 1.0)) { context in
-        Text(engine.elapsed(at: context.date)).font(.system(.body, design: .monospaced).weight(.semibold))
+      TimelineView(.periodic(from: .now, by: luminanceReduced ? 60.0 : 1.0)) { _ in
+        Text(engine.elapsed()).font(.system(.body, design: .monospaced).weight(.semibold))
           .foregroundStyle(dimmed ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
       }
     }
@@ -128,9 +132,13 @@ struct WatchWorkoutView: View {
         }
         .tint(paused ? .orange : .gray)
         .accessibilityLabel(paused ? "Resume ride" : "Pause ride")
-        Button { engine.lap() } label: { Image(systemName: "flag.fill").font(.title3).frame(maxWidth: .infinity) }
-          .tint(.gray)
-          .accessibilityLabel("Mark lap")
+        Button {
+          engine.lap()
+        } label: {
+          Image(systemName: "flag.fill").font(.title3).frame(maxWidth: .infinity)
+        }
+        .tint(.gray)
+        .accessibilityLabel("Mark lap")
       }
       .buttonStyle(.borderedProminent)
       .disabled(engine.isBusy || !engine.canControl)
@@ -147,18 +155,20 @@ struct WatchWorkoutView: View {
     ScrollView(showsIndicators: false) {
       VStack(spacing: 9) {
         timerRow
-        TimelineView(.periodic(from: .now, by: luminanceReduced ? 60.0 : 1.0)) { context in
+        TimelineView(.periodic(from: .now, by: luminanceReduced ? 60.0 : 1.0)) { _ in
           HStack(alignment: .firstTextBaseline) {
-            metric(engine.power(at: context.date), unit: "W", color: .orange)
+            metric(engine.power(), unit: "W", color: .orange)
             Spacer()
-            metric(engine.cadence(at: context.date), unit: "rpm", color: .purple)
+            metric(engine.cadence(), unit: "rpm", color: .purple)
           }
           HStack {
-            Label(engine.heartRate(at: context.date), systemImage: "heart.fill").foregroundStyle(dimmed ? AnyShapeStyle(.secondary) : AnyShapeStyle(.pink))
+            Label(engine.heartRate(), systemImage: "heart.fill").foregroundStyle(
+              dimmed ? AnyShapeStyle(.secondary) : AnyShapeStyle(.pink))
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
               Text(engine.distanceLabel)
-              Text(engine.distanceSourceLabel).font(.caption2).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+              Text(engine.distanceSourceLabel).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                .minimumScaleFactor(0.8)
             }
           }.font(.system(.body, design: .default).weight(.semibold)).monospacedDigit()
         }
@@ -175,7 +185,8 @@ struct WatchWorkoutView: View {
   private func metric(_ value: String, unit: String, color: Color) -> some View {
     VStack(alignment: .leading, spacing: 0) {
       Text(value).font(.system(size: 36, weight: dimmed ? .semibold : .bold, design: .default))
-        .monospacedDigit().minimumScaleFactor(0.6).lineLimit(1).foregroundStyle(dimmed ? AnyShapeStyle(.secondary) : AnyShapeStyle(color))
+        .monospacedDigit().minimumScaleFactor(0.6).lineLimit(1).foregroundStyle(
+          dimmed ? AnyShapeStyle(.secondary) : AnyShapeStyle(color))
       Text(unit).font(.caption2).foregroundStyle(.secondary)
     }.frame(maxWidth: .infinity, alignment: .leading)
   }

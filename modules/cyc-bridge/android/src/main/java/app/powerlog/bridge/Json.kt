@@ -19,8 +19,7 @@ private fun unwrap(value: Any?): Any? =
         else -> value
     }
 
-internal fun Payload.num(key: String, default: Double = 0.0) =
-    (this[key] as? Number)?.toDouble() ?: default
+internal fun Payload.num(key: String, default: Double = 0.0) = (this[key] as? Number)?.toDouble() ?: default
 
 internal fun Payload.str(key: String, default: String = "") = this[key] as? String ?: default
 
@@ -28,5 +27,4 @@ internal fun Payload.flag(key: String, default: Boolean = false) = this[key] as?
 
 private val utc = DateTimeFormatterBuilder().appendInstant(3).toFormatter()
 
-internal fun iso(millis: Long = System.currentTimeMillis()): String =
-    utc.format(Instant.ofEpochMilli(millis))
+internal fun iso(millis: Long = System.currentTimeMillis()): String = utc.format(Instant.ofEpochMilli(millis))

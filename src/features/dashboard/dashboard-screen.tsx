@@ -13,21 +13,36 @@ import { RideActionBar, RideControlsProvider, RideStatus } from '../workout/work
 import { ConnectionSettings } from './connection-settings';
 
 export function DashboardScreen() {
-  const session = useSession(), workout = useWorkoutIdentity();
+  const session = useSession(),
+    workout = useWorkoutIdentity();
   const { adapter } = session;
   const { preferences } = useMonitorPreferences();
   const distanceSource = preferences.distanceSource;
   const available = session.display !== 'unavailable';
   const workoutId = workoutInProgress(workout.phase) ? workout.id : undefined;
-  const monitorSource = useMemo(() => workoutId ? workoutMonitorSource(workoutId, true, distanceSource) : adapter.kind === 'native' ? nativeMonitorSource('live', undefined, true, distanceSource) : session.monitor, [adapter.kind, workoutId, session.monitor, distanceSource]);
+  const monitorSource = useMemo(
+    () =>
+      workoutId
+        ? workoutMonitorSource(workoutId, true, distanceSource)
+        : adapter.kind === 'native'
+          ? nativeMonitorSource('live', undefined, true, distanceSource)
+          : session.monitor,
+    [adapter.kind, workoutId, session.monitor, distanceSource],
+  );
   const { width } = useWindowDimensions();
   const bottomBar = !(Platform.OS === 'web' && width >= 1100);
-  return <RideControlsProvider>
-    <AppShell footer={bottomBar ? <RideActionBar /> : undefined}>
-      <RideStatus connection={<ConnectionSettings />} />
-      {!bottomBar && <RideActionBar inline />}
-      <MonitorPanel source={monitorSource} bikeAvailable={available} />
-      {available && session.faultCode !== null && session.faultCode !== 0 && <Text accessibilityRole="alert" style={{ color: colors.red }}>Controller fault: {session.faultCode}</Text>}
-    </AppShell>
-  </RideControlsProvider>;
+  return (
+    <RideControlsProvider>
+      <AppShell footer={bottomBar ? <RideActionBar /> : undefined}>
+        <RideStatus connection={<ConnectionSettings />} />
+        {!bottomBar && <RideActionBar inline />}
+        <MonitorPanel source={monitorSource} bikeAvailable={available} />
+        {available && session.faultCode !== null && session.faultCode !== 0 && (
+          <Text accessibilityRole="alert" style={{ color: colors.red }}>
+            Controller fault: {session.faultCode}
+          </Text>
+        )}
+      </AppShell>
+    </RideControlsProvider>
+  );
 }

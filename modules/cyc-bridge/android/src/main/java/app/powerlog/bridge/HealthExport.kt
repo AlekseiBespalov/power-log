@@ -11,7 +11,13 @@ import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 
-/** Optional write-only integration. Original observations always remain in Power Log. */
+internal data class HealthExportResult(
+    val state: String,
+    val written: Int = 0,
+    val omitted: Int = 0,
+    val reason: String? = null,
+)
+
 internal class HealthExport(private val context: Context, private val store: RideStore) {
     val available
         get() = HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
@@ -31,8 +37,7 @@ internal class HealthExport(private val context: Context, private val store: Rid
     }
 
     fun granted(): Set<String> =
-        if (available) runBlocking { client.permissionController.getGrantedPermissions() }
-        else emptySet()
+        if (available) runBlocking { client.permissionController.getGrantedPermissions() } else emptySet()
 
     fun status(): Payload {
         val grants = granted()
@@ -41,216 +46,312 @@ internal class HealthExport(private val context: Context, private val store: Rid
             "available" to available,
             "provider" to "healthConnect",
             "requiredWrites" to required.toList(),
-            "readAuthorization" to "notObservable",
             "writeAuthorization" to
                 permissions(true).associateWith {
                     if (it in grants) "authorized" else "notDetermined"
                 },
-            "requestStatus" to if (grants.containsAll(required)) "unnecessary" else "shouldRequest",
         )
     }
 
-    fun save(id: String) = runBlocking {
-        val meta = store.metadata(id)
-        require(meta.flag("saveToHealth") && meta.str("phase") == "completed")
-        check(available && granted().containsAll(permissions(meta.flag("recordGPS")))) {
-            "Allow Health Connect access to save this ride there."
+    fun save(id: String): HealthExportResult = runBlocking {
+        writeRide(
+            id,
+            prepare = { gps ->
+                check(available && granted().containsAll(permissions(gps))) {
+                    "Allow Health Connect access to save this ride there."
+                }
+            },
+        ) {
+            client.insertRecords(it)
         }
-        writeRide(id) { client.insertRecords(it) }
     }
 
-    internal suspend fun writeRide(id: String, write: suspend (List<Record>) -> Unit) {
-        val meta = store.metadata(id)
-        require(meta.flag("saveToHealth") && meta.str("phase") == "completed")
-        val start = Instant.parse(meta.str("startedAt"))
-        val elapsed = store.timing(id).first
-        check(elapsed > 0) { "This ride is too short to save to Health Connect." }
-        fun time(seconds: Double) = start.plusNanos((seconds * 1e9).toLong())
-        val end = time(elapsed)
-        fun metadata(part: String) =
-            Metadata.activelyRecorded(
-                device = Device(type = Device.TYPE_PHONE),
-                clientRecordId = "power-log:$id:$part",
-                clientRecordVersion = 1,
-            )
-        val power = mutableListOf<PowerRecord.Sample>()
-        val cadence = mutableListOf<CyclingPedalingCadenceRecord.Sample>()
-        val speed = mutableListOf<SpeedRecord.Sample>()
-        val route = mutableListOf<ExerciseRoute.Location>()
-        val routeStride =
-            kotlin.math.max(1, kotlin.math.ceil(store.count(id, "location") / 5000.0).toInt())
-        var routeIndex = 0
-        var batch = 0
-        suspend fun flush() {
-            val records = mutableListOf<Record>()
-            if (power.isNotEmpty())
-                records.add(
-                    PowerRecord(
-                        power.first().time,
-                        ZoneOffset.UTC,
-                        power.last().time.plusNanos(1).coerceAtMost(end),
-                        ZoneOffset.UTC,
-                        power.toList(),
-                        metadata("power:$batch"),
-                    )
-                )
-            if (cadence.isNotEmpty())
-                records.add(
-                    CyclingPedalingCadenceRecord(
-                        cadence.first().time,
-                        ZoneOffset.UTC,
-                        cadence.last().time.plusNanos(1).coerceAtMost(end),
-                        ZoneOffset.UTC,
-                        cadence.toList(),
-                        metadata("cadence:$batch"),
-                    )
-                )
-            if (speed.isNotEmpty())
-                records.add(
-                    SpeedRecord(
-                        speed.first().time,
-                        ZoneOffset.UTC,
-                        speed.last().time.plusNanos(1).coerceAtMost(end),
-                        ZoneOffset.UTC,
-                        speed.toList(),
-                        metadata("speed:$batch"),
-                    )
-                )
-            if (records.isNotEmpty()) write(records)
-            power.clear()
-            cadence.clear()
-            speed.clear()
-            batch++
+    internal suspend fun writeRide(
+        id: String,
+        prepare: suspend (Boolean) -> Unit = {},
+        write: suspend (List<Record>) -> Unit,
+    ): HealthExportResult {
+        var written = 0
+        var omitted = 0
+        val reasons = linkedSetOf<String>()
+        fun omit(reason: String) {
+            omitted++
+            reasons.add(reason)
         }
-        // Chunking keeps Binder payloads and memory independent of ride duration.
-        var after = 0L
-        while (true) {
-            val rows = store.page(id, after, 512)
-            if (rows.isEmpty()) break
-            for (row in rows) {
-                val t = time(row.time)
-                if (!row.active || t < start || t >= end) continue
-                row.values["humanPowerW"]
-                    ?.takeIf { it in 0.0..10000.0 }
-                    ?.let { power.add(PowerRecord.Sample(t, it.watts)) }
-                row.values["cadenceRpm"]
-                    ?.takeIf { it in 0.0..10000.0 }
-                    ?.let { cadence.add(CyclingPedalingCadenceRecord.Sample(t, it)) }
-                if (
-                    row.kind == "location" &&
-                        (row.values["horizontalAccuracyM"] ?: 999.0) in 0.0..50.0
-                ) {
-                    row.values["speedMps"]
-                        ?.takeIf { it in 0.0..40.0 }
-                        ?.let { speed.add(SpeedRecord.Sample(t, it.metersPerSecond)) }
-                    if (routeIndex++ % routeStride == 0)
-                        route.add(
-                            ExerciseRoute.Location(
-                                t,
-                                row.values.getValue("latitude"),
-                                row.values.getValue("longitude"),
-                                row.values.getValue("horizontalAccuracyM").meters,
-                            )
-                        )
-                }
+        fun reason() =
+            reasons
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(
+                    " ",
+                    prefix = if (omitted > 0) "Health Connect omitted $omitted items. " else "",
+                )
+        try {
+            val meta = store.metadata(id)
+            require(meta.flag("saveToHealth") && meta.str("phase") == "completed")
+            val start = Instant.parse(meta.str("startedAt"))
+            val end = Instant.parse(meta.str("endedAt"))
+            clockFailure(start, end)?.let {
+                return it
             }
-            power.sortBy { it.time }
-            cadence.sortBy { it.time }
-            speed.sortBy { it.time }
-            flush()
-            after = rows.last().id
-        }
-        val selected = RideDistance(store).selected(id, "auto")
-        if (selected != null) {
-            val records = mutableListOf<Record>()
-            var index = 0
-            store.readableDatabase
-                .rawQuery(
-                    "SELECT start,end,meters FROM distance_intervals WHERE ride=? AND source=? ORDER BY end",
-                    arrayOf(id, selected),
+            prepare(meta.flag("recordGPS"))
+            fun instant(value: String?) = value?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            fun contains(a: Instant?, b: Instant?) = a != null && b != null && a >= start && b <= end && b > a
+            fun metadata(part: String) =
+                Metadata.activelyRecorded(
+                    device = Device(type = Device.TYPE_PHONE),
+                    clientRecordId = "power-log:$id:$part",
+                    clientRecordVersion = 1,
                 )
-                .use { cursor ->
-                    var a = 0.0
-                    var b = 0.0
-                    var meters = 0.0
-                    suspend fun flushDistance() {
-                        if (b <= a) return
-                        records.add(
-                            DistanceRecord(
-                                time(a),
-                                ZoneOffset.UTC,
-                                time(b),
-                                ZoneOffset.UTC,
-                                meters.meters,
-                                metadata("distance:${index++}"),
-                            )
+            val power = mutableListOf<PowerRecord.Sample>()
+            val cadence = mutableListOf<CyclingPedalingCadenceRecord.Sample>()
+            val speed = mutableListOf<SpeedRecord.Sample>()
+            val route = mutableListOf<ExerciseRoute.Location>()
+            val routeTimes = mutableSetOf<Instant>()
+            val routeStride = kotlin.math.max(1, kotlin.math.ceil(store.count(id, "location") / 5000.0).toInt())
+            var routeIndex = 0
+            var batch = 0
+            fun bounds(first: Instant, last: Instant): Pair<Instant, Instant> {
+                val a = if (first == end) end.minusMillis(1).coerceAtLeast(start) else first
+                val b = if (last == end) end else last.plusMillis(1).coerceAtMost(end)
+                check(contains(a, b))
+                return a to b
+            }
+            suspend fun flush() {
+                val records = mutableListOf<Record>()
+                if (power.isNotEmpty()) {
+                    power.sortBy { it.time }
+                    val (a, b) = bounds(power.first().time, power.last().time)
+                    records.add(
+                        PowerRecord(a, ZoneOffset.UTC, b, ZoneOffset.UTC, power.toList(), metadata("power:$batch"))
+                    )
+                }
+                if (cadence.isNotEmpty()) {
+                    cadence.sortBy { it.time }
+                    val (a, b) = bounds(cadence.first().time, cadence.last().time)
+                    records.add(
+                        CyclingPedalingCadenceRecord(
+                            a,
+                            ZoneOffset.UTC,
+                            b,
+                            ZoneOffset.UTC,
+                            cadence.toList(),
+                            metadata("cadence:$batch"),
                         )
-                        if (records.size >= 100) {
-                            write(records.toList())
-                            records.clear()
+                    )
+                }
+                if (speed.isNotEmpty()) {
+                    speed.sortBy { it.time }
+                    val (a, b) = bounds(speed.first().time, speed.last().time)
+                    records.add(
+                        SpeedRecord(a, ZoneOffset.UTC, b, ZoneOffset.UTC, speed.toList(), metadata("speed:$batch"))
+                    )
+                }
+                if (records.isNotEmpty()) {
+                    write(records)
+                    written += power.size + cadence.size + speed.size
+                }
+                power.clear()
+                cadence.clear()
+                speed.clear()
+                batch++
+            }
+            // Chunking keeps Binder payloads and memory independent of ride duration.
+            var after = 0L
+            while (true) {
+                val rows = store.page(id, after, 512)
+                if (rows.isEmpty()) break
+                for (row in rows) {
+                    val t = instant(row.timestamp)
+                    fun eligible(
+                        value: Double,
+                        range: ClosedFloatingPointRange<Double>,
+                        gps: Boolean = false,
+                    ): Boolean {
+                        val cause =
+                            when {
+                                !row.active || (gps && !meta.flag("recordGPS")) ->
+                                    "Inactive or disabled measurements were omitted."
+                                t == null || t < start || t > end ->
+                                    "Measurements outside the retained workout UTC interval were omitted."
+                                !value.isFinite() || value !in range -> "Invalid measurement values were omitted."
+                                gps && row.values["horizontalAccuracyM"]?.let { it in 0.0..50.0 } != true ->
+                                    "GPS fixes with invalid accuracy were omitted."
+                                else -> null
+                            }
+                        if (cause != null) omit(cause)
+                        return cause == null
+                    }
+                    row.values["humanPowerW"]?.let {
+                        if (eligible(it, 0.0..10000.0)) power.add(PowerRecord.Sample(t!!, it.watts))
+                    }
+                    row.values["cadenceRpm"]?.let {
+                        if (eligible(it, 0.0..10000.0)) cadence.add(CyclingPedalingCadenceRecord.Sample(t!!, it))
+                    }
+                    if (row.kind == "location") {
+                        row.values["speedMps"]?.let {
+                            if (eligible(it, 0.0..40.0, gps = true))
+                                speed.add(SpeedRecord.Sample(t!!, it.metersPerSecond))
+                        }
+                        if (!eligible(row.values["latitude"] ?: Double.NaN, -90.0..90.0, gps = true)) continue
+                        val longitude = row.values["longitude"]
+                        when {
+                            longitude == null || longitude !in -180.0..180.0 ->
+                                omit("Invalid route coordinates were omitted.")
+                            t == end -> omit("Route points at the workout end were omitted.")
+                            routeIndex++ % routeStride != 0 ->
+                                omit("Route points were reduced to the Health Connect limit.")
+                            !routeTimes.add(t!!) -> omit("Duplicate route timestamps were omitted.")
+                            else ->
+                                route.add(
+                                    ExerciseRoute.Location(
+                                        t!!,
+                                        row.values.getValue("latitude"),
+                                        longitude,
+                                        row.values.getValue("horizontalAccuracyM").meters,
+                                    )
+                                )
                         }
                     }
-                    while (cursor.moveToNext()) {
-                        val x = cursor.getDouble(0)
-                        val y = cursor.getDouble(1)
-                        if (x != b || y - a > 60) {
-                            flushDistance()
-                            a = x
-                            meters = 0.0
-                        }
-                        if (b == 0.0) a = x
-                        b = y
-                        meters += cursor.getDouble(2)
-                    }
-                    flushDistance()
-                    if (records.isNotEmpty()) write(records)
                 }
-        }
-        val events = store.events(id)
-        val segments = mutableListOf<ExerciseSegment>()
-        var paused: Double? = null
-        events.forEach { (t, action) ->
-            if (action == "pause") paused = t
-            else if (action in listOf("resume", "stop")) {
-                paused?.let {
-                    if (t > it)
-                        segments.add(
-                            ExerciseSegment(
-                                time(it),
-                                time(t),
-                                ExerciseSegment.EXERCISE_SEGMENT_TYPE_PAUSE,
-                            )
-                        )
-                }
-                paused = null
+                flush()
+                after = rows.last().id
             }
-        }
-        val laps =
-            (listOf(0.0) + events.filter { it.second == "lap" }.map { it.first } + elapsed)
-                .zipWithNext()
-                .filter { (a, b) -> b > a }
-                .map { (a, b) -> ExerciseLap(time(a), time(b)) }
-        write(
-            listOf(
-                ExerciseSessionRecord(
-                    start,
-                    ZoneOffset.UTC,
-                    end,
-                    ZoneOffset.UTC,
-                    metadata("session"),
-                    if (meta.flag("indoor")) ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY
-                    else ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
-                    title = "Power Log ride",
-                    segments = segments,
-                    laps = laps,
-                    exerciseRoute =
-                        route
-                            .takeIf { it.isNotEmpty() }
-                            ?.distinctBy { it.time }
-                            ?.sortedBy { it.time }
-                            ?.let { ExerciseRoute(it) },
+            val selected = RideDistance(store).selected(id, "auto")
+            if (selected != null) {
+                val records = mutableListOf<Record>()
+                var recordItems = 0
+                var index = 0
+                store.readableDatabase
+                    .rawQuery(
+                        "SELECT d.start,d.end,d.meters,a.timestamp,b.timestamp,d.from_id,d.to_id FROM distance_intervals d LEFT JOIN observations a ON a.id=d.from_id AND a.ride=d.ride LEFT JOIN observations b ON b.id=d.to_id AND b.ride=d.ride WHERE d.ride=? AND d.source=? ORDER BY d.end",
+                        arrayOf(id, selected),
+                    )
+                    .use { cursor ->
+                        var a: Instant? = null
+                        var b: Instant? = null
+                        var fromElapsed = 0.0
+                        var toElapsed = 0.0
+                        var toID = 0L
+                        var meters = 0.0
+                        var items = 0
+                        suspend fun flushDistance() {
+                            if (items == 0) return
+                            records.add(
+                                DistanceRecord(
+                                    a!!,
+                                    ZoneOffset.UTC,
+                                    b!!,
+                                    ZoneOffset.UTC,
+                                    meters.meters,
+                                    metadata("distance:${index++}"),
+                                )
+                            )
+                            recordItems += items
+                            items = 0
+                            if (records.size >= 100) {
+                                write(records.toList())
+                                written += recordItems
+                                records.clear()
+                                recordItems = 0
+                            }
+                        }
+                        while (cursor.moveToNext()) {
+                            val x = instant(cursor.getString(3))
+                            val y = instant(cursor.getString(4))
+                            val amount = cursor.getDouble(2)
+                            if (!contains(x, y) || !amount.isFinite() || amount !in 0.0..1000000.0) {
+                                flushDistance()
+                                omit("Invalid or out-of-workout distance intervals were omitted.")
+                                continue
+                            }
+                            if (
+                                items > 0 &&
+                                    (cursor.getDouble(0) != toElapsed ||
+                                        cursor.getLong(5) != toID ||
+                                        x != b ||
+                                        cursor.getDouble(1) - fromElapsed > 60 ||
+                                        y!! > a!!.plusSeconds(60) ||
+                                        meters + amount > 1000000.0)
+                            )
+                                flushDistance()
+                            if (items == 0) {
+                                a = x
+                                fromElapsed = cursor.getDouble(0)
+                                meters = 0.0
+                            }
+                            b = y
+                            toElapsed = cursor.getDouble(1)
+                            toID = cursor.getLong(6)
+                            meters += amount
+                            items++
+                        }
+                        flushDistance()
+                        if (records.isNotEmpty()) {
+                            write(records)
+                            written += recordItems
+                        }
+                    }
+            }
+            val events = store.events(id)
+            val segments = mutableListOf<ExerciseSegment>()
+            var paused: RideEvent? = null
+            for (event in events) {
+                if (event.action == "pause") {
+                    if (paused != null) omit("Unpaired pause events were omitted.")
+                    paused = event
+                } else if (event.action in listOf("resume", "stop")) {
+                    paused?.let {
+                        val a = instant(it.timestamp)
+                        val b = instant(event.timestamp)
+                        if (contains(a, b) && segments.none { a!! < it.endTime && b!! > it.startTime })
+                            segments.add(ExerciseSegment(a!!, b!!, ExerciseSegment.EXERCISE_SEGMENT_TYPE_PAUSE))
+                        else omit("Invalid or overlapping pause intervals were omitted.")
+                    }
+                    paused = null
+                }
+            }
+            if (paused != null) omit("Unpaired pause events were omitted.")
+            val laps = mutableListOf<ExerciseLap>()
+            val boundaries = listOf(start) + events.filter { it.action == "lap" }.map { instant(it.timestamp) } + end
+            for ((a, b) in boundaries.zipWithNext()) {
+                if (contains(a, b) && laps.none { a!! < it.endTime && b!! > it.startTime })
+                    laps.add(ExerciseLap(a!!, b!!))
+                else omit("Invalid or overlapping lap intervals were omitted.")
+            }
+            write(
+                listOf(
+                    ExerciseSessionRecord(
+                        start,
+                        ZoneOffset.UTC,
+                        end,
+                        ZoneOffset.UTC,
+                        metadata("session"),
+                        if (meta.flag("indoor")) ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY
+                        else ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+                        title = "Power Log ride",
+                        segments = segments.sortedBy { it.startTime },
+                        laps = laps.sortedBy { it.startTime },
+                        exerciseRoute =
+                            route.takeIf { it.isNotEmpty() }?.sortedBy { it.time }?.let { ExerciseRoute(it) },
+                    )
                 )
             )
-        )
+            written += 1 + segments.size + laps.size + route.size
+            return HealthExportResult("saved", written, omitted, reason())
+        } catch (error: Exception) {
+            reasons.add("Health Connect saving failed: ${error.message ?: "Try again."}")
+            return HealthExportResult("notSaved", written, omitted, reason())
+        }
+    }
+
+    companion object {
+        fun clockFailure(start: Instant, end: Instant): HealthExportResult? =
+            if (end > start) null
+            else
+                HealthExportResult(
+                    "unavailable",
+                    reason =
+                        "Health Connect is unavailable for this ride because its clock cutoff is not after its start.",
+                )
     }
 }

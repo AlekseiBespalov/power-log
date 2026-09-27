@@ -3,33 +3,47 @@ import Foundation
 enum CycReconnectPolicy {
   static let stablePeriod: Double = 30
   static func mayRetry(attempt: Int, activeRide: Bool) -> Bool { attempt <= 5 || activeRide }
-  static func recoveryDelay(attempt: Int, activeRide: Bool, confirmedPeerDisconnect: Bool, stableTelemetrySeconds: Double?) -> Double {
+  static func recoveryDelay(
+    attempt: Int, activeRide: Bool, confirmedPeerDisconnect: Bool, stableTelemetrySeconds: Double?
+  ) -> Double {
     if activeRide, attempt > 5 { return 30 }
-    return delay(attempt: attempt, confirmedPeerDisconnect: confirmedPeerDisconnect, stableTelemetrySeconds: stableTelemetrySeconds)
+    return delay(
+      attempt: attempt, confirmedPeerDisconnect: confirmedPeerDisconnect, stableTelemetrySeconds: stableTelemetrySeconds
+    )
   }
 
   static func delay(attempt: Int, confirmedPeerDisconnect: Bool, stableTelemetrySeconds: Double?) -> Double {
     if attempt == 1, confirmedPeerDisconnect, let stableTelemetrySeconds,
-      stableTelemetrySeconds.isFinite, stableTelemetrySeconds >= stablePeriod { return 0 }
+      stableTelemetrySeconds.isFinite, stableTelemetrySeconds >= stablePeriod
+    {
+      return 0
+    }
     return pow(2, Double(max(1, attempt) - 1))
   }
 
-  static func adoptSystemReconnect(attempt: Int, confirmedPeerDisconnect: Bool, stableTelemetrySeconds: Double?) -> Bool {
-    delay(attempt: attempt, confirmedPeerDisconnect: confirmedPeerDisconnect, stableTelemetrySeconds: stableTelemetrySeconds) == 0
+  static func adoptSystemReconnect(attempt: Int, confirmedPeerDisconnect: Bool, stableTelemetrySeconds: Double?) -> Bool
+  {
+    delay(
+      attempt: attempt, confirmedPeerDisconnect: confirmedPeerDisconnect, stableTelemetrySeconds: stableTelemetrySeconds
+    ) == 0
   }
 
   static func confirmedPeerDisconnect(callbackCompleted: Bool, initiator: String?) -> Bool {
     callbackCompleted && initiator == "peer_or_system"
   }
 
-  static func mustCancelBeforeRetry(callbackCompleted: Bool, systemIsReconnecting: Bool,
-    systemAttemptPending: Bool, peripheralIsDisconnected: Bool, adoptingSystemReconnect: Bool) -> Bool {
+  static func mustCancelBeforeRetry(
+    callbackCompleted: Bool, systemIsReconnecting: Bool,
+    systemAttemptPending: Bool, peripheralIsDisconnected: Bool, adoptingSystemReconnect: Bool
+  ) -> Bool {
     guard !adoptingSystemReconnect else { return false }
     // A completed callback is stronger evidence than the asynchronously changing peripheral state.
     return systemIsReconnecting || systemAttemptPending || (!callbackCompleted && !peripheralIsDisconnected)
   }
 
-  static func displayError(storage: String?, other: String?, recovery: String?, reconnecting: Bool) -> (message: String?, recoverable: Bool) {
+  static func displayError(storage: String?, other: String?, recovery: String?, reconnecting: Bool) -> (
+    message: String?, recoverable: Bool
+  ) {
     if let storage { return (storage, false) }
     if let other { return (other, false) }
     return (recovery, reconnecting && recovery != nil)
@@ -37,14 +51,18 @@ enum CycReconnectPolicy {
 }
 
 enum CycPollingSchedule {
-  static func delay(now: Double, poweredOn: Bool, verified: Bool, scanning: Bool,
+  static func delay(
+    now: Double, poweredOn: Bool, verified: Bool, scanning: Bool,
     scanDeadline: Double?, reconnectDue: Double?, connectionDeadline: Double?, cancellationPending: Bool,
-    responseDeadline: Double?, writeDeadline: Double?, nextPoll: Double?, sampleDeadline: Double?) -> Double {
+    responseDeadline: Double?, writeDeadline: Double?, nextPoll: Double?, sampleDeadline: Double?
+  ) -> Double {
     guard poweredOn else { return 5 }
     let reconnect = cancellationPending && (reconnectDue ?? .infinity) <= now ? nil : reconnectDue
     var deadline = now + (verified || scanning ? 0.25 : 5)
-    for value in [scanDeadline, reconnect, connectionDeadline, responseDeadline, writeDeadline, nextPoll,
-      sampleDeadline.flatMap { $0 > now ? $0 : nil }].compactMap({ $0 }) { deadline = min(deadline, value) }
+    for value in [
+      scanDeadline, reconnect, connectionDeadline, responseDeadline, writeDeadline, nextPoll,
+      sampleDeadline.flatMap { $0 > now ? $0 : nil },
+    ].compactMap({ $0 }) { deadline = min(deadline, value) }
     return max(0.005, deadline - now)
   }
 }
@@ -147,9 +165,12 @@ struct CycDisconnectDiagnostic {
   let sampleAgeSeconds: Double?
 
   var dictionary: [String: Any] {
-    ["initiator": initiator, "reason": reason.rawValue,
+    [
+      "initiator": initiator, "reason": reason.rawValue,
       "errorDomain": errorDomain as Any? ?? NSNull(), "errorCode": errorCode as Any? ?? NSNull(),
-      "connectionSeconds": connectionSeconds as Any? ?? NSNull(), "sampleAgeSeconds": sampleAgeSeconds as Any? ?? NSNull()]
+      "connectionSeconds": connectionSeconds as Any? ?? NSNull(),
+      "sampleAgeSeconds": sampleAgeSeconds as Any? ?? NSNull(),
+    ]
   }
 }
 
@@ -208,9 +229,12 @@ struct CycDiagnosticMetrics {
     cancelledSampleAgeSeconds = sampleAge(at: now)
   }
 
-  mutating func disconnected(at now: Double, error: Error?, defaultReason: CycDiagnosticReason = .linkDisconnected) -> [String: Any] {
+  mutating func disconnected(at now: Double, error: Error?, defaultReason: CycDiagnosticReason = .linkDisconnected)
+    -> [String: Any]
+  {
     let nsError = error as NSError?
-    let detail = CycDisconnectDiagnostic(initiator: cancellationReason == nil ? "peer_or_system" : "app",
+    let detail = CycDisconnectDiagnostic(
+      initiator: cancellationReason == nil ? "peer_or_system" : "app",
       reason: cancellationReason ?? defaultReason,
       errorDomain: nsError.map { CycDiagnosticLog.safeErrorDomain($0.domain) }, errorCode: nsError?.code,
       connectionSeconds: connectionSeconds(at: now), sampleAgeSeconds: sampleAge(at: now))
@@ -229,7 +253,10 @@ struct CycDiagnosticMetrics {
 
   mutating func receivedSample(at now: Double, responseSeconds: Double) -> Double? {
     let gap = lastSample.flatMap { now - $0 > CycProtocol.maximumGap ? now - $0 : nil }
-    if let gap { lastGapSeconds = gap; resetWindow(at: now) }
+    if let gap {
+      lastGapSeconds = gap
+      resetWindow(at: now)
+    }
     sampleCount += 1
     linkSamples += 1
     lastSample = now
@@ -247,7 +274,8 @@ struct CycDiagnosticMetrics {
 
   func recentSampleHz(at now: Double) -> Double? {
     guard let first = windowFirstSample, let last = windowLastSample,
-      windowSamples > 1, last > first, now - last <= CycProtocol.maximumGap else { return nil }
+      windowSamples > 1, last > first, now - last <= CycProtocol.maximumGap
+    else { return nil }
     return Double(windowSamples - 1) / (last - first)
   }
 
@@ -280,14 +308,19 @@ final class CycDiagnosticLog {
   private var writeError: Error?
 
   init(directory: URL? = nil, byteLimit: Int = CycDiagnosticLog.maximumFileBytes) throws {
-    self.directory = try directory ?? FileManager.default.url(for: .applicationSupportDirectory,
-      in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("PowerLog/diagnostics", isDirectory: true)
+    self.directory =
+      try directory
+      ?? FileManager.default.url(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask, appropriateFor: nil, create: true
+      ).appendingPathComponent("PowerLog/diagnostics", isDirectory: true)
     self.currentURL = self.directory.appendingPathComponent("events.jsonl")
     self.previousURL = self.directory.appendingPathComponent("events.previous.jsonl")
     self.byteLimit = max(512, min(byteLimit, Self.maximumFileBytes))
     try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
     #if os(iOS)
-    try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: self.directory.path)
+      try FileManager.default.setAttributes(
+        [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: self.directory.path)
     #endif
     var resourceURL = self.directory
     var values = URLResourceValues()
@@ -297,14 +330,18 @@ final class CycDiagnosticLog {
     let recovered = try readBounded(currentURL)
     try recovered.write(to: currentURL, options: .atomic)
     let previous = try readBounded(previousURL)
-    if FileManager.default.fileExists(atPath: previousURL.path) { try previous.write(to: previousURL, options: .atomic) }
+    if FileManager.default.fileExists(atPath: previousURL.path) {
+      try previous.write(to: previousURL, options: .atomic)
+    }
     currentBytes = recovered.count
     handle = try FileHandle(forWritingTo: currentURL)
     try handle?.seekToEnd()
   }
 
   static func safeErrorDomain(_ domain: String) -> String {
-    let allowed: Set<String> = ["CBErrorDomain", "CBATTErrorDomain", "NSCocoaErrorDomain", "NSPOSIXErrorDomain", "NSOSStatusErrorDomain"]
+    let allowed: Set<String> = [
+      "CBErrorDomain", "CBATTErrorDomain", "NSCocoaErrorDomain", "NSPOSIXErrorDomain", "NSOSStatusErrorDomain",
+    ]
     return allowed.contains(domain) ? domain : "OtherErrorDomain"
   }
 
@@ -317,10 +354,12 @@ final class CycDiagnosticLog {
     guard elapsedSeconds.isFinite, elapsedSeconds >= 0 else { return }
     var entry = Self.sanitized(fields)
     entry["schemaVersion"] = 1
-    entry["timestamp"] = CycProtocol.timestamp()
+    entry["timestamp"] = WorkoutCoding.timestamp(Date())
     entry["elapsedSeconds"] = elapsedSeconds
     entry["event"] = event.rawValue
-    guard var bytes = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]), bytes.count + 1 <= byteLimit else { return }
+    guard var bytes = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]),
+      bytes.count + 1 <= byteLimit
+    else { return }
     bytes.append(10)
     let payload = bytes
     queue.async {
@@ -338,7 +377,9 @@ final class CycDiagnosticLog {
       try handle?.synchronize()
       if writeError != nil { throw CycError.invalid("Private diagnostic storage is unavailable.") }
       let bytes = try readBounded(previousURL) + readBounded(currentURL)
-      guard let text = String(data: bytes, encoding: .utf8) else { throw CycError.invalid("Private diagnostic log is not UTF-8.") }
+      guard let text = String(data: bytes, encoding: .utf8) else {
+        throw CycError.invalid("Private diagnostic log is not UTF-8.")
+      }
       return text
     }
   }
@@ -363,32 +404,56 @@ final class CycDiagnosticLog {
     try reader.seek(toOffset: offset)
     var data = try reader.read(upToCount: byteLimit) ?? Data()
     // A retained tail starts in an unknown line; omit that line rather than emit malformed JSON.
-    if offset > 0, let newline = data.firstIndex(of: 10) { data.removeSubrange(...newline) }
-    else if offset > 0 { return Data() }
+    if offset > 0, let newline = data.firstIndex(of: 10) {
+      data.removeSubrange(...newline)
+    } else if offset > 0 {
+      return Data()
+    }
     guard let lastNewline = data.lastIndex(of: 10) else { return Data() }
     data.removeSubrange(data.index(after: lastNewline)..<data.endIndex)
     return data
   }
 
   private static func sanitized(_ fields: [String: Any]) -> [String: Any] {
-    let numbers: Set<String> = ["requestedHz", "sampleCount", "connectionAttempts", "reconnects", "requestTimeouts",
-      "decoderDiscardedBytes", "lastSampleAgeSeconds", "gapSeconds", "linkSamples", "connectionSeconds", "sampleAgeSeconds",
+    let numbers: Set<String> = [
+      "requestedHz", "sampleCount", "connectionAttempts", "reconnects", "requestTimeouts",
+      "decoderDiscardedBytes", "lastSampleAgeSeconds", "gapSeconds", "linkSamples", "connectionSeconds",
+      "sampleAgeSeconds",
       "cancellationCallbackSeconds", "connectionSecondsAtCancel", "sampleAgeSecondsAtCancel", "requestAgeSeconds",
-      "writeBlockedSeconds", "retryAttempt", "retryDelaySeconds", "errorCode", "recentSampleHz", "latencyMeanMs", "latencyMaxMs",
-      "notificationErrors", "unexpectedReplies", "pendingBytes", "queueDelaySeconds", "storageWriteMs", "connectionGeneration"]
+      "writeBlockedSeconds", "retryAttempt", "retryDelaySeconds", "errorCode", "recentSampleHz", "latencyMeanMs",
+      "latencyMaxMs",
+      "notificationErrors", "unexpectedReplies", "pendingBytes", "queueDelaySeconds", "storageWriteMs",
+      "connectionGeneration",
+    ]
     var safe: [String: Any] = [:]
     for (key, value) in fields {
-      if numbers.contains(key), let number = value as? NSNumber, number.doubleValue.isFinite { safe[key] = number }
-      else if ["background", "systemReconnect"].contains(key), let value = value as? Bool { safe[key] = value }
-      else if key == "transportStage", let value = value as? String, CycConnectionAttempt.Stage(rawValue: value) != nil { safe[key] = value }
-      else if key == "reason", let value = value as? String, CycDiagnosticReason(rawValue: value) != nil { safe[key] = value }
-      else if key == "errorDomain", let value = value as? String { safe[key] = safeErrorDomain(value) }
-      else if key == "initiator", let value = value as? String, ["app", "peer_or_system"].contains(value) { safe[key] = value }
-      else if key == "request", let value = value as? String, ["identity", "selective"].contains(value) { safe[key] = value }
-      else if key == "manager", let value = value as? String, value == "central" { safe[key] = value }
-      else if key == "status", let value = value as? String, ["idle", "scanning", "connecting", "connected", "reconnecting", "error"].contains(value) { safe[key] = value }
-      else if key == "bluetoothState", let value = value as? String,
-        ["unknown", "resetting", "unsupported", "unauthorized", "poweredOff", "poweredOn"].contains(value) { safe[key] = value }
+      if numbers.contains(key), let number = value as? NSNumber, number.doubleValue.isFinite {
+        safe[key] = number
+      } else if ["background", "systemReconnect"].contains(key), let value = value as? Bool {
+        safe[key] = value
+      } else if key == "transportStage", let value = value as? String,
+        CycConnectionAttempt.Stage(rawValue: value) != nil
+      {
+        safe[key] = value
+      } else if key == "reason", let value = value as? String, CycDiagnosticReason(rawValue: value) != nil {
+        safe[key] = value
+      } else if key == "errorDomain", let value = value as? String {
+        safe[key] = safeErrorDomain(value)
+      } else if key == "initiator", let value = value as? String, ["app", "peer_or_system"].contains(value) {
+        safe[key] = value
+      } else if key == "request", let value = value as? String, ["identity", "selective"].contains(value) {
+        safe[key] = value
+      } else if key == "manager", let value = value as? String, value == "central" {
+        safe[key] = value
+      } else if key == "status", let value = value as? String,
+        ["idle", "scanning", "connecting", "connected", "reconnecting", "error"].contains(value)
+      {
+        safe[key] = value
+      } else if key == "bluetoothState", let value = value as? String,
+        ["unknown", "resetting", "unsupported", "unauthorized", "poweredOff", "poweredOn"].contains(value)
+      {
+        safe[key] = value
+      }
     }
     return safe
   }

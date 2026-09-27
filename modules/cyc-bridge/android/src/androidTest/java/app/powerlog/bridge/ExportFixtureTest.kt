@@ -21,12 +21,11 @@ class ExportFixtureTest {
         val monitor = RideMonitor(store, distance)
         val output = File(context.getExternalFilesDir(null), "verification").apply { mkdirs() }
         try {
-            val id = store.create(mapOf("recordGPS" to false, "saveToHealth" to false))
+            val id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
             store.update(
                 id,
                 "running",
-                0.0,
-                0.0,
+                RideTiming(0.0, 0.0, iso(1767225600000L)),
                 mapOf("example" to true, "startedAt" to iso(1767225600000L)),
             )
             for (batch in 0 until 2400 step 128) store.transaction {
@@ -68,10 +67,10 @@ class ExportFixtureTest {
                     )
                 }
             }
-            store.lifecycle(id, 100.0, "pause")
-            store.lifecycle(id, 110.0, "resume")
-            store.lifecycle(id, 180.0, "lap")
-            store.seal(id, 300.0, 290.0, iso(1767225900000L))
+            store.lifecycle(id, RideTiming(100.0, 100.0, iso(1767225700000L)), "pause")
+            store.lifecycle(id, RideTiming(110.0, 100.0, iso(1767225710000L)), "resume")
+            store.lifecycle(id, RideTiming(180.0, 170.0, iso(1767225780000L)), "lap")
+            store.seal(id, RideTiming(300.0, 290.0, iso(1767225900000L)))
             val exporter = RideExport(context, store, distance, monitor)
             File(URI(exporter.fit(id, "auto"))).copyTo(File(output, "synthetic.fit"), true)
             File(URI(exporter.archive(id))).copyTo(File(output, "synthetic.zip"), true)

@@ -2,14 +2,27 @@ import type { ChartViewport } from './chart-viewport';
 import type { MonitorSnap } from './monitor-hit-test';
 
 export type ChartPresentation = {
-  view: ChartViewport; domain: ChartViewport; cursor: number | null; reference: number | null;
+  view: ChartViewport;
+  domain: ChartViewport;
+  cursor: number | null;
+  reference: number | null;
 };
 export type ChartInteractionState = ChartPresentation & {
-  epoch: number; sequence: number; active: 0 | 1 | 2; cursorAt: number; viewportAt: number; snap: MonitorSnap | null;
+  epoch: number;
+  sequence: number;
+  active: 0 | 1 | 2;
+  cursorAt: number;
+  viewportAt: number;
+  snap: MonitorSnap | null;
 };
 export type ChartInteractionEvent = {
-  epoch: number; sequence: number; kind: 'cursor' | 'viewport'; final: boolean;
-  view: ChartViewport; cursor: number | null; snap?: MonitorSnap | null;
+  epoch: number;
+  sequence: number;
+  kind: 'cursor' | 'viewport';
+  final: boolean;
+  view: ChartViewport;
+  cursor: number | null;
+  snap?: MonitorSnap | null;
 };
 export function chartInteractionState(presentation: ChartPresentation, epoch: number): ChartInteractionState {
   'worklet';
@@ -17,20 +30,42 @@ export function chartInteractionState(presentation: ChartPresentation, epoch: nu
 }
 
 /** UI movement is immediate. Only bounded readout/query notifications cross to JS. */
-export function moveChartInteraction(state: ChartInteractionState, kind: ChartInteractionEvent['kind'], view: ChartViewport, cursor: number | null, now: number, final: boolean, snap: MonitorSnap | null = null) {
+export function moveChartInteraction(
+  state: ChartInteractionState,
+  kind: ChartInteractionEvent['kind'],
+  view: ChartViewport,
+  cursor: number | null,
+  now: number,
+  final: boolean,
+  snap: MonitorSnap | null = null,
+) {
   'worklet';
   const sequence = state.sequence + 1;
   const last = kind === 'cursor' ? state.cursorAt : state.viewportAt;
   const publish = final || now - last >= (kind === 'cursor' ? 50 : 100);
-  const next: ChartInteractionState = { ...state, view, cursor, sequence, snap, active: final ? 0 : kind === 'cursor' ? 1 : 2,
+  const next: ChartInteractionState = {
+    ...state,
+    view,
+    cursor,
+    sequence,
+    snap,
+    active: final ? 0 : kind === 'cursor' ? 1 : 2,
     cursorAt: kind === 'cursor' && publish ? now : state.cursorAt,
-    viewportAt: kind === 'viewport' && publish ? now : state.viewportAt };
-  const event: ChartInteractionEvent | null = publish ? { epoch: state.epoch, sequence, kind, final, view, cursor, snap } : null;
+    viewportAt: kind === 'viewport' && publish ? now : state.viewportAt,
+  };
+  const event: ChartInteractionEvent | null = publish
+    ? { epoch: state.epoch, sequence, kind, final, view, cursor, snap }
+    : null;
   return { state: next, event };
 }
 
 /** Delayed React commits may update the domain but never rewind a newer gesture. */
-export function synchronizeChartInteraction(state: ChartInteractionState, presentation: ChartPresentation, epoch: number, acknowledgedSequence: number): ChartInteractionState {
+export function synchronizeChartInteraction(
+  state: ChartInteractionState,
+  presentation: ChartPresentation,
+  epoch: number,
+  acknowledgedSequence: number,
+): ChartInteractionState {
   'worklet';
   if (epoch !== state.epoch) return state;
   if (state.active !== 0 || acknowledgedSequence < state.sequence) return { ...state, domain: presentation.domain };
@@ -49,5 +84,9 @@ export class ChartInteractionGate {
     this.sequence = event.sequence;
     return true;
   }
-  invalidate() { this.epoch++; this.sequence = 0; this.navigating = false; }
+  invalidate() {
+    this.epoch++;
+    this.sequence = 0;
+    this.navigating = false;
+  }
 }

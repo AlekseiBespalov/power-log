@@ -5,7 +5,6 @@ import CoreBluetooth
 final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   static let shared = CycEngine()
   let queue = DispatchQueue(label: "app.powerlog.cyc", qos: .utility)
-  private let exportQueue = DispatchQueue(label: "app.powerlog.cyc.export", qos: .utility)
   private static let uart = CBUUID(string: "6e400001-b5a3-f393-e0a9-e50e24dcca9e")
   private static let writeUUID = CBUUID(string: "6e400002-b5a3-f393-e0a9-e50e24dcca9e")
   private static let notifyUUID = CBUUID(string: "6e400003-b5a3-f393-e0a9-e50e24dcca9e")
@@ -23,7 +22,6 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   private var lastSample: Double?
   private var shouldConnect = false
   private var verified = false
-  private var controllerAdapter: CycControllerAdapter?
   // Only sanitized model/version metadata is cached, never the opaque identity tail.
   private var knownControllers: [String: CycControllerIdentity] = [:]
   private var deviceRSSI: [UUID: Int] = [:]
@@ -65,10 +63,11 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     super.init()
     queue.async {
       if let data = self.defaults.data(forKey: "PowerLog.knownControllers"),
-        let known = try? JSONDecoder().decode([String: CycControllerIdentity].self, from: data) {
+        let known = try? JSONDecoder().decode([String: CycControllerIdentity].self, from: data)
+      {
         self.knownControllers = known
       }
-      do { self.diagnosticLog = try CycDiagnosticLog() } catch { /* Logging must not disable ride capture. */ }
+      do { self.diagnosticLog = try CycDiagnosticLog() } catch { /* Logging must not disable ride capture. */  }
       self.note(.engineStarted)
     }
   }
@@ -80,7 +79,8 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   func captureResult(_ failure: Error?) {
     let next = failure.map { "Recording storage failed: \($0.localizedDescription)" }
     guard storeError != next else { return }
-    storeError = next; emitState()
+    storeError = next
+    emitState()
   }
   private func emit(_ event: String, _ body: [String: Any]) {
     guard !background else { return }
@@ -98,7 +98,8 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
         value["firmwareLabel"] = identity.firmwareLabel
       }
     }
-    let displayError = CycReconnectPolicy.displayError(storage: storeError, other: errorMessage,
+    let displayError = CycReconnectPolicy.displayError(
+      storage: storeError, other: errorMessage,
       recovery: recoveryErrorMessage, reconnecting: status == "reconnecting")
     if let error = displayError.message { value["error"] = error }
     value["recoverableConnectionError"] = displayError.recoverable
@@ -107,32 +108,32 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
 
   func diagnostics() -> [String: Any] {
     let current = now
-    return ["schemaVersion": 1, "timestamp": CycProtocol.timestamp(), "status": status, "requestedHz": hz,
-      "sampleCount": diagnosticMetrics.sampleCount, "connectionAttempts": diagnosticMetrics.connectionAttempts,
-      "reconnects": diagnosticMetrics.reconnects, "requestTimeouts": diagnosticMetrics.requestTimeouts,
-      "decoderDiscardedBytes": decoder.discardedBytes,
+    return [
+      "status": status, "requestedHz": hz,
+      "connectionAttempts": diagnosticMetrics.connectionAttempts, "reconnects": diagnosticMetrics.reconnects,
       "lastSampleAgeSeconds": diagnosticMetrics.sampleAge(at: current) as Any? ?? NSNull(),
       "lastGapSeconds": diagnosticMetrics.lastGapSeconds as Any? ?? NSNull(),
       "recentSampleHz": diagnosticMetrics.recentSampleHz(at: current) as Any? ?? NSNull(),
-      "responseLatencyMs": diagnosticMetrics.responseLatencyMs as Any? ?? NSNull(),
-      "lastDisconnect": diagnosticMetrics.lastDisconnect?.dictionary as Any? ?? NSNull(), "background": background]
+    ]
   }
 
-  func readDiagnostics(completion: @escaping (Result<String, Error>) -> Void) {
-    guard let diagnosticLog else { completion(.failure(CycError.invalid("Private diagnostic storage is unavailable."))); return }
-    exportQueue.async { completion(Result { try diagnosticLog.read() }) }
-  }
-
-  private func note(_ event: CycDiagnosticEvent, reason: CycDiagnosticReason? = nil, error: Error? = nil, fields: [String: Any] = [:]) {
+  private func note(
+    _ event: CycDiagnosticEvent, reason: CycDiagnosticReason? = nil, error: Error? = nil, fields: [String: Any] = [:]
+  ) {
     let current = now
-    var data: [String: Any] = ["status": status, "requestedHz": hz, "sampleCount": diagnosticMetrics.sampleCount,
+    var data: [String: Any] = [
+      "status": status, "requestedHz": hz, "sampleCount": diagnosticMetrics.sampleCount,
       "connectionAttempts": diagnosticMetrics.connectionAttempts, "reconnects": diagnosticMetrics.reconnects,
       "requestTimeouts": diagnosticMetrics.requestTimeouts, "decoderDiscardedBytes": decoder.discardedBytes,
       "linkSamples": diagnosticMetrics.linkSamples, "background": background,
-      "connectionGeneration": connectionAttempt.generation, "transportStage": connectionAttempt.stage.rawValue]
+      "connectionGeneration": connectionAttempt.generation, "transportStage": connectionAttempt.stage.rawValue,
+    ]
     if let duration = diagnosticMetrics.connectionSeconds(at: current) { data["connectionSeconds"] = duration }
     if let age = diagnosticMetrics.sampleAge(at: current) { data["lastSampleAgeSeconds"] = age }
-    if let pending { data["request"] = pending.request == .identity ? "identity" : "selective"; data["requestAgeSeconds"] = max(0, current - pending.sent) }
+    if let pending {
+      data["request"] = pending.request == .identity ? "identity" : "selective"
+      data["requestAgeSeconds"] = max(0, current - pending.sent)
+    }
     if let sendBlockedAt { data["writeBlockedSeconds"] = max(0, current - sendBlockedAt) }
     if let reason { data["reason"] = reason.rawValue }
     data.merge(CycDiagnosticLog.errorFields(error)) { _, value in value }
@@ -143,10 +144,16 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   private func summarizeIfDue() {
     let current = now
     guard shouldConnect, current >= diagnosticMetrics.nextSummary else { return }
-    var fields: [String: Any] = ["notificationErrors": notificationErrors, "unexpectedReplies": unexpectedReplies,
-      "pendingBytes": decoder.buffer.count, "queueDelaySeconds": maxQueueDelaySeconds, "storageWriteMs": maxStorageWriteMs]
+    var fields: [String: Any] = [
+      "notificationErrors": notificationErrors, "unexpectedReplies": unexpectedReplies,
+      "pendingBytes": decoder.buffer.count, "queueDelaySeconds": maxQueueDelaySeconds,
+      "storageWriteMs": maxStorageWriteMs,
+    ]
     if let rate = diagnosticMetrics.recentSampleHz(at: current) { fields["recentSampleHz"] = rate }
-    if let latency = diagnosticMetrics.responseLatencyMs { fields["latencyMeanMs"] = latency["mean"]; fields["latencyMaxMs"] = latency["max"] }
+    if let latency = diagnosticMetrics.responseLatencyMs {
+      fields["latencyMeanMs"] = latency["mean"]
+      fields["latencyMaxMs"] = latency["max"]
+    }
     fields["cpuSeconds"] = Self.processCPUSeconds()
     note(.telemetrySummary, fields: fields)
     diagnosticMetrics.resetWindow(at: current)
@@ -159,15 +166,20 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
       connectionAttempt.requestedCancellation()
       diagnosticMetrics.requestedCancellation(reason: reason, at: now)
       note(.disconnectRequested, reason: diagnosticMetrics.cancellationReason ?? reason, fields: ["initiator": "app"])
-    } else { note(.disconnectRequested, reason: reason, fields: ["initiator": "app"]) }
+    } else {
+      note(.disconnectRequested, reason: reason, fields: ["initiator": "app"])
+    }
     central?.cancelPeripheralConnection(peripheral)
   }
 
   private func ensureCentral() {
     guard central == nil else { return }
-    central = CBCentralManager(delegate: self, queue: queue,
-      options: [CBCentralManagerOptionRestoreIdentifierKey: "app.powerlog.cyc.central",
-        CBCentralManagerOptionShowPowerAlertKey: true])
+    central = CBCentralManager(
+      delegate: self, queue: queue,
+      options: [
+        CBCentralManagerOptionRestoreIdentifierKey: "app.powerlog.cyc.central",
+        CBCentralManagerOptionShowPowerAlertKey: true,
+      ])
   }
 
   private func ensureTimer() {
@@ -209,17 +221,24 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     guard scanRequested, let central, central.state == .poweredOn else { return }
     // Both verified families advertise UART. Always provide its UUID so discovery also
     // works when iOS treats a locked/mirrored app as background for Bluetooth scanning.
-    central.scanForPeripherals(withServices: [Self.uart],
+    central.scanForPeripherals(
+      withServices: [Self.uart],
       options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
   }
 
   func connect(deviceID: String, rate: Double) throws {
-    guard rate.isFinite, (1...8).contains(rate) else { throw CycError.invalid("Polling rate must be between 1 and 8 Hz.") }
-    guard let id = UUID(uuidString: deviceID) else { throw CycError.invalid("Invalid local Bluetooth device identifier.") }
+    let rate = try WorkoutRecordingPolicy.sampleHz(rate)
+    guard let id = UUID(uuidString: deviceID) else {
+      throw CycError.invalid("Invalid local Bluetooth device identifier.")
+    }
     guard !shouldConnect else { throw CycError.invalid("Disconnect the current controller before connecting again.") }
-    guard !connectionAttempt.cancellationPending else { throw CycError.invalid("Bluetooth is still finishing the previous disconnection. Try again shortly.") }
+    guard !connectionAttempt.cancellationPending else {
+      throw CycError.invalid("Bluetooth is still finishing the previous disconnection. Try again shortly.")
+    }
     ensureCentral()
-    guard let central, central.state == .poweredOn else { throw CycError.invalid("Bluetooth must be powered on; scan first to request permission.") }
+    guard let central, central.state == .poweredOn else {
+      throw CycError.invalid("Bluetooth must be powered on; scan first to request permission.")
+    }
     guard let device = devices[id] ?? central.retrievePeripherals(withIdentifiers: [id]).first else {
       throw CycError.invalid("Device is unknown to iOS. Scan and select it again.")
     }
@@ -231,7 +250,10 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     sessionStarted = now
     sessionSamples = 0
     captureClock = CycCaptureClock(origin: sessionStarted)
-    MonitorDataStore.shared.beginLive(startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted, id: captureClock.sessionID)
+    latestSample = nil
+    MonitorDataStore.shared.beginLive(
+      startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted, id: captureClock.sessionID
+    )
     diagnosticMetrics.beginSession(at: now)
     decoder = CycFrameDecoder()
     notificationErrors = 0
@@ -251,7 +273,8 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     hz = try WorkoutRecordingPolicy.sampleHz(rate)
     nextPoll = max(now, (pending?.sent ?? lastSample ?? now) + 1 / rate)
     defaults.set(rate, forKey: "PowerLog.pollHz")
-    scheduleNextTick(); emitState()
+    scheduleNextTick()
+    emitState()
   }
 
   func setWorkoutSamplingOwner(_ id: String?, rate: Double?) {
@@ -261,13 +284,17 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     workoutSampling.update(id: id, rate: rate ?? restored)
     if previous != nil, id == nil, status == "reconnecting" { try? disconnect() }
     if let admitted = workoutSampling.rate, hz != admitted {
-      hz = admitted; nextPoll = max(now, (pending?.sent ?? lastSample ?? now) + 1 / hz)
-      defaults.set(hz, forKey: "PowerLog.pollHz"); scheduleNextTick()
+      hz = admitted
+      nextPoll = max(now, (pending?.sent ?? lastSample ?? now) + 1 / hz)
+      defaults.set(hz, forKey: "PowerLog.pollHz")
+      scheduleNextTick()
     }
   }
 
   func disconnect() throws {
-    if let selected, selected.state != .disconnected || connectionAttempt.systemInitiated { cancel(selected, reason: .manualDisconnect) }
+    if let selected, selected.state != .disconnected || connectionAttempt.systemInitiated {
+      cancel(selected, reason: .manualDisconnect)
+    }
     shouldConnect = false
     scanRequested = false
     scanDeadline = nil
@@ -280,21 +307,26 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     errorMessage = nil
     recoveryErrorMessage = nil
     note(.sessionStopped, reason: .manualDisconnect)
-    stopTimerIfIdle(); emitState()
+    stopTimerIfIdle()
+    emitState()
   }
 
   // Called from the AppDelegate subscriber without depending on a JS runtime.
   func restoreOnLaunch(central: Bool) {
     guard central else { return }
-    note(.restored); ensureCentral(); ensureTimer()
+    note(.restored)
+    ensureCentral()
+    ensureTimer()
   }
 
   /// A relaunch that CoreBluetooth did not initiate still reconnects the remembered controller.
   func resumeRememberedConnection() {
     guard !shouldConnect, resumeID == nil, let saved = defaults.string(forKey: "PowerLog.selectedPeripheral"),
-      let id = UUID(uuidString: saved) else { return }
+      let id = UUID(uuidString: saved)
+    else { return }
     resumeID = id
-    ensureCentral(); ensureTimer()
+    ensureCentral()
+    ensureTimer()
     resumeIfPossible()
   }
 
@@ -310,8 +342,11 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     sessionStarted = now
     sessionSamples = 0
     captureClock = CycCaptureClock(origin: sessionStarted)
+    latestSample = nil
     diagnosticMetrics.beginSession(at: now)
-    MonitorDataStore.shared.beginLive(startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted, id: captureClock.sessionID)
+    MonitorDataStore.shared.beginLive(
+      startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted, id: captureClock.sessionID
+    )
     decoder = CycFrameDecoder()
     notificationErrors = 0
     unexpectedReplies = 0
@@ -321,30 +356,38 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     emitState()
   }
 
+  private func emitSample(_ sample: [String: Any]) {
+    guard let value = WorkoutLiveFreshness.sampleEvent(sample) else { return }
+    emit("onSample", value)
+  }
+
   func setBackground(_ background: Bool) {
     guard self.background != background else { return }
     self.background = background
     note(.backgroundChanged)
-    if scanRequested { central?.stopScan(); scanIfReady() }
-    tick() // Immediately re-evaluate stale state after a suspension gap.
+    if scanRequested {
+      central?.stopScan()
+      scanIfReady()
+    }
+    tick()  // Immediately re-evaluate stale state after a suspension gap.
     if !background {
-      if let latestSample { emit("onSample", latestSample) }
+      if let latestSample { emitSample(latestSample) }
       emitState()
     }
     updateBackgroundHold()
   }
 
   #if canImport(UIKit)
-  private var backgroundHoldWanted = false
-  /// This grants a finite completion window, not an indefinite background runtime.
-  private func updateBackgroundHold() {
-    let wanted = background && shouldConnect && !verified
-    guard wanted != backgroundHoldWanted else { return }
-    backgroundHoldWanted = wanted
-    DispatchQueue.main.async { CycBackgroundHold.shared.set(active: wanted) }
-  }
+    private var backgroundHoldWanted = false
+    /// This grants a finite completion window, not an indefinite background runtime.
+    private func updateBackgroundHold() {
+      let wanted = background && shouldConnect && !verified
+      guard wanted != backgroundHoldWanted else { return }
+      backgroundHoldWanted = wanted
+      DispatchQueue.main.async { CycBackgroundHold.shared.set(active: wanted) }
+    }
   #else
-  private func updateBackgroundHold() {}
+    private func updateBackgroundHold() {}
   #endif
 
   func willTerminate() {
@@ -352,12 +395,16 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   }
 
   private func stopTimerIfIdle() {
-    if !shouldConnect && !scanRequested { timer?.cancel(); timer = nil }
+    if !shouldConnect && !scanRequested {
+      timer?.cancel()
+      timer = nil
+    }
   }
 
   private func beginConnection(systemInitiated: Bool = false, forceConnect: Bool = false) {
     guard shouldConnect, let central, central.state == .poweredOn, let selected,
-      !connectionAttempt.cancellationPending, connectionAttempt.stage == .idle else { return }
+      !connectionAttempt.cancellationPending, connectionAttempt.stage == .idle
+    else { return }
     clearTransport()
     guard connectionAttempt.begin(systemInitiated: systemInitiated) else { return }
     diagnosticMetrics.beginAttempt(at: now)
@@ -366,14 +413,17 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     connectionDeadline = now + 20
     reconnectDue = nil
     note(.connectionAttempt, fields: ["systemReconnect": systemInitiated])
-    if selected.state == .connected, !forceConnect { handleConnected(selected) }
-    else if !systemInitiated {
+    if selected.state == .connected, !forceConnect {
+      handleConnected(selected)
+    } else if !systemInitiated {
       // iOS 17/macOS 14 can start reconnecting before delivering the disconnect callback.
       // That attempt is adopted below or explicitly cancelled; never run two retry owners.
       // https://developer.apple.com/documentation/corebluetooth/cbconnectperipheraloptionenableautoreconnect
       if #available(iOS 17.0, macOS 14.0, *) {
         central.connect(selected, options: [CBConnectPeripheralOptionEnableAutoReconnect: true])
-      } else { central.connect(selected, options: nil) }
+      } else {
+        central.connect(selected, options: nil)
+      }
     }
     emitState()
     scheduleNextTick()
@@ -382,7 +432,6 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   private func clearTransport() {
     connectionAttempt.invalidate()
     verified = false
-    controllerAdapter = nil
     writer = nil
     notifier = nil
     pending = nil
@@ -394,20 +443,30 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     decoder.reset()
   }
 
-  private func retry(_ message: String, reason: CycDiagnosticReason, error: Error? = nil,
-    systemIsReconnecting: Bool = false, disconnectCallbackCompleted: Bool = false) {
+  private func retry(
+    _ message: String, reason: CycDiagnosticReason, error: Error? = nil,
+    systemIsReconnecting: Bool = false, disconnectCallbackCompleted: Bool = false
+  ) {
     guard shouldConnect, reconnectDue == nil else { return }
     let stableTelemetrySeconds = verified ? stableSince.map { now - $0 } : nil
-    let confirmedPeerDisconnect = reason == .linkDisconnected && CycReconnectPolicy.confirmedPeerDisconnect(
-      callbackCompleted: disconnectCallbackCompleted, initiator: diagnosticMetrics.lastDisconnect?.initiator)
+    let confirmedPeerDisconnect =
+      reason == .linkDisconnected
+      && CycReconnectPolicy.confirmedPeerDisconnect(
+        callbackCompleted: disconnectCallbackCompleted, initiator: diagnosticMetrics.lastDisconnect?.initiator)
     let nextAttempt = reconnectAttempts + 1
-    let adoptSystemReconnect = systemIsReconnecting && CycReconnectPolicy.adoptSystemReconnect(attempt: nextAttempt,
-      confirmedPeerDisconnect: confirmedPeerDisconnect, stableTelemetrySeconds: stableTelemetrySeconds)
+    let adoptSystemReconnect =
+      systemIsReconnecting
+      && CycReconnectPolicy.adoptSystemReconnect(
+        attempt: nextAttempt,
+        confirmedPeerDisconnect: confirmedPeerDisconnect, stableTelemetrySeconds: stableTelemetrySeconds)
     if reason == .responseTimeout || reason == .expiredReply { diagnosticMetrics.timedOut() }
     note(.transportError, reason: reason, error: error)
-    if let selected, CycReconnectPolicy.mustCancelBeforeRetry(callbackCompleted: disconnectCallbackCompleted,
-      systemIsReconnecting: systemIsReconnecting, systemAttemptPending: connectionAttempt.systemInitiated,
-      peripheralIsDisconnected: selected.state == .disconnected, adoptingSystemReconnect: adoptSystemReconnect) {
+    if let selected,
+      CycReconnectPolicy.mustCancelBeforeRetry(
+        callbackCompleted: disconnectCallbackCompleted,
+        systemIsReconnecting: systemIsReconnecting, systemAttemptPending: connectionAttempt.systemInitiated,
+        peripheralIsDisconnected: selected.state == .disconnected, adoptingSystemReconnect: adoptSystemReconnect)
+    {
       cancel(selected, reason: reason)
     }
     clearTransport()
@@ -415,36 +474,53 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     recoveryErrorMessage = message
     reconnectAttempts = nextAttempt
     guard CycReconnectPolicy.mayRetry(attempt: reconnectAttempts, activeRide: workoutSampling.id != nil) else {
-      fail("Reconnect limit reached. \(message)", reason: .retryLimit,
+      fail(
+        "Reconnect limit reached. \(message)", reason: .retryLimit,
         cancelConnection: !disconnectCallbackCompleted || systemIsReconnecting)
       return
     }
-    let retryDelay = CycReconnectPolicy.recoveryDelay(attempt: reconnectAttempts, activeRide: workoutSampling.id != nil,
+    let retryDelay = CycReconnectPolicy.recoveryDelay(
+      attempt: reconnectAttempts, activeRide: workoutSampling.id != nil,
       confirmedPeerDisconnect: confirmedPeerDisconnect, stableTelemetrySeconds: stableTelemetrySeconds)
     reconnectAttempts = min(reconnectAttempts, 6)
     reconnectDue = now + retryDelay
     connectionDeadline = reconnectDue! + 5
     status = "reconnecting"
     diagnosticMetrics.scheduledReconnect()
-    note(.reconnectScheduled, reason: reason, fields: ["retryAttempt": reconnectAttempts, "retryDelaySeconds": retryDelay,
-      "systemReconnect": adoptSystemReconnect])
+    note(
+      .reconnectScheduled, reason: reason,
+      fields: [
+        "retryAttempt": reconnectAttempts, "retryDelaySeconds": retryDelay,
+        "systemReconnect": adoptSystemReconnect,
+      ])
     // The disconnect callback has completed teardown; a stable link needs no extra app delay.
     // Failed/short attempts still back off, and app cancellations still wait for their callback.
-    if retryDelay == 0 { beginConnection(systemInitiated: adoptSystemReconnect, forceConnect: !adoptSystemReconnect) }
-    else { emitState(); scheduleNextTick() }
+    if retryDelay == 0 {
+      beginConnection(systemInitiated: adoptSystemReconnect, forceConnect: !adoptSystemReconnect)
+    } else {
+      emitState()
+      scheduleNextTick()
+    }
     updateBackgroundHold()
   }
 
-  private func fail(_ message: String, reason: CycDiagnosticReason, error: Error? = nil, cancelConnection: Bool = true) {
+  private func fail(_ message: String, reason: CycDiagnosticReason, error: Error? = nil, cancelConnection: Bool = true)
+  {
     defer { updateBackgroundHold() }
     note(.transportError, reason: reason, error: error)
-    if cancelConnection, let selected, selected.state != .disconnected || connectionAttempt.systemInitiated { cancel(selected, reason: reason) }
+    if cancelConnection, let selected, selected.state != .disconnected || connectionAttempt.systemInitiated {
+      cancel(selected, reason: reason)
+    }
     if workoutSampling.id != nil, [.bluetoothUnavailable, .cancellationDeadline, .retryLimit].contains(reason) {
       clearTransport()
-      recoveryErrorMessage = message; errorMessage = nil; status = "reconnecting"
+      recoveryErrorMessage = message
+      errorMessage = nil
+      status = "reconnecting"
       reconnectDue = central?.state == .poweredOn ? now + 30 : nil
       connectionDeadline = reconnectDue.map { $0 + 5 }
-      ensureTimer(); emitState(); return
+      ensureTimer()
+      emitState()
+      return
     }
     shouldConnect = false
     reconnectDue = nil
@@ -469,10 +545,15 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     guard central?.state == .poweredOn else { return }
     if let due = reconnectDue {
       if current >= due {
-        guard central?.state == .poweredOn else { fail("Bluetooth is unavailable during reconnect.", reason: .bluetoothUnavailable); return }
+        guard central?.state == .poweredOn else {
+          fail("Bluetooth is unavailable during reconnect.", reason: .bluetoothUnavailable)
+          return
+        }
 
         if connectionAttempt.cancellationPending || selected?.state == .disconnecting {
-          if let deadline = connectionDeadline, current >= deadline { fail("Bluetooth cancellation did not finish before reconnect deadline.", reason: .cancellationDeadline) }
+          if let deadline = connectionDeadline, current >= deadline {
+            fail("Bluetooth cancellation did not finish before reconnect deadline.", reason: .cancellationDeadline)
+          }
           return
         }
         // This path follows confirmed teardown/cancellation, not restoration of a live link.
@@ -480,14 +561,20 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
       }
       return
     }
-    if let deadline = connectionDeadline, current >= deadline { retry("CYC connection or identity handshake timed out.", reason: .connectionDeadline); return }
+    if let deadline = connectionDeadline, current >= deadline {
+      retry("CYC connection or identity handshake timed out.", reason: .connectionDeadline)
+      return
+    }
     if let pending, current - pending.sent >= CycProtocol.maximumGap {
       // Reconnect, instead of reissuing an ambiguous same-command request on the old link.
       retry("Controller response timed out; a telemetry gap was recorded.", reason: .responseTimeout)
       return
     }
     if let request = waitingToSend {
-      if let sendBlockedAt, current - sendBlockedAt >= CycProtocol.maximumGap { retry("UART write queue remained blocked.", reason: .writeReadyTimeout); return }
+      if let sendBlockedAt, current - sendBlockedAt >= CycProtocol.maximumGap {
+        retry("UART write queue remained blocked.", reason: .writeReadyTimeout)
+        return
+      }
       send(request)
       return
     }
@@ -497,9 +584,11 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   private func scheduleNextTick() {
     guard let timer else { return }
     let current = now
-    let delay = CycPollingSchedule.delay(now: current, poweredOn: central?.state == .poweredOn,
+    let delay = CycPollingSchedule.delay(
+      now: current, poweredOn: central?.state == .poweredOn,
       verified: verified, scanning: scanRequested, scanDeadline: scanDeadline, reconnectDue: reconnectDue,
-      connectionDeadline: connectionDeadline, cancellationPending: connectionAttempt.cancellationPending || selected?.state == .disconnecting,
+      connectionDeadline: connectionDeadline,
+      cancellationPending: connectionAttempt.cancellationPending || selected?.state == .disconnecting,
       responseDeadline: pending.map { $0.sent + CycProtocol.maximumGap },
       writeDeadline: sendBlockedAt.map { $0 + CycProtocol.maximumGap },
       nextPoll: verified && pending == nil && waitingToSend == nil && reconnectDue == nil ? nextPoll : nil,
@@ -510,8 +599,10 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
 
   private func send(_ request: CycRequest) {
     guard shouldConnect, reconnectDue == nil, !connectionAttempt.cancellationPending,
-      pending == nil, let selected, selected.state == .connected, let writer else { return }
-    guard request == .identity ? connectionAttempt.stage == .identity : verified && connectionAttempt.stage == .ready else { return }
+      pending == nil, let selected, selected.state == .connected, let writer
+    else { return }
+    guard request == .identity ? connectionAttempt.stage == .identity : verified && connectionAttempt.stage == .ready
+    else { return }
     guard selected.canSendWriteWithoutResponse else {
       waitingToSend = request
       if sendBlockedAt == nil { sendBlockedAt = now }
@@ -519,7 +610,8 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     }
     let frame = request.frame
     guard frame.count <= selected.maximumWriteValueLength(for: .withoutResponse) else {
-      fail("UART write capacity is smaller than an allowlisted request.", reason: .writeCapacity); return
+      fail("UART write capacity is smaller than an allowlisted request.", reason: .writeCapacity)
+      return
     }
     waitingToSend = nil
     sendBlockedAt = nil
@@ -536,8 +628,13 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
       if shouldConnect, reconnectDue == nil, connectionAttempt.stage == .idle { beginConnection() }
     } else if central.state != .unknown && central.state != .resetting {
       if scanRequested { stopScan() }
-      if shouldConnect { fail(bluetoothError(central.state), reason: .bluetoothUnavailable) }
-      else { status = "error"; errorMessage = bluetoothError(central.state); emitState() }
+      if shouldConnect {
+        fail(bluetoothError(central.state), reason: .bluetoothUnavailable)
+      } else {
+        status = "error"
+        errorMessage = bluetoothError(central.state)
+        emitState()
+      }
       // Below poweredOn the manager has already torn down its links; a cancellation callback
       // is no longer a prerequisite for a later, newly selected connection.
       connectionAttempt.disconnected()
@@ -565,21 +662,30 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     }
   }
 
-  func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
-    advertisementData: [String: Any], rssi RSSI: NSNumber) {
+  func centralManager(
+    _ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
+    advertisementData: [String: Any], rssi RSSI: NSNumber
+  ) {
     guard scanRequested else { return }
-    let name = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? "Unnamed UART device"
-    let services = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []) +
-      (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? [])
-    guard services.contains(Self.uart) || name.uppercased().contains("CYC") || name.uppercased().contains("X6") || name.uppercased().contains("X12") else { return }
+    let name =
+      (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? "Unnamed UART device"
+    let services =
+      (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
+      + (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? [])
+    guard
+      services.contains(Self.uart) || name.uppercased().contains("CYC") || name.uppercased().contains("X6")
+        || name.uppercased().contains("X12")
+    else { return }
     devices[peripheral.identifier] = peripheral
     deviceRSSI[peripheral.identifier] = RSSI.intValue
     emitDevice(peripheral, name: name)
   }
 
   private func emitDevice(_ peripheral: CBPeripheral, name: String? = nil) {
-    var value: [String: Any] = ["id": peripheral.identifier.uuidString,
-      "name": name ?? peripheral.name ?? "CYC bike", "rssi": deviceRSSI[peripheral.identifier] ?? 0]
+    var value: [String: Any] = [
+      "id": peripheral.identifier.uuidString,
+      "name": name ?? peripheral.name ?? "CYC bike", "rssi": deviceRSSI[peripheral.identifier] ?? 0,
+    ]
     if let identity = knownControllers[peripheral.identifier.uuidString] {
       value["controllerModel"] = identity.controllerModel
       value["firmwareLabel"] = identity.firmwareLabel
@@ -588,8 +694,14 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   }
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-    guard shouldConnect, peripheral === selected else { cancel(peripheral, reason: .unexpectedConnection); return }
-    guard reconnectDue == nil, !connectionAttempt.cancellationPending else { cancel(peripheral, reason: .pendingReconnect); return }
+    guard shouldConnect, peripheral === selected else {
+      cancel(peripheral, reason: .unexpectedConnection)
+      return
+    }
+    guard reconnectDue == nil, !connectionAttempt.cancellationPending else {
+      cancel(peripheral, reason: .pendingReconnect)
+      return
+    }
     handleConnected(peripheral)
   }
 
@@ -607,15 +719,19 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     connectionAttempt.disconnected()
     let fields = diagnosticMetrics.disconnected(at: now, error: error, defaultReason: .connectionFailed)
     note(.connectionFailed, fields: fields)
-    retry("Could not connect to CYC controller: \(error?.localizedDescription ?? "connection failed").", reason: .connectionFailed, error: error)
+    retry(
+      "Could not connect to CYC controller: \(error?.localizedDescription ?? "connection failed").",
+      reason: .connectionFailed, error: error)
   }
 
   func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
     handleDisconnected(peripheral, error: error, systemIsReconnecting: false)
   }
 
-  func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
-    timestamp: CFAbsoluteTime, isReconnecting: Bool, error: Error?) {
+  func centralManager(
+    _ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
+    timestamp: CFAbsoluteTime, isReconnecting: Bool, error: Error?
+  ) {
     handleDisconnected(peripheral, error: error, systemIsReconnecting: isReconnecting)
   }
 
@@ -630,10 +746,16 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     if shouldConnect {
       // A cancellation/backoff may already own recovery. Stop an unexpected system retry
       // instead of allowing it to escape that attempt's deadline or retry limit.
-      if reconnectDue != nil, systemIsReconnecting { cancel(peripheral, reason: .pendingReconnect) }
-      else { retry("Bike disconnected. Reconnecting…", reason: .linkDisconnected, error: error,
-        systemIsReconnecting: systemIsReconnecting, disconnectCallbackCompleted: true) }
-    } else if systemIsReconnecting { cancel(peripheral, reason: .manualDisconnect) }
+      if reconnectDue != nil, systemIsReconnecting {
+        cancel(peripheral, reason: .pendingReconnect)
+      } else {
+        retry(
+          "Bike disconnected. Reconnecting…", reason: .linkDisconnected, error: error,
+          systemIsReconnecting: systemIsReconnecting, disconnectCallbackCompleted: true)
+      }
+    } else if systemIsReconnecting {
+      cancel(peripheral, reason: .manualDisconnect)
+    }
   }
 
   func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
@@ -650,8 +772,11 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     hz = workoutSampling.connectionRate(min(8, max(1, defaults.double(forKey: "PowerLog.pollHz"))))
     sessionStarted = now
     captureClock = CycCaptureClock(origin: sessionStarted)
+    latestSample = nil
     diagnosticMetrics.beginSession(at: now)
-    MonitorDataStore.shared.beginLive(startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted, id: captureClock.sessionID)
+    MonitorDataStore.shared.beginLive(
+      startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted, id: captureClock.sessionID
+    )
     note(.restored)
     status = "reconnecting"
     reconnectAttempts = 1
@@ -663,9 +788,11 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
     guard peripheral === selected, peripheral.state == .connected, shouldConnect, reconnectDue == nil,
-      connectionAttempt.stage == .services else { return }
+      connectionAttempt.stage == .services
+    else { return }
     guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == Self.uart }) else {
-      fail("Expected CYC UART service was not discovered.", reason: .serviceDiscovery, error: error); return
+      fail("Expected CYC UART service was not discovered.", reason: .serviceDiscovery, error: error)
+      return
     }
     guard connectionAttempt.advance(from: .services, to: .characteristics) else { return }
     note(.transportStage)
@@ -674,7 +801,8 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
 
   func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
     guard peripheral === selected, peripheral.state == .connected, shouldConnect, reconnectDue == nil,
-      invalidatedServices.contains(where: { $0.uuid == Self.uart }) else { return }
+      invalidatedServices.contains(where: { $0.uuid == Self.uart })
+    else { return }
 
     retry("CYC UART services were invalidated by Bluetooth.", reason: .servicesInvalidated)
   }
@@ -682,11 +810,16 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
     guard peripheral === selected, peripheral.state == .connected, shouldConnect, reconnectDue == nil,
       connectionAttempt.stage == .characteristics, service.uuid == Self.uart,
-      peripheral.services?.contains(where: { $0 === service }) == true else { return }
+      peripheral.services?.contains(where: { $0 === service }) == true
+    else { return }
     guard error == nil,
-      let write = service.characteristics?.first(where: { $0.uuid == Self.writeUUID }), write.properties.contains(.writeWithoutResponse),
-      let notify = service.characteristics?.first(where: { $0.uuid == Self.notifyUUID }), notify.properties.contains(.notify) else {
-      fail("CYC UART properties do not match the verified transport.", reason: .characteristicDiscovery, error: error); return
+      let write = service.characteristics?.first(where: { $0.uuid == Self.writeUUID }),
+      write.properties.contains(.writeWithoutResponse),
+      let notify = service.characteristics?.first(where: { $0.uuid == Self.notifyUUID }),
+      notify.properties.contains(.notify)
+    else {
+      fail("CYC UART properties do not match the verified transport.", reason: .characteristicDiscovery, error: error)
+      return
     }
     writer = write
     notifier = notify
@@ -695,10 +828,16 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     peripheral.setNotifyValue(true, for: notify)
   }
 
-  func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+  func peripheral(
+    _ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?
+  ) {
     guard peripheral === selected, peripheral.state == .connected, characteristic === notifier,
-      connectionAttempt.stage == .notifications, shouldConnect, reconnectDue == nil else { return }
-    guard error == nil, characteristic.isNotifying else { retry("Could not subscribe to CYC telemetry.", reason: .notificationSetup, error: error); return }
+      connectionAttempt.stage == .notifications, shouldConnect, reconnectDue == nil
+    else { return }
+    guard error == nil, characteristic.isNotifying else {
+      retry("Could not subscribe to CYC telemetry.", reason: .notificationSetup, error: error)
+      return
+    }
     guard connectionAttempt.advance(from: .notifications, to: .identity) else { return }
     note(.transportStage)
     send(.identity)
@@ -715,7 +854,8 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     defer { scheduleNextTick() }
     guard peripheral === selected, peripheral.state == .connected, characteristic === notifier,
       shouldConnect, reconnectDue == nil, !connectionAttempt.cancellationPending,
-      connectionAttempt.stage == .identity || connectionAttempt.stage == .ready else { return }
+      connectionAttempt.stage == .identity || connectionAttempt.stage == .ready
+    else { return }
     if let error {
       notificationErrors += 1
       // Report the actual callback error before the normal outstanding-request deadline decides recovery.
@@ -729,14 +869,20 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     var identityVerified = false
     for payload in decoder.feed(data) {
       guard let outstanding = pending,
-        payload.first == outstanding.request.rawValue || (outstanding.request == .identity && payload.first == 0) else { unexpectedReplies += 1; continue }
+        payload.first == outstanding.request.rawValue || (outstanding.request == .identity && payload.first == 0)
+      else {
+        unexpectedReplies += 1
+        continue
+      }
       // The queue may resume after iOS suspension; do not accept an expired reply then.
-      guard current - outstanding.sent <= CycProtocol.maximumGap else { retry("Telemetry reply arrived after its freshness deadline.", reason: .expiredReply); return }
+      guard current - outstanding.sent <= CycProtocol.maximumGap else {
+        retry("Telemetry reply arrived after its freshness deadline.", reason: .expiredReply)
+        return
+      }
       do {
         if outstanding.request == .identity {
           let identity = try CycProtocol.validateIdentity(payload)
           guard connectionAttempt.advance(from: .identity, to: .ready) else { return }
-          controllerAdapter = identity.adapter
           knownControllers[peripheral.identifier.uuidString] = identity
           if let data = try? JSONEncoder().encode(knownControllers) {
             defaults.set(data, forKey: "PowerLog.knownControllers")
@@ -750,19 +896,27 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
           note(.identityVerified)
           emitState()
         } else {
-          guard let controllerAdapter, let identity = knownControllers[peripheral.identifier.uuidString] else { throw CycError.invalid("Controller identity has not been verified.") }
-          let values = try controllerAdapter.decodeTelemetry(payload)
+          guard verified, let identity = knownControllers[peripheral.identifier.uuidString] else {
+            throw CycError.invalid("Controller identity has not been verified.")
+          }
+          let values = try CycProtocol.decodeTelemetry(payload)
           pending = nil
           receive(values, identity: identity, at: current, responseSeconds: current - outstanding.sent)
         }
-      } catch { fail(error.localizedDescription, reason: outstanding.request == .identity ? .identityRejected : .telemetryRejected); return }
+      } catch {
+        fail(
+          error.localizedDescription, reason: outstanding.request == .identity ? .identityRejected : .telemetryRejected)
+        return
+      }
     }
     // Drain this callback's pre-existing bytes before issuing the new request: trailing old
     // telemetry in an identity notification must not become the reply to the first poll.
     if identityVerified { send(.selective) }
   }
 
-  private func receive(_ values: [String: Double], identity: CycControllerIdentity, at current: Double, responseSeconds: Double) {
+  private func receive(
+    _ values: [String: Double], identity: CycControllerIdentity, at current: Double, responseSeconds: Double
+  ) {
     // Identity establishes the allowlist; only an actual fresh measurement ends recovery.
     status = "connected"
     recoveryErrorMessage = nil
@@ -780,16 +934,15 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     let storageStarted = now
     do {
       #if os(iOS)
-      if #available(iOS 26.0, *) {
-        try WorkoutEngine.shared.admitCyc(PowerLogCaptureFrame(sample: sample, liveID: captureClock.sessionID,
-          liveStartedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), liveOrigin: sessionStarted,
-          liveElapsed: current - sessionStarted))
-      } else { try MonitorDataStore.shared.appendLive(sample, elapsedSeconds: current - sessionStarted) }
+        try WorkoutEngine.shared.admitCyc(
+          PowerLogCaptureFrame(
+            sample: sample, liveID: captureClock.sessionID,
+            liveStartedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), liveOrigin: sessionStarted,
+            liveElapsed: current - sessionStarted))
       #else
-      try MonitorDataStore.shared.appendLive(sample, elapsedSeconds: current - sessionStarted)
+        try MonitorDataStore.shared.appendLive(sample, elapsedSeconds: current - sessionStarted)
       #endif
-    }
-    catch {
+    } catch {
       note(.recordingError, reason: .storageFailure, error: error)
       storeError = "Live capture storage failed: \(error.localizedDescription)"
     }
@@ -797,7 +950,7 @@ final class CycEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
     latestSample = sample
     if !background, current - lastPresentation >= 0.25 {
       lastPresentation = current
-      emit("onSample", sample)
+      emitSample(sample)
       emitState()
     }
     updateBackgroundHold()
@@ -813,18 +966,20 @@ extension CycEngine {
 }
 
 #if canImport(UIKit)
-import UIKit
+  import UIKit
 
-final class CycBackgroundHold {
-  static let shared = CycBackgroundHold()
-  private var task: UIBackgroundTaskIdentifier = .invalid
-  func set(active: Bool) {
-    if active, task == .invalid {
-      task = UIApplication.shared.beginBackgroundTask(withName: "Power Log bike reconnect") { [weak self] in self?.set(active: false) }
-    } else if !active, task != .invalid {
-      UIApplication.shared.endBackgroundTask(task)
-      task = .invalid
+  final class CycBackgroundHold {
+    static let shared = CycBackgroundHold()
+    private var task: UIBackgroundTaskIdentifier = .invalid
+    func set(active: Bool) {
+      if active, task == .invalid {
+        task = UIApplication.shared.beginBackgroundTask(withName: "Power Log bike reconnect") { [weak self] in
+          self?.set(active: false)
+        }
+      } else if !active, task != .invalid {
+        UIApplication.shared.endBackgroundTask(task)
+        task = .invalid
+      }
     }
   }
-}
 #endif

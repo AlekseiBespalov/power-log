@@ -1,19 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const xcode = require('xcode');
+const { projectFixture } = require('./project-fixture.cjs');
 const { configureActivityProject } = require('../../plugins/with-power-log-live-activity');
-
-function projectFixture() {
-  const project = xcode.project('/unused/project.pbxproj');
-  project.hash = { project: { rootObject: '000000000000000000000001', objects: {
-    PBXProject: { '000000000000000000000001': { isa: 'PBXProject', attributes: {}, targets: [] } },
-    PBXNativeTarget: {}, PBXBuildFile: {}, PBXFileReference: {}, XCConfigurationList: {}, XCBuildConfiguration: {},
-    PBXGroup: { '000000000000000000000002': { isa: 'PBXGroup', name: 'Products', children: [] } },
-  } } };
-  const phone = project.addTarget('PowerLog', 'application', 'PowerLog', 'app.powerlog.test');
-  project.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', phone.uuid);
-  return project;
-}
 
 function inspect(project) {
   const objects = project.hash.project.objects;
@@ -28,7 +16,7 @@ function inspect(project) {
 test('prebuild embeds one activity and keeps native intent available in both targets', () => {
   const project = projectFixture();
   for (let repetition = 0; repetition < 3; repetition++) {
-    configureActivityProject(project, 'app.powerlog.test', 'SYNTHETIC');
+    configureActivityProject(project, { version: '2.4.6', ios: { bundleIdentifier: 'app.powerlog.test', appleTeamId: 'SYNTHETIC', buildNumber: '73' } });
     const { objects, targets, phone, activityID, activity, sources } = inspect(project);
     assert.equal(targets.length, 2);
     assert.equal(phone.dependencies.filter(reference => objects.PBXTargetDependency[reference.value].target === activityID).length, 1);
@@ -57,8 +45,8 @@ test('prebuild embeds one activity and keeps native intent available in both tar
 
 test('prebuild updates the extension identity with the configured phone identity', () => {
   const project = projectFixture();
-  configureActivityProject(project, 'app.powerlog.first');
-  configureActivityProject(project, 'app.powerlog.second');
+  configureActivityProject(project, { version: '2.4.6', ios: { bundleIdentifier: 'app.powerlog.first', buildNumber: '73' } });
+  configureActivityProject(project, { version: '3.7.9', ios: { bundleIdentifier: 'app.powerlog.second', buildNumber: '108' } });
   const { objects, activity } = inspect(project);
   for (const reference of objects.XCConfigurationList[activity.buildConfigurationList].buildConfigurations) {
     assert.equal(objects.XCBuildConfiguration[reference.value].buildSettings.PRODUCT_BUNDLE_IDENTIFIER, '"app.powerlog.second.activity"');

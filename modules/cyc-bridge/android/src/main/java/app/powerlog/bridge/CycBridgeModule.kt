@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import androidx.core.content.FileProvider
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
@@ -29,6 +30,17 @@ class CycBridgeModule : Module() {
         if (read) engine.reads.execute(job) else engine.handler.post(job)
     }
 
+    private fun <T> read(input: Payload, promise: Promise, parse: (Payload) -> T, body: (T) -> Any?) {
+        val request =
+            try {
+                parse(input)
+            } catch (error: Exception) {
+                promise.reject("E_POWER_LOG", error.message, error)
+                return
+            }
+        submit(promise, true) { body(request) }
+    }
+
     private fun permissions(
         gps: Boolean,
         notifications: Boolean,
@@ -44,8 +56,7 @@ class CycBridgeModule : Module() {
                 add(Manifest.permission.ACCESS_COARSE_LOCATION)
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
-            if (notifications && Build.VERSION.SDK_INT >= 33)
-                add(Manifest.permission.POST_NOTIFICATIONS)
+            if (notifications && Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }
         val manager =
             appContext.permissions
@@ -62,10 +73,19 @@ class CycBridgeModule : Module() {
         manager.askForPermissions({ submit(promise, body = after) }, *required.toTypedArray())
     }
 
-    private fun ridePermissions(options: Payload, promise: Promise, after: () -> Any?) {
-        val gps = options.flag("recordGPS", !options.flag("indoor"))
-        if (!options.flag("saveToHealth")) {
-            permissions(gps, true, promise, after)
+    private fun ridePermissions(input: Payload, promise: Promise, after: (RideOptions) -> Any?) {
+        val options =
+            try {
+                BridgeInputs.ride(input)
+            } catch (error: Exception) {
+                promise.reject("E_PERMISSIONS", error.message, error)
+                return
+            }
+        val effective = options.effective(engine.capabilities())
+        val gps = effective.recordGPS
+        val continueRequest = { after(options) }
+        if (!effective.saveToHealth) {
+            permissions(gps, true, promise, continueRequest)
             return
         }
         engine.reads.execute {
@@ -74,7 +94,7 @@ class CycBridgeModule : Module() {
                 check(engine.health.available) { "Health Connect is unavailable." }
                 val required = engine.health.permissions(gps)
                 if (engine.health.granted().containsAll(required)) {
-                    permissions(gps, true, promise, after)
+                    permissions(gps, true, promise, continueRequest)
                     return@execute
                 }
                 val activity = appContext.throwingActivity
@@ -87,11 +107,10 @@ class CycBridgeModule : Module() {
                         )
                         return@runOnUiThread
                     }
-                    healthContinuation = { permissions(gps, true, promise, after) }
+                    healthContinuation = { permissions(gps, true, promise, continueRequest) }
                     try {
                         activity.startActivityForResult(
-                            Intent(activity, HealthPermissionsActivity::class.java)
-                                .putExtra("gps", gps),
+                            Intent(activity, HealthPermissionsActivity::class.java).putExtra("gps", gps),
                             8642,
                         )
                     } catch (error: Exception) {
@@ -101,6 +120,26 @@ class CycBridgeModule : Module() {
                 }
             } catch (error: Exception) {
                 promise.reject("E_PERMISSIONS", error.message, error)
+            }
+        }
+    }
+
+    private fun connect(options: Payload, promise: Promise) {
+        val input =
+            try {
+                BridgeInputs.connect(options)
+            } catch (error: Exception) {
+                promise.reject("E_BLUETOOTH", error.message, error)
+                return
+            }
+        engine.handler.post {
+            try {
+                engine.awaitReady()
+                engine.connect(input) { error ->
+                    if (error == null) promise.resolve(null) else promise.reject("E_BLUETOOTH", error.message, error)
+                }
+            } catch (error: Exception) {
+                promise.reject("E_BLUETOOTH", error.message, error)
             }
         }
     }
@@ -132,11 +171,9 @@ class CycBridgeModule : Module() {
             Prop("selectionTarget") { view: MonitorRasterView, value: String -> view.target(value) }
         }
         AsyncFunction("getState") { promise: Promise -> submit(promise) { engine.bluetooth.state } }
+        AsyncFunction("getMonotonicSeconds") { SystemClock.elapsedRealtime() / 1000.0 }
         AsyncFunction("getDiagnostics") { promise: Promise ->
             submit(promise) { engine.bluetooth.diagnostics() }
-        }
-        AsyncFunction("readDiagnostics") { promise: Promise ->
-            submit(promise) { json(engine.bluetooth.diagnostics()).toString() }
         }
         AsyncFunction("startScan") { promise: Promise ->
             permissions(false, false, promise) {
@@ -151,21 +188,7 @@ class CycBridgeModule : Module() {
             }
         }
         AsyncFunction("connect") { options: Map<String, Any?>, promise: Promise ->
-            engine.handler.post {
-                try {
-                    engine.awaitReady()
-                    engine.checkBike(options.str("deviceId"))
-                    engine.bluetooth.connect(
-                        options.str("deviceId"),
-                        options.num("hz", 2.0).toInt(),
-                    ) { error ->
-                        if (error == null) promise.resolve(null)
-                        else promise.reject("E_BLUETOOTH", error.message, error)
-                    }
-                } catch (error: Exception) {
-                    promise.reject("E_BLUETOOTH", error.message, error)
-                }
-            }
+            connect(options, promise)
         }
         AsyncFunction("disconnect") { promise: Promise ->
             submit(promise) {
@@ -177,16 +200,11 @@ class CycBridgeModule : Module() {
         AsyncFunction("getWorkoutPermissions") { promise: Promise ->
             submit(promise) { engine.permissionStatus() }
         }
-        AsyncFunction("requestWorkoutPermissions") { promise: Promise ->
-            permissions(true, true, promise) { engine.permissionStatus() }
-        }
-        AsyncFunction("requestWorkoutPermissionsForOptions") {
-            options: Map<String, Any?>,
-            promise: Promise ->
+        AsyncFunction("requestWorkoutPermissions") { options: Map<String, Any?>, promise: Promise ->
             ridePermissions(options, promise) { engine.permissionStatus() }
         }
         AsyncFunction("startWorkout") { options: Map<String, Any?>, promise: Promise ->
-            ridePermissions(options, promise) { engine.start(options) }
+            ridePermissions(options, promise) { input -> engine.start(input) }
         }
         AsyncFunction("pauseWorkout") { id: String?, promise: Promise ->
             submit(promise) { engine.action("pause", id) }
@@ -210,42 +228,42 @@ class CycBridgeModule : Module() {
             submit(promise) { engine.recover(id) }
         }
         AsyncFunction("listWorkouts") { options: Map<String, Any?>, promise: Promise ->
-            submit(promise, true) { engine.store.list(options) }
+            read(options, promise, BridgeInputs::catalog) { engine.store.list(it) }
         }
         AsyncFunction("readWorkout") { id: String, source: String?, promise: Promise ->
             submit(promise, true) {
                 RideExport(engine.context, engine.store, engine.distance, engine.monitor)
-                    .detail(id, source ?: "auto")
+                    .detail(id, BridgeInputs.distanceSource(source ?: "auto").wire)
             }
         }
         AsyncFunction("exportWorkout") { id: String, source: String?, promise: Promise ->
             submit(promise, true) {
+                val distanceSource = BridgeInputs.distanceSource(source ?: "auto")
                 engine.store.withSavedRide(id) {
                     RideExport(engine.context, engine.store, engine.distance, engine.monitor)
-                        .fit(id, source ?: "auto")
+                        .fit(id, distanceSource.wire)
                 }
             }
         }
         AsyncFunction("exportWorkoutArchive") { id: String, promise: Promise ->
             submit(promise, true) {
                 engine.store.withSavedRide(id) {
-                    RideExport(engine.context, engine.store, engine.distance, engine.monitor)
-                        .archive(id)
+                    RideExport(engine.context, engine.store, engine.distance, engine.monitor).archive(id)
                 }
             }
         }
         listOf(
-                "describeMonitorSource" to "describe",
-                "readMonitorLatest" to "latest",
-                "readMonitorPlot" to "plot",
-                "inspectMonitorAt" to "inspect",
-                "readMonitorRangeStats" to "stats",
-                "monitorChangesSince" to "changes",
+                "describeMonitorSource" to MonitorOperation.Describe,
+                "readMonitorLatest" to MonitorOperation.Latest,
+                "readMonitorPlot" to MonitorOperation.Plot,
+                "inspectMonitorAt" to MonitorOperation.Inspect,
+                "readMonitorRangeStats" to MonitorOperation.Stats,
+                "monitorChangesSince" to MonitorOperation.Changes,
             )
             .forEach { (name, kind) ->
                 AsyncFunction(name) { options: Map<String, Any?>, promise: Promise ->
-                    submit(promise, true) {
-                        engine.monitor.query(kind, engine.source(options), options)
+                    read(options, promise, { BridgeInputs.monitor(kind, it) }) { input ->
+                        engine.monitor.query(engine.source(input.target), input)
                     }
                 }
             }
@@ -267,14 +285,10 @@ class CycBridgeModule : Module() {
                     )
                 val intent =
                     Intent(Intent.ACTION_SEND)
-                        .setType(
-                            if (exported.extension == "csv") "text/csv"
-                            else "application/octet-stream"
-                        )
+                        .setType(if (exported.extension == "csv") "text/csv" else "application/octet-stream")
                         .putExtra(Intent.EXTRA_STREAM, shared)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                requireNotNull(appContext.currentActivity)
-                    .startActivity(Intent.createChooser(intent, "Export ride"))
+                requireNotNull(appContext.currentActivity).startActivity(Intent.createChooser(intent, "Export ride"))
                 promise.resolve(null)
             } catch (error: Exception) {
                 promise.reject("E_EXPORT", error.message, error)

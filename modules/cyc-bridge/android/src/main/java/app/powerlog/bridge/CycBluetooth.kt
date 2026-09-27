@@ -10,8 +10,7 @@ import java.util.UUID
 
 internal fun nextTelemetryPollMillis(previousDue: Long, sentAt: Long, hz: Int): Long {
     val period = 1000L / hz
-    return if (previousDue == 0L || sentAt - previousDue >= period) sentAt + period
-    else previousDue + period
+    return if (previousDue == 0L || sentAt - previousDue >= period) sentAt + period else previousDue + period
 }
 
 /** All callbacks and timers are confined to the recorder's native looper. */
@@ -19,7 +18,7 @@ internal class CycBluetooth(
     private val context: Context,
     private val handler: Handler,
     private val emit: (String, Payload) -> Unit,
-    private val sample: (Map<String, Double>, CycProtocol.Identity, String) -> Unit,
+    private val sample: (Map<String, Double>, CycProtocol.Identity, String, Long, String) -> Unit,
     private val recording: () -> Boolean,
 ) {
     private val manager = context.getSystemService(BluetoothManager::class.java)
@@ -86,7 +85,7 @@ internal class CycBluetooth(
         }
 
     fun setHz(value: Int) {
-        require(value in listOf(2, 4, 8))
+        BridgeInputs.sampleHz(value)
         if (hz != value) nextPollAt = 0
         hz = value
     }
@@ -98,11 +97,7 @@ internal class CycBluetooth(
         scanning = true
         publish("scanning")
         manager.adapter.bluetoothLeScanner.startScan(
-            listOf(
-                ScanFilter.Builder()
-                    .setServiceUuid(ParcelUuid.fromString(CycProtocol.SERVICE))
-                    .build()
-            ),
+            listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(CycProtocol.SERVICE)).build()),
             ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
             scanner,
         )
@@ -127,7 +122,7 @@ internal class CycBluetooth(
     fun connect(id: String, frequency: Int, completion: (Throwable?) -> Unit) {
         if (recording() && desired != null && desired != id)
             error("Finish the current ride before connecting another bike.")
-        setHz(frequency)
+        if (!recording()) setHz(frequency)
         if (desired == id && state["status"] == "connected") {
             completion(null)
             return
@@ -144,8 +139,7 @@ internal class CycBluetooth(
             mapOf(
                 "status" to status,
                 "deviceId" to desired,
-                "deviceName" to
-                    desired?.let { runCatching { devices[it]?.name }.getOrNull() ?: "CYC bike" },
+                "deviceName" to desired?.let { runCatching { devices[it]?.name }.getOrNull() ?: "CYC bike" },
                 "controllerModel" to identity?.model,
                 "firmwareLabel" to identity?.firmware,
                 "error" to error,
@@ -210,18 +204,13 @@ internal class CycBluetooth(
                         newState: Int,
                     ) =
                         event(connection) {
-                            if (
-                                status == BluetoothGatt.GATT_SUCCESS &&
-                                    newState == BluetoothProfile.STATE_CONNECTED
-                            ) {
+                            if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
                                 // No competing MTU requests: the frame decoder accepts fragmented
                                 // notifications.
                                 deadline(15000, "Bike service discovery timed out.", attempt)
-                                if (!connection.discoverServices())
-                                    failed("Could not discover bike services.")
+                                if (!connection.discoverServices()) failed("Could not discover bike services.")
                             } else if (
-                                newState == BluetoothProfile.STATE_DISCONNECTED ||
-                                    status != BluetoothGatt.GATT_SUCCESS
+                                newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS
                             )
                                 failed("Bike disconnected ($status).", true)
                         }
@@ -232,15 +221,11 @@ internal class CycBluetooth(
                                 failed("Bike service discovery failed ($status).")
                                 return@event
                             }
-                            val service =
-                                connection.getService(UUID.fromString(CycProtocol.SERVICE))
+                            val service = connection.getService(UUID.fromString(CycProtocol.SERVICE))
                             writer = service?.getCharacteristic(UUID.fromString(CycProtocol.WRITE))
-                            val notify =
-                                service?.getCharacteristic(UUID.fromString(CycProtocol.NOTIFY))
+                            val notify = service?.getCharacteristic(UUID.fromString(CycProtocol.NOTIFY))
                             val descriptor =
-                                notify?.getDescriptor(
-                                    UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-                                )
+                                notify?.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
                             if (writer == null || notify == null || descriptor == null) {
                                 failed(
                                     "This bike does not provide the CYC telemetry service.",
@@ -260,8 +245,7 @@ internal class CycBluetooth(
                             val value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                             val success =
                                 if (Build.VERSION.SDK_INT >= 33)
-                                    connection.writeDescriptor(descriptor, value) ==
-                                        BluetoothStatusCodes.SUCCESS
+                                    connection.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
                                 else {
                                     descriptor.value = value
                                     connection.writeDescriptor(descriptor)
@@ -275,8 +259,7 @@ internal class CycBluetooth(
                         status: Int,
                     ) =
                         event(connection) {
-                            if (status == BluetoothGatt.GATT_SUCCESS)
-                                send(CycProtocol.Read.IDENTITY)
+                            if (status == BluetoothGatt.GATT_SUCCESS) send(CycProtocol.Read.IDENTITY)
                             else failed("Bike notifications failed ($status).")
                         }
 
@@ -286,18 +269,21 @@ internal class CycBluetooth(
                         status: Int,
                     ) =
                         event(connection) {
-                            if (status != BluetoothGatt.GATT_SUCCESS)
-                                failed("Bike request failed ($status).")
+                            if (status != BluetoothGatt.GATT_SUCCESS) failed("Bike request failed ($status).")
                         }
 
                     override fun onCharacteristicChanged(
                         connection: BluetoothGatt,
                         characteristic: BluetoothGattCharacteristic,
                         value: ByteArray,
-                    ) =
+                    ) {
+                        val receivedAt = SystemClock.elapsedRealtime()
+                        val timestamp = iso()
                         event(connection) {
-                            if (characteristic.uuid.toString() == CycProtocol.NOTIFY) receive(value)
+                            if (characteristic.uuid.toString() == CycProtocol.NOTIFY)
+                                receive(value, receivedAt, timestamp)
                         }
+                    }
 
                     override fun onCharacteristicChanged(
                         connection: BluetoothGatt,
@@ -343,21 +329,16 @@ internal class CycBluetooth(
         if (pending != null) return
         pending = read
         pendingSince = SystemClock.elapsedRealtime()
-        if (read == CycProtocol.Read.TELEMETRY)
-            nextPollAt = nextTelemetryPollMillis(nextPollAt, pendingSince, hz)
+        if (read == CycProtocol.Read.TELEMETRY) nextPollAt = nextTelemetryPollMillis(nextPollAt, pendingSince, hz)
         deadline(2500, "Bike response timed out.")
         val bytes = CycProtocol.request(read)
         val type =
-            if (
-                characteristic.properties and
-                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0
-            )
+            if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
                 BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         val success =
             if (Build.VERSION.SDK_INT >= 33)
-                connection.writeCharacteristic(characteristic, bytes, type) ==
-                    BluetoothStatusCodes.SUCCESS
+                connection.writeCharacteristic(characteristic, bytes, type) == BluetoothStatusCodes.SUCCESS
             else {
                 characteristic.writeType = type
                 characteristic.value = bytes
@@ -366,9 +347,15 @@ internal class CycBluetooth(
         if (!success) failed("Could not read bike telemetry.")
     }
 
-    private fun receive(bytes: ByteArray) {
+    private fun receive(bytes: ByteArray, receivedAt: Long, timestamp: String) {
+        var identified = false
         for (payload in decoder.feed(bytes)) {
             val command = payload.firstOrNull()?.toInt()?.and(255) ?: continue
+            if (pending != null && receivedAt - pendingSince > 2500) {
+                timeouts++
+                failed("Bike response arrived after its freshness deadline.")
+                return
+            }
             if (pending == CycProtocol.Read.IDENTITY && command in listOf(0, 111)) {
                 try {
                     identity = CycProtocol.identity(payload)
@@ -379,7 +366,7 @@ internal class CycBluetooth(
                 epoch = UUID.randomUUID().toString()
                 pending = null
                 watchdog?.let(handler::removeCallbacks)
-                send(CycProtocol.Read.TELEMETRY)
+                identified = true
             } else if (pending == CycProtocol.Read.TELEMETRY && command == 50) {
                 val model = identity ?: continue
                 val values =
@@ -390,23 +377,22 @@ internal class CycBluetooth(
                     }
                 pending = null
                 watchdog?.let(handler::removeCallbacks)
-                val now = SystemClock.elapsedRealtime()
-                if (stableSince == 0L) stableSince = now
-                if (now - stableSince >= 30000) retries = 0
-                lastSample = now
+                if (stableSince == 0L) stableSince = receivedAt
+                if (receivedAt - stableSince >= 30000) retries = 0
+                lastSample = receivedAt
                 sampleCount++
                 if (state["status"] != "connected") {
                     publish("connected")
                     connectingCompletion?.invoke(null)
                     connectingCompletion = null
                 }
-                sample(values, model, epoch)
+                sample(values, model, epoch, receivedAt, timestamp)
                 val wait = maxOf(0L, nextPollAt - SystemClock.elapsedRealtime())
-                polling =
-                    Runnable { send(CycProtocol.Read.TELEMETRY) }
-                        .also { handler.postDelayed(it, wait) }
+                polling = Runnable { send(CycProtocol.Read.TELEMETRY) }.also { handler.postDelayed(it, wait) }
             }
         }
+        // Pre-existing frames in this notification cannot answer a request sent after identity.
+        if (identified) send(CycProtocol.Read.TELEMETRY)
     }
 
     private fun closeGatt() {
@@ -423,8 +409,7 @@ internal class CycBluetooth(
     }
 
     private fun failed(message: String, peer: Boolean = false, terminal: Boolean = false) {
-        val immediate =
-            peer && stableSince > 0 && SystemClock.elapsedRealtime() - stableSince >= 30000
+        val immediate = peer && stableSince > 0 && SystemClock.elapsedRealtime() - stableSince >= 30000
         closeGatt()
         if (desired == null) return
         if (terminal || retries >= 5 && !recording()) {
@@ -435,14 +420,11 @@ internal class CycBluetooth(
             return
         }
         publish("reconnecting", message)
-        val delay =
-            if (immediate) 0
-            else listOf(1000L, 2000L, 4000L, 8000L, 16000L, 30000L)[retries.coerceAtMost(5)]
+        val delay = if (immediate) 0 else listOf(1000L, 2000L, 4000L, 8000L, 16000L, 30000L)[retries.coerceAtMost(5)]
         retries++
         val attempt = generation
         retry =
-            Runnable { if (generation == attempt && desired != null) begin() }
-                .also { handler.postDelayed(it, delay) }
+            Runnable { if (generation == attempt && desired != null) begin() }.also { handler.postDelayed(it, delay) }
     }
 
     fun disconnect() {
@@ -458,21 +440,13 @@ internal class CycBluetooth(
 
     fun diagnostics(): Payload =
         mapOf(
-            "schemaVersion" to 1,
-            "timestamp" to iso(),
             "status" to state["status"],
             "requestedHz" to hz,
-            "sampleCount" to sampleCount,
             "connectionAttempts" to attempts,
             "reconnects" to retries,
-            "requestTimeouts" to timeouts,
-            "decoderDiscardedBytes" to decoder.discarded,
             "recentSampleHz" to null,
-            "responseLatencyMs" to null,
             "lastSampleAgeSeconds" to
                 if (lastSample > 0) (SystemClock.elapsedRealtime() - lastSample) / 1000.0 else null,
             "lastGapSeconds" to null,
-            "background" to false,
-            "lastDisconnect" to null,
         )
 }

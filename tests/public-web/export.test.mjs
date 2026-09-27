@@ -6,20 +6,39 @@ import test from 'node:test';
 import { chromium, expect } from '@playwright/test';
 import { filesIn } from '../../scripts/web-notices.mjs';
 
+test('the exported privacy policy is readable without JavaScript', () => {
+  const html = readFileSync(resolve('dist/privacy.html'), 'utf8');
+  assert.match(html, /<h1[^>]*>Privacy policy</);
+  assert.match(html, /Power Log keeps ride data in the app on your devices/);
+  assert.match(html, /<h2[^>]*>Keeping and deleting data</);
+});
+
 test('public export works under the Pages path without external requests', { timeout: 60000 }, async () => {
   const root = resolve('dist');
   const prefix = '/power-log';
-  const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8' };
+  const mime = {
+    '.html': 'text/html',
+    '.js': 'text/javascript',
+    '.css': 'text/css',
+    '.png': 'image/png',
+    '.json': 'application/json',
+    '.txt': 'text/plain; charset=utf-8',
+  };
   const server = createServer((request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     const relative = pathname.slice(prefix.length);
     if (!pathname.startsWith(`${prefix}/`) || relative.includes('..')) {
-      response.writeHead(404).end(); return;
+      response.writeHead(404).end();
+      return;
     }
     const target = resolve(root, `.${relative}`);
-    const file = [target, `${target}.html`, `${target}/index.html`]
-      .find(candidate => existsSync(candidate) && statSync(candidate).isFile());
-    if (!file) { response.writeHead(404).end(); return; }
+    const file = [target, `${target}.html`, `${target}/index.html`].find(
+      candidate => existsSync(candidate) && statSync(candidate).isFile(),
+    );
+    if (!file) {
+      response.writeHead(404).end();
+      return;
+    }
     response.setHeader('Content-Type', mime[extname(file)] ?? 'application/octet-stream');
     response.end(readFileSync(file));
   });
@@ -29,7 +48,9 @@ test('public export works under the Pages path without external requests', { tim
     const origin = `http://127.0.0.1:${server.address().port}`;
     browser = await chromium.launch();
     const page = await browser.newPage();
-    const requests = [], errors = [], failures = [];
+    const requests = [],
+      errors = [],
+      failures = [];
     page.on('request', request => requests.push(request.url()));
     page.on('pageerror', error => errors.push(error.message));
     page.on('requestfailed', request => failures.push(request.url()));
@@ -43,6 +64,26 @@ test('public export works under the Pages path without external requests', { tim
       assert.equal(new URL(page.url()).pathname, `${prefix}/settings`);
       await page.reload();
       await expect(page.getByTestId('settings-speed')).toBeVisible();
+      const about = page.getByTestId('settings-about');
+      const privacy = about.getByRole('link', { name: 'Privacy policy', exact: true });
+      await expect(privacy).toHaveAttribute('href', `${prefix}/privacy`);
+      await expect(about.getByRole('link', { name: 'Third-party notices', exact: true })).toHaveAttribute(
+        'href',
+        'https://AlekseiBespalov.github.io/power-log/THIRD_PARTY_NOTICES.txt',
+      );
+      await privacy.click();
+      assert.equal(new URL(page.url()).pathname, `${prefix}/privacy`);
+      await page.reload();
+      const policy = page.getByTestId('privacy-screen');
+      await expect(policy.getByRole('heading', { name: 'Privacy policy', exact: true })).toBeVisible();
+      await expect(policy.getByRole('heading', { name: 'Keeping and deleting data', exact: true })).toBeVisible();
+      await expect(policy.getByRole('link', { name: 'GitHub Issues', exact: true })).toHaveAttribute(
+        'href',
+        'https://github.com/AlekseiBespalov/power-log/issues',
+      );
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await policy.getByRole('link', { name: 'Back to Settings', exact: true }).click();
+      assert.equal(new URL(page.url()).pathname, `${prefix}/settings`);
       await page.getByRole('link', { name: 'History', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
     }
@@ -53,7 +94,10 @@ test('public export works under the Pages path without external requests', { tim
       assert.equal(response.status, 404, `${name} must not be served`);
     }
     assert.ok(requests.length > 0);
-    assert.deepEqual(requests.filter(url => !url.startsWith(`${origin}${prefix}/`)), []);
+    assert.deepEqual(
+      requests.filter(url => !url.startsWith(`${origin}${prefix}/`)),
+      [],
+    );
     assert.deepEqual(errors, []);
     assert.deepEqual(failures, []);
     assert.ok(existsSync(`${root}/.nojekyll`));
@@ -63,10 +107,15 @@ test('public export works under the Pages path without external requests', { tim
       assert.ok((await response.text()).length > 1000);
     }
     const notices = readFileSync(`${root}/THIRD_PARTY_NOTICES.txt`, 'utf8');
-    for (const text of ['Copyright (c) Meta Platforms, Inc. and affiliates.', '--- vendor/react-helmet-async/LICENSE ---']) assert.ok(notices.includes(text), text);
+    for (const text of [
+      'Copyright (c) Meta Platforms, Inc. and affiliates.',
+      '--- vendor/react-helmet-async/LICENSE ---',
+    ])
+      assert.ok(notices.includes(text), text);
     for (const file of filesIn(root)) {
       assert.ok(!file.endsWith('.map'), `Source map must not be published: ${file}`);
-      if (/\.(js|css)$/.test(file)) assert.ok(!readFileSync(file, 'utf8').match(/(?:\/\/[#@]|\/\*[#@])\s*sourceMappingURL=/));
+      if (/\.(js|css)$/.test(file))
+        assert.ok(!readFileSync(file, 'utf8').match(/(?:\/\/[#@]|\/\*[#@])\s*sourceMappingURL=/));
     }
   } finally {
     await browser?.close();

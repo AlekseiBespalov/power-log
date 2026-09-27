@@ -10,9 +10,7 @@ class HealthPermissionsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val launcher =
-            registerForActivityResult(
-                PermissionController.createRequestPermissionResultContract()
-            ) {
+            registerForActivityResult(PermissionController.createRequestPermissionResultContract()) {
                 setResult(Activity.RESULT_OK)
                 finish()
             }

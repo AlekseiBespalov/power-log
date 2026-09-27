@@ -1,0 +1,463 @@
+{
+  "cases": [
+    {
+      "platform": "ios",
+      "name": "idle",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": true,
+          "phoneHealth": true,
+          "watchHealth": true,
+          "healthProvider": "appleHealth",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": null,
+        "phase": "idle",
+        "pendingAction": null,
+        "timerSeconds": 0,
+        "historyRevision": "",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": null,
+        "sealRevision": null,
+        "verifiedSealRevision": null,
+        "finalizationState": null,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": false,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "notRequested",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "off"
+          },
+          "heartRate": {
+            "status": "off"
+          },
+          "gps": {
+            "status": "off",
+            "source": "phone",
+            "accuracyMeters": null
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    },
+    {
+      "platform": "ios",
+      "name": "phone ride running with Health and GPS",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": true,
+          "phoneHealth": true,
+          "watchHealth": true,
+          "healthProvider": "appleHealth",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": "3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21",
+        "phase": "running",
+        "pendingAction": null,
+        "timerSeconds": 125.5,
+        "historyRevision": "",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": 42,
+        "sealRevision": null,
+        "verifiedSealRevision": null,
+        "finalizationState": "pending",
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": true,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "pending",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "receiving"
+          },
+          "heartRate": {
+            "status": "waiting"
+          },
+          "gps": {
+            "status": "receiving",
+            "source": "phone",
+            "accuracyMeters": 4.25
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    },
+    {
+      "platform": "ios",
+      "name": "Watch ride finishing after Health saved",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": true,
+          "phoneHealth": false,
+          "watchHealth": true,
+          "healthProvider": "appleHealth",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": "3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21",
+        "phase": "finishing",
+        "pendingAction": "stop",
+        "timerSeconds": 3600.75,
+        "historyRevision": "",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": 918,
+        "sealRevision": 3,
+        "verifiedSealRevision": 2,
+        "finalizationState": "pending",
+        "indoor": false,
+        "useWatch": true,
+        "saveToHealth": true,
+        "recordGPS": true,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "saved",
+        "watch": {
+          "installed": true
+        },
+        "streams": {
+          "cyc": {
+            "status": "stale"
+          },
+          "heartRate": {
+            "status": "receiving"
+          },
+          "gps": {
+            "status": "weak",
+            "source": "watch",
+            "accuracyMeters": 62.5
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    },
+    {
+      "platform": "ios",
+      "name": "unresolved recovery with an error",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": true,
+          "phoneHealth": true,
+          "watchHealth": true,
+          "healthProvider": "appleHealth",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": "3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21",
+        "phase": "recoverable",
+        "pendingAction": null,
+        "timerSeconds": 61,
+        "historyRevision": "",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": 7,
+        "sealRevision": null,
+        "verifiedSealRevision": null,
+        "finalizationState": "pending",
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": false,
+        "recoveryState": "unresolved",
+        "recoveryMessage": "Stop requested from the original owner. No recording completion has been confirmed.",
+        "healthKitState": "notSaved",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "off"
+          },
+          "heartRate": {
+            "status": "off"
+          },
+          "gps": {
+            "status": "off",
+            "source": "phone",
+            "accuracyMeters": null
+          }
+        },
+        "warnings": ["GPS was unavailable for part of this ride."],
+        "error": "Bluetooth is turned off."
+      }
+    },
+    {
+      "platform": "ios",
+      "name": "deletion signal",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": true,
+          "phoneHealth": true,
+          "watchHealth": true,
+          "healthProvider": "appleHealth",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": null,
+        "phase": "idle",
+        "pendingAction": null,
+        "timerSeconds": 0,
+        "historyRevision": "5b1d7c9e-0a4f-4e0b-8a61-7d2c3e9f4a10",
+        "lastDeletedWorkoutId": "3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21",
+        "collectionRevision": null,
+        "sealRevision": null,
+        "verifiedSealRevision": null,
+        "finalizationState": null,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": false,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "notRequested",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "off"
+          },
+          "heartRate": {
+            "status": "off"
+          },
+          "gps": {
+            "status": "off",
+            "source": "phone",
+            "accuracyMeters": null
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    },
+    {
+      "platform": "ios",
+      "name": "largest safe revision",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": true,
+          "phoneHealth": true,
+          "watchHealth": true,
+          "healthProvider": "appleHealth",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": "3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21",
+        "phase": "completed",
+        "pendingAction": null,
+        "timerSeconds": 0.5,
+        "historyRevision": "",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": 9007199254740991,
+        "sealRevision": 9007199254740991,
+        "verifiedSealRevision": 9007199254740991,
+        "finalizationState": "complete",
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": false,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "notRequested",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "off"
+          },
+          "heartRate": {
+            "status": "off"
+          },
+          "gps": {
+            "status": "off",
+            "source": "phone",
+            "accuracyMeters": null
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    },
+    {
+      "platform": "android",
+      "name": "idle",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": false,
+          "phoneHealth": true,
+          "watchHealth": false,
+          "healthProvider": "healthConnect",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": null,
+        "phase": "idle",
+        "pendingAction": null,
+        "timerSeconds": 0,
+        "historyRevision": "0",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": null,
+        "sealRevision": null,
+        "verifiedSealRevision": null,
+        "finalizationState": null,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": false,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "notRequested",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "off"
+          },
+          "heartRate": {
+            "status": "off"
+          },
+          "gps": {
+            "status": "off",
+            "source": "phone",
+            "accuracyMeters": null
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    },
+    {
+      "platform": "android",
+      "name": "ride running with Health Connect",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": false,
+          "phoneHealth": true,
+          "watchHealth": false,
+          "healthProvider": "healthConnect",
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": "3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21",
+        "phase": "running",
+        "pendingAction": null,
+        "timerSeconds": 3600.25,
+        "historyRevision": "4",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": null,
+        "sealRevision": null,
+        "verifiedSealRevision": null,
+        "finalizationState": null,
+        "indoor": false,
+        "useWatch": false,
+        "saveToHealth": true,
+        "recordGPS": true,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "pending",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "receiving"
+          },
+          "heartRate": {
+            "status": "off"
+          },
+          "gps": {
+            "status": "receiving",
+            "source": "phone",
+            "accuracyMeters": 4.2
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    },
+    {
+      "platform": "android",
+      "name": "paused indoor ride without Health Connect",
+      "wire": {
+        "supported": true,
+        "capabilities": {
+          "phoneWorkout": true,
+          "watchWorkout": false,
+          "phoneHealth": false,
+          "watchHealth": false,
+          "healthProvider": null,
+          "gps": true,
+          "foregroundOnly": false
+        },
+        "id": "3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21",
+        "phase": "paused",
+        "pendingAction": null,
+        "timerSeconds": 12,
+        "historyRevision": "4",
+        "lastDeletedWorkoutId": null,
+        "collectionRevision": null,
+        "sealRevision": null,
+        "verifiedSealRevision": null,
+        "finalizationState": null,
+        "indoor": true,
+        "useWatch": false,
+        "saveToHealth": false,
+        "recordGPS": false,
+        "recoveryState": "idle",
+        "recoveryMessage": null,
+        "healthKitState": "notRequested",
+        "watch": {
+          "installed": false
+        },
+        "streams": {
+          "cyc": {
+            "status": "paused"
+          },
+          "heartRate": {
+            "status": "off"
+          },
+          "gps": {
+            "status": "off",
+            "source": "phone",
+            "accuracyMeters": null
+          }
+        },
+        "warnings": [],
+        "error": null
+      }
+    }
+  ]
+}

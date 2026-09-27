@@ -27,13 +27,8 @@ internal class RideDistance(private val store: RideStore) {
         epoch: String,
         identity: String,
         gps: Boolean,
-    ) {
-        if (!store.writableDatabase.inTransaction()) {
-            store.transaction {
-                append(ride, row, time, values, active, segment, epoch, identity, gps)
-            }
-            return
-        }
+    ): String? {
+        check(store.writableDatabase.inTransaction()) { "Distance must commit with its original observation." }
         val source = if (gps) "gps:phone" else "controller"
         val key = "$ride:$source"
         val valid =
@@ -48,21 +43,16 @@ internal class RideDistance(private val store: RideStore) {
                         epoch.isNotEmpty()
         if (!valid) {
             previous.remove(key)
-            return
+            return null
         }
-        val old = previous.put(key, Prior(row, time, values, segment, epoch, identity)) ?: return
+        val old = previous.put(key, Prior(row, time, values, segment, epoch, identity)) ?: return null
         val dt = time - old.time
         if (dt <= 0) {
             previous.remove(key)
-            return
+            return null
         }
-        if (
-            dt > (if (gps) 10.0 else 2.5) ||
-                segment != old.segment ||
-                epoch != old.epoch ||
-                identity != old.identity
-        )
-            return
+        if (dt > (if (gps) 10.0 else 2.5) || segment != old.segment || epoch != old.epoch || identity != old.identity)
+            return null
         val u = old.values["controllerSpeedMps"] ?: 0.0
         val v = values["controllerSpeedMps"] ?: 0.0
         var meters =
@@ -74,13 +64,8 @@ internal class RideDistance(private val store: RideStore) {
                     values.getValue("longitude"),
                 )
             else (u + v) * dt / 2
-        if (meters / dt > 40) return
-        if (
-            gps &&
-                old.values["speedMps"]?.let { it in 0.0..0.5 } == true &&
-                values["speedMps"]?.let { it in 0.0..0.5 } == true
-        )
-            meters = 0.0
+        if (meters / dt > 40) return null
+        if (gps && stationary(old.values) && stationary(values)) meters = 0.0
         val prior = total(ride, source)
         store.writableDatabase.execSQL(
             "INSERT INTO distance_intervals(ride,source,start,end,meters,cumulative,covered,from_id,to_id,u,v) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -108,6 +93,7 @@ internal class RideDistance(private val store: RideStore) {
             "UPDATE rides SET metrics=metrics|? WHERE id=?",
             arrayOf(1L shl storedMetrics.indexOf(column), ride),
         )
+        return column
     }
 
     fun total(id: String, source: String): Pair<Double, Double> =
@@ -130,7 +116,8 @@ internal class RideDistance(private val store: RideStore) {
                     "controller",
                 )
         )
-        val timer = store.timing(id).second
+        val timer = store.timing(id).timer
+        val indoor = store.metadata(id).flag("indoor")
         val available =
             listOf("gps:phone", "controller").mapNotNull { source ->
                 val (meters, covered) = total(id, source)
@@ -138,24 +125,50 @@ internal class RideDistance(private val store: RideStore) {
                 else
                     mapOf(
                         "source" to source,
-                        "label" to
-                            if (source == "controller") "Controller estimate" else "GPS · Phone",
+                        "label" to if (source == "controller") "Controller estimate" else "GPS · Phone",
                         "estimated" to (source == "controller"),
                         "distanceMeters" to meters,
                         "coveredSeconds" to covered,
                         "uncoveredSeconds" to max(0.0, timer - covered),
-                        "partial" to (timer - covered > 2.5),
-                        "policyVersion" to 1,
+                        "partial" to (timer - covered > 0.001),
                     )
             }
         val selected =
-            if (selection == "auto") available.firstOrNull()
+            if (selection == "auto") available.firstOrNull { !indoor || it["source"] == "controller" }
             else available.find { it["source"] == selection }
         return mapOf("selection" to selection, "selected" to selected, "available" to available)
     }
 
     fun selected(id: String, selection: String) =
         (info(id, selection)["selected"] as? Map<*, *>)?.get("source") as? String
+
+    fun supportsInterval(id: String, column: String, from: Long, to: Long, end: Double): Boolean =
+        store.readableDatabase
+            .rawQuery(
+                "SELECT 1 FROM distance_intervals WHERE ride=? AND source=? AND end=? AND from_id=? AND to_id=?",
+                arrayOf(
+                    id,
+                    if (column == "gpsDistanceMeters") "gps:phone" else "controller",
+                    end.toString(),
+                    from.toString(),
+                    to.toString(),
+                ),
+            )
+            .use { it.moveToFirst() }
+
+    fun activeSeconds(id: String, start: Double, end: Double): Double {
+        var active = true
+        var previous = 0.0
+        var total = 0.0
+        val timing = store.timing(id)
+        (store.events(id) + RideEvent(timing.elapsed, "stop", timing.timestamp)).forEach { (time, action) ->
+            if (active) total += max(0.0, min(time, end) - max(previous, start))
+            if (action in listOf("pause", "stop")) active = false
+            else if (action in listOf("start", "resume")) active = true
+            previous = time
+        }
+        return total
+    }
 
     fun range(id: String, source: String, start: Double, end: Double): Pair<Double, Double> {
         fun cumulative(time: Double): Pair<Double, Double> {
@@ -181,9 +194,7 @@ internal class RideDistance(private val store: RideStore) {
                         val dt = time - a
                         val meters =
                             if (c.isNull(3)) c.getDouble(2) * dt / (b - a)
-                            else
-                                (c.getDouble(3) +
-                                    (c.getDouble(4) - c.getDouble(3)) * dt / (2 * (b - a))) * dt
+                            else (c.getDouble(3) + (c.getDouble(4) - c.getDouble(3)) * dt / (2 * (b - a))) * dt
                         base.first + meters to base.second + dt
                     }
                 }
@@ -194,13 +205,18 @@ internal class RideDistance(private val store: RideStore) {
     }
 
     companion object {
+        private fun stationary(values: Map<String, Double>) =
+            values["speedMps"]?.let { it >= 0.0 && it < 0.5 } == true &&
+                values["speedAccuracyMps"]?.let { it.isFinite() && it >= 0.0 } != false
+
         fun haversine(a: Double, b: Double, c: Double, d: Double): Double {
             val p1 = Math.toRadians(a)
             val p2 = Math.toRadians(c)
             val h =
-                (sin((p2 - p1) / 2).pow(2) +
-                        cos(p1) * cos(p2) * sin(Math.toRadians(d - b) / 2).pow(2))
-                    .coerceIn(0.0, 1.0)
+                (sin((p2 - p1) / 2).pow(2) + cos(p1) * cos(p2) * sin(Math.toRadians(d - b) / 2).pow(2)).coerceIn(
+                    0.0,
+                    1.0,
+                )
             return 6371008.8 * 2 * atan2(sqrt(h), sqrt(1 - h))
         }
     }

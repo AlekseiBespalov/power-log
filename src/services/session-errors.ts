@@ -19,8 +19,10 @@ export function sessionErrorReducer(current: SessionErrors, action: SessionError
       // its message starts a new occurrence without erasing a failed export/action.
       return error === current.native ? current : { ...current, native: error, nativeDismissed: false };
     }
-    case 'operation': return { ...current, operation: action.error };
-    case 'dismiss': return { ...current, operation: null, nativeDismissed: current.native !== null };
+    case 'operation':
+      return { ...current, operation: action.error };
+    case 'dismiss':
+      return { ...current, operation: null, nativeDismissed: current.native !== null };
   }
 }
 

@@ -33,7 +33,9 @@ final class PowerLogWatchDelegate: NSObject, WKApplicationDelegate {
     for task in backgroundTasks {
       if let connectivity = task as? WKWatchConnectivityRefreshBackgroundTask {
         Task { @MainActor in await WatchWorkoutEngine.shared.ownBackgroundTask(connectivity) }
-      } else { task.setTaskCompletedWithSnapshot(false) }
+      } else {
+        task.setTaskCompletedWithSnapshot(false)
+      }
     }
   }
 

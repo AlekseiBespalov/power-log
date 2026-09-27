@@ -1,24 +1,58 @@
+import { createCsvParser, type ParsedRecording } from '../core/recordings';
+import { MAX_CSV_BYTES } from '../core/validation';
+
 export async function exportText(name: string, contents: string) {
   const url = URL.createObjectURL(new Blob([contents], { type: 'text/csv;charset=utf-8' }));
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await exportWorkoutFile(url, name);
 }
-export async function importText(): Promise<{ name: string; text: string } | null> {
+export async function importRecording(): Promise<{ name: string; recording: ParsedRecording } | null> {
+  const file = await chooseCsv();
+  if (!file) return null;
+  const parser = createCsvParser();
+  const reader = file
+    .stream()
+    .pipeThrough(new TextDecoderStream('utf-8', { ignoreBOM: true }))
+    .getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parser.write(value);
+    }
+    return { name: file.name, recording: parser.finish() };
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+function chooseCsv(): Promise<File | null> {
   return new Promise((resolve, reject) => {
-    const input = document.createElement('input'); input.type = 'file'; input.accept = '.csv,text/csv';
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv';
     input.oncancel = () => resolve(null);
-    input.onchange = async () => {
-      const file = input.files?.[0]; if (!file) { resolve(null); return; }
-      if (file.size > 25 * 1024 * 1024) { reject(new Error('Choose a CSV smaller than 25 MB.')); return; }
-      try { resolve({ name: file.name, text: await file.text() }); } catch (error) { reject(error); }
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      if (file.size > MAX_CSV_BYTES) {
+        reject(new Error('Choose a CSV no larger than 256 MiB.'));
+        return;
+      }
+      resolve(file);
     };
     input.click();
   });
 }
 
-
 export async function exportWorkoutFile(uri: string, name: string): Promise<void> {
   if (!uri.startsWith('blob:')) throw new Error('The browser ride export is unavailable.');
-  const anchor = document.createElement('a'); anchor.href = uri; anchor.download = name; anchor.click();
+  const anchor = document.createElement('a');
+  anchor.href = uri;
+  anchor.download = name;
+  anchor.click();
   setTimeout(() => URL.revokeObjectURL(uri), 1000);
 }

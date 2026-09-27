@@ -1,7 +1,21 @@
 import { createElement } from 'react';
 import { View } from 'react-native';
-export { useFocusEffect, useIsFocused, useSafeAreaInsets, useSession, deviceAdapter, useMonitorPreferences, RoutePreview,
-  CaptureRideDetails, CsvRideDetails, exportWorkoutFile, importText, exportText, deleteCapture, exportCapture, workoutMonitorSource } from './history-deletion-platform';
+export {
+  useFocusEffect,
+  useIsFocused,
+  useSafeAreaInsets,
+  useSession,
+  deviceAdapter,
+  useMonitorPreferences,
+  RoutePreview,
+  CaptureRideDetails,
+  exportWorkoutFile,
+  importRecording,
+  exportText,
+  deleteCapture,
+  exportCapture,
+  workoutMonitorSource,
+} from './history-deletion-platform';
 
 /** A fixed chart landmark; the History/Metric/Text layout above it uses real RN Web. */
 export function MonitorPanel() {

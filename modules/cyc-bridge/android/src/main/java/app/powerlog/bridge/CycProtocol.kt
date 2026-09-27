@@ -29,9 +29,7 @@ object CycProtocol {
             if (read == Read.IDENTITY) byteArrayOf(111)
             else byteArrayOf(50, 3, 0xc0.toByte(), 0xfb.toByte(), 0x8f.toByte())
         val crc = crc(payload)
-        return byteArrayOf(2, payload.size.toByte()) +
-            payload +
-            byteArrayOf((crc shr 8).toByte(), crc.toByte(), 3)
+        return byteArrayOf(2, payload.size.toByte()) + payload + byteArrayOf((crc shr 8).toByte(), crc.toByte(), 3)
     }
 
     data class Identity(val model: String, val firmware: String, val protocol: String) {
@@ -43,14 +41,12 @@ object CycProtocol {
         require(bytes.size in 5..1024 && (bytes[0].toInt() and 255) in listOf(0, 111)) {
             "Unsupported controller"
         }
-        val end =
-            (3 until bytes.size).firstOrNull { bytes[it] == 0.toByte() }
-                ?: error("Invalid controller identity")
+        val end = (3 until bytes.size).firstOrNull { bytes[it] == 0.toByte() } ?: error("Invalid controller identity")
         require(end - 3 in 1..128)
         val text = bytes.copyOfRange(3, end).toString(Charsets.US_ASCII)
         val match =
-            Regex("^(X(?:6|12)(?:[A-Za-z_][A-Za-z0-9_]{0,29})?) +([0-9]{6,8}[A-Z]{0,8})(?= |$)")
-                .find(text) ?: error("Unsupported controller. Connect a CYC X6 or X12.")
+            Regex("^(X(?:6|12)(?:[A-Za-z_][A-Za-z0-9_]{0,29})?) +([0-9]{6,8}[A-Z]{0,8})(?= |$)").find(text)
+                ?: error("Unsupported controller. Connect a CYC X6 or X12.")
         return Identity(
             match.groupValues[1],
             match.groupValues[2],
@@ -66,24 +62,14 @@ object CycProtocol {
             Field("motorTempC", 2, 10.0),
             Field("motorCurrentA", 4, 100.0),
             Field("batteryCurrentA", 4, 100.0),
-            Field("idCurrentA", 4, 100.0),
-            Field("iqCurrentA", 4, 100.0),
-            Field("dutyCycle", 2, 1000.0),
             Field("motorRpm", 4, 1.0),
             Field("batteryVoltageV", 2, 10.0),
             Field("consumedAh", 4, 10000.0),
-            Field("tripTimeRaw", 4, 1.0),
             Field("consumedWh", 4, 10000.0),
             Field("cadenceRpm", 4, 10000.0),
             Field("throttleVoltageV", 4, 100.0),
             Field("pedalTorqueNm", 4, 100.0),
             Field("faultCode", 1, 1.0),
-            Field("ioFlags", 4, 1.0),
-            Field("controllerId", 1, 1.0),
-            Field("temperatures", 6, 10.0),
-            Field("vdV", 4, 1000.0),
-            Field("vqV", 4, 1000.0),
-            Field("odometerRaw", 4, 1.0),
             Field("humanPowerW", 4, 1.0),
             Field("speedRaw", 4, 100.0),
             Field("raceMode", 1, 1.0),
@@ -96,23 +82,19 @@ object CycProtocol {
             "Unexpected telemetry response"
         }
         val values = linkedMapOf<String, Double>()
-        fields.forEachIndexed { bit, field ->
-            if (MASK and (1 shl bit) != 0) {
-                require(buffer.remaining() >= field.bytes) { "Truncated telemetry" }
-                val raw =
-                    when (field.bytes) {
-                        1 -> buffer.get().toInt() and 255
-                        2 -> buffer.short.toInt()
-                        else -> buffer.int
-                    }
-                values[field.name] = raw / field.scale
-            }
+        fields.forEach { field ->
+            require(buffer.remaining() >= field.bytes) { "Truncated telemetry" }
+            val raw =
+                when (field.bytes) {
+                    1 -> buffer.get().toInt() and 255
+                    2 -> buffer.short.toInt()
+                    else -> buffer.int
+                }
+            values[field.name] = raw / field.scale
         }
         require(!buffer.hasRemaining()) { "Unexpected telemetry length" }
         values["motorInputPowerW"] =
-            Math.round(
-                values.getValue("batteryVoltageV") * values.getValue("batteryCurrentA") * 10000
-            ) / 10000.0
+            Math.round(values.getValue("batteryVoltageV") * values.getValue("batteryCurrentA") * 10000) / 10000.0
         if (identity.knownSpeed) values["controllerSpeedMps"] = values.getValue("speedRaw") / 3.6
         return values
     }
@@ -144,9 +126,7 @@ object CycProtocol {
                     }
                     val length =
                         if (start == 2) buffer[offset + 1].toInt() and 255
-                        else
-                            ((buffer[offset + 1].toInt() and 255) shl 8) or
-                                (buffer[offset + 2].toInt() and 255)
+                        else ((buffer[offset + 1].toInt() and 255) shl 8) or (buffer[offset + 2].toInt() and 255)
                     if (length !in 1..1024 || start == 3 && length <= 255) continue
                     val size = header + length + 3
                     if (buffer.size - offset < size) {
@@ -155,10 +135,8 @@ object CycProtocol {
                     }
                     val payload = buffer.copyOfRange(offset + header, offset + header + length)
                     val pos = offset + header + length
-                    val checksum =
-                        ((buffer[pos].toInt() and 255) shl 8) or (buffer[pos + 1].toInt() and 255)
-                    if (buffer[offset + size - 1] != 3.toByte() || crc(payload) != checksum)
-                        continue
+                    val checksum = ((buffer[pos].toInt() and 255) shl 8) or (buffer[pos + 1].toInt() and 255)
+                    if (buffer[offset + size - 1] != 3.toByte() || crc(payload) != checksum) continue
                     result.add(payload)
                     discarded += offset
                     buffer = buffer.copyOfRange(offset + size, buffer.size)

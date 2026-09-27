@@ -11,18 +11,29 @@ enum WorkoutDataError: Error, LocalizedError {
 
 /// JSON values are retained without linking the archive to CoreLocation, HealthKit or CYC.
 enum WorkoutJSON: Codable, Equatable {
-  case integer(Int64), unsigned(UInt64), number(Double), string(String), bool(Bool), object([String: WorkoutJSON]), array([WorkoutJSON]), null
+  case integer(Int64), unsigned(UInt64), number(Double), string(String), bool(Bool), object([String: WorkoutJSON]),
+    array([WorkoutJSON]), null
   init(from decoder: Decoder) throws {
     let c = try decoder.singleValueContainer()
-    if c.decodeNil() { self = .null }
-    else if let v = try? c.decode(Bool.self) { self = .bool(v) }
-    else if let v = try? c.decode(Int64.self) { self = .integer(v) }
-    else if let v = try? c.decode(UInt64.self) { self = .unsigned(v) }
-    else if let v = try? c.decode(Double.self), v.isFinite { self = .number(v) }
-    else if let v = try? c.decode(String.self) { self = .string(v) }
-    else if let v = try? c.decode([String: WorkoutJSON].self) { self = .object(v) }
-    else if let v = try? c.decode([WorkoutJSON].self) { self = .array(v) }
-    else { throw WorkoutDataError.invalid("Unsupported JSON value") }
+    if c.decodeNil() {
+      self = .null
+    } else if let v = try? c.decode(Bool.self) {
+      self = .bool(v)
+    } else if let v = try? c.decode(Int64.self) {
+      self = .integer(v)
+    } else if let v = try? c.decode(UInt64.self) {
+      self = .unsigned(v)
+    } else if let v = try? c.decode(Double.self), v.isFinite {
+      self = .number(v)
+    } else if let v = try? c.decode(String.self) {
+      self = .string(v)
+    } else if let v = try? c.decode([String: WorkoutJSON].self) {
+      self = .object(v)
+    } else if let v = try? c.decode([WorkoutJSON].self) {
+      self = .array(v)
+    } else {
+      throw WorkoutDataError.invalid("Unsupported JSON value")
+    }
   }
   func encode(to encoder: Encoder) throws {
     var c = encoder.singleValueContainer()
@@ -39,10 +50,21 @@ enum WorkoutJSON: Codable, Equatable {
   }
   /// Only analytical consumers use this conversion. Original integer storage never does.
   var number: Double? {
-    switch self { case .number(let v): return v; case .integer(let v): return Double(v); case .unsigned(let v): return Double(v); default: return nil }
+    switch self {
+    case .number(let v): return v
+    case .integer(let v): return Double(v)
+    case .unsigned(let v): return Double(v)
+    default: return nil
+    }
   }
-  var integer: Int64? { if case .integer(let value) = self { return value }; return nil }
-  var string: String? { if case .string(let value) = self { return value }; return nil }
+  var integer: Int64? {
+    if case .integer(let value) = self { return value }
+    return nil
+  }
+  var string: String? {
+    if case .string(let value) = self { return value }
+    return nil
+  }
   var any: Any {
     switch self {
     case .integer(let v): return v
@@ -70,11 +92,13 @@ enum WorkoutCoding {
   private static let dates = Dates()
   private static let millisecondDates = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
   static func encoder() -> JSONEncoder {
-    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     return encoder
   }
   static func timestamp(_ date: Date) -> String {
-    dates.lock.lock(); defer { dates.lock.unlock() }
+    dates.lock.lock()
+    defer { dates.lock.unlock() }
     return dates.fractional.string(from: date)
   }
   static func date(_ string: String) throws -> Date {
@@ -91,14 +115,17 @@ enum WorkoutCoding {
       (0..<24).contains(Int(bytes[11]) * 10 + Int(bytes[12]) - 528),
       (0..<60).contains(Int(bytes[14]) * 10 + Int(bytes[15]) - 528),
       (0..<60).contains(Int(bytes[17]) * 10 + Int(bytes[18]) - 528),
-      let parsed = try? millisecondDates.parse(string) {
+      let parsed = try? millisecondDates.parse(string)
+    {
       let seconds = (parsed.timeIntervalSince1970 * 1000).rounded() / 1000
       if seconds >= 946684800, seconds < 4102444800 { return Date(timeIntervalSince1970: seconds) }
     }
-    dates.lock.lock(); defer { dates.lock.unlock() }
+    dates.lock.lock()
+    defer { dates.lock.unlock() }
     let result = dates.fractional.date(from: string) ?? dates.whole.date(from: string)
     guard let date = result, date.timeIntervalSince1970 >= 946684800,
-          date.timeIntervalSince1970 < 4102444800 else {
+      date.timeIntervalSince1970 < 4102444800
+    else {
       throw WorkoutDataError.invalid("Invalid workout timestamp")
     }
     return date
@@ -109,7 +136,8 @@ enum WorkoutCoding {
   }
   static func dictionary<T: Encodable>(_ value: T) -> [String: Any] {
     guard let data = try? encoder().encode(value),
-          let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return [:] }
     return value
   }
 }
@@ -124,29 +152,45 @@ struct WorkoutEvent: Codable, Equatable {
   var elapsedSeconds: Double?
   var payload: [String: WorkoutJSON]
 
-  /// Reconstruct only previously validated canonical database rows. Keep the original
-  /// timestamp spelling and absent elapsed value; input admission still calls validate().
-  init(storedEventID: String, workoutID: String, kind: String, source: String,
-       originalTimestamp: String, elapsedSeconds: Double?, payload: [String: WorkoutJSON]) {
-    self.eventId = storedEventID; self.workoutId = workoutID
-    self.kind = kind; self.source = source; self.timestamp = originalTimestamp
-    self.elapsedSeconds = elapsedSeconds; self.payload = payload
+  init(
+    storedEventID: String, workoutID: String, kind: String, source: String,
+    originalTimestamp: String, elapsedSeconds: Double?, payload: [String: WorkoutJSON]
+  ) throws {
+    guard kind == "health" || elapsedSeconds != nil else {
+      throw WorkoutDataError.invalid("Stored app observation has no collection elapsed time")
+    }
+    self.eventId = storedEventID
+    self.workoutId = workoutID
+    self.kind = kind
+    self.source = source
+    self.timestamp = originalTimestamp
+    self.elapsedSeconds = elapsedSeconds
+    self.payload = payload
   }
 
   init(dictionary: [String: Any]) throws {
-    guard JSONSerialization.isValidJSONObject(dictionary) else { throw WorkoutDataError.invalid("Workout event is not finite JSON") }
+    guard JSONSerialization.isValidJSONObject(dictionary) else {
+      throw WorkoutDataError.invalid("Workout event is not finite JSON")
+    }
     let data = try JSONSerialization.data(withJSONObject: dictionary)
     guard data.count <= 32_768 else { throw WorkoutDataError.invalid("Workout event exceeds 32 KiB") }
     self = try JSONDecoder().decode(Self.self, from: data)
     try validate()
-    eventId = try WorkoutCoding.id(eventId); workoutId = try WorkoutCoding.id(workoutId)
+    eventId = try WorkoutCoding.id(eventId)
+    workoutId = try WorkoutCoding.id(workoutId)
     // Retain the original UTC spelling/precision. The indexed microsecond key is derived.
   }
-  init(workoutId: String, kind: String, source: String, timestamp: Date,
-       elapsedSeconds: Double? = nil, payload: [String: WorkoutJSON], eventId: String = UUID().uuidString) throws {
-    self.eventId = try WorkoutCoding.id(eventId); self.workoutId = try WorkoutCoding.id(workoutId)
-    self.kind = kind; self.source = source; self.timestamp = WorkoutCoding.timestamp(timestamp)
-    self.elapsedSeconds = elapsedSeconds; self.payload = payload
+  init(
+    workoutId: String, kind: String, source: String, timestamp: Date,
+    elapsedSeconds: Double? = nil, payload: [String: WorkoutJSON], eventId: String = UUID().uuidString
+  ) throws {
+    self.eventId = try WorkoutCoding.id(eventId)
+    self.workoutId = try WorkoutCoding.id(workoutId)
+    self.kind = kind
+    self.source = source
+    self.timestamp = WorkoutCoding.timestamp(timestamp)
+    self.elapsedSeconds = elapsedSeconds
+    self.payload = payload
     try validate()
   }
   var dictionary: [String: Any] { WorkoutCoding.dictionary(self) }
@@ -155,10 +199,16 @@ struct WorkoutEvent: Codable, Equatable {
   @discardableResult
   func validate() throws -> Int {
     guard schemaVersion == 1 else { throw WorkoutDataError.invalid("Unsupported workout event version") }
-    _ = try WorkoutCoding.id(eventId); _ = try WorkoutCoding.id(workoutId); _ = try WorkoutCoding.date(timestamp)
+    _ = try WorkoutCoding.id(eventId)
+    _ = try WorkoutCoding.id(workoutId)
+    _ = try WorkoutCoding.date(timestamp)
     guard ["telemetry", "location", "health", "lifecycle"].contains(kind),
-          ["cyc", "phone", "watch"].contains(source), payload.count <= 64 else {
+      ["cyc", "phone", "watch"].contains(source), payload.count <= 64
+    else {
       throw WorkoutDataError.invalid("Invalid workout event kind/source/payload")
+    }
+    guard kind == "health" || elapsedSeconds != nil else {
+      throw WorkoutDataError.invalid("App observations require collection elapsed time")
     }
     if let elapsedSeconds, !elapsedSeconds.isFinite || elapsedSeconds < 0 || elapsedSeconds > 2_678_400 {
       throw WorkoutDataError.invalid("Invalid workout elapsed time")
@@ -166,20 +216,29 @@ struct WorkoutEvent: Codable, Equatable {
     func validateJSON(_ value: WorkoutJSON, depth: Int) throws {
       guard depth <= 8 else { throw WorkoutDataError.invalid("Workout JSON nesting exceeds limit") }
       switch value {
-      case .number(let n): guard n.isFinite, abs(n) <= 1e15 else { throw WorkoutDataError.invalid("Invalid workout number") }
-      case .string(let s): guard s.utf8.count <= 4096 else { throw WorkoutDataError.invalid("Workout string exceeds limit") }
-      case .object(let o): guard o.count <= 128 else { throw WorkoutDataError.invalid("Workout object exceeds limit") }; for v in o.values { try validateJSON(v, depth: depth + 1) }
-      case .array(let a): guard a.count <= 256 else { throw WorkoutDataError.invalid("Workout array exceeds limit") }; for v in a { try validateJSON(v, depth: depth + 1) }
+      case .number(let n):
+        guard n.isFinite, abs(n) <= 1e15 else { throw WorkoutDataError.invalid("Invalid workout number") }
+      case .string(let s):
+        guard s.utf8.count <= 4096 else { throw WorkoutDataError.invalid("Workout string exceeds limit") }
+      case .object(let o):
+        guard o.count <= 128 else { throw WorkoutDataError.invalid("Workout object exceeds limit") }
+        for v in o.values { try validateJSON(v, depth: depth + 1) }
+      case .array(let a):
+        guard a.count <= 256 else { throw WorkoutDataError.invalid("Workout array exceeds limit") }
+        for v in a { try validateJSON(v, depth: depth + 1) }
       default: break
       }
     }
     try validateJSON(.object(payload), depth: 0)
     switch kind {
     case "telemetry":
-      guard source == "cyc", number("humanPowerW") != nil, number("cadenceRpm") != nil else { throw WorkoutDataError.invalid("Telemetry requires CYC rider power and cadence") }
+      guard source == "cyc", number("humanPowerW") != nil, number("cadenceRpm") != nil else {
+        throw WorkoutDataError.invalid("Telemetry requires CYC rider power and cadence")
+      }
     case "location":
       guard source != "cyc", let lat = number("latitude"), let lon = number("longitude"),
-            (-90...90).contains(lat), (-180...180).contains(lon) else { throw WorkoutDataError.invalid("Invalid workout coordinates") }
+        (-90...90).contains(lat), (-180...180).contains(lon)
+      else { throw WorkoutDataError.invalid("Invalid workout coordinates") }
     case "health":
       guard source != "cyc", !payload.isEmpty else { throw WorkoutDataError.invalid("Invalid health event") }
       for key in ["activeEnergyKcal", "basalEnergyKcal", "distanceMeters"] {
@@ -187,7 +246,8 @@ struct WorkoutEvent: Codable, Equatable {
       }
     case "lifecycle":
       guard source != "cyc", let action = payload["action"]?.string,
-            ["start", "pause", "resume", "lap", "stop"].contains(action) else { throw WorkoutDataError.invalid("Invalid lifecycle action") }
+        ["start", "pause", "resume", "lap", "stop"].contains(action)
+      else { throw WorkoutDataError.invalid("Invalid lifecycle action") }
     default: break
     }
     let bytes = try WorkoutCoding.encoder().encode(self).count
@@ -202,14 +262,13 @@ struct WorkoutMetadata: Codable {
   var startedAt: String
   var endedAt: String?
   var stopElapsedSeconds: Double?
+  var elapsedSeconds: Double = 0
+  var ownerTiming: WorkoutOwnerTiming?
   var phase = "running"
   var indoor: Bool
   var watchEnabled: Bool
-  // Optional storage preserves legacy decoding; new rides always freeze explicit values.
-  var saveToHealth: Bool? = nil
-  var recordGPS: Bool? = nil
-  var savesToHealth: Bool { saveToHealth ?? true }
-  var recordsGPS: Bool { recordGPS ?? !indoor }
+  var saveToHealth: Bool
+  var recordGPS: Bool
   var sport = "cycling"
   var subSport = "e_biking"
   var eventCount = 0
@@ -226,7 +285,6 @@ struct WorkoutMetadata: Codable {
   var sealVerified: Bool { (sealRevision ?? 0) > 0 && verifiedSealRevision == sealRevision }
   var dictionary: [String: Any] {
     var result = WorkoutCoding.dictionary(self)
-    result["saveToHealth"] = savesToHealth; result["recordGPS"] = recordsGPS
     result["watchSyncState"] = watchSyncState ?? (watchEnabled ? "pending" : "notRequired")
     return result
   }
@@ -273,20 +331,56 @@ struct WorkoutSummary: Codable {
   var dictionary: [String: Any] { WorkoutCoding.dictionary(self) }
 }
 
+struct WorkoutCapabilities {
+  let phoneWorkout = true
+  let watchWorkout: Bool
+  let phoneHealth: Bool
+  let watchHealth: Bool
+  let healthProvider: String?
+  let gps = true
+  let foregroundOnly = false
+
+  init(iOSMajorVersion: Int, healthAvailable: Bool) {
+    watchWorkout = iOSMajorVersion >= 17 && healthAvailable
+    phoneHealth = iOSMajorVersion >= 26 && healthAvailable
+    watchHealth = watchWorkout
+    healthProvider = healthAvailable ? "appleHealth" : nil
+  }
+}
+
+struct WorkoutRecordingOptions: Equatable {
+  let useWatch: Bool
+  let saveToHealth: Bool
+  let recordGPS: Bool
+}
+
 /// Frozen collection intent is consulted again at every delayed native Health effect.
 enum WorkoutRecordingPolicy {
+  static func effectiveOptions(
+    capabilities: WorkoutCapabilities, indoor: Bool, useWatch: Bool = false, saveToHealth: Bool = true,
+    recordGPS: Bool? = nil
+  ) -> WorkoutRecordingOptions {
+    let watch = capabilities.watchWorkout && useWatch
+    return WorkoutRecordingOptions(
+      useWatch: watch, saveToHealth: (watch ? capabilities.watchHealth : capabilities.phoneHealth) && saveToHealth,
+      recordGPS: capabilities.gps && (recordGPS ?? !indoor))
+  }
   static func sampleHz(_ value: Double) throws -> Double {
-    guard value.isFinite, [2.0, 4.0, 8.0].contains(value) else { throw WorkoutDataError.invalid("Choose 2, 4, or 8 samples per second.") }
+    guard value.isFinite, [2.0, 4.0, 8.0].contains(value) else {
+      throw WorkoutDataError.invalid("Choose 2, 4, or 8 samples per second.")
+    }
     return value
   }
   static func requireHealthWrite(id: String, archive: WorkoutArchive) throws {
     let metadata = try archive.metadata(id: id)
-    guard metadata.savesToHealth, metadata.healthKitState != "notRequested", metadata.healthKitState != "discarded" else {
+    guard metadata.saveToHealth, metadata.healthKitState != "notRequested", metadata.healthKitState != "discarded",
+      metadata.healthKitState != "unavailable"
+    else {
       throw WorkoutDataError.invalid("Health saving was not requested for this ride")
     }
   }
   static func requireOptions(_ metadata: WorkoutMetadata, saveToHealth: Bool, recordGPS: Bool) throws {
-    guard metadata.savesToHealth == saveToHealth, metadata.recordsGPS == recordGPS else {
+    guard metadata.saveToHealth == saveToHealth, metadata.recordGPS == recordGPS else {
       throw WorkoutDataError.invalid("Recording options cannot change after a ride starts")
     }
   }
@@ -298,7 +392,8 @@ struct WorkoutSamplingOwner {
   private(set) var rate: Double?
   mutating func update(id: String?, rate: Double) {
     guard self.id != id else { return }
-    self.id = id; self.rate = id == nil ? nil : rate
+    self.id = id
+    self.rate = id == nil ? nil : rate
   }
   func connectionRate(_ requested: Double) -> Double { rate ?? requested }
 }
@@ -307,14 +402,128 @@ struct WorkoutSamplingOwner {
 struct WorkoutSensorWindow {
   let start: Date
   let cutoff: Date
-  func contains(start sampleStart: Date, end sampleEnd: Date) -> Bool { sampleStart >= start && sampleEnd <= cutoff && sampleEnd >= sampleStart }
+  func contains(start sampleStart: Date, end sampleEnd: Date) -> Bool {
+    sampleStart >= start && sampleEnd <= cutoff && sampleEnd >= sampleStart
+  }
 }
 
 /// Deterministic external operation identity, without truncating the durable replay ledger.
 enum WorkoutStableIdentity {
   static func uuid(_ value: String) -> String {
     var bytes = Array(SHA256.hash(data: Data(value.utf8)).prefix(16))
-    bytes[6] = (bytes[6] & 0x0f) | 0x50; bytes[8] = (bytes[8] & 0x3f) | 0x80
-    return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15])).uuidString.lowercased()
+    bytes[6] = (bytes[6] & 0x0f) | 0x50
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    return UUID(
+      uuid: (
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10],
+        bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+      )
+    ).uuidString.lowercased()
+  }
+}
+
+struct WorkoutLiveFreshness {
+  private(set) var observationID: String?
+  private(set) var sequence: Int64?
+  private(set) var acquiredAt: Double?
+
+  func age(at uptime: Double) -> Double? {
+    acquiredAt.map { max(0, uptime - $0) }
+  }
+
+  @discardableResult
+  mutating func receive(id: String, sequence: Int64? = nil, age: Double?, at uptime: Double, isNew: Bool = true) -> Bool
+  {
+    guard let age, age.isFinite, age >= 0, uptime.isFinite else { return false }
+    let acquisition = uptime - age
+    if observationID == id {
+      acquiredAt = min(acquiredAt ?? acquisition, acquisition)
+      return false
+    }
+    guard isNew else { return false }
+    if let sequence, let previous = self.sequence {
+      guard sequence > previous else { return false }
+    } else if let acquiredAt, acquisition <= acquiredAt {
+      return false
+    }
+    observationID = id
+    self.sequence = sequence
+    acquiredAt = acquisition
+    return true
+  }
+
+  static func admitHealth(
+    duplicate: () throws -> Bool, record: () -> Bool, storageFailed: (Error) -> Void
+  ) -> Bool {
+    do {
+      guard try !duplicate() else { return false }
+      return record()
+    } catch {
+      storageFailed(error)
+      return false
+    }
+  }
+
+  static func unrecorded(_ events: [WorkoutEvent], archive: WorkoutArchive) throws -> Set<String> {
+    Set(try events.filter { try !archive.hasEvent(id: $0.workoutId, eventID: $0.eventId) }.map(\.eventId))
+  }
+
+  static func age(acquisition: Double?, now: Double) -> Double? {
+    guard let acquisition, acquisition.isFinite, now.isFinite else { return nil }
+    let age = max(0, now - acquisition)
+    return age.isFinite ? age : nil
+  }
+
+  static func sampleEvent(_ sample: [String: Any]) -> [String: Any]? {
+    guard let acquisition = sample["acquisitionMonotonic"] as? Double, acquisition.isFinite else { return nil }
+    var value = sample
+    value["acquiredAtMonotonic"] = acquisition
+    return value
+  }
+
+  static func dispatchPacket(
+    _ data: Data, epoch: String, lock: NSRecursiveLock? = nil,
+    now: () -> Double = { ProcessInfo.processInfo.systemUptime }, send: (Data) -> Void
+  ) {
+    lock?.lock()
+    defer { lock?.unlock() }
+    send(forwardingPacket(data, epoch: epoch, now: now()))
+  }
+
+  static func forwardingPacket(_ data: Data, epoch: String, now: Double) -> Data {
+    guard var packet = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      packet["kind"] as? String == "events", let events = packet["events"] as? [[String: Any]]
+    else { return data }
+    packet["sampleAges"] = sampleAges(events, epoch: epoch, now: now)
+    guard let encoded = try? JSONSerialization.data(withJSONObject: packet), encoded.count <= 60_000 else {
+      return data
+    }
+    return encoded
+  }
+
+  static func delayedPacket(_ data: Data, dispatchedAt: Double, now: Double) -> Data {
+    guard var packet = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let ages = packet["sampleAges"] as? [String: Double]
+    else { return data }
+    let delay = now - dispatchedAt
+    packet["sampleAges"] = ages.compactMapValues { age -> Double? in
+      guard delay.isFinite, delay >= 0, age.isFinite, age >= 0, (age + delay).isFinite else { return nil }
+      return age + delay
+    }
+    if let encoded = try? JSONSerialization.data(withJSONObject: packet), encoded.count <= 60_000 { return encoded }
+    packet.removeValue(forKey: "sampleAges")
+    return (try? JSONSerialization.data(withJSONObject: packet)) ?? data
+  }
+
+  static func sampleAges(_ events: [[String: Any]], epoch: String, now: Double) -> [String: Double] {
+    var ages: [String: Double] = [:]
+    for event in events {
+      guard let id = event["eventId"] as? String, let payload = event["payload"] as? [String: Any],
+        payload["clockEpoch"] as? String == epoch,
+        let age = age(acquisition: payload["acquisitionMonotonic"] as? Double, now: now)
+      else { continue }
+      ages[id] = age
+    }
+    return ages
   }
 }
