@@ -27,6 +27,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: ${{ !startsWith(github.ref, 'refs/tags/v') && 'gradle' || '' }}
+          cache-dependency-path: |
+            package-lock.json
+            modules/cyc-bridge/android/build.gradle
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
@@ -61,7 +65,7 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/v')"
         env:
           POWER_LOG_ANDROID_VERSION_CODE: ${{ github.run_number }}
-        run: npm run build:android -- --preview
+        run: npm run build:android -- --preview --arch=arm64-v8a
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: android-apk

@@ -59,13 +59,13 @@ const config: ExpoConfig = {
     'expo-router',
     'expo-dev-client',
     'expo-document-picker',
-    // Precompiled Expo modules require React.framework. Keep both on source
-    // builds so a missing React prebuilt cannot produce an unlaunchable app.
+    // Precompiled Expo modules require React.framework; building them from source keeps the app launchable
+    // when the React Native prebuilt is unavailable and pod install falls back to a source build.
     [
       'expo-build-properties',
       {
         android: { minSdkVersion: 28 },
-        ios: { buildReactNativeFromSource: true, usePrecompiledModules: false, enableSceneSupport: true },
+        ios: { buildReactNativeFromSource: false, usePrecompiledModules: false, enableSceneSupport: true },
       },
     ],
     './plugins/with-power-log-watch',

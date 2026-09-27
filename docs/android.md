@@ -36,7 +36,7 @@ For independent FIT verification, install `garmin-fit-sdk` in a temporary Python
 
 ## GitHub APKs
 
-The Android workflow builds an installable preview artifact for pull requests, `main` and manual runs. A `v*` tag builds a separately signed release and attaches `power-log.apk` and `SHA256SUMS.txt` to its GitHub release. It does not use a cloud build service.
+The Android workflow builds an installable arm64 preview artifact for pull requests, `main` and manual runs, reusing a Gradle dependency cache; tagged releases build without a cache. A `v*` tag builds a separately signed release and attaches `power-log.apk` and `SHA256SUMS.txt` to its GitHub release. It does not use a cloud build service.
 
 Release tags must match the version in `package.json`, which also supplies the app version. Before creating a release tag, configure these repository Actions secrets:
 
