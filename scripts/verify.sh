@@ -22,10 +22,12 @@ else
 fi
 cd "$work"
 export CI=1
+node_bin="/opt/homebrew/opt/node@$(cat .nvmrc)/bin"
+if [ -x "$node_bin/node" ]; then PATH="$node_bin:$PATH"; fi
 export FIT_PYTHON="${FIT_PYTHON:-$HOME/.cache/power-log/fit-venv/bin/python}"
 if [ -z "${BUNDLE_PATH:-}" ] && [ -d "$HOME/.cache/power-log/bundle" ]; then export BUNDLE_PATH="$HOME/.cache/power-log/bundle"; fi
 npm ci
-npm audit --audit-level=moderate
+node scripts/audit.mjs
 npm run check
 npm run test:browser
 npm run test:e2e

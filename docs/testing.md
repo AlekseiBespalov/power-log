@@ -1,6 +1,6 @@
 # Testing
 
-Use Node 24 and `npm ci`. Browser checks need Playwright Chromium (`npx playwright install chromium`); Apple checks need macOS and full Xcode with iOS/watchOS SDKs. Android checks need JDK 17 and the Android SDK.
+Use Node 24 and `npm ci`; `npm run verify` and `npm run release:android` pick Homebrew's `node@24` when it is installed. Browser checks need Playwright Chromium (`npx playwright install chromium`); Apple checks need macOS and full Xcode with iOS/watchOS SDKs. Android checks need JDK 17 and the Android SDK.
 
 | Command | Coverage |
 | --- | --- |
@@ -18,7 +18,7 @@ The ride snapshot and ride-option rules are fixed by `tests/fixtures/contract/`:
 
 The Watch journal and `ClockHealth` Swift suites guard the [two time domains](measurements.md#evidence-and-limits): monotonic capture elapsed excludes recovery downtime, while original UTC stays unchanged through forward and backward wall-clock jumps. A Watch recovery fixture retains elapsed 60 at 10:01, resumes at 10:11 and stores a GPS fix at elapsed 61 alongside a raw Health sample at UTC 10:11:01 with UTC-derived placement 661; valid historical Health data remains stored even beyond the measured stop. Clock contracts retain measured terminal timing, original Health write dates and UTC-based omission rules. FIT's start-plus-elapsed placement can differ from Health after recovery or clock changes; these tests do not assert Health/FIT equality or validate native HealthKit execution.
 
-GitHub runs only the website deploy. Before merging or releasing, `npm run verify` checks the commit on this Mac in a fresh temporary worktree of `HEAD`, so ignored local files and generated native folders cannot hide a missing file. With `CI=1` it installs dependencies with `npm ci`, then runs the audit, `npm run check`, the browser, end-to-end and public-web suites, the Swift and Kotlin format checks, the Swift suite, the linked iPhone simulator build and the Android preview build with its unit tests; the worktree is removed when everything passes and kept for inspection when something fails. FIT decoding there is mandatory and uses the Garmin SDK from `FIT_PYTHON` (default `~/.cache/power-log/fit-venv`).
+GitHub runs only the website deploy. Before merging or releasing, `npm run verify` checks the commit on this Mac in a fresh temporary worktree of `HEAD`, so ignored local files and generated native folders cannot hide a missing file. With `CI=1` it installs dependencies with `npm ci`, then runs the audit (`scripts/audit.mjs` fails on any moderate or worse advisory it does not accept by name), `npm run check`, the browser, end-to-end and public-web suites, the Swift and Kotlin format checks, the Swift suite, the linked iPhone simulator build and the Android preview build with its unit tests; the worktree is removed when everything passes and kept for inspection when something fails. FIT decoding there is mandatory and uses the Garmin SDK from `FIT_PYTHON` (default `~/.cache/power-log/fit-venv`).
 
 ## iOS build and installation
 

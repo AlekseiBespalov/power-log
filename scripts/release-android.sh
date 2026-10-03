@@ -2,6 +2,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 root=$(pwd)
+node_bin="/opt/homebrew/opt/node@$(cat .nvmrc)/bin"
+if [ -x "$node_bin/node" ]; then PATH="$node_bin:$PATH"; fi
 version=${1:-}
 tag="v$version"
 fail() {

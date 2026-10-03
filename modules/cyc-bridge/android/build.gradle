@@ -2,13 +2,13 @@ apply plugin: 'com.android.library'
 apply plugin: 'expo-module-gradle-plugin'
 
 group = 'app.powerlog.bridge'
-version = '0.2.0'
+version = '0.3.0'
 
 android {
     namespace 'app.powerlog.bridge'
     defaultConfig {
         versionCode 1
-        versionName '0.2.0'
+        versionName '0.3.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     testOptions { unitTests.includeAndroidResources = true }
