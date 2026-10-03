@@ -7,6 +7,7 @@ import {
 import { catalogLimit, catalogOrder, type CatalogRequest } from '../../src/core/catalog';
 import { afterCatalogCursor } from '../support/catalog';
 import type { DistanceSource, WorkoutDistanceInfo } from '../../src/core/distance';
+import { writeRecordingCsv, type ImportedSample } from '../../src/core/recordings';
 
 let state: WorkoutState = { ...unavailableWorkoutState, supported: true, historyRevision: '0' };
 const records = new Map<string, WorkoutMetadata>(),
@@ -22,7 +23,25 @@ const failures = new Map<string, string>(),
       reject(error: Error): void;
     }
   >();
-const counts = { list: 0, read: [] as string[], exports: [] as { id: string; selection: DistanceSource }[] };
+const counts = {
+  list: 0,
+  read: [] as string[],
+  exports: [] as { kind: 'fit' | 'zip'; id: string; selection: DistanceSource }[],
+};
+export const exportHooks = { before: async (_id: string) => {} };
+export const exportedTexts: { name: string; contents: string }[] = [];
+export async function exportRecording(name: string, samples: readonly ImportedSample[]) {
+  let contents = '';
+  const decoder = new TextDecoder();
+  await writeRecordingCsv(samples, {
+    write: async bytes => void (contents += decoder.decode(bytes, { stream: true })),
+  });
+  exportedTexts.push({ name, contents: contents + decoder.decode() });
+}
+export async function exportRide(kind: 'fit' | 'zip', id: string, selection: DistanceSource = 'auto') {
+  await exportHooks.before(id);
+  counts.exports.push({ kind, id, selection });
+}
 const distances = new Map<string, WorkoutDistanceInfo>();
 export function setDistanceFixture(id: string, value: WorkoutDistanceInfo) {
   distances.set(id, value);
@@ -59,7 +78,6 @@ export function metadata(id: string, index: number, phase = 'completed'): Workou
     saveToHealth: false,
     recordGPS: false,
     healthKitState: 'notRequested',
-    warnings: [],
     watchSyncState: phase === 'finishing' ? 'pending' : 'received',
     collectionRevision: 1,
     finalizationState: phase === 'finishing' ? 'pending' : 'complete',
@@ -94,7 +112,6 @@ function detail(record: WorkoutMetadata, selection: DistanceSource = 'auto'): Wo
       healthCount: 0,
       lapCount: 0,
       routePreview: [],
-      warnings: [],
       provenance: {},
       distance,
       distanceMeters: distance?.selected?.distanceMeters,
@@ -204,12 +221,5 @@ export const workouts = {
   },
   async recover() {
     return state;
-  },
-  async export(id: string, selection: DistanceSource = 'auto') {
-    counts.exports.push({ id, selection });
-    return 'file:///fixture.fit';
-  },
-  async exportOriginal() {
-    return 'fixture.zip';
   },
 };

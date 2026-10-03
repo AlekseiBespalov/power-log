@@ -6,11 +6,12 @@ let root = FileManager.default.temporaryDirectory.appendingPathComponent(
   "powerlog-distance-benchmark-" + UUID().uuidString)
 defer { try? FileManager.default.removeItem(at: root) }
 let store = try PowerLogStore.shared(databaseURL: root.appendingPathComponent("store.sqlite3"))
+let archive = try WorkoutArchive(rootURL: root.appendingPathComponent("archive"), store: store)
 let service = WorkoutDistanceStore(store: store)
 let start = Date(timeIntervalSince1970: 1_780_000_000)
 let durations = CommandLine.arguments.dropFirst().compactMap(Double.init)
-func assertNear(_ actual: Double?, _ expected: Double, _ message: String) {
-  precondition(actual != nil && abs(actual! - expected) < 0.0001, message)
+func assertNear(_ actual: Double?, _ expected: Double, _ message: String, tolerance: Double = 0.0001) {
+  precondition(actual != nil && abs(actual! - expected) < tolerance, message)
 }
 func originals(_ id: String) throws -> (Int, String) {
   var revision: Int64 = -1
@@ -40,12 +41,27 @@ func derivedBytes() throws -> Int64 {
     ) ?? 0
   }
 }
-for seconds in durations.isEmpty ? [3420, 28800] : durations {
+/// With `watch` the ride is Watch-owned, with 8 Hz telemetry, 1 Hz Watch GPS and heart rate, cumulative Health
+/// totals every 5 s and final totals. Otherwise it carries controller telemetry only.
+func measure(seconds: Double, watch: Bool) throws {
   precondition(seconds >= 2 && seconds <= 28800)
   let id = UUID().uuidString.lowercased()
   let count = Int(seconds * 8)
-  try store.createCollection(id: id, kind: "workout", startedAt: WorkoutCoding.timestamp(start))
+  if watch {
+    _ = try archive.create(
+      id: id, startedAt: start, indoor: false, watchEnabled: true, saveToHealth: true, recordGPS: true)
+  } else {
+    try store.createCollection(id: id, kind: "workout", startedAt: WorkoutCoding.timestamp(start))
+  }
+  let session = UUID().uuidString.lowercased()
   var secondID: String?
+  func event(_ kind: String, _ source: String, _ elapsed: Double, _ payload: [String: WorkoutJSON]) throws
+    -> WorkoutEvent
+  {
+    try WorkoutEvent(
+      workoutId: id, kind: kind, source: source, timestamp: start.addingTimeInterval(elapsed),
+      elapsedSeconds: elapsed, payload: payload)
+  }
   func sample(_ index: Int, speed: Double = 4, replaces: String? = nil) throws -> WorkoutEvent {
     let elapsed = Double(index) / 8
     var payload: [String: WorkoutJSON] = [
@@ -54,19 +70,85 @@ for seconds in durations.isEmpty ? [3420, 28800] : durations {
       "connectionEpoch": .string("connection"), "clockEpoch": .string("epoch"),
       "acquisitionMonotonic": .number(elapsed),
     ]
-    if let replaces { payload["supersedesEventId"] = .string(replaces) }
-    return try WorkoutEvent(
-      workoutId: id, kind: "telemetry", source: "cyc", timestamp: start.addingTimeInterval(elapsed),
-      elapsedSeconds: elapsed, payload: payload)
+    if watch {
+      payload["captureSessionID"] = .string(session)
+      payload["observationSequence"] = .string(String(index + 1))
+      payload["firmwareLabel"] = .string("20240601")
+      payload["sourceElapsedSeconds"] = .number(elapsed)
+      payload["connectionEpoch"] = .string(session)
+      payload["clockEpoch"] = .string(session)
+    }
+    if let replaces {
+      payload["supersedesEventId"] = .string(replaces)
+      payload.removeValue(forKey: "observationSequence")
+    }
+    return try event("telemetry", "cyc", elapsed, payload)
   }
-  let generationStart = ProcessInfo.processInfo.systemUptime
-  for first in stride(from: 0, to: count, by: 512) {
-    try autoreleasepool {
-      let events = try (first..<min(first + 512, count)).map { try sample($0) }
-      if first == 0 { secondID = events[1].eventId }
-      _ = try store.appendBatch(events)
+  func second(_ index: Int) throws -> [WorkoutEvent] {
+    let elapsed = Double(index)
+    var events = [
+      try event(
+        "location", "watch", elapsed,
+        [
+          "latitude": .number(45 + elapsed * 4 / 111_195), "longitude": .number(7), "altitudeMeters": .number(420),
+          "horizontalAccuracyM": .number(4), "verticalAccuracyM": .number(6), "speedMps": .number(4),
+          "speedAccuracyMps": .number(0.4), "courseDegrees": .number(0), "courseAccuracyDegrees": .number(8),
+          "distanceBarrier": .bool(false), "clockEpoch": .string(session), "acquisitionMonotonic": .number(elapsed),
+        ]),
+      try event(
+        "health", "watch", elapsed,
+        [
+          "healthKitIdentifier": .string("HKQuantityTypeIdentifierHeartRate"), "value": .number(120),
+          "unit": .string("bpm"), "representation": .string("rawQuantity"),
+          "sampleUUID": .string(UUID().uuidString.lowercased()), "sampleCount": .number(1),
+          "sampleStart": .string(WorkoutCoding.timestamp(start.addingTimeInterval(elapsed))),
+          "sampleEnd": .string(WorkoutCoding.timestamp(start.addingTimeInterval(elapsed))),
+          "heartRateBpm": .number(120),
+        ]),
+    ]
+    if index % 5 == 0 {
+      events += try totals(elapsed, representation: "cumulativeWorkoutTotal")
+    }
+    return events
+  }
+  func totals(_ elapsed: Double, representation: String) throws -> [WorkoutEvent] {
+    try [
+      ("activeEnergyKcal", "HKQuantityTypeIdentifierActiveEnergyBurned", "kcal", elapsed / 6),
+      ("basalEnergyKcal", "HKQuantityTypeIdentifierBasalEnergyBurned", "kcal", elapsed / 50),
+      ("distanceMeters", "HKQuantityTypeIdentifierDistanceCycling", "m", elapsed * 4),
+    ].map { key, identifier, unit, value in
+      try event(
+        "health", "watch", elapsed,
+        [
+          "healthKitIdentifier": .string(identifier), "value": .number(value), "unit": .string(unit),
+          "representation": .string(representation), key: .number(value),
+        ])
     }
   }
+  let generationStart = ProcessInfo.processInfo.systemUptime
+  var batch: [WorkoutEvent] = []
+  func flush(_ force: Bool = false) throws {
+    while batch.count >= 512 || (force && !batch.isEmpty) {
+      let size = min(512, batch.count)
+      _ = try store.appendBatch(Array(batch.prefix(size)))
+      batch.removeFirst(size)
+    }
+  }
+  if watch { batch.append(try event("lifecycle", "watch", 0, ["action": .string("start")])) }
+  for index in 0..<count {
+    try autoreleasepool {
+      let frame = try sample(index)
+      if index == 1 { secondID = frame.eventId }
+      batch.append(frame)
+      if watch, index % 8 == 0 { batch += try second(index / 8) }
+      try flush()
+    }
+  }
+  if watch {
+    batch.append(try event("lifecycle", "watch", seconds, ["action": .string("stop")]))
+    batch += try totals(seconds, representation: "finalWorkoutTotal")
+  }
+  try flush(true)
   let generateSeconds = ProcessInfo.processInfo.systemUptime - generationStart
   let before = try originals(id)
   let bytesBefore = try derivedBytes()
@@ -76,11 +158,20 @@ for seconds in durations.isEmpty ? [3420, 28800] : durations {
     inputRows += $0
     maxPage = max(maxPage, $0)
   }
+  defer { WorkoutDistanceStore.inputPageObserverForTesting = nil }
   let coldStart = ProcessInfo.processInfo.systemUptime
   let snapshot = try service.snapshot(id: id)
   let cold = ProcessInfo.processInfo.systemUptime - coldStart
-  precondition(snapshot.source == "controller")
-  assertNear(snapshot.totalMeters, Double(count - 1) / 2, "full controller profile must retain every accepted interval")
+  let controller = { (snapshot: WorkoutDistanceSnapshot) in
+    snapshot.sources.first { $0.source == "controller" }?.distanceMeters
+  }
+  precondition(snapshot.source == (watch ? "gps:watch" : "controller"))
+  assertNear(controller(snapshot), Double(count - 1) / 2, "full controller profile must retain every accepted interval")
+  if watch {
+    let gps = snapshot.sources.first { $0.source == "gps:watch" }?.distanceMeters
+    assertNear(gps, (seconds - 1) * 4, "Watch GPS covers the ride", tolerance: seconds * 0.01)
+    assertNear(snapshot.healthReportedMeters, seconds * 4, "the final Health total is reported")
+  }
   let coldInputs = inputRows
   let bytes = try derivedBytes() - bytesBefore
   let warmStart = ProcessInfo.processInfo.systemUptime
@@ -100,26 +191,30 @@ for seconds in durations.isEmpty ? [3420, 28800] : durations {
   let appendInputs = inputRows - coldInputs
   precondition(
     appended.generation == snapshot.generation && appendInputs == 1, "ordinary append must advance one input")
-  assertNear(appended.totalMeters, Double(count) / 2, "append total")
+  assertNear(controller(appended), Double(count) / 2, "append total")
   _ = try store.appendBatch([sample(1, speed: 2, replaces: secondID)])
   let correctionStart = ProcessInfo.processInfo.systemUptime
   let corrected = try service.snapshot(id: id)
   let correction = ProcessInfo.processInfo.systemUptime - correctionStart
   precondition(
     corrected.generation != appended.generation, "early correction must publish separate coherent generation")
-  assertNear(corrected.totalMeters, Double(count) / 2 - 0.25, "early correction adjusts only its adjoining intervals")
+  assertNear(controller(corrected), Double(count) / 2 - 0.25, "early correction adjusts only its adjoining intervals")
   assertNear(
-    try service.page(snapshot: snapshot, start: seconds - 1).last?.distanceMeters, Double(count - 1) / 2,
+    try service.page(snapshot: snapshot, start: seconds - 1).last?.distanceMeters, snapshot.totalMeters!,
     "old readers retain their exact prefix")
   precondition(maxPage <= 128)
   let output: [String: Any] = [
-    "durationSeconds": seconds, "rateHz": 8, "originalCount": count, "generateSeconds": generateSeconds,
-    "coldSeconds": cold, "warm1000NeighborAndRangeSeconds": inspect, "appendSeconds": append,
-    "appendInputs": appendInputs, "correctionSeconds": correction, "profilePointCount": snapshot.maximumPointID,
-    "derivedBytes": bytes, "bytesPerPoint": Double(bytes) / Double(snapshot.maximumPointID),
-    "maximumInputPage": maxPage, "originalHashesUnchanged": true,
+    "ride": watch ? "watch-gps-health" : "controller", "durationSeconds": seconds, "rateHz": 8,
+    "originalCount": after.0, "generateSeconds": generateSeconds, "coldSeconds": cold,
+    "warm1000NeighborAndRangeSeconds": inspect, "appendSeconds": append, "appendInputs": appendInputs,
+    "correctionSeconds": correction, "profilePointCount": snapshot.maximumPointID, "derivedBytes": bytes,
+    "bytesPerPoint": Double(bytes) / Double(snapshot.maximumPointID), "maximumInputPage": maxPage,
+    "originalHashesUnchanged": true,
   ]
   print(String(data: try JSONSerialization.data(withJSONObject: output, options: [.sortedKeys]), encoding: .utf8)!)
   fflush(stdout)
-  WorkoutDistanceStore.inputPageObserverForTesting = nil
+}
+for seconds in durations.isEmpty ? [3420, 28800] : durations {
+  try measure(seconds: seconds, watch: false)
+  try measure(seconds: seconds, watch: true)
 }

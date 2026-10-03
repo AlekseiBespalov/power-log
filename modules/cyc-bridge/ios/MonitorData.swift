@@ -699,17 +699,13 @@ final class MonitorDataStore {
     }
     result["metricSources"] = metricSources
     result["availableMetrics"] = available.sorted()
-    let warnings = source.metadata["warnings"] as? [String] ?? []
     let finalization = source.metadata["finalizationState"] as? String
     let pending =
       distance == nil || finalization == "pending" || source.metadata["watchSyncState"] as? String == "pending"
       || source.phase == "finishing"
     result["outcome"] =
       pending
-      ? "pending"
-      : (distance?.info.selected?.partial == true || finalization == "partial" || !warnings.isEmpty
-        ? "partial" : "available")
-    result["warnings"] = warnings
+      ? "pending" : (distance?.info.selected?.partial == true || finalization == "partial" ? "partial" : "available")
     result = try published(result, request: request, source: source)
     result.merge(try presentationTiming(request, source)) { _, new in new }
     return result

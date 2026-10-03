@@ -9,11 +9,10 @@ import { workoutCanDelete, workoutExportReady, workoutRecoveryAction, type Worko
 import { ArchiveActions } from '../../services/workout-actions';
 import { useWorkout } from '../../services/workout-context';
 import { workouts } from '../../services/workouts';
-import { exportWorkoutFile, importRecording, exportText } from '../../services/files';
+import { importRecording } from '../../services/files';
+import { exportRecording, exportRide } from '../../services/ride-export';
 import { workoutMonitorSource } from '../../services/workout-monitor-source';
 import { CsvRideDetails, type CsvRide } from './csv-ride-details';
-import { csvRow } from '../../core/recordings';
-import { SAMPLE_COLUMNS } from '../../core/types';
 import { MonitorPanel } from '../monitor/monitor-panel';
 import { useReadResource } from '../../services/use-read-resource';
 import { useMonitorPreferences } from '../../services/monitor-preferences';
@@ -37,6 +36,11 @@ const phaseLabel = (phase: string) => phases[phase] ?? phase;
 type HistorySelection = null | { kind: 'saved'; id: string } | { kind: 'csv'; csv: CsvRide };
 function elapsedLabel(record: WorkoutMetadata) {
   return `${formatDuration(record.elapsedSeconds)} elapsed`;
+}
+function healthLabel(record: WorkoutMetadata) {
+  if (record.healthReason && record.healthKitState !== 'saved') return `Health not saved: ${record.healthReason}`;
+  if (record.healthKitState === 'notRequested') return 'Saved only in Power Log';
+  return `Health ${record.healthKitState === 'notSaved' ? 'not saved' : record.healthKitState}`;
 }
 
 export function SavedRides() {
@@ -77,8 +81,6 @@ export function SavedRides() {
       workout.records.filter(record => !removedIds.has(record.id) && record.id !== workout.state.lastDeletedWorkoutId),
     [workout.records, workout.state.lastDeletedWorkoutId, removedIds],
   );
-  const [noticeId, setNoticeId] = useState<string | null>(null);
-  const showNotices = selectedId !== null && noticeId === selectedId;
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [editing, setEditing] = useState(false);
   const [repairingId, setRepairingId] = useState<string | null>(null);
@@ -124,7 +126,6 @@ export function SavedRides() {
   if (deleted && selectedId) {
     setRemovedIds(ids => new Set([...ids, selectedId]));
     clearSaved(selectedId);
-    setNoticeId(null);
     setRemovalTarget(null);
   }
   const action = (key: string, operation: () => Promise<unknown>) => () => {
@@ -137,7 +138,6 @@ export function SavedRides() {
   const summary = detail?.metadata.id === selectedId ? detail.summary : null;
   const ready = record ? workoutExportReady(record) : false;
   const recoveryAction = record ? workoutRecoveryAction(record, workout.state.id) : null;
-  const warnings = [...new Set([...(record?.warnings ?? []), ...(summary?.warnings ?? [])])];
   const visibleError =
     (deleted ? null : error) ??
     archiveState.get(selectedKey)?.error ??
@@ -159,7 +159,6 @@ export function SavedRides() {
       setRemovedIds(ids => new Set([...ids, target.id]));
       if (records.length <= 1) setEditing(false);
       clearSaved(target.id);
-      setNoticeId(id => (id === target.id ? null : id));
       resource.clearError();
       setRemovalTarget(value => (value?.id === target.id ? null : value));
     });
@@ -288,9 +287,7 @@ export function SavedRides() {
           <Button
             secondary
             disabled={pending('csv')}
-            onPress={action('csv', () =>
-              exportText(csv.title, [SAMPLE_COLUMNS.join(','), ...csv.samples.map(csvRow)].join('\n') + '\n'),
-            )}
+            onPress={action('csv', () => exportRecording(csv.title, csv.samples))}
           >
             Export CSV
           </Button>
@@ -381,15 +378,17 @@ export function SavedRides() {
                     : Platform.OS === 'android'
                       ? 'Android'
                       : 'iPhone'}
-                {record.storage !== 'browser'
-                  ? ` · ${record.healthKitState === 'notRequested' ? 'Saved only in Power Log' : `Health ${record.healthKitState === 'notSaved' ? 'not saved' : record.healthKitState}`}`
-                  : ''}
+                {record.storage !== 'browser' ? ` · ${healthLabel(record)}` : ''}
                 {summary && summary.lapCount > 0 ? ` · ${summary.lapCount} laps` : ''}
               </Body>
-              {record.finalizationState === 'pending' && <Body>Ride ended. Syncing remaining data…</Body>}
-              {record.finalizationState === 'partial' && (
-                <Body>Incomplete ride. Some sources are unavailable; see notices.</Body>
+              {record.finalizationState === 'pending' && (
+                <Body>
+                  {record.syncReason
+                    ? `Watch sync failed: ${record.syncReason}`
+                    : 'Ride ended. Syncing remaining data…'}
+                </Body>
               )}
+              {record.finalizationState === 'partial' && <Body>Incomplete ride. Some sources are unavailable.</Body>}
               {!ready && (
                 <Body muted>
                   {record.watchEnabled
@@ -422,41 +421,22 @@ export function SavedRides() {
                       : 'Retry'}
                 </Button>
               )}
-              {warnings.length > 0 && (
-                <View style={{ gap: 6 }}>
-                  <Button secondary onPress={() => setNoticeId(showNotices ? null : selectedId)}>
-                    {showNotices ? 'Hide notices' : `Recording notices · ${warnings.length}`}
-                  </Button>
-                  {showNotices && warnings.map(warning => <Body key={warning}>{warning}</Body>)}
-                </View>
-              )}
               <View style={styles.row}>
                 <Button
                   disabled={pending(recordKey(record.id)) || !ready}
-                  onPress={action(recordKey(record.id), async () => {
-                    const uri = await workouts.export(record.id, distanceSource);
-                    await exportWorkoutFile(
-                      uri,
-                      `power-log-${record.id}.${record.storage === 'browser' ? 'csv' : 'fit'}`,
-                    );
-                  })}
+                  onPress={action(recordKey(record.id), () => exportRide('fit', record.id, distanceSource))}
                 >
-                  {record.storage === 'browser' ? 'Export CSV' : 'Export FIT'}
+                  Export FIT
                 </Button>
-                {record.storage !== 'browser' && (
-                  <Button
-                    secondary
-                    disabled={pending(recordKey(record.id)) || !ready}
-                    onPress={action(recordKey(record.id), async () => {
-                      const uri = await workouts.exportOriginal(record.id);
-                      await exportWorkoutFile(uri, `power-log-original-${record.id}.zip`);
-                    })}
-                  >
-                    Export ZIP
-                  </Button>
-                )}
+                <Button
+                  secondary
+                  disabled={pending(recordKey(record.id)) || !ready}
+                  onPress={action(recordKey(record.id), () => exportRide('zip', record.id))}
+                >
+                  Export ZIP
+                </Button>
               </View>
-              {record.storage !== 'browser' && !record.example && (
+              {!record.example && (
                 <View style={{ gap: 8 }}>
                   <Body muted>Export FIT, then select the file on Strava.</Body>
                   <Button

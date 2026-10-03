@@ -57,7 +57,6 @@ internal data class RideSnapshot(
     val pendingAction: String? = null,
     val recoveryState: String = "idle",
     val watch: RideWatch = RideWatch(),
-    val warnings: List<String> = emptyList(),
 ) {
     init {
         require(timerSeconds.isFinite() && timerSeconds >= 0)
@@ -105,7 +104,6 @@ internal data class RideSnapshot(
                             "accuracyMeters" to streams.gps.accuracyMeters,
                         ),
                 ),
-            "warnings" to warnings,
             "error" to error,
         )
 }

@@ -38,11 +38,12 @@ export function PrivacyPolicy() {
         </Body>
         <Body>
           iPhone and Android keep rides and live chart data in local databases, settings in app files, and temporary
-          imports and exports in app storage. iPhone also remembers the selected Bluetooth device and the identifiers,
-          model and firmware of controllers it has recognized (disconnecting does not clear that list), and keeps
-          bounded connection logs. Apple Watch keeps its own ride database, recording settings and files waiting to
-          transfer to iPhone. Synchronization and recovery records help complete interrupted rides and transfers. Native
-          apps also write operational errors to system logs.
+          imports and exports in app storage. An exported file stays there for at least 24 hours so the app you share it
+          with can read it; Power Log deletes it the next time it starts or exports after that. iPhone also remembers
+          the selected Bluetooth device and the identifiers, model and firmware of controllers it has recognized
+          (disconnecting does not clear that list), and keeps bounded connection logs. Apple Watch keeps its own ride
+          database, recording settings and files waiting to transfer to iPhone. Synchronization and recovery records
+          help complete interrupted rides and transfers. Native apps also write operational errors to system logs.
         </Body>
         <Body>
           Depending on your Apple backup settings, iPhone app data, including rides with their Health readings and
@@ -52,10 +53,12 @@ export function PrivacyPolicy() {
         </Body>
         <Body>
           The website keeps saved rides in this browser’s IndexedDB and settings in localStorage. CSV files you open are
-          read on your device. Browser recording requires an active page and does not use GPS, Apple Health or Health
-          Connect. Starting a browser recording asks the browser to keep this site’s storage persistent, which reduces
-          automatic eviction; clearing site data still removes it. Browser data is not encrypted by Power Log; it is
-          accessible to that browser profile and other code allowed to run on the same website origin.
+          read on your device. Exports are prepared in this site’s private browser file storage where the browser offers
+          it, and deleted from it the next time the site starts or exports after 24 hours. Browser recording requires an
+          active page and does not use GPS, Apple Health or Health Connect. Starting a browser recording asks the
+          browser to keep this site’s storage persistent, which reduces automatic eviction; clearing site data still
+          removes it. Browser data is not encrypted by Power Log; it is accessible to that browser profile and other
+          code allowed to run on the same website origin.
         </Body>
       </Card>
       <Card>
@@ -135,8 +138,8 @@ export function PrivacyPolicy() {
           any sharing or synchronization you enable there.
         </Body>
         <Body>
-          Export buttons create FIT or original ZIP files on iPhone and Android, or CSV downloads on the web. Native
-          sharing opens the system share sheet so you choose where the file goes. Exports can contain precise routes,
+          Export buttons create a FIT file or a ride-data ZIP. On iPhone and Android, sharing opens the system share
+          sheet so you choose where the file goes; the website downloads the file. Exports can contain precise routes,
           Health readings and controller details. Imported CSV files can also be exported again.
         </Body>
         <Body>

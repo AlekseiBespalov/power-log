@@ -52,7 +52,6 @@ export class WorkoutStateDelivery {
         value.supported,
         value.watch.installed,
         value.finalizationState,
-        value.warnings,
       ]);
     const delay = Math.max(0, 1000 - (performance.now() - this.lastPublication));
     if (!this.delivered || control(this.delivered) !== control(state) || !delay) this.publish();

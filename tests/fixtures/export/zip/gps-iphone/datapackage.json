@@ -1,0 +1,439 @@
+{
+  "$schema": "https://datapackage.org/profiles/2.0/datapackage.json",
+  "name": "power-log-ride-8e4f2a6c-1b3d-4e5f-a6b7-c8d9e0f1a2b3",
+  "id": "8e4f2a6c-1b3d-4e5f-a6b7-c8d9e0f1a2b3",
+  "title": "Power Log ride",
+  "created": "2026-06-21T23:59:59.999Z",
+  "description": "One Power Log ride: controller readings, GPS fixes, Health values and ride events, each in its own table, with the ride metadata and its sources.",
+  "powerLog:ride": {
+    "startedAt": "2026-06-21T22:00:00.000Z",
+    "endedAt": "2026-06-21T22:00:10.000Z",
+    "elapsedSeconds": 10,
+    "timerSeconds": 9,
+    "ownerTiming": null,
+    "indoor": false,
+    "interrupted": false,
+    "watchEnabled": true,
+    "saveToHealth": true,
+    "recordGPS": true,
+    "sport": "cycling",
+    "subSport": "e_biking",
+    "health": {
+      "provider": "appleHealth",
+      "state": "saved",
+      "workoutUUID": "0f1e2d3c-4b5a-4697-8a7b-6c5d4e3f2a1b",
+      "export": null
+    },
+    "watchSyncState": "received",
+    "finalizationState": "partial",
+    "example": false,
+    "sampleHz": null
+  },
+  "powerLog:sources": {
+    "connections": [],
+    "gps": [
+      "phone",
+      "watch"
+    ],
+    "health": []
+  },
+  "resources": [
+    {
+      "name": "telemetry",
+      "type": "table",
+      "path": "telemetry.csv",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "lineTerminator": "\n"
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "datetime",
+            "description": "Original reading time in the source clock, as retained"
+          },
+          {
+            "name": "elapsedSeconds",
+            "type": "number",
+            "description": "Time on the ride timeline",
+            "powerLog:unit": "s"
+          },
+          {
+            "name": "activeInterval",
+            "type": "integer",
+            "description": "Activity interval, numbered from 1; empty while paused"
+          },
+          {
+            "name": "run",
+            "type": "integer",
+            "description": "Continuous run of readings, numbered from 1 in order of first appearance"
+          },
+          {
+            "name": "connection",
+            "type": "integer",
+            "description": "Controller connection, numbered as in powerLog:sources.connections"
+          },
+          {
+            "name": "humanPowerW",
+            "type": "number",
+            "description": "Rider power reported by the controller",
+            "powerLog:unit": "W"
+          },
+          {
+            "name": "cadenceRpm",
+            "type": "number",
+            "description": "Crank cadence reported by the controller, smoothed",
+            "powerLog:unit": "/min"
+          },
+          {
+            "name": "motorInputPowerW",
+            "type": "number",
+            "description": "Battery input power: battery voltage × battery current; not motor output or rider power",
+            "powerLog:unit": "W"
+          },
+          {
+            "name": "batteryVoltageV",
+            "type": "number",
+            "description": "Battery voltage",
+            "powerLog:unit": "V"
+          },
+          {
+            "name": "batteryCurrentA",
+            "type": "number",
+            "description": "Battery current; negative under regeneration",
+            "powerLog:unit": "A"
+          },
+          {
+            "name": "motorCurrentA",
+            "type": "number",
+            "description": "Motor current",
+            "powerLog:unit": "A"
+          },
+          {
+            "name": "motorRpm",
+            "type": "number",
+            "description": "Motor speed; not crank cadence",
+            "powerLog:unit": "/min"
+          },
+          {
+            "name": "pedalTorqueNm",
+            "type": "number",
+            "description": "Pedal torque",
+            "powerLog:unit": "N.m"
+          },
+          {
+            "name": "controllerTempC",
+            "type": "number",
+            "description": "Controller temperature; not ambient temperature",
+            "powerLog:unit": "Cel"
+          },
+          {
+            "name": "motorTempC",
+            "type": "number",
+            "description": "Motor temperature; not ambient temperature",
+            "powerLog:unit": "Cel"
+          },
+          {
+            "name": "consumedAh",
+            "type": "number",
+            "description": "Charge counter of the controller; not ride consumption",
+            "powerLog:unit": "A.h"
+          },
+          {
+            "name": "consumedWh",
+            "type": "number",
+            "description": "Energy counter of the controller; not ride consumption",
+            "powerLog:unit": "W.h"
+          },
+          {
+            "name": "throttleVoltageV",
+            "type": "number",
+            "description": "Throttle voltage",
+            "powerLog:unit": "V"
+          },
+          {
+            "name": "faultCode",
+            "type": "integer",
+            "description": "Fault code in the vocabulary of the connection's vendor"
+          },
+          {
+            "name": "assistLevel",
+            "type": "integer",
+            "description": "Assist level reported by the controller"
+          },
+          {
+            "name": "controllerSpeedMps",
+            "type": "number",
+            "description": "Controller speed, normalized for a known controller profile",
+            "powerLog:unit": "m/s"
+          },
+          {
+            "name": "cyc.raceMode",
+            "type": "integer",
+            "description": "CYC race mode",
+            "powerLog:vendor": "cyc"
+          },
+          {
+            "name": "cyc.speedRaw",
+            "type": "number",
+            "description": "CYC speed field divided by 100; its unit depends on the controller profile",
+            "powerLog:vendor": "cyc"
+          }
+        ],
+        "missingValues": [
+          ""
+        ]
+      }
+    },
+    {
+      "name": "gps",
+      "type": "table",
+      "path": "gps.csv",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "lineTerminator": "\n"
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "datetime",
+            "description": "Original fix time in the source clock, as retained"
+          },
+          {
+            "name": "elapsedSeconds",
+            "type": "number",
+            "description": "Time on the ride timeline",
+            "powerLog:unit": "s"
+          },
+          {
+            "name": "activeInterval",
+            "type": "integer",
+            "description": "Activity interval, numbered from 1; empty while paused"
+          },
+          {
+            "name": "run",
+            "type": "integer",
+            "description": "Continuous run of fixes, numbered from 1 in order of first appearance; a barrier fix is its own run"
+          },
+          {
+            "name": "source",
+            "type": "string",
+            "description": "GPS producer: phone or watch"
+          },
+          {
+            "name": "latitude",
+            "type": "number",
+            "description": "Latitude",
+            "powerLog:unit": "deg"
+          },
+          {
+            "name": "longitude",
+            "type": "number",
+            "description": "Longitude",
+            "powerLog:unit": "deg"
+          },
+          {
+            "name": "altitudeMeters",
+            "type": "number",
+            "description": "Altitude above mean sea level",
+            "powerLog:unit": "m"
+          },
+          {
+            "name": "verticalAccuracyM",
+            "type": "number",
+            "description": "Vertical accuracy of altitudeMeters",
+            "powerLog:unit": "m"
+          },
+          {
+            "name": "ellipsoidalAltitudeMeters",
+            "type": "number",
+            "description": "Height above the WGS84 ellipsoid (Android)",
+            "powerLog:unit": "m"
+          },
+          {
+            "name": "ellipsoidalVerticalAccuracyM",
+            "type": "number",
+            "description": "Vertical accuracy of ellipsoidalAltitudeMeters (Android)",
+            "powerLog:unit": "m"
+          },
+          {
+            "name": "horizontalAccuracyM",
+            "type": "number",
+            "description": "Horizontal accuracy",
+            "powerLog:unit": "m"
+          },
+          {
+            "name": "speedMps",
+            "type": "number",
+            "description": "GPS speed",
+            "powerLog:unit": "m/s"
+          },
+          {
+            "name": "speedAccuracyMps",
+            "type": "number",
+            "description": "Accuracy of speedMps",
+            "powerLog:unit": "m/s"
+          },
+          {
+            "name": "courseDegrees",
+            "type": "number",
+            "description": "Direction of travel; not device heading",
+            "powerLog:unit": "deg"
+          },
+          {
+            "name": "courseAccuracyDegrees",
+            "type": "number",
+            "description": "Accuracy of courseDegrees",
+            "powerLog:unit": "deg"
+          }
+        ],
+        "missingValues": [
+          ""
+        ]
+      }
+    },
+    {
+      "name": "health",
+      "type": "table",
+      "path": "health.csv",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "lineTerminator": "\n"
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "datetime",
+            "description": "Sample end, or the instant of an instantaneous value"
+          },
+          {
+            "name": "startTimestamp",
+            "type": "datetime",
+            "description": "Sample interval start; empty for instants"
+          },
+          {
+            "name": "elapsedSeconds",
+            "type": "number",
+            "description": "Time on the ride timeline",
+            "powerLog:unit": "s"
+          },
+          {
+            "name": "activeInterval",
+            "type": "integer",
+            "description": "Activity interval, numbered from 1; empty outside activity"
+          },
+          {
+            "name": "source",
+            "type": "string",
+            "description": "Health producer: phone or watch"
+          },
+          {
+            "name": "sourceApp",
+            "type": "string",
+            "description": "Bundle identifier of the app that recorded the sample, when known"
+          },
+          {
+            "name": "metric",
+            "type": "string",
+            "description": "Measured quantity"
+          },
+          {
+            "name": "value",
+            "type": "number",
+            "description": "Measured value, in unit"
+          },
+          {
+            "name": "unit",
+            "type": "string",
+            "description": "UCUM unit of value; an unknown metric keeps its stored unit, which is not UCUM"
+          },
+          {
+            "name": "kind",
+            "type": "string",
+            "description": "sample, aggregate, latest, cumulative or final"
+          },
+          {
+            "name": "sampleCount",
+            "type": "integer",
+            "description": "Number of values condensed into an aggregate"
+          },
+          {
+            "name": "sampleId",
+            "type": "string",
+            "description": "HealthKit sample UUID; series values carry their parent's"
+          }
+        ],
+        "missingValues": [
+          ""
+        ]
+      }
+    },
+    {
+      "name": "events",
+      "type": "table",
+      "path": "events.csv",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "lineTerminator": "\n"
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "datetime",
+            "description": "Original event time, as retained"
+          },
+          {
+            "name": "elapsedSeconds",
+            "type": "number",
+            "description": "Time on the ride timeline",
+            "powerLog:unit": "s"
+          },
+          {
+            "name": "timerSeconds",
+            "type": "number",
+            "description": "Active time at the event; empty when not retained",
+            "powerLog:unit": "s"
+          },
+          {
+            "name": "action",
+            "type": "string",
+            "description": "start, pause, resume, lap or stop"
+          },
+          {
+            "name": "interrupted",
+            "type": "boolean",
+            "description": "The event records a capture interruption"
+          },
+          {
+            "name": "source",
+            "type": "string",
+            "description": "Recorder: phone, watch or browser"
+          }
+        ],
+        "missingValues": [
+          ""
+        ]
+      }
+    }
+  ]
+}

@@ -312,7 +312,6 @@ export function browserWorkoutMonitorSource(
             : live
               ? 'pending'
               : 'unavailable',
-        warnings: record.warnings,
       };
     },
     async readLatest({ generation, metrics }) {

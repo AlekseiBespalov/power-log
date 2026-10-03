@@ -14,6 +14,6 @@ xcrun swiftc -O -swift-version 5 -module-cache-path "$temp/modules" \
   modules/cyc-bridge/ios/WorkoutTypes.swift modules/cyc-bridge/ios/PowerLogStore.swift \
   modules/cyc-bridge/ios/WorkoutArchive.swift modules/cyc-bridge/ios/WorkoutControl.swift \
   modules/cyc-bridge/ios/WorkoutTransfer.swift modules/cyc-bridge/ios/WorkoutSync.swift modules/cyc-bridge/ios/MonitorData.swift \
-  modules/cyc-bridge/ios/WorkoutFIT.swift modules/cyc-bridge/ios/WorkoutExampleRides.swift \
+  modules/cyc-bridge/ios/WorkoutAnalysis.swift modules/cyc-bridge/ios/WorkoutExampleRides.swift \
   artifacts/app-store/source/main.swift -lsqlite3 -lcompression -o "$temp/generate"
 "$temp/generate" "$output"

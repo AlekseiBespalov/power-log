@@ -52,128 +52,6 @@ struct WorkoutLivePresentation {
   var metrics: [String: Double] = [:]
 }
 
-/// A portable original-data package, separate from FIT's intentionally smaller field set.
-enum WorkoutOriginalExport {
-  static func write(archive: WorkoutArchive, id: String, to output: URL, revision: Int64? = nil) throws {
-    let metadata = try archive.metadata(id: id, atRevision: revision)
-    guard metadata.phase == "completed", metadata.endedAt != nil,
-      metadata.sealVerified,
-      ["complete", "partial"].contains(metadata.finalizationState ?? "")
-    else {
-      throw CycError.invalid("Finish the workout and wait for its final Watch archive before exporting original data.")
-    }
-    let fm = FileManager.default
-    if fm.fileExists(atPath: output.path) { return }
-    let temporary = output.deletingLastPathComponent().appendingPathComponent(
-      "original-" + UUID().uuidString, isDirectory: true)
-    let staging = temporary.appendingPathComponent("PowerLog-original", isDirectory: true)
-    try fm.createDirectory(at: staging, withIntermediateDirectories: true)
-    defer { try? fm.removeItem(at: temporary) }
-    #if os(iOS)
-      try fm.setAttributes(
-        [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: staging.path)
-    #endif
-    try writeContents(archive: archive, metadata: metadata, to: staging)
-    var coordinationError: NSError?
-    var copyError: Error?
-    let snapshot = temporary.appendingPathComponent("snapshot.zip")
-    // Apple produces a ZIP for a directory with .forUploading; copy it before its accessor returns.
-    NSFileCoordinator(filePresenter: nil).coordinate(
-      readingItemAt: staging, options: .forUploading, error: &coordinationError
-    ) { zipped in
-      do { try fm.copyItem(at: zipped, to: snapshot) } catch { copyError = error }
-    }
-    if let coordinationError { throw coordinationError }
-    if let copyError { throw copyError }
-    guard fm.fileExists(atPath: snapshot.path) else {
-      throw CycError.invalid("Original-data ZIP could not be created.")
-    }
-    #if os(iOS)
-      try fm.setAttributes(
-        [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: snapshot.path)
-    #endif
-    if fm.fileExists(atPath: output.path) {
-      _ = try fm.replaceItemAt(output, withItemAt: snapshot)
-    } else {
-      try fm.moveItem(at: snapshot, to: output)
-    }
-  }
-
-  static func writeContents(archive: WorkoutArchive, metadata: WorkoutMetadata, to staging: URL) throws {
-    let fm = FileManager.default
-    let id = metadata.id
-    let before = try JSONSerialization.data(withJSONObject: metadata.dictionary, options: [.sortedKeys])
-    try before.write(to: staging.appendingPathComponent("metadata.json"))
-    let eventsURL = staging.appendingPathComponent("events.jsonl")
-    let csvURL = staging.appendingPathComponent("CYCtelemetry.csv")
-    fm.createFile(atPath: eventsURL.path, contents: nil)
-    fm.createFile(atPath: csvURL.path, contents: Data((CycProtocol.csvHeader + "\n").utf8))
-    let events = try FileHandle(forWritingTo: eventsURL)
-    let csv = try FileHandle(forWritingTo: csvURL)
-    defer {
-      try? events.close()
-      try? csv.close()
-    }
-    try csv.seekToEnd()
-    var count = 0
-    try archive.forEachEvent(id: id, revision: metadata.collectionRevision) { event in
-      let encoded = try JSONSerialization.data(
-        withJSONObject: event.dictionary, options: [.sortedKeys, .withoutEscapingSlashes])
-      try events.write(contentsOf: encoded)
-      try events.write(contentsOf: Data([10]))
-      count += 1
-    }
-    let interruptions = try WorkoutInterruptionBoundary.load(
-      store: archive.store, id: id, revision: metadata.collectionRevision ?? archive.revision(id: id))
-    var sequence = 0
-    var interruptionIndex = 0
-    var previousBoundaryIndex = 0
-    var previousEpoch: String?
-    try archive.forEachRecord(id: id, revision: metadata.collectionRevision, orderByTime: true) { record in
-      let event = record.event
-      if event.source == "cyc", event.kind == "telemetry" {
-        let sample = event.payload.mapValues(\.any)
-        guard let elapsed = event.elapsedSeconds else {
-          throw WorkoutDataError.invalid("Stored telemetry has no collection elapsed time")
-        }
-        let epoch = event.payload["clockEpoch"]?.string
-        let epochChanged = previousEpoch != nil && epoch != nil && previousEpoch != epoch
-        let boundaryIndex = WorkoutInterruptionBoundary.index(
-          interruptions, time: elapsed, producer: record.producer, sequence: record.sequence, clockEpoch: epoch)
-        interruptionIndex += boundaryIndex - previousBoundaryIndex
-        if epochChanged, boundaryIndex == previousBoundaryIndex { interruptionIndex += 1 }
-        previousBoundaryIndex = boundaryIndex
-        previousEpoch = epoch
-        sequence += 1
-        let fields = CycProtocol.columns.map { key -> String in
-          if key == "timestamp" { return event.timestamp }
-          if key == "elapsedSeconds" { return String(elapsed) }
-          if key == "sequence" { return String(sequence) }
-          if key == "interruptionIndex" { return String(interruptionIndex) }
-          if let number = sample[key] as? NSNumber, number.doubleValue.isFinite { return number.stringValue }
-          if let text = sample[key] as? String { return text }
-          return ""
-        }
-        try csv.write(contentsOf: Data((fields.joined(separator: ",") + "\n").utf8))
-      }
-    }
-    try events.synchronize()
-    try csv.synchronize()
-    guard count == metadata.eventCount else {
-      throw CycError.invalid("The chosen immutable workout snapshot is incomplete.")
-    }
-    let manifest: [String: Any] = [
-      "format": "power-log-original", "schemaVersion": 1, "workoutId": metadata.id,
-      "collectionRevision": metadata.collectionRevision ?? 0, "sealRevision": metadata.sealRevision ?? 0,
-      "events": count, "files": ["metadata.json", "events.jsonl", "CYCtelemetry.csv"],
-      "notes":
-        "events.jsonl retains all canonical original event payloads. CYCtelemetry.csv is a convenience table of known fields; empty cells mean unavailable values.",
-    ]
-    try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]).write(
-      to: staging.appendingPathComponent("manifest.json"))
-  }
-}
-
 #if os(iOS)
   import CoreLocation
   import Foundation
@@ -231,7 +109,6 @@ enum WorkoutOriginalExport {
     private var healthKitState = "notSaved"
     private var discardRequested = false
     private var healthKitUUID: String?
-    private var warnings: [String] = []
     private var error: String?
     private var gpsDistance = WorkoutGPSDistanceAccumulator()
     private var gpsClock = WorkoutTimelineAnchor.LocationClock()
@@ -314,7 +191,6 @@ enum WorkoutOriginalExport {
       health.onRemoteDisconnect = { [weak self] in
         self?.queue.async {
           self?.connectivity?.recordDiagnostic(.mirrorDisconnected)
-          self?.warn("Watch connection is interrupted. Native records are retained for later synchronization.")
           self?.reconcileAndPublish()
         }
       }
@@ -375,7 +251,7 @@ enum WorkoutOriginalExport {
             self?.healthKitState = "unavailable"
             self?.phase = "finishing"
           }
-          self?.warn("HealthKit: \(failure.localizedDescription)")
+          self?.retainHealthReason(failure)
           self?.reconcileAndPublish()
         }
       }
@@ -385,7 +261,7 @@ enum WorkoutOriginalExport {
           if self.healthKitState == "discarded" { return }
           self.connectivity?.recordDiagnostic(.sessionFailed, error: failure, phase: self.phase)
           self.healthKitState = "failed"
-          self.warn("The HealthKit session failed: \(failure.localizedDescription)")
+          self.retainHealthReason(failure)
           if self.phase == "preparing" {
             self.startFailed(failure)
           } else if ["running", "paused"].contains(self.phase) {
@@ -537,7 +413,7 @@ enum WorkoutOriginalExport {
               staleAfter: 10,
               status: livePresentation.gpsStatus),
             source: useWatch ? .watch : .phone, accuracyMeters: livePresentation.gpsAccuracy)),
-        warnings: warnings, error: error
+        error: error
       ).wireMap
     }
 
@@ -652,7 +528,6 @@ enum WorkoutOriginalExport {
       started = Date()
       phase = "preparing"
       error = nil
-      warnings = []
       elapsedBase = 0
       timerBase = 0
       elapsedOrigin = nil
@@ -970,10 +845,7 @@ enum WorkoutOriginalExport {
             self.healthKitState = "saved"
           case .failure(let failure):
             self.healthKitState = failure is WorkoutHealthClockError ? "unavailable" : "pending"
-            self.warn(
-              failure is WorkoutHealthClockError
-                ? failure.localizedDescription
-                : "HealthKit finalization remains pending: \(failure.localizedDescription)")
+            self.retainHealthReason(failure)
           }
           do {
             let nativeState = self.health.sessionSnapshot?.state
@@ -1389,11 +1261,6 @@ enum WorkoutOriginalExport {
       if !useWatch, saveToHealth, let id {
         _ = try archive?.finish(id: id, endedAt: stopRequestedAt!, finalPhase: "finishing")
       }
-      if useWatch {
-        warn(
-          "Waiting for the final Watch archive and HealthKit outcome. FIT export becomes available after synchronization."
-        )
-      }
       if useWatch || saveToHealth {
         updateMetadata()
         try persist()
@@ -1500,7 +1367,6 @@ enum WorkoutOriginalExport {
         admittedTimeline.stopUTC = timeline.stopUTC
       }
       guard let event = try frame.mappedRide(timeline: admittedTimeline) else { return nil }
-      if let uncertainty = event.payload["timelineMappingUncertainty"]?.string { warn(uncertainty) }
       if destination.id == id, destination.generation == sessionGeneration,
         livePresentation.cycFreshness.receive(
           id: event.eventId,
@@ -1541,10 +1407,7 @@ enum WorkoutOriginalExport {
       }
       if let fault = captureInbox.fault {
         try fault.persist(archive: archive)
-        if fault.workoutID == id, let id, try !archive.store.isWorkoutDeleted(id: id) {
-          warn(fault.message)
-          try persist()
-        }
+        if fault.workoutID == id, let id, try !archive.store.isWorkoutDeleted(id: id) { try persist() }
         captureInbox.acknowledgeFault(fault.id)
       }
       let cyc = CycEngine.shared
@@ -1574,11 +1437,6 @@ enum WorkoutOriginalExport {
       // A damaged historical source cannot prevent the current phone owner's Health replay.
       let forwarder = WorkoutTelemetryForwarder(archive: archive)
       if try forwarder.stageNextPending() { forwardingRefreshNeeded = true }
-      if forwarder.deferredSource {
-        warn(
-          "An older ride has missing controller samples. Its originals are retained for recovery; other rides can still sync."
-        )
-      }
       if forwardingRefreshNeeded {
         try connectivity?.refreshOutbox()
         forwardingRefreshNeeded = false
@@ -1617,17 +1475,16 @@ enum WorkoutOriginalExport {
         horizontalAccuracy: value.horizontalAccuracy, speed: value.speed, speedAccuracy: value.speedAccuracy,
         epoch: mapping.epoch, activeInterval: activeInterval,
         identity: "live", timestamp: WorkoutCoding.timestamp(value.timestamp),
-        barrier: gpsBarrier || mapping.uncertainty != nil)
+        barrier: gpsBarrier || mapping.uncertain)
       var next = gpsDistance
       let interval = next.append(fix)
       var payload: [String: Any] = [
         "latitude": value.coordinate.latitude, "longitude": value.coordinate.longitude,
         "horizontalAccuracyM": value.horizontalAccuracy, "verticalAccuracyM": value.verticalAccuracy,
         "speedAccuracyMps": value.speedAccuracy, "courseAccuracyDegrees": value.courseAccuracy,
-        "distanceBarrier": gpsBarrier || mapping.uncertainty != nil,
+        "distanceBarrier": gpsBarrier || mapping.uncertain,
         "clockEpoch": mapping.epoch, "acquisitionMonotonic": mapping.acquisition,
       ]
-      if let uncertainty = mapping.uncertainty { payload["timelineMappingUncertainty"] = uncertainty }
       if value.verticalAccuracy >= 0 { payload["altitudeMeters"] = value.altitude }
       if value.speed >= 0 { payload["speedMps"] = value.speed }
       if value.course >= 0 { payload["courseDegrees"] = value.course }
@@ -1709,7 +1566,6 @@ enum WorkoutOriginalExport {
       recoveryMessage = nil
       if result.outcome != "applied" {
         recoveryMessage = result.reason ?? "The original owner rejected the action."
-        warn(recoveryMessage!)
         if timeline == nil, ["preparing", "recoverable"].contains(phase) {
           phase = "failed"
           startDeadline = nil
@@ -1873,10 +1729,7 @@ enum WorkoutOriginalExport {
             connectivity?.acknowledge(messageID, allowDeletion: true)
             reconcileAndPublish()
           }
-        } catch {
-          warn("Deletion receipt could not be saved; delivery will retry.")
-          reconcileAndPublish()
-        }
+        } catch { reconcileAndPublish() }
         return
       }
       if let targetID = packet["workoutId"] as? String, UUID(uuidString: targetID) != nil {
@@ -1908,7 +1761,7 @@ enum WorkoutOriginalExport {
       if WorkoutLaunchReadiness.shouldResendStart(
         kind: kind, remotePhase: packet["phase"] as? String, localPhase: phase, watch: useWatch)
       {
-        do { try receiveStatus(packet) } catch { warn("The Watch start command could not be persisted.") }
+        try? receiveStatus(packet)
         return
       }
       guard let workoutID = packet["workoutId"] as? String, let normalizedID = try? WorkoutCoding.id(workoutID),
@@ -1976,7 +1829,6 @@ enum WorkoutOriginalExport {
           recoveryState = "idle"
           recoveryMessage = nil
           phase = adopted.phase
-          warnings = adopted.metadata.warnings
           error = nil
           elapsedBase = adopted.elapsed
           timerBase = adopted.active
@@ -2016,6 +1868,7 @@ enum WorkoutOriginalExport {
             try transfer.receiveLive(events, producer: "watch", firstSequence: first, liveAcquisitions: acquisitions)
             return newEvents
           }
+          clearSyncReason(id: normalizedID)
           if normalizedID == id {
             let ages = packet["sampleAges"] as? [String: Double] ?? [:]
             for (offset, event) in events.enumerated() {
@@ -2035,7 +1888,7 @@ enum WorkoutOriginalExport {
         ])
         reconcileAndPublish()
       } catch {
-        warn("Watch data could not be archived: \(error.localizedDescription)")
+        retainSyncReason(error, id: normalizedID)
         reconcileAndPublish()
       }
     }
@@ -2127,8 +1980,7 @@ enum WorkoutOriginalExport {
           timer: owner.timing?.timerSeconds, archive: archive)
         timeline = WorkoutTimelineAnchor(
           epoch: CycCaptureClock.processEpoch, monotonicOrigin: clock - timing.elapsedSeconds,
-          startedAt: WorkoutCoding.timestamp(started),
-          uncertainty: "Remote owner timing anchored at receipt; transit time is uncertain", epochStart: clock)
+          startedAt: WorkoutCoding.timestamp(started), uncertain: true, epochStart: clock)
         elapsedBase = timing.elapsedSeconds
         timerBase = timing.timerSeconds
         elapsedOrigin = clock
@@ -2136,7 +1988,6 @@ enum WorkoutOriginalExport {
       }
       livePresentation.gpsStatus = WorkoutStreamStatus.normalized(packet["gpsStatus"])
       livePresentation.gpsAccuracy = WorkoutStreamStatus.accuracy(packet["gpsAccuracyM"])
-      if let reason = packet["error"] as? String { warn(String(reason.prefix(500))) }
       let date = packetPhaseDate ?? packetTimestamp ?? Date()
       if ["finishing", "completed"].contains(watchPhase) {
         guard let timeline, let id, let archive, let owner = acceptedOwner else {
@@ -2186,9 +2037,6 @@ enum WorkoutOriginalExport {
         runningOrigin = nil
         phase = "completed"
         pendingAction = nil
-        warn(
-          "Waiting for the final Watch archive and HealthKit outcome. FIT export becomes available after synchronization."
-        )
       } else if watchPhase == "completed" {
         if phase != "completed" {
           elapsedBase = elapsed
@@ -2197,9 +2045,6 @@ enum WorkoutOriginalExport {
           runningOrigin = nil
           phase = "completed"
           pendingAction = nil
-          warn(
-            "Waiting for the final Watch archive and HealthKit outcome. FIT export becomes available after synchronization."
-          )
         }
         reconcileWatchCompletion()
       } else if watchPhase == "failed" {
@@ -2216,7 +2061,6 @@ enum WorkoutOriginalExport {
           completion?(.failure(CycError.invalid(recoveryMessage!)))
         } else {
           healthKitState = saveToHealth ? "failed" : "notRequested"
-          warn("Apple Watch reported a workout failure. Raw native data remains available.")
         }
       }
       updateMetadata()
@@ -2298,6 +2142,7 @@ enum WorkoutOriginalExport {
               if try archive.metadata(id: id).watchSyncState != "received" {
                 try archive.update(id: id, watchSyncState: "received")
               }
+              try archive.updateSyncReason(id: id, nil)
               self.verifiedCompletedRideID = id
               if self.verificationACKs.remove(id) != nil {
                 self.connectivity?.sendEphemeral([
@@ -2311,7 +2156,7 @@ enum WorkoutOriginalExport {
         } catch {
           self.queue.async {
             self.verificationJobs.remove(id)
-            self.warn("Archive verification remains pending: \(error.localizedDescription)")
+            self.retainSyncReason(error, id: id)
           }
         }
       }
@@ -2407,9 +2252,10 @@ enum WorkoutOriginalExport {
           startCompletion = nil
           completion?(.success(state()))
         }
+        clearSyncReason(id: seal.workoutID)
         requestVerification(id: seal.workoutID, acknowledge: true)
         reconcileAndPublish()
-      } catch { warn("Seal verification remains pending: \(error.localizedDescription)") }
+      } catch { retainSyncReason(error, id: packet["workoutId"] as? String) }
     }
 
     private func complete(at date: Date) {
@@ -2442,7 +2288,7 @@ enum WorkoutOriginalExport {
             let pending = try WorkoutPhoneSealRepair.pendingLocal(archive: archive, afterID: phoneSealCursor)
             for target in pending { try sealPhone(id: target) }
             phoneSealCursor = pending.count == 8 ? pending.last! : ""
-          } catch { warn("Local archive finalization will retry: \(error.localizedDescription)") }
+          } catch {}
         }
       }
       if let deadline = recoveryDeadline, clock >= deadline {
@@ -2504,23 +2350,15 @@ enum WorkoutOriginalExport {
       }
     }
 
-    private func warn(_ value: String) {
-      if !warnings.contains(value) {
-        warnings.append(value)
-        if warnings.count > 32 { warnings.removeFirst() }
-      }
-    }
     private func storageFailed(_ failure: Error, captureInterrupted: Bool = false) {
       let cyc = CycEngine.shared
       cyc.queue.async { cyc.captureResult(failure) }
       guard captureInterrupted || WorkoutStorageFaultPolicy.freezesRide(failure) else {
         error = "Workout state was not saved: \(failure.localizedDescription)"
-        warn(error!)
         reconcileAndPublish()
         return
       }
       error = "Workout storage failed: \(failure.localizedDescription)"
-      warn(error!)
       if phase == "running" || (!useWatch && phase == "paused") {
         timerBase = timerSeconds
         runningOrigin = nil
@@ -2541,13 +2379,20 @@ enum WorkoutOriginalExport {
     private func updateMetadata() {
       guard let id, let archive else { return }
       do {
-        try archive.store.transaction { _ in
-          for warning in try archive.metadata(id: id).warnings { warn(warning) }
-          try archive.update(
-            id: id, phase: phase, healthKitState: healthKitState, healthKitUUID: healthKitUUID, warnings: warnings)
-        }
+        try archive.update(id: id, phase: phase, healthKitState: healthKitState, healthKitUUID: healthKitUUID)
       } catch { self.error = "Workout metadata could not be saved." }
     }
+    private func retainHealthReason(_ failure: Error) {
+      guard !useWatch, saveToHealth, let id, let archive else { return }
+      do { try archive.update(id: id, healthReason: failure.localizedDescription) } catch {
+        self.error = "Workout metadata could not be saved."
+      }
+    }
+    private func retainSyncReason(_ failure: Error, id: String?) {
+      guard let id else { return }
+      try? archive?.updateSyncReason(id: id, failure.localizedDescription)
+    }
+    private func clearSyncReason(id: String) { try? archive?.updateSyncReason(id: id, nil) }
     private func persist() throws {
       guard let id else { return }
       let now = clock
@@ -2564,7 +2409,7 @@ enum WorkoutOriginalExport {
         "elapsedSeconds": timing.elapsedSeconds, "indoor": indoor, "useWatch": useWatch,
         "timerSeconds": timing.timerSeconds,
         "sampleHz": admittedSampleHz as Any? ?? NSNull(),
-        "healthKitState": healthKitState, "healthKitUUID": healthKitUUID as Any? ?? NSNull(), "warnings": warnings,
+        "healthKitState": healthKitState, "healthKitUUID": healthKitUUID as Any? ?? NSNull(),
         "error": error as Any? ?? NSNull(),
         "discardRequested": discardRequested,
         "stopRequestedAt": stopRequestedAt.map(WorkoutCoding.timestamp) as Any? ?? NSNull(),
@@ -2634,7 +2479,6 @@ enum WorkoutOriginalExport {
       retainedTiming = restoredTiming
       healthKitState = value["healthKitState"] as? String ?? "unknown"
       healthKitUUID = value["healthKitUUID"] as? String
-      warnings = value["warnings"] as? [String] ?? []
       error = value["error"] as? String
       stopRequestedAt = restoredCutoff
       pendingRemoteAction = try? control?.pendingRemote(workoutID: normalizedID)
@@ -2673,7 +2517,6 @@ enum WorkoutOriginalExport {
             id: normalizedID, epoch: timeline?.epoch, checkpoint: checkpoint,
             needsInterruption: interrupted, archive: archive, pendingCommand: pendingOwnerCommand)
           retainedTiming = restored.timing
-          warnings = try archive.metadata(id: normalizedID).warnings
           stopRequestedAt = restored.cutoff
           elapsedBase = restored.timing.elapsedSeconds
           timerBase = restored.timing.timerSeconds
@@ -2743,7 +2586,6 @@ enum WorkoutOriginalExport {
         phase = "finishing"
         pendingAction = "discard"
       }
-      warn("Native workout was interrupted. Recovery must confirm the original owner before continuing.")
       if useWatch {
         do { try replayUnforwardedTelemetry() } catch { storageFailed(error) }
         do { try queryOwner() } catch {
@@ -2765,9 +2607,7 @@ enum WorkoutOriginalExport {
             runningOrigin = nil
             timeline = WorkoutTimelineAnchor(
               epoch: CycCaptureClock.processEpoch, monotonicOrigin: clock - elapsedBase,
-              startedAt: WorkoutCoding.timestamp(started),
-              uncertainty: "Recording interrupted across process restart; unobserved downtime is excluded",
-              epochStart: clock)
+              startedAt: WorkoutCoding.timestamp(started), uncertain: true, epochStart: clock)
             if let command = pendingOwnerCommand {
               if command.endsWorkout {
                 retainedTiming = try WorkoutOwnerTiming.command(command)
@@ -2904,7 +2744,7 @@ enum WorkoutOriginalExport {
                       if failure is WorkoutHealthClockError {
                         self.healthKitState = "unavailable"
                         self.phase = "completed"
-                        self.warn(failure.localizedDescription)
+                        self.retainHealthReason(failure)
                         self.recoveryState = "resolved"
                         self.recoveryDeadline = nil
                         if let cutoff = self.stopRequestedAt { try self.commitPhoneOwner("completed", at: cutoff) }
@@ -2917,7 +2757,7 @@ enum WorkoutOriginalExport {
                       self.healthKitState = "pending"
                       self.recoveryState = "unresolved"
                       self.recoveryMessage = "Original Health recovery remains pending: \(failure.localizedDescription)"
-                      self.warn(self.recoveryMessage!)
+                      self.retainHealthReason(failure)
                     }
                     self.updateMetadata()
                     try self.persist()
@@ -3002,11 +2842,9 @@ enum WorkoutOriginalExport {
                 self.record(kind: "lifecycle", source: "phone", date: Date(), payload: ["action": "resume"])
               }
               if self.recordGPS { self.location.start() }
-              self.warn("Recovered the original phone workout. The process interruption remains a data gap.")
             case .failure(let failure):
               self.recoveryState = "unresolved"
               self.recoveryMessage = "Original owner recovery is unavailable: \(failure.localizedDescription)"
-              self.warn(self.recoveryMessage!)
             }
             self.updateMetadata()
             try? self.persist()
@@ -3034,41 +2872,13 @@ enum WorkoutOriginalExport {
     func read(_ id: String, distanceSource: String = "auto") throws -> [String: Any] {
       guard let archive else { throw CycError.invalid("Workout storage is unavailable.") }
       let metadata = try archive.metadata(id: id)
-      let summary = try WorkoutFIT.summarize(
+      let summary = try WorkoutAnalysis.summarize(
         archive: archive, id: id, revision: metadata.collectionRevision, distanceSource: distanceSource)
       try archive.store.requireWorkoutAvailable(id: id)
       return ["metadata": metadata.dictionary, "summary": summary.dictionary]
     }
-    func export(_ id: String, distanceSource: String = "auto") throws -> String {
-      guard let archive else { throw CycError.invalid("Workout storage is unavailable.") }
-      let metadata = try archive.metadata(id: id)
-      guard metadata.endedAt != nil, metadata.phase == "completed", metadata.sealVerified,
-        ["complete", "partial"].contains(metadata.finalizationState ?? "")
-      else { throw CycError.invalid("Finish the workout and wait for its final Watch archive before exporting FIT.") }
-      let output = try archive.directory(id: id).appendingPathComponent(
-        WorkoutFIT.filename(
-          revision: metadata.collectionRevision ?? 0, seal: metadata.sealRevision ?? 0, distanceSource: distanceSource))
-      _ = try WorkoutFIT.export(
-        archive: archive, id: id, to: output, revision: metadata.collectionRevision, distanceSource: distanceSource)
-      do { try archive.store.requireWorkoutAvailable(id: id) } catch {
-        try? FileManager.default.removeItem(at: output)
-        throw error
-      }
-      return output.absoluteString
-    }
 
-    func exportOriginal(_ id: String) throws -> String {
-      guard let archive else { throw CycError.invalid("Workout storage is unavailable.") }
-      let metadata = try archive.metadata(id: id)
-      let output = try archive.directory(id: id).appendingPathComponent(
-        "PowerLog-original-r\(metadata.collectionRevision ?? 0)-s\(metadata.sealRevision ?? 0).zip")
-      try WorkoutOriginalExport.write(archive: archive, id: id, to: output, revision: metadata.collectionRevision)
-      do { try archive.store.requireWorkoutAvailable(id: id) } catch {
-        try? FileManager.default.removeItem(at: output)
-        throw error
-      }
-      return output.absoluteString
-    }
+    private struct ArchiveBudgetExpired: Error {}
 
     private func importWatchArchive(_ url: URL, metadata: [String: Any], completion: @escaping (Bool) -> Void) {
       let lease = WorkoutImportLease()
@@ -3091,7 +2901,7 @@ enum WorkoutOriginalExport {
             }
           }
           do {
-            guard lease.permits() else { throw CycError.invalid("Archive processing budget expired") }
+            guard lease.permits() else { throw ArchiveBudgetExpired() }
             guard let archive = self.archive, let transfer = self.transfer,
               let raw = metadata["manifest"] as? [String: Any]
             else { throw CycError.invalid("Invalid Watch chunk manifest") }
@@ -3111,11 +2921,12 @@ enum WorkoutOriginalExport {
             guard let saves = metadata["saveToHealth"] as? Bool, let gps = metadata["recordGPS"] as? Bool else {
               throw CycError.invalid("Missing Watch recording options")
             }
-            guard lease.permits() else { throw CycError.invalid("Archive processing budget expired") }
+            guard lease.permits() else { throw ArchiveBudgetExpired() }
             _ = try transfer.receiveWatch(
               WorkoutChunk(manifest: manifest, data: Data(contentsOf: url)),
               startedAt: start, indoor: metadata["indoor"] as? Bool ?? false, saveToHealth: saves, recordGPS: gps)
             self.queue.async {
+              self.clearSyncReason(id: manifest.workoutID)
               self.connectivity?.sendEphemeral([
                 "schemaVersion": 1, "kind": "chunkAck", "workoutId": manifest.workoutID,
                 "messageId": UUID().uuidString.lowercased(), "chunkIdentity": manifest.identity,
@@ -3132,10 +2943,12 @@ enum WorkoutOriginalExport {
               completion(true)
               self.reconcileAndPublish()
             }
-          } catch PowerLogStorageError.deleted { self.queue.async { completion(true) } } catch {
+          } catch PowerLogStorageError.deleted { self.queue.async { completion(true) } } catch is ArchiveBudgetExpired {
+            self.queue.async { completion(false) }
+          } catch {
             self.queue.async {
               completion(false)
-              self.warn("Watch chunk remains pending: \(error.localizedDescription)")
+              self.retainSyncReason(error, id: metadata["workoutId"] as? String)
               self.reconcileAndPublish()
             }
           }
@@ -3202,7 +3015,6 @@ enum WorkoutOriginalExport {
         if !useWatch && !saveToHealth { health.setLocalOwner(nil) }
         healthKitState = "notSaved"
         healthKitUUID = nil
-        warnings = []
         error = nil
       }
     }
@@ -3216,16 +3028,14 @@ enum WorkoutOriginalExport {
         for record in page {
           connectivity?.discardWorkoutPackets(workoutId: record.id)
           if record.watchRequired, !record.watchAcknowledged, record.retryAfter <= Date().timeIntervalSince1970 {
-            do { _ = try connectivity?.enqueue(record.packet) } catch {
-              warn("Watch deletion delivery will retry: \(error.localizedDescription)")
-            }
+            _ = try? connectivity?.enqueue(record.packet)
           }
           if !record.cleanupComplete, deletionCleanupID == nil {
             deletionCleanupID = record.id
             cleanupDeletedRide(record.id)
           }
         }
-      } catch { warn("Deleted ride cleanup will retry: \(error.localizedDescription)") }
+      } catch {}
     }
     private func cleanupDeletedRide(_ targetID: String) {
       guard let archive else {
@@ -3247,7 +3057,6 @@ enum WorkoutOriginalExport {
         } catch {
           self.queue.async {
             self.deletionCleanupID = nil
-            self.warn("Deleted ride cleanup will retry: \(error.localizedDescription)")
             self.reconcileAndPublish()
           }
         }

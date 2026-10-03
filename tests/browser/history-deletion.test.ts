@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import path from 'node:path';
 import { chromium, expect as ui, type Browser, type Page } from '@playwright/test';
 import { browserTestBundle } from '../helpers/browser-test-bundle';
-import { syntheticSample } from '../fixtures/synthetic-sample';
+import { syntheticCsvSample } from '../core/csv-fixture';
 import { parseCsv } from '../support/csv';
 import type * as Harness from './history-actions-harness';
 
@@ -23,7 +23,7 @@ const aliases: Record<string, string> = {
   'react-native-safe-area-context': platform,
   'expo-router': platform,
 };
-for (const name of ['src/services/workouts']) aliases[path.resolve(name)] = backend;
+for (const name of ['src/services/workouts', 'src/services/ride-export']) aliases[path.resolve(name)] = backend;
 for (const name of [
   'src/services/session-context',
   'src/services/device',
@@ -66,9 +66,7 @@ async function selectFirst(page: Page) {
 }
 const csvFile = {
   name: 'synthetic-import.csv',
-  recording: {
-    samples: [syntheticSample(0, 0, '2026-01-01T00:00:00.000Z'), syntheticSample(1, 1, '2026-01-01T00:00:01.000Z')],
-  },
+  recording: { samples: [syntheticCsvSample(0), syntheticCsvSample(1)] },
 };
 async function openCsv(page: Page) {
   await page.evaluate(file => window.historyTests.setCsvImport(file), csvFile);
@@ -335,6 +333,82 @@ describe('production History and resource lifecycle in React', () => {
       await page.waitForFunction(() => window.historyTests.snapshot().counts.read.length === 3);
       await ui(page.getByRole('button', { name: 'Retry Health Connect', exact: true })).toHaveCount(0);
     }));
+  it('shows why Health did not save in place of the Health status until Health saves', async () =>
+    run(async page => {
+      await page.evaluate(() => {
+        const h = window.historyTests;
+        h.seed([
+          {
+            ...h.metadata('health-reason', 1),
+            watchEnabled: false,
+            saveToHealth: true,
+            healthKitState: 'failed',
+            healthReason: 'Health data is unavailable while the iPhone is locked.',
+          },
+        ]);
+        h.mount();
+      });
+      await selectFirst(page);
+      const status = (text: string) => page.getByText(text, { exact: true });
+      await ui(
+        status('iPhone · Health not saved: Health data is unavailable while the iPhone is locked.'),
+      ).toBeVisible();
+      for (const [patch, text] of [
+        [{ healthKitState: 'saved' }, 'iPhone · Health saved'],
+        [{ healthKitState: 'notSaved', healthReason: null }, 'iPhone · Health not saved'],
+        [{ healthKitState: 'notRequested', saveToHealth: false }, 'iPhone · Saved only in Power Log'],
+      ] as const) {
+        await page.evaluate(async patch => {
+          window.historyTests.updateRecord('health-reason', patch);
+          await window.historyTests.refreshCatalog();
+        }, patch);
+        await ui(status(text)).toBeVisible();
+      }
+    }));
+  it('shows a Watch sync failure in place of the syncing line only while the ride is pending', async () =>
+    run(async page => {
+      await page.evaluate(() => {
+        const h = window.historyTests;
+        h.seed([{ ...h.metadata('sync-reason', 1, 'finishing'), syncReason: 'The Watch archive did not verify.' }]);
+        h.mount();
+      });
+      await selectFirst(page);
+      const failed = page.getByText('Watch sync failed: The Watch archive did not verify.', { exact: true });
+      const syncing = page.getByText('Ride ended. Syncing remaining data…', { exact: true });
+      const exportsWait = page.getByText('Exports are available when syncing finishes.', { exact: true });
+      await ui(failed).toBeVisible();
+      await ui(syncing).toHaveCount(0);
+      await ui(exportsWait).toBeVisible();
+      await page.evaluate(async () => {
+        window.historyTests.updateRecord('sync-reason', { syncReason: null });
+        await window.historyTests.refreshCatalog();
+      });
+      await ui(syncing).toBeVisible();
+      await ui(failed).toHaveCount(0);
+      await page.evaluate(async () => {
+        window.historyTests.updateRecord('sync-reason', {
+          phase: 'completed',
+          watchSyncState: 'received',
+          finalizationState: 'complete',
+          verifiedSealRevision: 1,
+          syncReason: 'The Watch archive did not verify.',
+        });
+        await window.historyTests.refreshCatalog();
+      });
+      await ui(syncing).toHaveCount(0);
+      await ui(exportsWait).toHaveCount(0);
+      await ui(failed).toHaveCount(0);
+    }));
+  it('marks a partial ride as incomplete', async () =>
+    run(async page => {
+      await page.evaluate(() => {
+        const h = window.historyTests;
+        h.seed([{ ...h.metadata('partial-ride', 1), finalizationState: 'partial' }]);
+        h.mount();
+      });
+      await selectFirst(page);
+      await ui(page.getByText('Incomplete ride. Some sources are unavailable.', { exact: true })).toBeVisible();
+    }));
   it('exports FIT with the chosen distance source and opens manual Strava upload only on request', async () =>
     run(async page => {
       await page.evaluate(() => {
@@ -347,19 +421,20 @@ describe('production History and resource lifecycle in React', () => {
       expect(await page.evaluate(() => window.historyTests.snapshot().counts.exports)).toEqual([]);
       expect(await page.evaluate(() => window.historyTests.openedURLs)).toEqual([]);
       await page.getByRole('button', { name: 'Export FIT', exact: true }).click();
-      await page.waitForFunction(() => window.historyTests.sharedFiles.length === 1);
+      await page.waitForFunction(() => window.historyTests.snapshot().counts.exports.length === 1);
+      await ui(page.getByRole('button', { name: 'Export ZIP', exact: true })).toBeEnabled();
+      await page.getByRole('button', { name: 'Export ZIP', exact: true }).click();
+      await page.waitForFunction(() => window.historyTests.snapshot().counts.exports.length === 2);
       expect(await page.evaluate(() => window.historyTests.snapshot().counts.exports)).toEqual([
-        { id: 'manual-export', selection: 'controller' },
-      ]);
-      expect(await page.evaluate(() => window.historyTests.sharedFiles)).toEqual([
-        { uri: 'file:///fixture.fit', name: 'power-log-manual-export.fit' },
+        { kind: 'fit', id: 'manual-export', selection: 'controller' },
+        { kind: 'zip', id: 'manual-export', selection: 'auto' },
       ]);
       expect(await page.evaluate(() => window.historyTests.openedURLs)).toEqual([]);
       await page.getByRole('button', { name: 'Open Strava upload', exact: true }).click();
       expect(await page.evaluate(() => window.historyTests.openedURLs)).toEqual([
         'https://www.strava.com/upload/select',
       ]);
-      expect(await page.evaluate(() => window.historyTests.snapshot().counts.exports.length)).toBe(1);
+      expect(await page.evaluate(() => window.historyTests.snapshot().counts.exports.length)).toBe(2);
     }));
   it('keeps FIT sharing unavailable until ride verification finishes', async () =>
     run(async page => {
@@ -375,7 +450,7 @@ describe('production History and resource lifecycle in React', () => {
       expect(await page.evaluate(() => window.historyTests.openedURLs)).toEqual([]);
     }));
   for (const kind of ['example', 'browser'] as const)
-    it(`omits the Strava shortcut for ${kind} rides and retains their export`, async () =>
+    it(`offers both exports for ${kind} rides and the Strava shortcut only for recorded rides`, async () =>
       run(async page => {
         await page.evaluate(kind => {
           const h = window.historyTests,
@@ -386,10 +461,12 @@ describe('production History and resource lifecycle in React', () => {
           h.mount();
         }, kind);
         await selectFirst(page);
-        await ui(page.getByRole('button', { name: 'Open Strava upload', exact: true })).toHaveCount(0);
-        await ui(
-          page.getByRole('button', { name: kind === 'example' ? 'Export FIT' : 'Export CSV', exact: true }),
-        ).toBeEnabled();
+        await ui(page.getByRole('button', { name: 'Open Strava upload', exact: true })).toHaveCount(
+          kind === 'example' ? 0 : 1,
+        );
+        await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
+        await ui(page.getByRole('button', { name: 'Export ZIP', exact: true })).toBeEnabled();
+        await ui(page.getByRole('button', { name: 'Export CSV', exact: true })).toHaveCount(0);
       }));
   it('identifies a builder Health snapshot as provisional and refreshes a separately named final report', async () =>
     run(async page => {
@@ -660,9 +737,9 @@ describe('History archive controls alongside an active ride', () => {
       await rows(page).last().click();
       await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
       await page.getByRole('button', { name: 'Export FIT', exact: true }).click();
-      await page.waitForFunction(() => window.historyTests.sharedFiles.length === 1);
+      await page.waitForFunction(() => window.historyTests.snapshot().counts.exports.length === 1);
       await page.evaluate(() => window.historyTests.releaseArchive('export', 'first'));
-      await page.waitForFunction(() => window.historyTests.sharedFiles.length === 2);
+      await page.waitForFunction(() => window.historyTests.snapshot().counts.exports.length === 2);
       expect(JSON.parse(await page.getByTestId('ride-controls-state').innerText()).busy).toBe(false);
     }));
 

@@ -337,7 +337,7 @@ _ = try WorkoutLocalOwner.observe(
   control: control, timing: try timing(100, timer: 2))
 try local.finish(id: resumeFailure.id, endedAt: start.addingTimeInterval(100))
 check(
-  try WorkoutFIT.summarize(archive: local, id: resumeFailure.id).timerSeconds == 2,
+  try WorkoutAnalysis.summarize(archive: local, id: resumeFailure.id).timerSeconds == 2,
   "recovery and Finish after failed Resume retain only the original active time")
 
 // Every local action uses the owner transaction's checkpoint boundary. Inject a
@@ -412,7 +412,7 @@ for discardEnd in [false, true] {
     previousCheckpoint = checkpoint
   }
   check(
-    try WorkoutFIT.summarize(archive: local, id: atomic.id).timerSeconds == 3,
+    try WorkoutAnalysis.summarize(archive: local, id: atomic.id).timerSeconds == 3,
     "complete atomic local lifecycle yields the same active FIT duration")
 }
 
@@ -644,7 +644,7 @@ for wallOffset in [-300.0, 300.0] {
     _ = try WorkoutPhoneSealRepair.seal(
       id: interrupted.id, archive: local,
       transfer: WorkoutTransferJournal(archive: local), control: control)
-    let summary = try WorkoutFIT.summarize(archive: local, id: interrupted.id)
+    let summary = try WorkoutAnalysis.summarize(archive: local, id: interrupted.id)
     check(
       summary.elapsedSeconds == endTiming.elapsedSeconds && summary.timerSeconds == endTiming.timerSeconds,
       "summary elapsed and active time exclude restart downtime")
@@ -674,7 +674,7 @@ _ = try WorkoutRecoveredOwnerCommand.reconcile(
   observedLapIDs: [],
   cutoff: nil, health: "pending", healthID: nil, archive: local, control: control, timing: uncertainRecovery.timing)
 check(
-  try WorkoutFIT.summarize(archive: local, id: uncertainRide.id).timerSeconds == 8,
+  try WorkoutAnalysis.summarize(archive: local, id: uncertainRide.id).timerSeconds == 8,
   "lifecycle analytics exclude the same uncertain active interval as the retained owner timer")
 for (action, elapsed, utc) in [("resume", 12.0, 1000.0), ("stop", 14.0, 1002.0)] {
   try local.append(
@@ -686,7 +686,7 @@ try local.update(
   id: uncertainRide.id, stopElapsedSeconds: 14,
   ownerTiming: try timing(14, timer: 10, utc: start.addingTimeInterval(1002)))
 try local.finish(id: uncertainRide.id, endedAt: start.addingTimeInterval(1002))
-let uncertainSummary = try WorkoutFIT.summarize(archive: local, id: uncertainRide.id)
+let uncertainSummary = try WorkoutAnalysis.summarize(archive: local, id: uncertainRide.id)
 check(
   uncertainSummary.elapsedSeconds == 14 && uncertainSummary.timerSeconds == 10,
   "resume adds only measured active time after the recovered boundary")

@@ -13,7 +13,6 @@ const record: WorkoutMetadata = {
   eventCount: 10,
   interrupted: false,
   healthKitState: 'saved',
-  warnings: [],
   watchSyncState: 'notRequired',
   collectionRevision: 12,
   sealRevision: 3,

@@ -1,0 +1,3 @@
+[
+  "timestamp,elapsedSeconds,activeInterval,run,source,latitude,longitude,altitudeMeters,verticalAccuracyM,ellipsoidalAltitudeMeters,ellipsoidalVerticalAccuracyM,horizontalAccuracyM,speedMps,speedAccuracyMps,courseDegrees,courseAccuracyDegrees"
+]

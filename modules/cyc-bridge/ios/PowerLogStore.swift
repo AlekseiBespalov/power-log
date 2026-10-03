@@ -96,8 +96,25 @@ final class PowerLogDatabase {
   private var statements: [String: OpaquePointer] = [:]
   var queryObserverForTesting: ((String, [PowerLogSQLValue]) -> Void)?
   private var order: [String] = []
+  private var drained = (steps: 0, reprepares: 0)
   fileprivate init(_ handle: OpaquePointer) { self.handle = handle }
   deinit { for statement in statements.values { sqlite3_finalize(statement) } }
+  /// Resets a statement's counters into the connection totals and returns what they held.
+  private func drain(_ s: OpaquePointer) -> (steps: Int, reprepares: Int) {
+    let work = (
+      steps: Int(sqlite3_stmt_status(s, SQLITE_STMTSTATUS_VM_STEP, 1)),
+      reprepares: Int(sqlite3_stmt_status(s, SQLITE_STMTSTATUS_REPREPARE, 1))
+    )
+    drained.steps += work.steps
+    drained.reprepares += work.reprepares
+    return work
+  }
+  /// VM steps and automatic re-preparations of every statement this connection has run.
+  var workForTesting: (steps: Int, reprepares: Int) {
+    assertExecutor()
+    for statement in statements.values { _ = drain(statement) }
+    return drained
+  }
   private func statement(_ sql: String, _ values: [PowerLogSQLValue]) throws -> OpaquePointer {
     queryObserverForTesting?(sql, values)
     assertExecutor()
@@ -110,7 +127,10 @@ final class PowerLogDatabase {
       s = prepared
       if order.count >= 64, let first = order.first {
         order.removeFirst()
-        if let old = statements.removeValue(forKey: first) { sqlite3_finalize(old) }
+        if let old = statements.removeValue(forKey: first) {
+          _ = drain(old)
+          sqlite3_finalize(old)
+        }
       }
       order.append(sql)
       statements[sql] = s
@@ -162,9 +182,9 @@ final class PowerLogDatabase {
       throw PowerLogStorageError.invalid("Storage page limit must be 1...512")
     }
     let s = try statement(sql, values)
-    if observeWork != nil { sqlite3_stmt_status(s, SQLITE_STMTSTATUS_VM_STEP, 1) }
+    if observeWork != nil { _ = drain(s) }
     defer {
-      if let observeWork { observeWork(Int(sqlite3_stmt_status(s, SQLITE_STMTSTATUS_VM_STEP, 1))) }
+      if let observeWork { observeWork(drain(s).steps) }
       sqlite3_reset(s)
     }
     var result: [PowerLogRow] = []
@@ -199,6 +219,45 @@ final class PowerLogDatabase {
         row[key] = value
       }
       result.append(PowerLogRow(values: row))
+    }
+  }
+  /// `body` returns false to stop stepping early.
+  @discardableResult
+  func scan(
+    _ sql: String, _ values: [PowerLogSQLValue] = [], limit: Int,
+    observeWork: ((_ steps: Int, _ reprepares: Int) -> Void)? = nil, _ body: (PowerLogStatementRow) throws -> Bool
+  ) throws -> Int {
+    guard (1...PowerLogStorageLimits.pageRows).contains(limit) else {
+      throw PowerLogStorageError.invalid("Storage page limit must be 1...512")
+    }
+    let s = try statement(sql, values)
+    if observeWork != nil { _ = drain(s) }
+    defer {
+      if let observeWork {
+        let work = drain(s)
+        observeWork(work.steps, work.reprepares)
+      }
+      sqlite3_reset(s)
+    }
+    let columns = sqlite3_column_count(s)
+    var count = 0
+    var pageBytes = 0
+    while true {
+      let rc = sqlite3_step(s)
+      if rc == SQLITE_DONE { return count }
+      guard rc == SQLITE_ROW else { throw error() }
+      guard count < limit else {
+        throw PowerLogStorageError.invalid("Unbounded database read rejected; use keyset pages")
+      }
+      for i in 0..<columns {
+        let type = sqlite3_column_type(s, i)
+        pageBytes += type == SQLITE_TEXT || type == SQLITE_BLOB ? max(8, Int(sqlite3_column_bytes(s, i))) : 8
+      }
+      guard pageBytes <= PowerLogStorageLimits.pageBytes else {
+        throw PowerLogStorageError.invalid("Database page byte limit exceeded; request fewer rows")
+      }
+      count += 1
+      guard try body(PowerLogStatementRow(statement: s)) else { return count }
     }
   }
   func scalarInt(_ sql: String, _ values: [PowerLogSQLValue] = []) throws -> Int64? {
@@ -248,6 +307,36 @@ final class PowerLogDatabase {
       "INSERT INTO counters(namespace,key,value) VALUES(?,?,?) ON CONFLICT(namespace,key) DO UPDATE SET value=excluded.value",
       [.text(namespace), .text(key), .integer(next)])
     return next
+  }
+}
+
+/// Valid only inside the `scan` callback that receives it.
+struct PowerLogStatementRow {
+  fileprivate let statement: OpaquePointer
+  func double(_ column: Int32) -> Double? {
+    let type = sqlite3_column_type(statement, column)
+    guard type == SQLITE_INTEGER || type == SQLITE_FLOAT else { return nil }
+    return sqlite3_column_double(statement, column)
+  }
+  func integer(_ column: Int32) -> Int64? {
+    sqlite3_column_type(statement, column) == SQLITE_INTEGER ? sqlite3_column_int64(statement, column) : nil
+  }
+  func text(_ column: Int32) -> String? {
+    guard sqlite3_column_type(statement, column) == SQLITE_TEXT, let text = sqlite3_column_text(statement, column)
+    else { return nil }
+    return String(cString: text)
+  }
+  /// Unlike `text`, keeps the NUL characters a JSON string value can carry.
+  func string(_ column: Int32) -> String? {
+    guard sqlite3_column_type(statement, column) == SQLITE_TEXT, let text = sqlite3_column_text(statement, column)
+    else { return nil }
+    return String(
+      decoding: UnsafeBufferPointer(start: text, count: Int(sqlite3_column_bytes(statement, column))), as: UTF8.self)
+  }
+  func data(_ column: Int32) -> Data? {
+    guard sqlite3_column_type(statement, column) == SQLITE_BLOB else { return nil }
+    let count = Int(sqlite3_column_bytes(statement, column))
+    return count == 0 ? Data() : Data(bytes: sqlite3_column_blob(statement, column)!, count: count)
   }
 }
 
@@ -431,6 +520,8 @@ final class PowerLogStore: @unchecked Sendable {
   ]
   /// Fault injection is configured only by software tests; runs before outer COMMIT.
   var beforeCommitForTesting: (() throws -> Void)?
+  /// Test instrumentation: the SQLite work of each executor job, reported on the executor as the job ends.
+  var jobObserverForTesting: ((_ priority: PowerLogJobPriority, _ steps: Int, _ reprepares: Int) -> Void)?
 
   static func databaseURL(forRoot root: URL) -> URL {
     if root.lastPathComponent == "workouts" {
@@ -526,7 +617,13 @@ final class PowerLogStore: @unchecked Sendable {
           priority,
           { [self] in
             let started = ProcessInfo.processInfo.systemUptime
+            let observer = jobObserverForTesting
+            let before = observer.map { _ in db.workForTesting }
             result = Result { try escaped() }
+            if let observer, let before {
+              let after = db.workForTesting
+              observer(priority, after.steps - before.steps, after.reprepares - before.reprepares)
+            }
             metrics["jobs", default: 0] += 1
             metrics["queueMilliseconds", default: 0] += (started - enqueued) * 1000
             metrics["executionMilliseconds", default: 0] += (ProcessInfo.processInfo.systemUptime - started) * 1000
@@ -648,6 +745,7 @@ final class PowerLogStore: @unchecked Sendable {
       "CREATE INDEX IF NOT EXISTS membership_utc ON collection_memberships(collection_id,query_us,observation_id)",
       "CREATE INDEX IF NOT EXISTS membership_source_time ON collection_memberships(collection_id,kind,source,raw_heart,elapsed_seconds,observation_id)",
       "CREATE INDEX IF NOT EXISTS membership_stream_time ON collection_memberships(collection_id,kind,source,elapsed_seconds,observation_id)",
+      "CREATE INDEX IF NOT EXISTS membership_kind_time ON collection_memberships(collection_id,kind,elapsed_seconds,producer,sequence)",
       "CREATE TABLE IF NOT EXISTS collection_corrections(collection_id TEXT NOT NULL REFERENCES collections(id),target_event_id TEXT NOT NULL,replacement_event_id TEXT NOT NULL,revision INTEGER NOT NULL,deleted INTEGER NOT NULL,PRIMARY KEY(collection_id,target_event_id,revision)) STRICT",
       "CREATE TABLE IF NOT EXISTS collection_versions(collection_id TEXT NOT NULL REFERENCES collections(id),revision INTEGER NOT NULL,metadata BLOB,PRIMARY KEY(collection_id,revision)) STRICT",
       "CREATE INDEX IF NOT EXISTS membership_snapshot ON collection_memberships(collection_id,revision,id)",
@@ -773,7 +871,7 @@ final class PowerLogStore: @unchecked Sendable {
     default: return nil
     }
   }
-  private static let mappingKeys: Set<String> = ["elapsedSeconds", "sequence", "timelineMappingUncertainty"]
+  private static let mappingKeys: Set<String> = ["elapsedSeconds", "sequence"]
   static func physicalIdentity(_ event: WorkoutEvent) throws -> String {
     if event.kind == "telemetry", let session = event.payload["captureSessionID"]?.string,
       let sequence = event.payload["observationSequence"]
@@ -1084,19 +1182,18 @@ final class PowerLogStore: @unchecked Sendable {
       // an arbitrary stream neighbor because it may be null (or already superseded).
       var lower = elapsed
       var upper = elapsed
-      let table =
-        event.kind == "telemetry" ? "telemetry_frames" : (event.kind == "location" ? "locations" : "health_samples")
+      let kind = event.kind == "telemetry" ? "telemetry" : (event.kind == "location" ? "location" : "health")
+      let table = kind == "telemetry" ? "telemetry_frames" : (kind == "location" ? "locations" : "health_samples")
       let projections: [String?] = denseTelemetry ? [nil] : names.map { Optional($0) }
       for metric in projections {
         let join = metric == nil ? "" : " JOIN \(table) h ON h.observation_id=m.observation_id"
         let selected = metric == nil ? "" : " AND \(Self.selectedMembershipSQL) AND h.\(metric!) IS NOT NULL"
-        var bindings: [PowerLogSQLValue] = [
-          .text(collectionID), .text(event.kind), .text(event.source), .integer(Int64(rawHeart)),
-        ]
+        var bindings: [PowerLogSQLValue] = [.text(collectionID), .text(event.source), .integer(Int64(rawHeart))]
         if metric != nil { bindings += [.integer(revision), .integer(revision)] }
         for before in [true, false] {
+          // A literal kind lets SQLite settle the partial kind indexes once instead of re-planning per bound value.
           let sql =
-            "SELECT m.elapsed_seconds FROM collection_memberships m\(join) WHERE m.collection_id=? AND m.kind=? AND m.source=? AND m.raw_heart=?\(selected) AND m.elapsed_seconds\(before ? "<" : ">")? ORDER BY m.elapsed_seconds \(before ? "DESC" : "ASC"),m.observation_id \(before ? "DESC" : "ASC") LIMIT 1"
+            "SELECT m.elapsed_seconds FROM collection_memberships m\(join) WHERE m.collection_id=? AND m.kind='\(kind)' AND m.source=? AND m.raw_heart=?\(selected) AND m.elapsed_seconds\(before ? "<" : ">")? ORDER BY m.elapsed_seconds \(before ? "DESC" : "ASC"),m.observation_id \(before ? "DESC" : "ASC") LIMIT 1"
           if let time = try db.rows(sql, bindings + [.real(elapsed)], limit: 1).first?.double("elapsed_seconds") {
             if before { lower = min(lower, time) } else { upper = max(upper, time) }
           }

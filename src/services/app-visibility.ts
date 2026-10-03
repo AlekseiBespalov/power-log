@@ -19,3 +19,18 @@ export function subscribeAppVisibility(listener: (active: boolean) => void): () 
     browser?.removeEventListener('visibilitychange', receive);
   };
 }
+
+export function subscribeAppBackground(listener: () => void): () => void {
+  const subscription = AppState.addEventListener('change', state => {
+    if (state === 'background') listener();
+  });
+  const browser = Platform.OS === 'web' && typeof document !== 'undefined' ? document : null;
+  const hidden = () => {
+    if (browser?.visibilityState === 'hidden') listener();
+  };
+  browser?.addEventListener('visibilitychange', hidden);
+  return () => {
+    subscription.remove();
+    browser?.removeEventListener('visibilitychange', hidden);
+  };
+}

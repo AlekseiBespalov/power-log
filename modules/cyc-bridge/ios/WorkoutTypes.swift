@@ -275,8 +275,9 @@ struct WorkoutMetadata: Codable {
   var interrupted = false
   var healthKitState = "notSaved"
   var healthKitUUID: String?
+  var healthReason: String?
   var watchSyncState: String?
-  var warnings: [String] = []
+  var syncReason: String?
   var collectionRevision: Int64?
   var sealRevision: Int64?
   var verifiedSealRevision: Int64?
@@ -325,7 +326,6 @@ struct WorkoutSummary: Codable {
   var healthCount = 0
   var lapCount = 0
   var routePreview: [[String: Double]] = []
-  var warnings: [String] = []
   var provenance: [String: String] = [:]
   var completeness: [String: String] = [:]
   var dictionary: [String: Any] { WorkoutCoding.dictionary(self) }

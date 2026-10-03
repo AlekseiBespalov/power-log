@@ -88,13 +88,6 @@ export const REQUIRED_SAMPLE_COLUMNS = [
   'speedRaw',
 ] as const satisfies readonly (keyof TelemetrySample)[];
 export const SAMPLE_IDENTITY_COLUMNS = ['controllerModel', 'firmwareLabel', 'controllerProtocol'] as const;
-export const SAMPLE_COLUMNS = [
-  ...REQUIRED_SAMPLE_COLUMNS,
-  'controllerSpeedMps',
-  ...SAMPLE_IDENTITY_COLUMNS,
-  'connectionEpoch',
-  'interruptionIndex',
-] as const;
 
 export type SampleTiming = Pick<TelemetrySample, 'timestamp' | 'elapsedSeconds' | 'sequence'>;
 export interface MonotonicMapping {

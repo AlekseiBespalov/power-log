@@ -149,14 +149,6 @@ describe('controller distance with real IndexedDB', () => {
           recorder.read(ride.id),
           recorder.read(ride.id, 'gps:watch'),
         ]);
-        const urls = await Promise.all([recorder.export(ride.id, 'auto'), recorder.export(ride.id, 'gps:watch')]);
-        const csv = await Promise.all(
-          urls.map(async url => {
-            const text = await (await fetch(url)).text();
-            URL.revokeObjectURL(url);
-            return text;
-          }),
-        );
         return {
           automatic: automatic.info,
           unavailable: unavailable.info,
@@ -175,7 +167,6 @@ describe('controller distance with real IndexedDB', () => {
           profileInputPages,
           defaultSummary,
           missingSummary,
-          csvSame: csv[0] === csv[1],
           metadataUnchanged: before === JSON.stringify(await api.store.get(ride.id)),
           originalsUnchanged: originals === JSON.stringify(await api.store.page(ride.id, 0, 10)),
         };
@@ -207,7 +198,7 @@ describe('controller distance with real IndexedDB', () => {
       expect(result.defaultSummary.summary.distance?.selection).toBe('auto');
       expect(result.missingSummary.summary.distance?.selected).toBeNull();
       expect(result.missingSummary.summary.distanceMeters).toBeUndefined();
-      expect(result.metadataUnchanged && result.originalsUnchanged && result.csvSame).toBe(true);
+      expect(result.metadataUnchanged && result.originalsUnchanged).toBe(true);
     }));
 
   it('keeps plot and statistics cancellation independent when their caller generations differ', async () =>

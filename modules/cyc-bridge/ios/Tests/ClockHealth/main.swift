@@ -30,7 +30,15 @@ for shift in [-100.0, 100.0] {
     startedAt: start, indoor: false, watchEnabled: true, saveToHealth: true, recordGPS: true)
   let anchor = WorkoutTimelineAnchor(epoch: "watch", monotonicOrigin: 1000, startedAt: ride.startedAt)
   var gps = WorkoutTimelineAnchor.LocationClock()
+  var timing = try WorkoutOwnerTiming(timestamp: ride.startedAt, elapsedSeconds: 0, timerSeconds: 0)
+  var previousUptime = 1000.0
+  var running = true
   for (action, elapsed) in [("start", 0.0), ("pause", 3.0), ("resume", 5.0), ("stop", 10.0)] {
+    timing = try timing.advancing(
+      anchor: anchor, at: start.addingTimeInterval(elapsed + (elapsed > 1 ? shift : 0)),
+      from: previousUptime, to: 1000 + elapsed, running: running)
+    previousUptime = 1000 + elapsed
+    running = ["start", "resume"].contains(action)
     try archive.append(
       event(
         ride.id, kind: "lifecycle", utc: elapsed + (elapsed > 1 ? shift : 0), elapsed: elapsed, action: action,
@@ -49,14 +57,13 @@ for shift in [-100.0, 100.0] {
     check(!gps.admit(duplicate), "duplicate GPS is not a second observation")
     let active = try WorkoutTimelineAnchor.activeInterval(id: ride.id, elapsed: fix.elapsed, archive: archive)
     check((active != nil) == (acquired != 4), "delayed fixes use acquisition phase, including arrival after Pause")
-    if acquired > 1 { check(fix.uncertainty != nil, "clock-straddling GPS retains mapping uncertainty") }
+    if acquired > 1 { check(fix.uncertain, "clock-straddling GPS mapping remains uncertain") }
     guard active != nil else { continue }
     let original = try WorkoutEvent(
       workoutId: ride.id, kind: "location", source: "watch", timestamp: fixDate, elapsedSeconds: fix.elapsed,
       payload: [
         "latitude": .number(0), "longitude": .number(acquired / 100_000), "horizontalAccuracyM": .number(3),
         "clockEpoch": .string(fix.epoch), "acquisitionMonotonic": .number(fix.acquisition),
-        "timelineMappingUncertainty": fix.uncertainty.map(WorkoutJSON.string) ?? .null,
       ])
     try archive.append(original)
     let telemetry = PowerLogCaptureFrame(
@@ -77,8 +84,27 @@ for shift in [-100.0, 100.0] {
   check(
     originals.filter { $0.kind == "location" }.map(\.elapsedSeconds) == [1, 2, 2.5, 6],
     "clock-jump originals survive reopen")
-  let timing = try WorkoutOwnerTiming(
-    timestamp: WorkoutCoding.timestamp(start.addingTimeInterval(10 + shift)), elapsedSeconds: 10, timerSeconds: 8)
+  for kind in ["location", "telemetry", "lifecycle"] {
+    let elapsed: [Double] = kind == "lifecycle" ? [0, 3, 5, 10] : [1, 2, 2.5, 6]
+    check(
+      originals.filter { $0.kind == kind }.map(\.timestamp)
+        == elapsed.map { WorkoutCoding.timestamp(start.addingTimeInterval($0 + ($0 > 1 ? shift : 0))) },
+      "forward and backward clock jumps preserve original UTC after reopen: " + kind)
+  }
+  check(
+    timing.elapsedSeconds == 10 && timing.timerSeconds == 8
+      && timing.timestamp == WorkoutCoding.timestamp(start.addingTimeInterval(10 + shift)),
+    "terminal timing measures capture and pause time without substituting UTC duration")
+  try reopened.update(id: ride.id, stopElapsedSeconds: timing.elapsedSeconds, ownerTiming: timing)
+  try reopened.finish(id: ride.id, endedAt: WorkoutCoding.date(timing.timestamp))
+  let finished = try WorkoutArchive(rootURL: root.appendingPathComponent("phone"))
+  check(
+    try WorkoutOwnerTiming.terminal(finished.metadata(id: ride.id)) == timing,
+    "terminal UTC, elapsed and active time survive reopening after either clock jump")
+  let summary = try WorkoutAnalysis.summarize(archive: finished, id: ride.id)
+  check(
+    summary.elapsedSeconds == 10 && summary.timerSeconds == 8,
+    "FIT timing retains measured capture duration through forward and backward clock jumps")
   let closed = try PowerLogCaptureCutoff.owner(anchor, timing: timing)
   check(
     closed.stopUTC == timing.timestamp && closed.stopMonotonic == 1010,
@@ -156,7 +182,7 @@ let confirmed = try WorkoutPhoneStartProjection.confirmOwnerPhase(
   archive: archive, id: remote.id, localPhase: "preparing", ownerPhase: "running", startedAt: start,
   now: start.addingTimeInterval(6000), uptime: 500, epoch: "phone", ownerTiming: report)!
 check(
-  confirmed.monotonicOrigin == 470 && confirmed.uncertainty != nil,
+  confirmed.monotonicOrigin == 470 && confirmed.uncertain == true,
   "first delayed status respects committed floor without cross-device wall delta")
 let retained = try WorkoutOwnerTiming.remote(
   id: remote.id, timestamp: report.timestamp, elapsed: 20, timer: 15, archive: archive)
@@ -195,13 +221,42 @@ check(
   try insertion.admit([later], bounds: &bounds, now: start.addingTimeInterval(10), historical: false) == [later],
   "production admission allows real live telemetry")
 bounds.settle(writer: "telemetry", id: later.eventId, success: true)
-try insertion.recordMetrics([later], results: WorkoutHealthTelemetryPlan(events: [later]) { _ in true }.committed)
-for original in [backward, prestart, future, excessive] {
+var laterResult: Result<Void, Error>?
+insertion.insert(
+  [later], authorized: { _ in true },
+  operation: { writes, done in
+    check(
+      writes.count == 2 && writes.allSatisfy { $0.date == start.addingTimeInterval(10) },
+      "Apple Health writes use original UTC rather than start plus capture elapsed")
+    done(.success(()))
+  }, completion: { laterResult = $0 })
+try laterResult!.get()
+for original in [backward, prestart, future] {
   check(
     try insertion.admit([original], bounds: &bounds, now: start.addingTimeInterval(11), historical: false).isEmpty,
     "permanent telemetry drops settle excluded receipts")
 }
-check(try insertion.outcome(id: healthRide.id) == "sealed", "drops do not stall bounded insertion discovery")
+let admittedExcessive = try insertion.admit(
+  [excessive], bounds: &bounds, now: start.addingTimeInterval(11), historical: false)
+check(admittedExcessive == [excessive], "out-of-range power cannot exclude valid cadence")
+var excessiveResult: Result<Void, Error>?
+insertion.insert(
+  admittedExcessive, authorized: { _ in true },
+  operation: { writes, done in
+    check(
+      writes.count == 1 && writes[0].quantity.metric == "cadenceRpm" && writes[0].quantity.value == 80,
+      "production insertion writes only the excessive power event's valid cadence")
+    done(.success(()))
+  }, completion: { excessiveResult = $0 })
+try excessiveResult!.get()
+bounds.settle(writer: "telemetry", id: excessive.eventId, success: true)
+check(
+  try insertion.metricResults([excessive])[excessive.eventId] == ["humanPowerW": "invalid", "cadenceRpm": "applied"],
+  "excessive power settles per metric")
+check(try !insertion.needsRepair(excessive), "invalid power is terminal while valid cadence is retained")
+check(
+  try insertion.outcome(id: healthRide.id) == "sealed" && !insertion.requiresAutomaticHistory(id: healthRide.id),
+  "invalid values and whole time exclusions settle without stalling bounded discovery")
 check(
   try insertion.admit([backward], bounds: &bounds, now: start.addingTimeInterval(11), historical: false).isEmpty,
   "duplicate excluded event stays settled")
@@ -243,7 +298,13 @@ var historical = WorkoutHealthWriteBounds()
 check(
   try insertion.admit([outside], bounds: &historical, now: start.addingTimeInterval(1000), historical: true).isEmpty,
   "historical writer omits UTC outside final interval despite valid elapsed")
-check(try archive.metadata(id: healthRide.id).warnings.count >= 5, "all omission reasons survive in metadata")
+let healthOriginals = try WorkoutArchive(rootURL: root.appendingPathComponent("phone"))
+  .pageEvents(id: healthRide.id, limit: 128).map(\.event)
+for original in [later, backward, prestart, future, excessive, restartedEvent, outside] {
+  check(
+    healthOriginals.first { $0.eventId == original.eventId } == original,
+    "Health insertion and UTC omissions retain original timestamps, elapsed and values")
+}
 
 for saves in [true, false] {
   let watchRoot = root.appendingPathComponent(saves ? "watch-health" : "watch-local")
@@ -340,13 +401,15 @@ for saves in [true, false] {
   check(
     try WorkoutTransferJournal(archive: again).verify(id: id),
     "seal-first transfer verifies after phone restart with backward cutoff")
-  let summary = try WorkoutFIT.export(archive: again, id: id, to: root.appendingPathComponent(id + ".fit"))
+  let opened = try ExportSource { again }.open([
+    "rideId": id, "kind": "fit", "context": ["exportedAt": cutoff.timestamp, "platform": "ios"],
+  ])
   check(
-    try summary.elapsedSeconds == 10 && again.metadata(id: id).endedAt == cutoff.timestamp,
+    try opened["elapsedEnd"] as? Double == 10 && again.metadata(id: id).endedAt == cutoff.timestamp,
     "verified FIT export retains local timing and original cutoff")
   check(
-    try again.metadata(id: id).warnings.contains(WorkoutHealthFinalizationGate.clockReason),
-    "seal-first recovery preserves clock reason")
+    try again.metadata(id: id).healthReason == (saves ? WorkoutHealthFinalizationGate.clockReason : nil),
+    "seal-first recovery keeps the clock reason only for a requested Health save")
   if saves {
     var stale = owner
     stale.ownerRevision += 1
@@ -380,6 +443,10 @@ for utc in [-10.0, 0.0] {
   check(
     try WorkoutHealthFinalizationGate.settle(id: ride.id, archive: archive)
       == WorkoutHealthFinalizationGate.clockReason, "phone terminal clock predicate includes zero UTC duration")
+  check(
+    try archive.metadata(id: ride.id).healthKitState == "unavailable"
+      && archive.metadata(id: ride.id).healthReason == WorkoutHealthFinalizationGate.clockReason,
+    "unavailable Health keeps its clock reason with the ride")
   _ = try control.observe(
     workoutID: ride.id, owner: "phone", phase: "completed", at: WorkoutCoding.date(timing.timestamp),
     health: "unavailable", cutoff: WorkoutCoding.date(timing.timestamp), timing: timing,
@@ -399,8 +466,10 @@ for utc in [-10.0, 0.0] {
     seal.healthOutcome == "unavailable" && seal.healthReason == WorkoutHealthFinalizationGate.clockReason
       && seal.resolved, "phone restart seals terminal Health with its clock reason")
   check(try transfer.verify(id: ride.id), "phone terminal archive remains verified")
-  let summary = try WorkoutFIT.export(archive: reopened, id: ride.id, to: root.appendingPathComponent(ride.id + ".fit"))
-  check(summary.elapsedSeconds == 8, "phone local FIT remains exportable after Health abandonment")
+  let opened = try ExportSource { reopened }.open([
+    "rideId": ride.id, "kind": "fit", "context": ["exportedAt": "2026-06-01T00:00:00.000Z", "platform": "ios"],
+  ])
+  check(opened["elapsedEnd"] as? Double == 8, "phone local FIT remains exportable after Health abandonment")
 }
 for kind in ["telemetry", "location", "lifecycle"] {
   let ride = try archive.create(
@@ -422,7 +491,7 @@ for kind in ["telemetry", "location", "lifecycle"] {
       "UPDATE collection_memberships SET original_elapsed_seconds=NULL WHERE collection_id=?", [.text(ride.id)])
   }
   rejects("FIT must reject malformed stored app timing: " + kind) {
-    _ = try WorkoutFIT.summarize(archive: archive, id: ride.id)
+    _ = try WorkoutAnalysis.summarize(archive: archive, id: ride.id)
   }
 }
 let healthOnly = try archive.create(
@@ -433,7 +502,7 @@ try archive.append(
     payload: ["heartRateBpm": .number(123)]))
 try archive.update(id: healthOnly.id, stopElapsedSeconds: 3)
 try archive.finish(id: healthOnly.id, endedAt: start.addingTimeInterval(3))
-let healthSummary = try WorkoutFIT.summarize(archive: archive, id: healthOnly.id)
+let healthSummary = try WorkoutAnalysis.summarize(archive: archive, id: healthOnly.id)
 check(healthSummary.elapsedSeconds == 3, "Health originals retain UTC placement without app elapsed")
 check(
   WorkoutHealthFinalizationGate.unavailableReason(start: start, cutoff: start.addingTimeInterval(1)) == nil,

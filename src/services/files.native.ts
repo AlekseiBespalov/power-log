@@ -1,17 +1,10 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { File, FileMode, Paths } from 'expo-file-system';
+import { File, FileMode } from 'expo-file-system';
 import bridge from '../../modules/cyc-bridge';
 import { Platform, Share } from 'react-native';
 import { createCsvParser, type ParsedRecording } from '../core/recordings';
 import { MAX_CSV_BYTES } from '../core/validation';
 
-const safeName = (name: string) => name.replace(/[^a-zA-Z0-9_.-]/g, '-');
-
-export async function exportText(name: string, contents: string) {
-  const file = new File(Paths.cache, safeName(name));
-  file.write(contents);
-  await shareFile(file.uri);
-}
 export async function importRecording(): Promise<{ name: string; recording: ParsedRecording } | null> {
   const selected = await chooseCsv();
   if (!selected) return null;
@@ -65,16 +58,7 @@ async function chooseCsv(): Promise<{ name: string; file: File } | null> {
   return { name: asset.name, file };
 }
 
-export async function exportWorkoutFile(uri: string, name: string) {
-  const source = new File(uri);
-  if (!source.exists) throw new Error('The workout export is missing.');
-  const copy = new File(Paths.cache, safeName(name));
-  if (copy.exists) copy.delete();
-  await source.copy(copy);
-  await shareFile(copy.uri);
-}
-
-async function shareFile(uri: string): Promise<void> {
+export async function shareExport(uri: string): Promise<void> {
   if (Platform.OS === 'android' && bridge?.shareFile) await bridge.shareFile(uri);
   else await Share.share({ url: uri });
 }

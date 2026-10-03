@@ -1,0 +1,13 @@
+[
+  "timestamp,elapsedSeconds,timerSeconds,action,interrupted,source",
+  "2026-03-14T08:00:00.000Z,0,0,start,false,phone",
+  "2026-03-14T08:00:02.000Z,2,2,pause,false,phone",
+  "2026-03-14T08:00:03.000Z,3,2,lap,false,phone",
+  "2026-03-14T08:00:04.000Z,4,2,resume,false,phone",
+  "2026-03-14T08:00:03.990Z,4,,lap,false,phone",
+  "2026-03-14T08:00:06.000Z,6,4,pause,true,phone",
+  "2026-03-14T08:00:07.250Z,6,4,resume,false,phone",
+  "2026-03-14T08:00:08.250Z,7,5,lap,false,phone",
+  "2026-03-14T08:00:08.250Z,7,5,lap,false,phone",
+  "2026-03-14T08:00:09.250Z,8,6,stop,false,phone"
+]

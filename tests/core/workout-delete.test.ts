@@ -19,7 +19,6 @@ const record: WorkoutMetadata = {
   eventCount: 12,
   interrupted: false,
   healthKitState: 'saved',
-  warnings: [],
   watchSyncState: 'received',
 };
 

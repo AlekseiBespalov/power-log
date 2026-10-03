@@ -51,7 +51,6 @@ function useRideControlState() {
   const [setup, setSetup] = useState(false);
   const [finishTarget, setFinishTarget] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [showNotices, setShowNotices] = useState(false);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
   const errorMessage = workout.error ?? state.error;
   const active = workoutInProgress(state.phase);
@@ -161,8 +160,6 @@ function useRideControlState() {
     setFinishTarget,
     confirmDiscard,
     setConfirmDiscard,
-    showNotices,
-    setShowNotices,
     dismissedError,
     setDismissedError,
     errorMessage,
@@ -572,19 +569,6 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
                     })}
                   </View>
                 </>
-              )}
-              {state.warnings.length > 0 && c.active && (
-                <View style={{ gap: 6 }}>
-                  <Button secondary onPress={() => c.setShowNotices(value => !value)}>
-                    {c.showNotices ? 'Hide notices' : `Ride notices · ${state.warnings.length}`}
-                  </Button>
-                  {c.showNotices &&
-                    state.warnings.map(warning => (
-                      <Body key={warning} muted>
-                        {warning}
-                      </Body>
-                    ))}
-                </View>
               )}
             </View>
           )}

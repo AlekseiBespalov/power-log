@@ -1,0 +1,7 @@
+[
+  "timestamp,elapsedSeconds,timerSeconds,action,interrupted,source",
+  "2026-07-04T10:00:00.000Z,0,,start,false,phone",
+  "2026-07-04T10:00:04.000Z,4,,pause,false,phone",
+  "2026-07-04T10:00:06.000Z,6,,resume,false,phone",
+  "2026-07-04T10:00:09.000Z,9,,stop,true,phone"
+]

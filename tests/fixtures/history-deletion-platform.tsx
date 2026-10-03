@@ -72,19 +72,12 @@ export function useMonitorPreferences() {
 }
 export const RoutePreview = () => null;
 export const CaptureRideDetails = () => null;
-export const sharedFiles: { uri: string; name: string }[] = [];
-export const exportWorkoutFile = async (uri: string, name: string) => {
-  sharedFiles.push({ uri, name });
-};
 let csvImport: Awaited<ReturnType<typeof chooseRecording>> = null;
 export function setCsvImport(value: typeof csvImport) {
   csvImport = value;
 }
 export const importRecording = async () => csvImport;
-export const exportedTexts: { name: string; contents: string }[] = [];
-export const exportText = async (name: string, contents: string) => {
-  exportedTexts.push({ name, contents });
-};
+
 export const deleteCapture = async () => {};
 export const exportCapture = async () => {};
 export const workoutMonitorSource = (id: string) => ({ key: `workout:${id}`, id });

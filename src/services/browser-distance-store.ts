@@ -342,20 +342,55 @@ async function project(tx: IDBTransaction, rows: DistanceRow[]) {
   }
   await Promise.all([...loaded.values()].map(tile => idbRequest(tiles.put(tile))));
 }
+function matches(handle: BrowserDistanceHandle, record: BrowserRide | undefined, profile: Profile | undefined) {
+  return Boolean(
+    record &&
+    profile &&
+    !profile.building &&
+    revision(record) === revision(handle.record) &&
+    profile.generation === handle.profile.generation &&
+    profile.inputSequence === handle.profile.inputSequence,
+  );
+}
 export async function browserDistanceCurrent(handle: BrowserDistanceHandle): Promise<boolean> {
   return browserTransaction(['recordings', 'distance-profiles'], 'readonly', async tx => {
     const [record, profile] = await Promise.all([
       idbRequest<BrowserRide | undefined>(tx.objectStore('recordings').get(handle.record.id)),
       idbRequest<Profile | undefined>(tx.objectStore('distance-profiles').get(handle.record.id)),
     ]);
-    return Boolean(
-      record &&
-      profile &&
-      !profile.building &&
-      revision(record) === revision(handle.record) &&
-      profile.generation === handle.profile.generation &&
-      profile.inputSequence === handle.profile.inputSequence,
-    );
+    return matches(handle, record, profile);
+  });
+}
+export interface BrowserDistanceInterval {
+  start: number;
+  end: number;
+  distance: number;
+  segment: number;
+  startSpeed: number;
+  endSpeed: number;
+  sequence: number;
+}
+/** Intervals after `after` in `(end, sequence)` order, or undefined once the stored ride or profile left the handle. */
+export async function browserDistanceIntervals(
+  handle: BrowserDistanceHandle,
+  after: readonly [number, number] | null,
+  limit: number,
+): Promise<BrowserDistanceInterval[] | undefined> {
+  // IndexedDB reads a count of 0 as unbounded.
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Invalid browser read bound');
+  const id = handle.record.id,
+    prefix = [id, handle.profile.generation];
+  return browserTransaction(['recordings', 'distance-profiles', 'distance-intervals'], 'readonly', async tx => {
+    const [record, profile, rows] = await Promise.all([
+      idbRequest<BrowserRide | undefined>(tx.objectStore('recordings').get(id)),
+      idbRequest<Profile | undefined>(tx.objectStore('distance-profiles').get(id)),
+      idbRequest<DistanceRow[]>(
+        tx
+          .objectStore('distance-intervals')
+          .getAll(IDBKeyRange.bound(after ? [...prefix, ...after] : prefix, [...prefix, []], Boolean(after)), limit),
+      ),
+    ]);
+    return matches(handle, record, profile) ? rows : undefined;
   });
 }
 function point(row: DistanceRow, edge: 'start' | 'end', startsSegment = false): MonitorPoint {

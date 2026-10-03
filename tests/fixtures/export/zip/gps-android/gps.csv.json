@@ -1,0 +1,9 @@
+[
+  "timestamp,elapsedSeconds,activeInterval,run,source,latitude,longitude,altitudeMeters,verticalAccuracyM,ellipsoidalAltitudeMeters,ellipsoidalVerticalAccuracyM,horizontalAccuracyM,speedMps,speedAccuracyMps,courseDegrees,courseAccuracyDegrees",
+  "2026-07-04T10:00:01.000Z,1,1,1,phone,-10.25,-30.125,101.5,3.5,148.25,3,4,5.5,0.4,180.5,",
+  "2026-07-04T10:00:02.000Z,2,1,1,phone,-10.2501,-30.1251,,,149,3.25,4.5,5.75,0.4,181,",
+  "2026-07-04T10:00:04.000Z,4,1,1,phone,-10.2502,-30.1252,102,3.5,149.5,3,4,0.5,0.3,182,",
+  "2026-07-04T10:00:05.000Z,5,,2,phone,-10.2502,-30.1252,102,3.5,149.5,3,5,0,0.2,,",
+  "2026-07-04T10:00:06.000Z,6,2,3,phone,-10.2503,-30.1253,99.75,,146.5,2.5,3.5,4,0.3,183,",
+  "2026-07-04T10:00:09.000Z,9,2,3,phone,-10.2504,-30.1254,100,3,147,2.5,3.5,4.25,0.3,184,"
+]

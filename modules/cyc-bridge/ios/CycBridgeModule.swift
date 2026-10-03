@@ -13,6 +13,12 @@ private final class BridgeException: Exception {
   override var reason: String { message }
 }
 
+private func exportCall<T>(_ body: () throws -> T) throws -> T {
+  do { return try body() } catch let failure as ExportFailure {
+    throw BridgeException(code: failure.code, message: failure.message)
+  }
+}
+
 private func rejectRead(_ promise: Promise, _ error: Error) {
   if let storage = error as? PowerLogStorageError, let code = storage.bridgeCode {
     promise.reject(BridgeException(code: code, message: storage.localizedDescription))
@@ -151,6 +157,7 @@ public final class CycBridgeModule: Module {
     }
 
     OnCreate { [weak self] in
+      ExportSinks.shared.queue.async { ExportSinks.shared.cleanUp() }
       guard let self else { return }
       let id = self.observerID
       let workout = WorkoutEngine.shared
@@ -169,6 +176,9 @@ public final class CycBridgeModule: Module {
       }
     }
     OnDestroy { [weak self] in
+      ExportSinks.shared.stop()
+      ExportSinks.shared.queue.async { ExportSinks.shared.abortAll() }
+      ExportSource.shared.queue.async { ExportSource.shared.closeAll() }
       guard let id = self?.observerID else { return }
       engine.queue.async { engine.removeSink(id: id) }
       let workout = WorkoutEngine.shared
@@ -268,12 +278,38 @@ public final class CycBridgeModule: Module {
     AsyncFunction("readWorkout") { (id: String, distanceSource: String?, promise: Promise) in
       self.workoutFileAction(promise) { try $0.read(id, distanceSource: distanceSource ?? "auto") }
     }
-    AsyncFunction("exportWorkoutArchive") { (id: String, promise: Promise) in
-      self.workoutFileAction(promise) { try $0.exportOriginal(id) }
-    }
-    AsyncFunction("exportWorkout") { (id: String, distanceSource: String?, promise: Promise) in
-      self.workoutFileAction(promise) { try $0.export(id, distanceSource: distanceSource ?? "auto") }
-    }
+
+    let source = ExportSource.shared
+    let sinks = ExportSinks.shared
+    AsyncFunction("exportOpen") { (request: [String: Any]) throws -> [String: Any] in
+      try exportCall { try source.open(request) }
+    }.runOnQueue(source.queue)
+    AsyncFunction("exportPage") { (request: [String: Any]) throws -> [String: Any] in
+      try exportCall { try source.page(request) }
+    }.runOnQueue(source.queue)
+    AsyncFunction("exportClose") { (session: String) in source.close(session) }.runOnQueue(source.queue)
+    AsyncFunction("sinkOpen") { (kind: String, _: [String: Any]) throws -> String in
+      guard ["fit", "zip", "csv"].contains(kind) else {
+        throw BridgeException(code: "unsupported", message: "This export kind is not supported.")
+      }
+      return try exportCall { try sinks.open() }
+    }.runOnQueue(sinks.queue)
+    AsyncFunction("sinkWrite") { (id: String, bytes: Data) throws in
+      try exportCall { try sinks.write(id, bytes) }
+    }.runOnQueue(sinks.queue)
+    AsyncFunction("sinkWriteAt") { (id: String, offset: Double, bytes: Data) throws in
+      try exportCall { try sinks.write(id, at: offset, bytes) }
+    }.runOnQueue(sinks.queue)
+    AsyncFunction("sinkBeginDeflate") { (id: String) throws in
+      try exportCall { try sinks.beginDeflate(id) }
+    }.runOnQueue(sinks.queue)
+    AsyncFunction("sinkEndDeflate") { (id: String) throws -> [String: Any] in
+      try exportCall { try sinks.endDeflate(id) }
+    }.runOnQueue(sinks.queue)
+    AsyncFunction("sinkCommit") { (id: String, name: String) throws -> [String: Any] in
+      try exportCall { try sinks.commit(id, name: name) }
+    }.runOnQueue(sinks.queue)
+    AsyncFunction("sinkAbort") { (id: String) in sinks.abort(id) }.runOnQueue(sinks.queue)
   }
 
   private func workoutAction(_ promise: Promise, action: @escaping (WorkoutEngine) throws -> Any) {

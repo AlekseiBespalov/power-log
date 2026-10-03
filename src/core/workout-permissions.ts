@@ -21,6 +21,10 @@ const writeTypes = {
     'HKQuantityTypeIdentifierDistanceCycling',
   ],
 };
+const healthConnectOptionalWrites = {
+  common: ['android.permission.health.WRITE_POWER', 'android.permission.health.WRITE_DISTANCE'],
+  outdoor: ['android.permission.health.WRITE_SPEED', 'android.permission.health.WRITE_EXERCISE_ROUTE'],
+};
 
 /** Decides whether the phone has a concrete setup action. It never asserts HealthKit read grants. */
 export function workoutPermissionAction(
@@ -43,7 +47,15 @@ export function workoutPermissionAction(
     ? (status.health.requiredWrites ?? [...writeTypes.common, ...(phoneGPS ? writeTypes.outdoor : [])])
     : [];
   const writes = requiredWrites.map(type => status.health.writeAuthorization[type] ?? 'notDetermined');
-  if (writes.includes('notDetermined')) {
+  const healthConnectAccessMissing =
+    healthRequired &&
+    status.health.provider === 'healthConnect' &&
+    [
+      ...requiredWrites,
+      ...healthConnectOptionalWrites.common,
+      ...(phoneGPS ? healthConnectOptionalWrites.outdoor : []),
+    ].some(type => status.health.writeAuthorization[type] !== 'authorized');
+  if (writes.includes('notDetermined') || healthConnectAccessMissing) {
     return {
       action: 'request',
       label: 'Set up permissions',

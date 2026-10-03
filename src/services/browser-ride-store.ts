@@ -37,7 +37,6 @@ export type BrowserRide = {
   timerSeconds: number;
   checkpointAt: string;
   availableMetrics: string[];
-  warnings: string[];
   lapCount: number;
 };
 type PlotRun = { first: MonitorPoint; last: MonitorPoint; min: MonitorPoint; max: MonitorPoint };
@@ -61,6 +60,14 @@ export type Aggregate = {
   lastInterruptionIndex: number;
 };
 export type RideTile = { recordingId: string; level: number; bucket: number; stats: Record<string, Aggregate> };
+export type RideLifecycleRow = {
+  recordingId: string;
+  revision: number;
+  action: 'start' | 'pause' | 'resume' | 'lap' | 'save' | 'interrupted';
+  elapsedSeconds: number;
+  timestamp: string;
+};
+export type RevisionRead<T> = { record: BrowserRide | undefined; rows: T[] };
 type Owner = { key: 'current'; id: string; token: string };
 const STORES = [
   'recordings',
@@ -173,8 +180,6 @@ export function normalize(value: unknown): BrowserRide {
     throw new Error('Invalid recording checkpoint');
   if (typeof value.indoor !== 'boolean' || typeof value.interrupted !== 'boolean')
     throw new Error('Invalid recording flags');
-  if (!Array.isArray(value.warnings) || !value.warnings.every(warning => typeof warning === 'string'))
-    throw new Error('Invalid recording warnings');
   if (
     !Array.isArray(value.availableMetrics) ||
     !value.availableMetrics.every(
@@ -206,6 +211,23 @@ async function owned(tx: IDBTransaction, id: string, token: string): Promise<Bro
     throw new Error('This browser no longer owns the recording');
   return record;
 }
+/** The batch and its recording come from one transaction, so the rows belong to the returned revision. */
+async function revisionRead<T>(
+  id: string,
+  store: string,
+  limit: number,
+  read: (tx: IDBTransaction, count: number) => IDBRequest<T[]>,
+): Promise<RevisionRead<T>> {
+  // IndexedDB reads a count of 0 as unbounded.
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Invalid browser read bound');
+  return browserTransaction(['recordings', store], 'readonly', async tx => {
+    const [value, rows] = await Promise.all([
+      idbRequest<unknown>(tx.objectStore('recordings').get(id)),
+      idbRequest(read(tx, limit)),
+    ]);
+    return { record: value === undefined ? undefined : normalize(value), rows };
+  });
+}
 export function metadataOf(record: BrowserRide): WorkoutMetadata {
   return {
     schemaVersion: 1,
@@ -221,7 +243,6 @@ export function metadataOf(record: BrowserRide): WorkoutMetadata {
     eventCount: record.samples,
     interrupted: record.interrupted,
     healthKitState: 'notRequested',
-    warnings: record.warnings,
     watchSyncState: 'notRequired',
     collectionRevision: record.revision,
     finalizationState: record.endedAt ? 'complete' : 'pending',
@@ -395,7 +416,6 @@ export class BrowserRideStore {
         timerSeconds: 0,
         checkpointAt: startedAt,
         availableMetrics: [],
-        warnings: [],
         lapCount: 0,
       });
       await idbRequest(tx.objectStore('recordings').add(record));
@@ -522,10 +542,6 @@ export class BrowserRideStore {
         endedAt: record.checkpointAt,
         interrupted: true,
         revision: record.revision + 1,
-        warnings: [
-          ...record.warnings,
-          'Browser recording was interrupted. The retained cutoff is the last committed checkpoint; unobserved time was not counted.',
-        ],
       };
       delete next.writer;
       normalize(next);
@@ -612,6 +628,31 @@ export class BrowserRideStore {
             Math.min(BROWSER_PAGE, limit),
           ),
       ),
+    );
+  }
+  async find(id: string): Promise<BrowserRide | undefined> {
+    return browserTransaction(['recordings'], 'readonly', async tx => {
+      const value: unknown = await idbRequest(tx.objectStore('recordings').get(id));
+      return value === undefined ? undefined : normalize(value);
+    });
+  }
+  async samplesAfter(
+    id: string,
+    after: readonly [number, number] | null,
+    limit: number,
+  ): Promise<RevisionRead<RideRow>> {
+    return revisionRead(id, 'samples', limit, (tx, count) =>
+      tx
+        .objectStore('samples')
+        .index('byElapsed')
+        .getAll(IDBKeyRange.bound(after ? [id, ...after] : [id], [id, []], Boolean(after)), count),
+    );
+  }
+  async lifecycleAfter(id: string, after: number | null, limit: number): Promise<RevisionRead<RideLifecycleRow>> {
+    return revisionRead(id, 'ride-lifecycle', limit, (tx, count) =>
+      tx
+        .objectStore('ride-lifecycle')
+        .getAll(IDBKeyRange.bound(after === null ? [id] : [id, after], [id, []], after !== null), count),
     );
   }
   async neighbor(id: string, seconds: number, direction: 'prev' | 'next'): Promise<RideRow | undefined> {

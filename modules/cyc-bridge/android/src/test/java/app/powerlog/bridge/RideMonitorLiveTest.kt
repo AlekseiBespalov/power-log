@@ -22,7 +22,11 @@ class RideMonitorLiveTest {
     @Before
     fun setup() {
         store = RideStore(RuntimeEnvironment.getApplication(), "live-${UUID.randomUUID()}.sqlite")
-        id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = true))
+        id =
+            store.create(
+                RideOptions(indoor = false, saveToHealth = false, recordGPS = true),
+                SystemRecordingClock.read(),
+            )
         monitor = RideMonitor(store, RideDistance(store)) { 100.0 }
         monitor.selectLiveRide(id)
     }
@@ -93,7 +97,7 @@ class RideMonitorLiveTest {
             assertEquals("available", result["outcome"])
             assertEquals(emptyList<String>(), result["availableMetrics"])
             assertEquals(emptyMap<String, Any>(), result["metricSources"])
-            assertEquals(emptyList<String>(), result["warnings"])
+            assertFalse(result.containsKey("warnings"))
             assertTrue(result.containsKey("nowSeconds"))
             assertTrue(result.containsKey("monotonicAt"))
             assertFalse(result.containsKey("liveAcquiredAt"))
@@ -107,27 +111,20 @@ class RideMonitorLiveTest {
     }
 
     @Test
-    fun descriptionsPreserveWarningsAndFinalizationOutcomes() {
+    fun descriptionsPreserveFinalizationOutcomes() {
         for ((extra, outcome) in
             listOf(
                 mapOf("finalizationState" to "pending") to "pending",
                 mapOf("watchSyncState" to "pending") to "pending",
                 mapOf("finalizationState" to "partial") to "partial",
-                mapOf("warnings" to listOf("Fixture warning")) to "partial",
             )) {
             store.update(
                 id,
                 "running",
                 RideTiming(2.0, 2.0, iso()),
-                mapOf(
-                    "finalizationState" to "complete",
-                    "watchSyncState" to "notRequired",
-                    "warnings" to emptyList<String>(),
-                ) + extra,
+                mapOf("finalizationState" to "complete", "watchSyncState" to "notRequired") + extra,
             )
-            val result = describe()
-            assertEquals(outcome, result["outcome"])
-            assertEquals(extra["warnings"] ?: emptyList<String>(), result["warnings"])
+            assertEquals(outcome, describe()["outcome"])
         }
     }
 
@@ -193,7 +190,11 @@ class RideMonitorLiveTest {
     @Test
     fun checkpointsRebuiltFromOneMixedBatchMatchOriginalsCommittedInTimeOrder() {
         fun build(batched: Boolean, earlierFix: Boolean): List<Any?> {
-            val ride = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = true))
+            val ride =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = true),
+                    SystemRecordingClock.read(),
+                )
             fun add(time: Double, kind: String, values: Map<String, Double>) =
                 store.insert(ride, time, iso(), kind, true, 0, values)
             if (earlierFix) add(14.0, "location", mapOf("speedMps" to 1.0))
@@ -389,7 +390,11 @@ class RideMonitorLiveTest {
         val original = id
         val row = insert(1.0, "humanPowerW", 120.0)
         monitor.committedLiveObservation(original, row, 101.0, listOf("humanPowerW"))
-        id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+        id =
+            store.create(
+                RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                SystemRecordingClock.read(),
+            )
         monitor.selectLiveRide(id)
         monitor.committedLiveObservation(original, row, 102.0, listOf("humanPowerW"))
         assertNull(point(latest("humanPowerW"), "humanPowerW"))

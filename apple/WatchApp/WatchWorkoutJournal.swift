@@ -61,9 +61,6 @@ final class WatchWorkoutJournal {
         }
       }
       try db.put(namespace: "watch-metadata", key: id, value: bytes)
-      if let reason = metadata["error"] as? String {
-        try WorkoutHealthWriteBounds.report(reason, id: id, archive: archive)
-      }
       try archive.update(
         id: id, phase: metadata["phase"] as? String, healthKitState: metadata["healthKitState"] as? String,
         healthKitUUID: metadata["healthKitUUID"] as? String,
@@ -338,6 +335,15 @@ extension WatchWorkoutJournal {
 }
 
 extension WatchWorkoutJournal {
+  static func applyTelemetryHealthResults(_ results: [String: String], to metadata: inout [String: Any]) -> Bool {
+    guard results.values.contains("denied") else { return false }
+    metadata["cycHealthSamplesIncomplete"] = true
+    metadata["cycHealthOutcome"] = "unavailable"
+    metadata["error"] =
+      "Health write access for CYC power or cadence is unavailable. Raw rider samples remain recorded."
+    return true
+  }
+
   /// Historical input commits into its own collection without selecting it as the active owner.
   func acceptTelemetry(_ events: [WorkoutEvent], firstSequence: Int64) throws {
     guard let id = events.first?.workoutId,
@@ -422,35 +428,24 @@ extension WatchWorkoutJournal {
       let preserveActive = missingTransition || changedNativeState
       let retained = try WorkoutOwnerTiming.retained(
         id: id, checkpoint: checkpoint, archive: archive, preserveActive: preserveActive)
-      let activeUncertainty =
-        preserveActive && retained.elapsedSeconds > checkpoint.elapsedSeconds
-        ? "Active time after the last checkpoint is excluded because the native pause or resume time is uncertain" : nil
-      if let activeUncertainty {
+      if preserveActive && retained.elapsedSeconds > checkpoint.elapsedSeconds {
         try WorkoutLocalOwner.pauseUncertainActive(id: id, checkpoint: checkpoint, archive: archive)
-        let previous = saved["error"] as? String
-        if previous?.contains(activeUncertainty) != true {
-          saved["error"] = previous.map { $0 + ". " + activeUncertainty } ?? activeUncertainty
-        }
-        var uncertain = anchor
-        uncertain.uncertainty = activeUncertainty
-        saved["timelineAnchor"] = WorkoutCoding.dictionary(uncertain)
+        var uncertainAnchor = anchor
+        uncertainAnchor.uncertain = true
+        saved["timelineAnchor"] = WorkoutCoding.dictionary(uncertainAnchor)
       }
       try WorkoutLocalOwner.interrupt(id: id, epoch: anchor.epoch, timing: retained, archive: archive)
       Self.retain(retained, in: &saved)
       saved["interrupted"] = true
       saved["archiveDirty"] = true
       if let running {
-        var resumed = anchor.resuming(timing: retained, epoch: epoch, uptime: uptime)
-        if let activeUncertainty { resumed.uncertainty = (resumed.uncertainty ?? "") + "; " + activeUncertainty }
+        let resumed = anchor.resuming(timing: retained, epoch: epoch, uptime: uptime)
         saved["timelineAnchor"] = WorkoutCoding.dictionary(resumed)
         if running {
           let event = try WorkoutEvent(
             workoutId: id, kind: "lifecycle", source: "watch", timestamp: resumedAt,
             elapsedSeconds: retained.elapsedSeconds,
-            payload: [
-              "action": .string("resume"), "clockEpoch": .string(epoch),
-              "timelineMappingUncertainty": .string("Process downtime is not measured"),
-            ],
+            payload: ["action": .string("resume"), "clockEpoch": .string(epoch)],
             eventId: WorkoutStableIdentity.uuid("watch-resume:\(id):\(epoch)"))
           try archive.append(event)
         }

@@ -18,12 +18,38 @@ internal data class HealthExportResult(
     val reason: String? = null,
 )
 
-internal class HealthExport(private val context: Context, private val store: RideStore) {
-    val available
+internal interface HealthConnectAccess {
+    val available: Boolean
+
+    suspend fun granted(): Set<String>
+
+    suspend fun write(records: List<Record>)
+}
+
+internal class AndroidHealthConnectAccess(private val context: Context) : HealthConnectAccess {
+    override val available
         get() = HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
 
     private val client
         get() = HealthConnectClient.getOrCreate(context)
+
+    override suspend fun granted(): Set<String> =
+        if (available) client.permissionController.getGrantedPermissions() else emptySet()
+
+    override suspend fun write(records: List<Record>) {
+        client.insertRecords(records)
+    }
+}
+
+internal class HealthExport(
+    context: Context,
+    private val store: RideStore,
+    private val access: HealthConnectAccess = AndroidHealthConnectAccess(context),
+) {
+    val available
+        get() = access.available
+
+    fun essentialPermissions() = setOf(HealthPermission.getWritePermission(ExerciseSessionRecord::class))
 
     fun permissions(gps: Boolean) = buildSet {
         add(HealthPermission.getWritePermission(ExerciseSessionRecord::class))
@@ -36,12 +62,11 @@ internal class HealthExport(private val context: Context, private val store: Rid
         }
     }
 
-    fun granted(): Set<String> =
-        if (available) runBlocking { client.permissionController.getGrantedPermissions() } else emptySet()
+    fun granted(): Set<String> = runBlocking { access.granted() }
 
     fun status(): Payload {
         val grants = granted()
-        val required = permissions(false)
+        val required = essentialPermissions()
         return mapOf(
             "available" to available,
             "provider" to "healthConnect",
@@ -56,13 +81,13 @@ internal class HealthExport(private val context: Context, private val store: Rid
     fun save(id: String): HealthExportResult = runBlocking {
         writeRide(
             id,
-            prepare = { gps ->
-                check(available && granted().containsAll(permissions(gps))) {
+            prepare = {
+                check(available && access.granted().containsAll(essentialPermissions())) {
                     "Allow Health Connect access to save this ride there."
                 }
             },
         ) {
-            client.insertRecords(it)
+            access.write(it)
         }
     }
 
@@ -85,6 +110,66 @@ internal class HealthExport(private val context: Context, private val store: Rid
                     " ",
                     prefix = if (omitted > 0) "Health Connect omitted $omitted items. " else "",
                 )
+        data class Write(val record: Record, val items: Int)
+        fun authorized(records: List<Write>, grants: Set<String>): List<Write> {
+            check(available && grants.containsAll(essentialPermissions())) {
+                "Allow Health Connect access to save this ride there."
+            }
+            fun denied(type: String, items: Int) {
+                omitted += items
+                reasons.add("Health Connect access to $type was not granted; those measurements were not saved.")
+            }
+            return records.mapNotNull { item ->
+                val record = item.record
+                val route = (record as? ExerciseSessionRecord)?.exerciseRouteResult as? ExerciseRouteResult.Data
+                val type =
+                    when (record) {
+                        is PowerRecord -> "power"
+                        is CyclingPedalingCadenceRecord -> "cadence"
+                        is SpeedRecord -> "speed"
+                        is DistanceRecord -> "distance"
+                        is ExerciseSessionRecord -> "exercise session"
+                        else -> error("Unsupported Health Connect record")
+                    }
+                if (HealthPermission.getWritePermission(record::class) !in grants) {
+                    denied(type, item.items)
+                    null
+                } else if (
+                    record is ExerciseSessionRecord &&
+                        HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE !in grants &&
+                        route != null
+                ) {
+                    val routeItems = route.exerciseRoute.route.size
+                    denied("exercise route", routeItems)
+                    Write(
+                        ExerciseSessionRecord(
+                            record.startTime,
+                            record.startZoneOffset,
+                            record.endTime,
+                            record.endZoneOffset,
+                            record.metadata,
+                            record.exerciseType,
+                            title = record.title,
+                            segments = record.segments,
+                            laps = record.laps,
+                        ),
+                        item.items - routeItems,
+                    )
+                } else item
+            }
+        }
+        suspend fun writeAuthorized(records: List<Write>) {
+            var pending = authorized(records, access.granted())
+            if (pending.isEmpty()) return
+            try {
+                write(pending.map { it.record })
+            } catch (_: SecurityException) {
+                pending = authorized(pending, access.granted())
+                if (pending.isEmpty()) return
+                write(pending.map { it.record })
+            }
+            written += pending.sumOf { it.items }
+        }
         try {
             val meta = store.metadata(id)
             require(meta.flag("saveToHealth") && meta.str("phase") == "completed")
@@ -147,8 +232,19 @@ internal class HealthExport(private val context: Context, private val store: Rid
                     )
                 }
                 if (records.isNotEmpty()) {
-                    write(records)
-                    written += power.size + cadence.size + speed.size
+                    writeAuthorized(
+                        records.map { record ->
+                            Write(
+                                record,
+                                when (record) {
+                                    is PowerRecord -> power.size
+                                    is CyclingPedalingCadenceRecord -> cadence.size
+                                    is SpeedRecord -> speed.size
+                                    else -> error("Unsupported measurement record")
+                                },
+                            )
+                        }
+                    )
                 }
                 power.clear()
                 cadence.clear()
@@ -182,10 +278,10 @@ internal class HealthExport(private val context: Context, private val store: Rid
                         return cause == null
                     }
                     row.values["humanPowerW"]?.let {
-                        if (eligible(it, 0.0..10000.0)) power.add(PowerRecord.Sample(t!!, it.watts))
+                        if (eligible(it, 0.0..5000.0)) power.add(PowerRecord.Sample(t!!, it.watts))
                     }
                     row.values["cadenceRpm"]?.let {
-                        if (eligible(it, 0.0..10000.0)) cadence.add(CyclingPedalingCadenceRecord.Sample(t!!, it))
+                        if (eligible(it, 0.0..300.0)) cadence.add(CyclingPedalingCadenceRecord.Sample(t!!, it))
                     }
                     if (row.kind == "location") {
                         row.values["speedMps"]?.let {
@@ -218,8 +314,7 @@ internal class HealthExport(private val context: Context, private val store: Rid
             }
             val selected = RideDistance(store).selected(id, "auto")
             if (selected != null) {
-                val records = mutableListOf<Record>()
-                var recordItems = 0
+                val records = mutableListOf<Write>()
                 var index = 0
                 store.readableDatabase
                     .rawQuery(
@@ -237,22 +332,22 @@ internal class HealthExport(private val context: Context, private val store: Rid
                         suspend fun flushDistance() {
                             if (items == 0) return
                             records.add(
-                                DistanceRecord(
-                                    a!!,
-                                    ZoneOffset.UTC,
-                                    b!!,
-                                    ZoneOffset.UTC,
-                                    meters.meters,
-                                    metadata("distance:${index++}"),
+                                Write(
+                                    DistanceRecord(
+                                        a!!,
+                                        ZoneOffset.UTC,
+                                        b!!,
+                                        ZoneOffset.UTC,
+                                        meters.meters,
+                                        metadata("distance:${index++}"),
+                                    ),
+                                    items,
                                 )
                             )
-                            recordItems += items
                             items = 0
                             if (records.size >= 100) {
-                                write(records.toList())
-                                written += recordItems
+                                writeAuthorized(records.toList())
                                 records.clear()
-                                recordItems = 0
                             }
                         }
                         while (cursor.moveToNext()) {
@@ -287,8 +382,7 @@ internal class HealthExport(private val context: Context, private val store: Rid
                         }
                         flushDistance()
                         if (records.isNotEmpty()) {
-                            write(records)
-                            written += recordItems
+                            writeAuthorized(records)
                         }
                     }
             }
@@ -318,25 +412,27 @@ internal class HealthExport(private val context: Context, private val store: Rid
                     laps.add(ExerciseLap(a!!, b!!))
                 else omit("Invalid or overlapping lap intervals were omitted.")
             }
-            write(
+            writeAuthorized(
                 listOf(
-                    ExerciseSessionRecord(
-                        start,
-                        ZoneOffset.UTC,
-                        end,
-                        ZoneOffset.UTC,
-                        metadata("session"),
-                        if (meta.flag("indoor")) ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY
-                        else ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
-                        title = "Power Log ride",
-                        segments = segments.sortedBy { it.startTime },
-                        laps = laps.sortedBy { it.startTime },
-                        exerciseRoute =
-                            route.takeIf { it.isNotEmpty() }?.sortedBy { it.time }?.let { ExerciseRoute(it) },
+                    Write(
+                        ExerciseSessionRecord(
+                            start,
+                            ZoneOffset.UTC,
+                            end,
+                            ZoneOffset.UTC,
+                            metadata("session"),
+                            if (meta.flag("indoor")) ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY
+                            else ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+                            title = "Power Log ride",
+                            segments = segments.sortedBy { it.startTime },
+                            laps = laps.sortedBy { it.startTime },
+                            exerciseRoute =
+                                route.takeIf { it.isNotEmpty() }?.sortedBy { it.time }?.let { ExerciseRoute(it) },
+                        ),
+                        1 + segments.size + laps.size + route.size,
                     )
                 )
             )
-            written += 1 + segments.size + laps.size + route.size
             return HealthExportResult("saved", written, omitted, reason())
         } catch (error: Exception) {
             reasons.add("Health Connect saving failed: ${error.message ?: "Try again."}")

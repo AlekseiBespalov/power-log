@@ -34,6 +34,4 @@ export const workouts: WorkoutAdapter = {
     unindexedCount: 0,
   }),
   read: (id, distanceSource = 'auto') => native().readWorkout(id, distanceSource),
-  export: (id, distanceSource = 'auto') => native().exportWorkout(id, distanceSource),
-  exportOriginal: id => native().exportWorkoutArchive(id),
 };

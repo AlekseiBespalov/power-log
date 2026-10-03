@@ -1,11 +1,4 @@
-import {
-  SAMPLE_COLUMNS,
-  samplePresentationTime,
-  type NativeState,
-  type SampleDelivery,
-  type TelemetrySample,
-} from '../core/types';
-import { csvRow } from '../core/recordings';
+import { samplePresentationTime, type NativeState, type SampleDelivery, type TelemetrySample } from '../core/types';
 import { validateSample } from '../core/validation';
 import { telemetryDisplay } from '../core/telemetry-display';
 import {
@@ -22,7 +15,6 @@ import type { CatalogRequest } from '../core/catalog';
 import type { TelemetryAdapter } from './adapter';
 import {
   BROWSER_BATCH,
-  BROWSER_PAGE,
   browserRideStore,
   browserStoragePersistence,
   metadataOf,
@@ -37,7 +29,6 @@ import type { DistanceSource } from '../core/distance';
 
 export const BROWSER_RECORDING_LOCK = 'power-log-recording';
 export const BROWSER_PENDING_ROWS = 512;
-const CSV_EXPORT_BYTES = 128 * 1024 * 1024;
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const permissions: WorkoutPermissionStatus = {
   health: { available: false, writeAuthorization: {} },
@@ -182,10 +173,6 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
         ...unavailableWorkoutState.streams,
         cyc: { status: streamStatus() },
       },
-      warnings: [
-        ...(this.record?.warnings ?? []),
-        ...(this.foreign ? ['This ride is recording in another browser tab. Use that tab to finish it.'] : []),
-      ],
       error: this.failure ?? null,
     };
   }
@@ -558,32 +545,8 @@ export class BrowserWorkoutRecorder implements WorkoutAdapter {
         healthCount: 0,
         lapCount: record.lapCount,
         routePreview: [],
-        warnings: record.warnings,
         provenance: { capture: 'browser CYC', storage: 'IndexedDB', health: 'not requested' },
       },
     };
-  }
-  async export(id: string, _distanceSource: DistanceSource = 'auto'): Promise<string> {
-    const record = await this.store.get(id);
-    if (!record.endedAt) throw new Error('Save the ride before exporting');
-    const parts = [SAMPLE_COLUMNS.join(',') + '\n'];
-    let bytes = parts[0]!.length,
-      after: [number, number] | undefined;
-    while (true) {
-      const rows = await this.store.page(id, 0, Infinity, after);
-      const text = rows.map(row => csvRow(validateSample(row))).join('\n') + (rows.length ? '\n' : '');
-      bytes += text.length;
-      if (bytes > CSV_EXPORT_BYTES)
-        throw new Error('CSV export exceeds the 128 MiB browser export limit. Your complete recording remains saved.');
-      parts.push(text);
-      if (rows.length < BROWSER_PAGE) break;
-      const last = rows[rows.length - 1]!;
-      after = [last.elapsedSeconds, last.sequence];
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-    }
-    return URL.createObjectURL(new Blob(parts, { type: 'text/csv;charset=utf-8' }));
-  }
-  async exportOriginal(_id: string): Promise<string> {
-    throw new Error('Browser rides support CSV export');
   }
 }

@@ -381,10 +381,9 @@ final class WorkoutTransferJournal {
         }
       }
       try db.put(namespace: "current-seal", key: seal.workoutID, value: data)
-      if let reason = seal.healthReason {
-        try WorkoutHealthWriteBounds.report(reason, id: seal.workoutID, archive: archive)
-      }
-      try archive.update(id: seal.workoutID, sealRevision: seal.sealRevision, finalizationState: "pending")
+      try archive.update(
+        id: seal.workoutID, healthReason: seal.healthReason, sealRevision: seal.sealRevision,
+        finalizationState: "pending")
       return true
     }
   }
@@ -577,8 +576,8 @@ enum WorkoutHealthFinalizationGate {
         let reason = unavailableReason(
           start: try WorkoutCoding.date(metadata.startedAt), cutoff: try WorkoutCoding.date(timing.timestamp))
       else { return nil }
-      try WorkoutHealthWriteBounds.report(reason, id: id, archive: archive)
-      try archive.update(id: id, healthKitState: metadata.saveToHealth ? "unavailable" : "notRequested")
+      try archive.update(
+        id: id, healthKitState: metadata.saveToHealth ? "unavailable" : "notRequested", healthReason: reason)
       return reason
     }
   }
@@ -617,14 +616,6 @@ struct WorkoutHealthWriteBounds {
       written[writer] = max(written[writer] ?? date, date)
     }
   }
-  static func report(_ reason: String, id: String, archive: WorkoutArchive) throws {
-    try archive.store.transaction { _ in
-      var warnings = try archive.metadata(id: id).warnings
-      guard !warnings.contains(reason) else { return }
-      warnings.append(reason)
-      try archive.update(id: id, warnings: Array(warnings.suffix(64)))
-    }
-  }
 }
 
 extension WorkoutHealthInsertionJournal {
@@ -640,25 +631,22 @@ extension WorkoutHealthInsertionJournal {
       let date = try event.date
       let start = try WorkoutCoding.date(metadata.startedAt)
       let cutoff = try metadata.endedAt.map(WorkoutCoding.date)
-      var reason = nextBounds.omission(
-        writer: "telemetry", start: date, end: date, workoutStart: start, cutoff: cutoff, now: historical ? nil : now)
-      if metadata.healthKitState == "unavailable" { reason = WorkoutHealthFinalizationGate.clockReason }
-      if try !metadata.saveToHealth || !WorkoutHealthEligibility.permits(event, archive: archive) {
-        reason = "Health omitted an ineligible telemetry observation; its original is retained."
-      }
-      if !(0...5000).contains(event.number("humanPowerW") ?? -.infinity)
-        || !(0...300).contains(event.number("cadenceRpm") ?? -.infinity)
-      {
-        reason = "Health omitted an out-of-range telemetry observation; its original is retained."
-      }
+      var excluded =
+        nextBounds.omission(
+          writer: "telemetry", start: date, end: date, workoutStart: start, cutoff: cutoff, now: historical ? nil : now)
+        != nil || metadata.healthKitState == "unavailable"
+      if try !metadata.saveToHealth || !WorkoutHealthEligibility.permits(event, archive: archive) { excluded = true }
       if historical && cutoff == nil {
         throw WorkoutDataError.invalid("Historical Health insertion has no retained cutoff")
       }
-      if let reason {
+      if excluded {
         try recordExcluded([event])
-        try WorkoutHealthWriteBounds.report(reason, id: event.workoutId, archive: archive)
       } else {
-        nextBounds.reserve(writer: "telemetry", id: event.eventId, end: date)
+        if WorkoutHealthTelemetryPlan.metrics.contains(where: {
+          WorkoutHealthTelemetryPlan.validValue(event, metric: $0) != nil
+        }) {
+          nextBounds.reserve(writer: "telemetry", id: event.eventId, end: date)
+        }
         accepted.append(event)
       }
     }
@@ -691,13 +679,20 @@ struct WorkoutHealthTelemetryPlan {
     let value: Double
   }
   static let metrics = ["humanPowerW", "cadenceRpm"]
+  private static let limits = ["humanPowerW": 0.0...5000, "cadenceRpm": 0.0...300]
   var quantities: [Quantity] = []
   var results: [String: [String: String]] = [:]
+  static func validValue(_ event: WorkoutEvent, metric: String) -> Double? {
+    guard let value = event.number(metric), value.isFinite, let limit = limits[metric], limit.contains(value) else {
+      return nil
+    }
+    return value
+  }
   init(events: [WorkoutEvent], previous: [String: [String: String]] = [:], authorized: (String) -> Bool) {
     for event in events {
       var metrics = previous[event.eventId] ?? [:]
-      for metric in Self.metrics where metrics[metric] != "applied" {
-        guard let value = event.number(metric), value.isFinite, value >= 0 else {
+      for metric in Self.metrics where metrics[metric] != "applied" && metrics[metric] != "invalid" {
+        guard let value = Self.validValue(event, metric: metric) else {
           metrics[metric] = "invalid"
           continue
         }
@@ -738,7 +733,15 @@ final class WorkoutHealthInsertionJournal {
     var outcome: String {
       switch self {
       case .excluded: return "excluded"
-      case .metrics(let results): return results.values.allSatisfy { $0 == "applied" } ? "applied" : "unavailable"
+      case .metrics(let results):
+        if results.values.contains("denied") { return "unavailable" }
+        return results.values.contains("applied") ? "applied" : "excluded"
+      }
+    }
+    var needsRepair: Bool {
+      switch self {
+      case .excluded: return false
+      case .metrics(let results): return results.values.contains("denied")
       }
     }
     func validate() throws {
@@ -906,8 +909,7 @@ final class WorkoutHealthInsertionJournal {
     let metadata = try archive.metadata(id: event.workoutId)
     if !metadata.saveToHealth || metadata.healthKitState == "unavailable" { return false }
     return try archive.store.read { _ in
-      let result = try receipt(event)?.outcome
-      return result != "applied" && result != "excluded"
+      try receipt(event)?.needsRepair ?? true
     }
   }
   func finishRepair(id: String) throws {
@@ -1243,7 +1245,6 @@ final class WorkoutImportLease {
 private enum WorkoutForwardingError: Error { case sourceHole }
 
 final class WorkoutTelemetryForwarder {
-  private(set) var deferredSource = false
   let archive: WorkoutArchive
   let outbox: WorkoutBoundedOutbox
   init(archive: WorkoutArchive) {
@@ -1331,7 +1332,6 @@ extension WorkoutTelemetryForwarder {
   /// Old collections remain discoverable after selection changes or process restart.
   @discardableResult
   func stageNextPending() throws -> Bool {
-    deferredSource = false
     let pruned = try pruneVerifiedPackets()
     // Keyset-page the eligibility scan so complete historical records cannot hide
     // a later live producer; no unbounded collection list is materialized.
@@ -1355,7 +1355,6 @@ extension WorkoutTelemetryForwarder {
               namespace: "telemetry-forward-blocked", key: id,
               value: Data(String(row.int("revision") ?? -1).utf8))
           }
-          deferredSource = true
         }
       }
       guard rows.count == 64, let last = rows.last else { return pruned > 0 }

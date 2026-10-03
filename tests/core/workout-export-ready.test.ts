@@ -15,7 +15,6 @@ const ride: WorkoutMetadata = {
   interrupted: false,
   healthKitState: 'saved',
   healthKitUUID: 'test-health',
-  warnings: [],
   watchSyncState: 'received',
 };
 describe('current snapshot export gate', () => {

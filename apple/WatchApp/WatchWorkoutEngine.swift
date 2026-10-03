@@ -853,7 +853,6 @@ struct WatchGPSStream {
         try WorkoutRecordingPolicy.requireHealthWrite(id: command.workoutID, archive: journal.archive)
         let start = try WorkoutCoding.date(journal.archive.metadata(id: id).startedAt)
         if let reason = healthBounds.omission(writer: "lap", start: date, end: date, workoutStart: start, now: Date()) {
-          try WorkoutHealthWriteBounds.report(reason, id: id, archive: journal.archive)
           metadata["error"] = reason
         } else {
           healthBounds.reserve(writer: "lap", id: command.id, end: date)
@@ -1478,8 +1477,6 @@ struct WatchGPSStream {
       if kind != "health", original["clockEpoch"] == nil, let timelineAnchor {
         original["clockEpoch"] = .string(timelineAnchor.epoch)
         original["acquisitionMonotonic"] = .number(timelineAnchor.monotonicOrigin + elapsed)
-        original["timelineMappingUncertainty"] = .string(
-          timelineAnchor.uncertainty ?? "Watch receipt timing; acquisition time is uncertain")
       }
       var event = try WorkoutEvent(
         workoutId: id, kind: kind, source: "watch", timestamp: date,
@@ -2194,11 +2191,7 @@ struct WatchGPSStream {
         }
         guard isCurrent(identity) else { return }
         let results = try insertion.metricResults(admitted)
-        if results[event.eventId]?.values.contains(where: { $0 != "applied" }) == true {
-          metadata["cycHealthSamplesIncomplete"] = true
-          metadata["cycHealthOutcome"] = "unavailable"
-          metadata["error"] =
-            "Health write access for CYC power or cadence is unavailable. Raw rider samples remain recorded."
+        if WatchWorkoutJournal.applyTelemetryHealthResults(results[event.eventId] ?? [:], to: &metadata) {
           persistMetadata()
         }
         if self.builder == nil { persistMetadata() }
@@ -3179,10 +3172,9 @@ struct WatchGPSStream {
             "latitude": .number(location.coordinate.latitude),
             "longitude": .number(location.coordinate.longitude),
             "horizontalAccuracyM": .number(location.horizontalAccuracy),
-            "distanceBarrier": .bool(self.gpsBarrier || mapping.uncertainty != nil),
+            "distanceBarrier": .bool(self.gpsBarrier || mapping.uncertain),
             "clockEpoch": .string(mapping.epoch), "acquisitionMonotonic": .number(mapping.acquisition),
           ]
-          if let uncertainty = mapping.uncertainty { payload["timelineMappingUncertainty"] = .string(uncertainty) }
           if location.verticalAccuracy >= 0 {
             payload["altitudeMeters"] = .number(location.altitude)
             payload["verticalAccuracyM"] = .number(location.verticalAccuracy)
@@ -3209,7 +3201,6 @@ struct WatchGPSStream {
                 writer: "route", start: location.timestamp, end: location.timestamp, workoutStart: start,
                 now: receivedAt)
               {
-                try WorkoutHealthWriteBounds.report(reason, id: id, archive: journal.archive)
                 self.metadata["error"] = reason
               } else {
                 self.healthBounds.reserve(

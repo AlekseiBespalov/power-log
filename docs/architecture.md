@@ -16,7 +16,8 @@ flowchart LR
   Phone -->|Rider power and cadence for Health| Watch
   Store --> Queries[Indexed reads and reduced chart geometry]
   Queries --> UI[Charts and exact inspection]
-  Store --> Export[FIT / original ZIP with CSV]
+  Store -->|Bounded export pages| Export[Shared TypeScript exporter]
+  Export --> Files[FIT and ride-data ZIP]
 ```
 
 ## Code map
@@ -25,10 +26,10 @@ flowchart LR
 | --- | --- |
 | `src/app/` | Routes and providers |
 | `src/features/`, `src/components/` | Screens, shared controls and charts |
-| `src/core/` | Protocol, validation, measurements and typed contracts |
+| `src/core/` | Protocol, validation, measurements, typed contracts and the FIT/ZIP exporter (`src/core/export/`) |
 | `src/services/` | Platform adapters, scheduling and presentation state |
-| `modules/cyc-bridge/ios/` | Bluetooth, SQLite, workouts, transfer, native charts and exports |
-| `modules/cyc-bridge/android/` | Android BLE/GPS foreground capture, SQLite, Canvas charts, Health Connect and exports |
+| `modules/cyc-bridge/ios/` | Bluetooth, SQLite, workouts, transfer, native charts, export reads and file sinks |
+| `modules/cyc-bridge/android/` | Android BLE/GPS foreground capture, SQLite, Canvas charts, Health Connect, export reads and file sinks |
 | `apple/WatchApp/`, `apple/LiveActivity/` | Watch companion and WidgetKit extension |
 | `app.config.ts`, `plugins/` | Permissions, background modes and reproducible native targets |
 | `tests/`, native `Tests/` | Regression tests and synthetic benchmarks |
@@ -67,4 +68,4 @@ Without a cursor, a following live chart shows the latest reading until its cata
 - Desktop offers bounded multi-column charts and a readings sidebar; narrow windows stack controls. Shrinking the window does not overwrite saved layout preferences. Native bottom navigation and the web header stay outside content transitions.
 - Modals use one stationary backdrop and shared transition. Safe-area bounds, scrollable content and stable status space prevent options, keyboards or refreshes from moving the surrounding page.
 
-The iPhone shares FIT through the system share sheet; Strava upload is manual in the browser. There is no account backend. [Testing](testing.md) distinguishes source checks from builds and physical recording/gesture acceptance.
+One TypeScript exporter writes the FIT and ride-data ZIP files on every platform from pages that the native and browser adapters read; the phones share the committed file through the system share sheet and the website downloads it. Strava upload is manual in the browser. There is no account backend. [Testing](testing.md) distinguishes source checks from builds and physical recording/gesture acceptance.

@@ -98,7 +98,6 @@ export type MonitorDescription = {
   monotonicAt?: number;
   availableMetrics: string[];
   outcome: 'available' | 'pending' | 'partial' | 'unavailable';
-  warnings: string[];
 };
 export type MonitorDescribeResult = MonitorEnvelope & { status: 'ok' } & MonitorDescription;
 export type MonitorLatestResult = MonitorResult<{

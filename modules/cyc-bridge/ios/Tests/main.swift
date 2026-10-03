@@ -148,6 +148,12 @@ do {
 let values = try CycProtocol.decodeTelemetry(payload)
 expect(values["humanPowerW"] == 205 && values["cadenceRpm"] == 87.5, "rider scalars")
 expect(abs(values["motorInputPowerW"]! - 296.541) < 0.000001, "input power must use battery current")
+var roundedPower = payload
+roundedPower[13...16] = [0, 0, 0, 29]  // Synthetic 0.29 A.
+roundedPower[21] = 0x01
+roundedPower[22] = 0xf4  // Synthetic 50.0 V.
+let roundedValues = try CycProtocol.decodeTelemetry(roundedPower)
+expect(roundedValues["motorInputPowerW"] == 14.5, "input power rounds to four decimals like Android and web")
 expect(values["controllerTempC"] == 35.5 && values["motorCurrentA"] == 12.34, "signed scaling")
 expect(values["speedRaw"] == 24.75 && values["assistLevel"] == 3 && values["raceMode"] == 1, "tail layout")
 for model in ["X6", "X12"] {

@@ -1059,17 +1059,17 @@ struct WorkoutTimelineAnchor: Codable, Equatable {
   let startedAt: String
   var stopMonotonic: Double?
   var stopUTC: String?
-  var uncertainty: String? = nil
+  var uncertain: Bool? = nil
   var epochStart: Double? = nil
   func resuming(timing: WorkoutOwnerTiming, epoch: String, uptime: Double) -> Self {
     Self(
-      epoch: epoch, monotonicOrigin: uptime - timing.elapsedSeconds, startedAt: startedAt,
-      uncertainty: "Recording interrupted across process restart; unobserved downtime is excluded", epochStart: uptime)
+      epoch: epoch, monotonicOrigin: uptime - timing.elapsedSeconds, startedAt: startedAt, uncertain: true,
+      epochStart: uptime)
   }
   struct Mapping {
     let elapsed: Double
     let eligible: Bool
-    let uncertainty: String?
+    let uncertain: Bool
   }
   func map(epoch sampleEpoch: String?, acquisition: Double?, timestamp: Date) throws -> Mapping {
     if sampleEpoch == epoch, let acquisition, acquisition.isFinite {
@@ -1078,9 +1078,9 @@ struct WorkoutTimelineAnchor: Codable, Equatable {
         elapsed: max(0, elapsed),
         eligible: elapsed >= 0 && acquisition >= (epochStart ?? monotonicOrigin)
           && (stopMonotonic.map { acquisition <= $0 } ?? true),
-        uncertainty: uncertainty)
+        uncertain: uncertain == true)
     }
-    return Mapping(elapsed: 0, eligible: false, uncertainty: "Acquisition belongs to an unavailable recording epoch")
+    return Mapping(elapsed: 0, eligible: false, uncertain: true)
   }
 }
 
@@ -1102,7 +1102,7 @@ extension WorkoutTimelineAnchor {
       let elapsed: Double
       let acquisition: Double
       let epoch: String
-      let uncertainty: String?
+      let uncertain: Bool
       fileprivate let original: Original
     }
 
@@ -1130,9 +1130,7 @@ extension WorkoutTimelineAnchor {
       guard mapped.eligible else { return nil }
       return Fix(
         elapsed: mapped.elapsed, acquisition: acquisition, epoch: anchor.epoch,
-        uncertainty: uptime <= uncertainUntil
-          ? "GPS UTC mapped at receipt; acquisition across a clock change or recording epoch is uncertain"
-          : mapped.uncertainty,
+        uncertain: uptime <= uncertainUntil || mapped.uncertain,
         original: Original(timestamp: timestamp, latitude: latitude, longitude: longitude, accuracy: accuracy))
     }
     mutating func admit(_ fix: Fix) -> Bool {
@@ -1287,8 +1285,8 @@ extension WorkoutOwnerAdoption {
       let elapsed = timing.elapsedSeconds
       let active = timing.timerSeconds
       let anchor = WorkoutTimelineAnchor(
-        epoch: epoch, monotonicOrigin: uptime - elapsed, startedAt: metadata.startedAt,
-        uncertainty: "Remote owner timing anchored at receipt; transit time is uncertain", epochStart: uptime)
+        epoch: epoch, monotonicOrigin: uptime - elapsed, startedAt: metadata.startedAt, uncertain: true,
+        epochStart: uptime)
       try archive.update(
         id: metadata.id, phase: incoming.phase, healthKitState: incoming.healthOutcome,
         healthKitUUID: incoming.healthWorkoutID)
@@ -1363,8 +1361,6 @@ enum WorkoutRecoveredOwnerCommand {
           payload: [
             "action": .string(command.action),
             "operationId": .string(command.id), "recoveredNativeEffect": .bool(true),
-            "timelineMappingUncertainty": .string(
-              "Retained timing for recovered native lifecycle; effect acquisition time is uncertain"),
           ], eventId: command.id)
         try archive.append(event)
         insertedLap = command.action == "lap"
@@ -1622,7 +1618,7 @@ enum WorkoutPhoneStartProjection {
           id: id, checkpoint: ownerTiming, archive: archive, preserveActive: true)
         return WorkoutTimelineAnchor(
           epoch: epoch, monotonicOrigin: uptime - timing.elapsedSeconds, startedAt: metadata.startedAt,
-          uncertainty: "Remote owner timing anchored at receipt; transit time is uncertain", epochStart: uptime)
+          uncertain: true, epochStart: uptime)
       }
       guard let origin = startedUptime ?? (now == startedAt ? uptime : nil), origin <= uptime else {
         throw WorkoutDataError.invalid("Phone start has no monotonic acquisition timing")
@@ -1713,8 +1709,9 @@ struct WorkoutPhoneTerminalProjection {
     healthReason: String? = nil
   ) throws {
     try archive.store.transaction(priority: .capture) { _ in
-      if let healthReason { try WorkoutHealthWriteBounds.report(healthReason, id: id, archive: archive) }
-      try archive.update(id: id, healthKitState: health, stopElapsedSeconds: timing.elapsedSeconds, ownerTiming: timing)
+      try archive.update(
+        id: id, healthKitState: health, healthReason: healthReason, stopElapsedSeconds: timing.elapsedSeconds,
+        ownerTiming: timing)
       try archive.finish(id: id, endedAt: WorkoutCoding.date(timing.timestamp), finalPhase: phase)
     }
   }
@@ -1807,11 +1804,6 @@ enum WorkoutLocalOwner {
         id: id, checkpoint: checkpoint, archive: archive, preserveActive: uncertainActive)
       if uncertainActive, timing.elapsedSeconds > checkpoint.elapsedSeconds {
         try pauseUncertainActive(id: id, checkpoint: checkpoint, archive: archive)
-        let warning =
-          "Active time after the retained checkpoint is uncertain because an owner transition was interrupted; that interval is excluded."
-        if !metadata.warnings.contains(warning) {
-          try archive.update(id: id, warnings: Array((metadata.warnings + [warning]).suffix(64)))
-        }
       }
       if needsInterruption, let epoch {
         try interrupt(id: id, epoch: epoch, timing: timing, archive: archive)
@@ -1829,10 +1821,7 @@ enum WorkoutLocalOwner {
       WorkoutEvent(
         workoutId: id, kind: "lifecycle", source: source,
         timestamp: WorkoutCoding.date(checkpoint.timestamp), elapsedSeconds: checkpoint.elapsedSeconds,
-        payload: [
-          "action": .string("pause"),
-          "timelineMappingUncertainty": .string("The interrupted native transition has no measured active interval"),
-        ], eventId: eventID))
+        payload: ["action": .string("pause")], eventId: eventID))
     try WorkoutTransferJournal(archive: archive).register(id: id, producer: source)
   }
   static func interrupt(id: String, epoch: String, timing: WorkoutOwnerTiming, archive: WorkoutArchive) throws {

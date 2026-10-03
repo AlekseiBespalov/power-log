@@ -49,7 +49,6 @@ export type WorkoutState = {
     heartRate: WorkoutStream;
     gps: WorkoutStream & { source: 'phone' | 'watch'; accuracyMeters: number | null };
   };
-  warnings: string[];
   error: string | null;
 };
 type UncheckedStream = { status: unknown };
@@ -131,8 +130,9 @@ export type WorkoutMetadata = {
   interrupted: boolean;
   healthKitState: string;
   healthKitUUID?: string;
-  warnings: string[];
+  healthReason?: string | null;
   watchSyncState: 'pending' | 'received' | 'notRequired';
+  syncReason?: string | null;
   collectionRevision?: number;
   sealRevision?: number;
   verifiedSealRevision?: number;
@@ -174,7 +174,6 @@ export type WorkoutSummary = {
   healthCount: number;
   lapCount: number;
   routePreview: RoutePoint[];
-  warnings: string[];
   provenance: Record<string, string>;
   completeness?: Record<string, string>;
 };
@@ -219,8 +218,6 @@ export interface WorkoutAdapter {
   /** Browser only: whether saved rides are protected from storage eviction. */
   storagePersistence?(): Promise<StoragePersistence>;
   read(id: string, distanceSource?: DistanceSource): Promise<WorkoutDetail>;
-  export(id: string, distanceSource?: DistanceSource): Promise<string>;
-  exportOriginal(id: string): Promise<string>;
 }
 export const workoutInProgress = (phase: WorkoutPhase) =>
   ['preparing', 'running', 'paused', 'recoverable', 'finishing'].includes(phase);
@@ -258,7 +255,6 @@ export const unavailableWorkoutState: WorkoutState = {
     heartRate: { status: 'unavailable' },
     gps: { status: 'unavailable', source: 'phone', accuracyMeters: null },
   },
-  warnings: [],
   error: null,
 };
 

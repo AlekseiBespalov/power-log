@@ -25,7 +25,6 @@ export function browserRide(values: Partial<BrowserRide> = {}): BrowserRide {
     elapsedSeconds: 0,
     timerSeconds: 0,
     availableMetrics: [],
-    warnings: [],
     lapCount: 0,
     ...values,
   };

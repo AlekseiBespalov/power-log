@@ -13,6 +13,9 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.HandlerThread
 import android.os.SystemClock
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.PowerRecord
 import java.io.File
 import java.time.Duration
 import java.util.UUID
@@ -29,6 +32,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.SQLiteMode
 import org.robolectric.shadows.ShadowPausedSystemClock
 import org.robolectric.shadows.ShadowSystemClock
 
@@ -36,6 +40,8 @@ import org.robolectric.shadows.ShadowSystemClock
 @Config(sdk = [35], manifest = Config.NONE, instrumentedPackages = ["app.powerlog.bridge"])
 class RecordingEngineTest {
     private lateinit var engine: RecordingEngine
+    private val healthAccess = FakeHealthConnectAccess().apply { available = false }
+    private var readClock: () -> RecordingClockReading = SystemRecordingClock::read
 
     private fun field(name: String): Any? =
         RecordingEngine::class.java.getDeclaredField(name).apply { isAccessible = true }.get(engine)
@@ -65,7 +71,7 @@ class RecordingEngineTest {
         val locations = context.getSystemService(LocationManager::class.java)
         shadowOf(locations).setLocationEnabled(true)
         shadowOf(locations).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
-        engine = RecordingEngine.get(context)
+        engine = RecordingEngine.get(context, RecordingClock { readClock() }, healthAccess)
         engine.awaitReady()
         command { engine.handler.removeCallbacks(field("tick") as Runnable) }
     }
@@ -102,6 +108,42 @@ class RecordingEngineTest {
                 )
             )
             .str("id")
+
+    @Test
+    fun healthStartNeedsOnlySessionAccessEvenWithPowerDenied() = command {
+        healthAccess.available = true
+        healthAccess.grants -= HealthPermission.getWritePermission(PowerRecord::class)
+        val state = engine.start(RideOptions(indoor = false, saveToHealth = true, recordGPS = true))
+        assertEquals("running", state["phase"])
+        assertTrue(engine.store.metadata(state.str("id")).flag("saveToHealth"))
+    }
+
+    @Test
+    fun deniedSessionRejectsHealthStartButAllowsLocalRecording() = command {
+        healthAccess.available = true
+        healthAccess.grants -= HealthPermission.getWritePermission(ExerciseSessionRecord::class)
+        val error =
+            assertThrows(IllegalStateException::class.java) {
+                engine.start(RideOptions(indoor = false, saveToHealth = true, recordGPS = false))
+            }
+        assertEquals(
+            "Allow Health Connect access before starting, or turn off Health Connect in Settings.",
+            error.message,
+        )
+        assertNull(field("ride"))
+        val id = start()
+        assertEquals("running", engine.store.metadata(id)["phase"])
+        assertFalse(engine.store.metadata(id).flag("saveToHealth"))
+    }
+
+    @Test
+    fun sessionAccessAloneAllowsHealthStartWithoutOptionalGrants() = command {
+        healthAccess.available = true
+        healthAccess.grants = engine.health.essentialPermissions()
+        val state = engine.start(RideOptions(indoor = false, saveToHealth = true, recordGPS = true))
+        assertEquals("running", state["phase"])
+        assertTrue(engine.store.metadata(state.str("id")).flag("saveToHealth"))
+    }
 
     private fun advanceTo(seconds: Long) {
         val target = (field("startClock") as Long) + seconds * 1000
@@ -159,6 +201,158 @@ class RecordingEngineTest {
                 acquiredAt,
                 iso(),
             )
+    }
+
+    private fun <T> withStartDelay(duringCreate: () -> Unit, body: () -> T): T {
+        val db = engine.store.writableDatabase
+        var delays = 0
+        db.setCustomScalarFunction("delay_start") { value ->
+            delays++
+            assertTrue(db.inTransaction())
+            ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
+            duringCreate()
+            value
+        }
+        db.execSQL(
+            "CREATE TEMP TRIGGER delay_start BEFORE INSERT ON lifecycle WHEN NEW.action='start' BEGIN SELECT delay_start(NEW.ride); END"
+        )
+        try {
+            return body().also { assertEquals(1, delays) }
+        } finally {
+            db.execSQL("DROP TRIGGER delay_start")
+        }
+    }
+
+    @Test
+    fun systemStartClockKeepsUtcMillisecondsAndElapsedRealtime() = command {
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(7))
+        val monotonic = SystemClock.elapsedRealtime()
+        val reading = withUtc(1767225600123L) { SystemRecordingClock.read() }
+        assertEquals("2026-01-01T00:00:00.123Z", reading.timestamp)
+        assertEquals(monotonic, reading.monotonicMillis)
+    }
+
+    @Test
+    @SQLiteMode(SQLiteMode.Mode.NATIVE)
+    fun delayedCreateKeepsTheCapturedStartForObservationsAndActiveTime() = command {
+        val reading = RecordingClockReading("2026-01-01T00:00:00.123Z", SystemClock.elapsedRealtime())
+        var reads = 0
+        readClock = {
+            reads++
+            reading
+        }
+        val live = engine.source(MonitorTarget.Live)
+        val notification = engine.notificationState
+        val id =
+            withStartDelay(
+                duringCreate = {
+                    assertNull(field("ride"))
+                    assertNull(field("selectedRide"))
+                    assertEquals(live, engine.source(MonitorTarget.Live))
+                    assertSame(notification, engine.notificationState)
+                    assertEquals(
+                        live,
+                        RideMonitor::class
+                            .java
+                            .getDeclaredField("liveRide")
+                            .apply { isAccessible = true }
+                            .get(engine.monitor),
+                    )
+                }
+            ) {
+                start()
+            }
+        assertEquals(1, reads)
+        assertEquals(reading.monotonicMillis, field("startClock"))
+        assertEquals(reading.monotonicMillis, field("activeSince"))
+        assertEquals(2.0, engine.state().num("timerSeconds"), 0.0)
+        assertEquals(reading.timestamp, engine.store.metadata(id)["startedAt"])
+        assertEquals(RideTiming(0.0, 0.0, reading.timestamp), engine.store.timing(id))
+        assertEquals(listOf(RideEvent(0.0, "start", reading.timestamp)), engine.store.events(id))
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        telemetry(acquiredAt = reading.monotonicMillis + 3000)
+        engine.flush()
+        assertEquals(3.0, engine.store.page(id).single().time, 0.0)
+        assertEquals(3.0, engine.state().num("timerSeconds"), 0.0)
+    }
+
+    @Test
+    fun failedCreateKeepsEngineIdleAndRollsBackTheRideAndStartEvent() = command {
+        val db = engine.store.writableDatabase
+        val live = engine.source(MonitorTarget.Live)
+        val state = engine.state()
+        val notification = engine.notificationState
+        val events = mutableListOf<Payload>()
+        engine.listeners.add { event, payload -> if (event == "onWorkoutState") events.add(payload) }
+        db.execSQL(
+            "CREATE TEMP TRIGGER fail_start AFTER INSERT ON lifecycle WHEN NEW.action='start' BEGIN SELECT RAISE(ABORT,'injected start failure'); END"
+        )
+        try {
+            assertThrows(SQLiteException::class.java) { start(true) }
+            assertNull(field("ride"))
+            assertNull(field("selectedRide"))
+            assertEquals(state, engine.state())
+            assertSame(notification, engine.notificationState)
+            assertFalse(engine.gpsActive)
+            assertEquals(live, engine.source(MonitorTarget.Live))
+            assertEquals(
+                live,
+                RideMonitor::class.java.getDeclaredField("liveRide").apply { isAccessible = true }.get(engine.monitor),
+            )
+            assertTrue(events.isEmpty())
+            assertTrue(engine.store.list(CatalogInput()).isEmpty())
+            for (table in listOf("rides", "lifecycle")) {
+                db.rawQuery("SELECT count(*) FROM $table", null).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(1L, cursor.getLong(0))
+                }
+            }
+        } finally {
+            db.execSQL("DROP TRIGGER fail_start")
+        }
+        assertEquals("running", engine.store.metadata(start())["phase"])
+    }
+
+    @Test
+    @SQLiteMode(SQLiteMode.Mode.NATIVE)
+    fun delayedLiveReplacementUsesOneCapturedStartReading() = command {
+        val reading = RecordingClockReading("2026-01-01T00:00:00.456Z", SystemClock.elapsedRealtime())
+        var reads = 0
+        readClock = {
+            reads++
+            reading
+        }
+        val previous = engine.source(MonitorTarget.Live)
+        val previousOrigin = field("liveStart")
+        withStartDelay(
+            duringCreate = {
+                assertEquals(previous, engine.source(MonitorTarget.Live))
+                assertEquals(previousOrigin, field("liveStart"))
+            }
+        ) {
+            RecordingEngine::class
+                .java
+                .getDeclaredMethod("startLiveSession")
+                .apply { isAccessible = true }
+                .invoke(engine)
+        }
+        val live = engine.source(MonitorTarget.Live)
+        assertNotEquals(previous, live)
+        assertEquals(1, reads)
+        assertEquals(reading.monotonicMillis, field("liveStart"))
+        assertEquals(reading.timestamp, engine.store.metadata(live)["startedAt"])
+        assertEquals(RideTiming(0.0, 0.0, reading.timestamp), engine.store.timing(live))
+        assertEquals(listOf(RideEvent(0.0, "start", reading.timestamp)), engine.store.events(live))
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        telemetry(acquiredAt = reading.monotonicMillis + 3000)
+        engine.flush()
+        assertEquals(3.0, engine.store.page(live).single().time, 0.0)
+        val description =
+            engine.monitor.query(
+                live,
+                BridgeInputs.monitor(MonitorOperation.Describe, mapOf("source" to "live", "generation" to 0)),
+            )
+        assertEquals(3.0, description.num("nowSeconds"), 0.0)
     }
 
     @Test
@@ -1338,7 +1532,7 @@ class RecordingEngineTest {
         val original = command {
             val metadata = engine.store.metadata(id)
             assertEquals("unavailable", metadata["healthKitState"])
-            assertTrue((metadata["warnings"] as List<*>).single().toString().contains("clock cutoff"))
+            assertTrue(metadata.str("healthReason").contains("clock cutoff"))
             assertTrue(engine.store.pendingHealthJobs().isEmpty())
             val next = start()
             assertNotEquals(id, next)
@@ -1360,9 +1554,9 @@ class RecordingEngineTest {
             assertEquals(original, engine.store.metadata(id))
             assertTrue(engine.store.pendingHealthJobs().isEmpty())
             assertTrue((field("healthPending") as Set<*>).isEmpty())
-            val exporter = RideExport(engine.context, engine.store, engine.distance, engine.monitor)
-            assertTrue(java.io.File(java.net.URI(exporter.fit(id, "auto"))).length() > 0)
-            assertTrue(java.io.File(java.net.URI(exporter.archive(id))).length() > 0)
+            for (kind in listOf("fit", "zip")) assertTrue(
+                openedExport(engine.store, engine.distance, id, kind)["session"] is String
+            )
         }
     }
 
@@ -1370,7 +1564,11 @@ class RecordingEngineTest {
     fun retryQueuesOnlyNotSavedAndLateCompletionCannotReplaceTerminalOutcome() {
         val terminal = HealthExportResult("unavailable", reason = "Terminal clock cutoff.")
         val id = command {
-            val id = engine.store.create(RideOptions(indoor = false, saveToHealth = true, recordGPS = false))
+            val id =
+                engine.store.create(
+                    RideOptions(indoor = false, saveToHealth = true, recordGPS = false),
+                    SystemRecordingClock.read(),
+                )
             val start = java.time.Instant.parse(engine.store.metadata(id).str("startedAt"))
             engine.store.seal(id, RideTiming(10.0, 10.0, start.plusSeconds(10).toString()))
             engine.store.healthStatus(id, HealthExportResult("notSaved", reason = "Retryable write failure."))
@@ -1382,7 +1580,7 @@ class RecordingEngineTest {
         }
         command {
             assertEquals("unavailable", engine.store.metadata(id)["healthKitState"])
-            assertEquals(listOf(terminal.reason), engine.store.metadata(id)["warnings"])
+            assertEquals(terminal.reason, engine.store.metadata(id)["healthReason"])
             engine.recover(id)
             assertEquals("unavailable", engine.store.metadata(id)["healthKitState"])
             assertTrue((field("healthPending") as Set<*>).isEmpty())
@@ -1428,6 +1626,7 @@ class RecordingEngineTest {
         )
         engine.store.update(id, "completed", engine.store.timing(id), mapOf("saveToHealth" to true))
         val records = mutableListOf<androidx.health.connect.client.records.Record>()
+        healthAccess.available = true
         val result = kotlinx.coroutines.runBlocking { engine.health.writeRide(id) { records.addAll(it) } }
         assertEquals("saved", result.state)
         assertEquals(7, result.omitted)

@@ -1,13 +1,12 @@
 import { useMemo } from 'react';
 import { View } from 'react-native';
 import { Body, Chip, Heading, Metric, colors, formatDuration } from '../../components/ui';
-import type { TelemetrySample } from '../../core/types';
 import { TelemetryMonitor } from '../../core/monitor-data';
-import { summarizeRecording } from '../../core/recordings';
+import { summarizeRecording, type ImportedSample } from '../../core/recordings';
 import { readConsumer } from '../../services/read-scheduler';
 import { MonitorPanel } from '../monitor/monitor-panel';
 
-export type CsvRide = { title: string; samples: TelemetrySample[] };
+export type CsvRide = { title: string; samples: ImportedSample[] };
 export function CsvRideDetails({ ride }: { ride: CsvRide }) {
   const source = useMemo(() => new TelemetryMonitor(readConsumer('csv-source'), false, ride.samples), [ride]);
   const summary = useMemo(() => summarizeRecording(ride.samples), [ride]);

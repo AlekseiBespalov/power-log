@@ -891,7 +891,6 @@
         writer: writer, start: start, end: end, workoutStart: try WorkoutCoding.date(metadata.startedAt),
         cutoff: try metadata.endedAt.map(WorkoutCoding.date), now: Date(), interval: interval)
       {
-        try WorkoutHealthWriteBounds.report(reason, id: workoutID, archive: archive)
         onError?(CycError.invalid(reason))
         return false
       }

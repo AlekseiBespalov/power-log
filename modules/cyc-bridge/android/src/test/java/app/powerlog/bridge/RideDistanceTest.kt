@@ -23,7 +23,11 @@ class RideDistanceTest {
             for (index in 0 until cases.length()) {
                 val case = cases.getJSONObject(index)
                 val name = case.getString("name")
-                val id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+                val id =
+                    store.create(
+                        RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                        SystemRecordingClock.read(),
+                    )
                 val samples = case.getJSONArray("samples")
                 store.transaction {
                     for (sampleIndex in 0 until samples.length()) {
@@ -66,7 +70,11 @@ class RideDistanceTest {
     fun distanceRenderingKeepsShortReconnectsFlatWithoutAddingCoverage() {
         for (gps in listOf(false, true)) for (gap in listOf(2.0, 6.0, 8.0)) {
             RideStore(RuntimeEnvironment.getApplication(), "distance-${UUID.randomUUID()}.sqlite").use { store ->
-                val id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = gps))
+                val id =
+                    store.create(
+                        RideOptions(indoor = false, saveToHealth = false, recordGPS = gps),
+                        SystemRecordingClock.read(),
+                    )
                 val distance = RideDistance(store)
                 val monitor = RideMonitor(store, distance)
                 val source = if (gps) "gps:phone" else "controller"
@@ -151,7 +159,11 @@ class RideDistanceTest {
     @Test
     fun coveredGpsIntervalLongerThanTheDisplayGapStaysConnected() {
         RideStore(RuntimeEnvironment.getApplication(), "distance-${UUID.randomUUID()}.sqlite").use { store ->
-            val id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = true))
+            val id =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = true),
+                    SystemRecordingClock.read(),
+                )
             val distance = RideDistance(store)
             val monitor = RideMonitor(store, distance)
             store.transaction {
@@ -199,7 +211,11 @@ class RideDistanceTest {
     @Test
     fun appendRequiresTheOriginalsTransaction() {
         RideStore(RuntimeEnvironment.getApplication(), "distance-${UUID.randomUUID()}.sqlite").use { store ->
-            val id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+            val id =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                    SystemRecordingClock.read(),
+                )
             val distance = RideDistance(store)
             val values = mapOf("controllerSpeedMps" to 10.0)
             assertThrows(IllegalStateException::class.java) {
@@ -222,7 +238,8 @@ internal fun assertDistanceReplay(original: RideStore, id: String) {
                     saveToHealth = original.metadata(id).flag("saveToHealth"),
                     recordGPS = original.metadata(id).flag("recordGPS"),
                     sampleHz = original.metadata(id).num("sampleHz").toInt(),
-                )
+                ),
+                SystemRecordingClock.read(),
             )
         val distance = RideDistance(replay)
         replay.transaction {

@@ -7,7 +7,6 @@ const source = (changes: Partial<MonitorDescription> = {}): MonitorDescription =
   domain: { start: 0, end: 37 },
   availableMetrics: [],
   outcome: 'pending',
-  warnings: [],
   ...changes,
 });
 

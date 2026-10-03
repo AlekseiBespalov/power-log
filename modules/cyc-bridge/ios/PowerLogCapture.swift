@@ -16,12 +16,10 @@ struct PowerLogCaptureFrame {
       epoch: sample["clockEpoch"] as? String,
       acquisition: sample["acquisitionMonotonic"] as? Double, timestamp: WorkoutCoding.date(timestamp))
     guard mapping.eligible else { return nil }
-    var payload = sample
-    if let uncertainty = mapping.uncertainty { payload["timelineMappingUncertainty"] = uncertainty }
     return try WorkoutEvent(dictionary: [
       "schemaVersion": 1, "eventId": observationID, "workoutId": ride.id,
       "kind": "telemetry", "source": "cyc", "timestamp": timestamp, "elapsedSeconds": mapping.elapsed,
-      "payload": payload,
+      "payload": sample,
     ])
   }
 }
@@ -54,11 +52,6 @@ struct PowerLogCaptureFault: Codable {
   func persist(archive: WorkoutArchive) throws {
     try archive.store.transaction { db in
       try db.put(namespace: "capture-faults", key: id, value: WorkoutCoding.encoder().encode(self), immutable: true)
-      if let workoutID, try !archive.store.isWorkoutDeleted(id: workoutID) {
-        var notices = try archive.metadata(id: workoutID).warnings
-        if !notices.contains(message) { notices.append(message) }
-        try archive.update(id: workoutID, warnings: Array(notices.suffix(64)))
-      }
     }
   }
 }

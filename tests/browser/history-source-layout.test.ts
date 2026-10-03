@@ -23,7 +23,7 @@ const aliases: Record<string, string> = {
   'react-native-safe-area-context': platform,
   'expo-router': platform,
 };
-for (const name of ['src/services/workouts']) aliases[path.resolve(name)] = backend;
+for (const name of ['src/services/workouts', 'src/services/ride-export']) aliases[path.resolve(name)] = backend;
 for (const name of [
   'src/services/session-context',
   'src/services/device',

@@ -1,0 +1,5 @@
+[
+  "timestamp,elapsedSeconds,activeInterval,run,connection,humanPowerW,cadenceRpm,motorInputPowerW,batteryVoltageV,batteryCurrentA,motorCurrentA,motorRpm,pedalTorqueNm,controllerTempC,motorTempC,consumedAh,consumedWh,throttleVoltageV,faultCode,assistLevel,controllerSpeedMps,cyc.raceMode,cyc.speedRaw",
+  "2026-07-04T10:00:01.000Z,1,1,1,1,150,70,,48.5,,,,,,,,,,,2,,,",
+  "2026-07-04T10:00:05.000Z,5,,2,1,0,0,,48.75,,,,,,,,,,,2,,,"
+]

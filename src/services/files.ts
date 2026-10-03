@@ -1,1 +1,1 @@
-export { exportText, importRecording, exportWorkoutFile } from './files.native';
+export { importRecording, shareExport } from './files.native';

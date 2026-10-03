@@ -10,11 +10,13 @@ import {
   MONITOR_METRICS,
   validateMonitorPreferences,
 } from '../../src/core/monitor';
-import { SAMPLE_COLUMNS } from '../../src/core/types';
+import { REQUIRED_SAMPLE_COLUMNS } from '../../src/core/types';
 import type { MonitorData, MonitorPlotRequest } from '../../src/core/monitor';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 import { exportCsv } from '../helpers/export-csv';
 import { parseCsv } from '../support/csv';
+import type { ImportedSample } from '../../src/core/recordings';
+import { syntheticCsvSample } from './csv-fixture';
 
 const sample = (seconds: number, value = seconds) => ({
   ...syntheticSample(seconds, seconds, new Date(Date.UTC(2026, 0, 1) + seconds * 1000).toISOString()),
@@ -456,9 +458,9 @@ describe('monitor snapshot contract', () => {
     },
   );
   it('uses the 2.5-second integration limit for every controller metric independently of display continuity', async () => {
-    const metrics = MONITOR_METRICS.filter(metric => (SAMPLE_COLUMNS as readonly string[]).includes(metric.id)).map(
-      metric => metric.id,
-    );
+    const metrics = MONITOR_METRICS.filter(metric =>
+      [...REQUIRED_SAMPLE_COLUMNS, 'controllerSpeedMps'].includes(metric.id as never),
+    ).map(metric => metric.id);
     const monitor = new TelemetryMonitor(
       'telemetry-gaps',
       false,
@@ -551,5 +553,54 @@ describe('monitor metric boundaries', () => {
     expect(formatMetric(metricById('distanceMeters')!, 1500)).toBe('1.50');
     expect(metricById('speedRaw')!.unit).toBe('raw');
     expect(formatMetric(metricById('heartRateBpm')!, null)).toBe('—');
+  });
+});
+
+describe('imported CSV statistics', () => {
+  const row = (elapsedSeconds: number, humanPowerW: number, patch: Partial<ImportedSample> = {}): ImportedSample => ({
+    ...syntheticCsvSample(elapsedSeconds),
+    elapsedSeconds,
+    humanPowerW,
+    ...patch,
+  });
+  const stats = async (samples: ImportedSample[], startSeconds: number, endSeconds: number) => {
+    const monitor = new TelemetryMonitor('imported', false, samples);
+    const result = await monitor.rangeStats({
+      generation: 1,
+      expectedRevision: String(samples.length),
+      metrics: ['humanPowerW'],
+      startSeconds,
+      endSeconds,
+    });
+    if (result.status !== 'ok') throw new Error('Statistics failed');
+    return result.statistics.humanPowerW;
+  };
+
+  it('keeps paused rows out of extrema, means, counts and integration', async () => {
+    const paused = { activeInterval: null, run: 2, interruptionIndex: 2 };
+    const resumed = { activeInterval: 2, run: 3, interruptionIndex: 3 };
+    const samples = [
+      row(0, 100),
+      row(1, 100),
+      row(1.5, 900, paused),
+      row(2, 900, paused),
+      row(3, 100, resumed),
+      row(4, 100, resumed),
+    ];
+    expect(await stats(samples, 0, 4)).toMatchObject({
+      count: 4,
+      min: { value: 100 },
+      max: { value: 100 },
+      sampleMean: 100,
+      coveredSeconds: 2,
+      integral: 200,
+    });
+  });
+
+  it('does not integrate across an empty cell of the same run', async () => {
+    const result = await stats([row(0, 100), row(1, NaN), row(2, 300)], 0, 2);
+    expect(result).toMatchObject({ count: 2, coveredSeconds: 0, integral: 0 });
+    const tied = await stats([row(0, 100), row(1, 100), row(1, NaN), row(1, 900), row(2, 900)], 0, 2);
+    expect(tied).toMatchObject({ coveredSeconds: 2, integral: 1000 });
   });
 });

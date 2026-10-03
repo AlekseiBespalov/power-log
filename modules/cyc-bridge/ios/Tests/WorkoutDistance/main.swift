@@ -129,7 +129,8 @@ check(
 near(try service.range(snapshot: first, start: 0.5, end: 2.5).distanceMeters, 10, "indexed clipped GPS range")
 let boundPlan = try store.read { db in
   try db.rows(
-    "EXPLAIN QUERY PLAN " + WorkoutDistanceStore.endBoundQuery, [.text(id), .integer(first.revision)], limit: 10)
+    "EXPLAIN QUERY PLAN " + WorkoutDistanceStore.endBoundQuery,
+    [.integer(first.revision), .text(id), .real(.greatestFiniteMagnitude), .integer(.max)], limit: 10)
 }
 check(
   boundPlan.contains { $0.string("detail")?.contains("membership_time") == true }

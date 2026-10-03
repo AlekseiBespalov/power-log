@@ -93,10 +93,17 @@ enum WorkoutExampleRides {
                 workoutId: id, kind: "health", source: "watch", timestamp: start.addingTimeInterval(t),
                 elapsedSeconds: t,
                 payload: [
-                  "heartRateBpm": .number(heart.rounded()),
+                  "heartRateBpm": .number(heart.rounded()), "representation": .string("builderMostRecent"),
+                  "exampleData": .bool(true),
+                ]))
+            batch.append(
+              try WorkoutEvent(
+                workoutId: id, kind: "health", source: "watch", timestamp: start.addingTimeInterval(t),
+                elapsedSeconds: t,
+                payload: [
                   "activeEnergyKcal": .number(mechanicalJoules / (4184 * 0.24)),
                   "basalEnergyKcal": .number(t / 3600 * 63), "distanceMeters": .number(distance),
-                  "representation": .string("aggregate"), "exampleData": .bool(true),
+                  "representation": .string("cumulativeWorkoutTotal"), "exampleData": .bool(true),
                 ]))
             batch.append(
               try WorkoutEvent(
@@ -125,7 +132,7 @@ enum WorkoutExampleRides {
           elapsedSeconds: Double(duration), payload: ["action": .string("stop")]))
       try flush()
       _ = try archive.update(
-        id: ride.id, healthKitState: "notSaved", warnings: [], watchSyncState: "received",
+        id: ride.id, healthKitState: "notSaved", watchSyncState: "received",
         stopElapsedSeconds: Double(duration))
       _ = try archive.finish(id: id, endedAt: start.addingTimeInterval(Double(duration)))
       var seals: [WorkoutSourceSeal] = []
@@ -144,7 +151,7 @@ enum WorkoutExampleRides {
           timerSeconds: Double(duration), saveToHealth: true,
           recordGPS: true))
       guard try transfer.verify(id: id) else { throw WorkoutDataError.invalid("Example ride seal did not verify") }
-      let summary = try WorkoutFIT.summarize(archive: archive, id: id)
+      let summary = try WorkoutAnalysis.summarize(archive: archive, id: id)
       reports.append([
         "id": id, "summary": summary.dictionary, "maximumPowerW": maxPower, "batteryConsumedWh": wh, "fictional": true,
       ])

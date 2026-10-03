@@ -12,12 +12,17 @@ import androidx.core.content.ContextCompat
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 
-internal class RecordingEngine private constructor(val context: Context) {
+internal class RecordingEngine
+private constructor(
+    val context: Context,
+    private val clock: RecordingClock,
+    healthAccess: HealthConnectAccess,
+) {
     private val thread = HandlerThread("PowerLogCapture").apply { start() }
     val handler = Handler(thread.looper)
     val reads = Executors.newSingleThreadExecutor { task -> Thread(task, "PowerLogReads") }
     val store = RideStore(context)
-    val health = HealthExport(context, store)
+    val health = HealthExport(context, store, healthAccess)
     private val healthWork = Executors.newSingleThreadExecutor()
     private val healthPending = mutableSetOf<String>()
     val distance = RideDistance(store)
@@ -25,7 +30,7 @@ internal class RecordingEngine private constructor(val context: Context) {
     val listeners = CopyOnWriteArrayList<(String, Payload) -> Unit>()
     private val locations = context.getSystemService(LocationManager::class.java)
     private var live = ""
-    private var liveStart = SystemClock.elapsedRealtime()
+    private var liveStart = 0L
     @Volatile private var ride: String? = null
     private var phase = "idle"
     private var selectedRide: String? = null
@@ -189,7 +194,7 @@ internal class RecordingEngine private constructor(val context: Context) {
         val nextHistoryRevision = RideStore.nextRevision(historyRevision)
         val effective = input.effective(capabilities())
         if (effective.saveToHealth)
-            check(health.granted().containsAll(health.permissions(effective.recordGPS))) {
+            check(health.available && health.granted().containsAll(health.essentialPermissions())) {
                 "Allow Health Connect access before starting, or turn off Health Connect in Settings."
             }
         val gps = effective.recordGPS
@@ -202,15 +207,16 @@ internal class RecordingEngine private constructor(val context: Context) {
             }
         flush()
         bluetooth.setHz(effective.sampleHz)
+        val reading = clock.read()
+        val created = store.create(effective, reading)
         options = effective
         rideError = null
-        val created = store.create(options)
         phase = "running"
-        startClock = SystemClock.elapsedRealtime()
+        startClock = reading.monotonicMillis
         ride = created
         selectedRide = created
         monitor.selectLiveRide(created)
-        activeSince = startClock
+        activeSince = reading.monotonicMillis
         activeSeconds = 0.0
         segment++
         telemetrySegment++
@@ -612,8 +618,9 @@ internal class RecordingEngine private constructor(val context: Context) {
     private fun startLiveSession() {
         flush()
         distance.forget(live)
-        live = store.replaceLive()
-        liveStart = SystemClock.elapsedRealtime()
+        val reading = clock.read()
+        live = store.replaceLive(reading)
+        liveStart = reading.monotonicMillis
         if (ride == null) monitor.selectLiveRide(live)
     }
 
@@ -652,10 +659,14 @@ internal class RecordingEngine private constructor(val context: Context) {
     companion object {
         @Volatile private var instance: RecordingEngine? = null
 
-        fun get(context: Context): RecordingEngine =
+        fun get(
+            context: Context,
+            clock: RecordingClock = SystemRecordingClock,
+            healthAccess: HealthConnectAccess = AndroidHealthConnectAccess(context),
+        ): RecordingEngine =
             instance
                 ?: synchronized(this) {
-                    instance ?: RecordingEngine(context.applicationContext).also { instance = it }
+                    instance ?: RecordingEngine(context.applicationContext, clock, healthAccess).also { instance = it }
                 }
     }
 }

@@ -1,15 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { exportText, exportWorkoutFile, importRecording } from '../../src/services/files.native';
+import { importRecording, shareExport } from '../../src/services/files.native';
 import { MAX_CSV_BYTES } from '../../src/core/validation';
-import { SAMPLE_COLUMNS } from '../../src/core/types';
-import { csvRow } from '../../src/core/recordings';
-import { syntheticCsvSample } from '../core/csv-fixture';
+import { syntheticCsvHeader, syntheticCsvRow, syntheticCsvSample } from '../core/csv-fixture';
 
 const mocks = vi.hoisted(() => ({
   platform: 'ios',
   files: new Map<string, string | Uint8Array>(),
-  copyFails: false,
-  copyBarrier: Promise.resolve(),
   share: vi.fn(),
   androidShare: vi.fn(),
   pick: vi.fn(),
@@ -65,26 +61,12 @@ vi.mock('expo-file-system', () => ({
         close: mocks.close,
       };
     }
-    write(value: string) {
-      mocks.files.set(this.uri, value);
-    }
-    delete() {
-      mocks.files.delete(this.uri);
-    }
-    async copy(destination: { uri: string }) {
-      await mocks.copyBarrier;
-      if (mocks.copyFails) throw new Error('Copy failed');
-      if (mocks.files.has(destination.uri)) throw new Error('Destination already exists');
-      mocks.files.set(destination.uri, mocks.files.get(this.uri)!);
-    }
   },
 }));
 
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.files.clear();
-  mocks.copyFails = false;
-  mocks.copyBarrier = Promise.resolve();
   mocks.platform = 'ios';
   mocks.reportedSize = null;
   mocks.chunkSizes = [];
@@ -93,7 +75,7 @@ beforeEach(() => {
 });
 
 describe('native CSV import', () => {
-  const csv = '\uFEFF' + SAMPLE_COLUMNS.join(',') + '\r\n' + csvRow(syntheticCsvSample()) + '\r\n';
+  const csv = '\uFEFF' + syntheticCsvHeader + '\r\n' + syntheticCsvRow(syntheticCsvSample()) + '\r\n';
   beforeEach(() => {
     mocks.files.set('file:///selected.csv', csv);
     mocks.pick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///selected.csv', name: 'ride.csv' }] });
@@ -129,7 +111,7 @@ describe('native CSV import', () => {
     expect(mocks.text).not.toHaveBeenCalled();
   });
 
-  it.each([SAMPLE_COLUMNS.join(',') + '\nshort', csv + '\u0000', csv + '\uFEFF', csv + '"unfinished'])(
+  it.each([syntheticCsvHeader + '\nshort', csv + '\u0000', csv + '\uFEFF', csv + '"unfinished'])(
     'closes the handle after parsing fails: %#',
     async contents => {
       mocks.files.set('file:///selected.csv', contents);
@@ -148,62 +130,20 @@ describe('native CSV import', () => {
 });
 
 describe('native file export', () => {
-  it.each(['ios', 'android'])('waits for the asynchronous file copy before sharing on %s', async platform => {
+  it.each([
+    ['ios', 'file:///app/Exports/0f0e/power-log-ride.fit'],
+    ['android', 'content://app.powerlog.powerlog.files/ride-exports/0f0e/power-log-ride.fit'],
+  ])('shares a committed %s export in place', async (platform, uri) => {
     mocks.platform = platform;
-    let finish!: () => void;
-    mocks.copyBarrier = new Promise<void>(resolve => {
-      finish = resolve;
-    });
-    mocks.files.set('file:///saved.fit', new Uint8Array([1, 2, 3]));
-    const exported = exportWorkoutFile('file:///saved.fit', 'ride.fit');
-    await Promise.resolve();
-    expect(mocks.share).not.toHaveBeenCalled();
-    expect(mocks.androidShare).not.toHaveBeenCalled();
-    expect(mocks.files.has('file:///cache/ride.fit')).toBe(false);
-    finish();
-    await exported;
-    expect(platform === 'android' ? mocks.androidShare : mocks.share).toHaveBeenCalledOnce();
-  });
-  it('shares Android exports through the native content-URI provider', async () => {
-    mocks.platform = 'android';
-    const bytes = new Uint8Array([0, 255, 128]);
-    mocks.files.set('file:///saved.fit', bytes);
-    await exportWorkoutFile('file:///saved.fit', 'ride.fit');
-    expect(mocks.androidShare).toHaveBeenCalledWith('file:///cache/ride.fit');
-    expect(mocks.share).not.toHaveBeenCalled();
-    expect(mocks.files.get('file:///cache/ride.fit')).toEqual(bytes);
+    await shareExport(uri);
+    if (platform === 'android') expect(mocks.androidShare).toHaveBeenCalledExactlyOnceWith(uri);
+    else expect(mocks.share).toHaveBeenCalledExactlyOnceWith({ url: uri });
+    expect(mocks.files.size).toBe(0);
   });
 
-  it.each(['fit', 'zip'])('shares an intact %s cache copy through the iOS system sheet', async extension => {
-    const source = `file:///private/workout.${extension}`;
-    const bytes = new Uint8Array([0, 255, 128, 10]);
-    mocks.files.set(source, bytes);
-    await exportWorkoutFile(source, `ride.${extension}`);
-    expect(mocks.share).toHaveBeenCalledWith({ url: `file:///cache/ride.${extension}` });
-    expect(mocks.files.get(source)).toEqual(bytes);
-    expect(mocks.files.get(`file:///cache/ride.${extension}`)).toEqual(bytes);
-  });
-
-  it('accepts cancelling the iOS sheet and shares CSV as a file rather than message text', async () => {
+  it('accepts cancelling the iOS sheet', async () => {
     mocks.share.mockResolvedValue({ action: 'dismissedAction' });
-    await expect(exportText('My ride.csv', 'time,power\n0,0')).resolves.toBeUndefined();
-    expect(mocks.share).toHaveBeenCalledWith({ url: 'file:///cache/My-ride.csv' });
-  });
-
-  it('shares CSV through the Android content-URI provider', async () => {
-    mocks.platform = 'android';
-    await exportText('My ride.csv', 'time,power\n0,10');
-    expect(mocks.files.get('file:///cache/My-ride.csv')).toBe('time,power\n0,10');
-    expect(mocks.androidShare).toHaveBeenCalledWith('file:///cache/My-ride.csv');
-    expect(mocks.share).not.toHaveBeenCalled();
-  });
-
-  it('does not open the share sheet when the source is missing or the copy fails', async () => {
-    await expect(exportWorkoutFile('file:///missing.fit', 'ride.fit')).rejects.toThrow('missing');
-    mocks.files.set('file:///saved.fit', new Uint8Array([1]));
-    mocks.copyFails = true;
-    await expect(exportWorkoutFile('file:///saved.fit', 'ride.fit')).rejects.toThrow('Copy failed');
-    expect(mocks.share).not.toHaveBeenCalled();
+    await expect(shareExport('file:///app/Exports/0f0e/ride.csv')).resolves.toBeUndefined();
   });
 });
 vi.mock('../../modules/cyc-bridge', () => ({ default: { shareFile: mocks.androidShare } }));

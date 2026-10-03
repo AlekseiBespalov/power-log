@@ -49,17 +49,26 @@ check(
   "fractional values retain their precision")
 var invalid = decoded
 invalid.payload["humanPowerW"] = .integer(-1)
-invalid.payload.removeValue(forKey: "cadenceRpm")
+invalid.payload["cadenceRpm"] = .integer(301)
 let invalidPlan = WorkoutHealthTelemetryPlan(events: [invalid]) { _ in true }
 check(
   invalidPlan.quantities.isEmpty
     && invalidPlan.committed[invalid.eventId]?.values.allSatisfy({ $0 == "invalid" }) == true,
-  "missing and negative values are unavailable, never fabricated zero")
-var nonfinite = decoded
-nonfinite.payload["humanPowerW"] = .number(.infinity)
-check(
-  WorkoutHealthTelemetryPlan(events: [nonfinite]) { _ in true }.results[decoded.eventId]?["humanPowerW"] == "invalid",
-  "nonfinite values cannot enter native samples")
+  "negative and excessive values are invalid, never fabricated zero")
+for value in [Double.nan, .infinity, -.infinity] {
+  for metric in WorkoutHealthTelemetryPlan.metrics {
+    var nonfinite = decoded
+    nonfinite.payload[metric] = .number(value)
+    let plan = WorkoutHealthTelemetryPlan(events: [nonfinite]) { _ in true }
+    check(
+      plan.results[decoded.eventId]?[metric] == "invalid" && plan.quantities.count == 1
+        && plan.quantities[0].metric != metric,
+      "nonfinite values preserve their valid companion")
+    rejects(
+      { _ = try WorkoutCoding.encoder().encode(nonfinite) },
+      "production JSON cannot persist a nonfinite numeric value")
+  }
+}
 @discardableResult
 func insert(
   _ events: [WorkoutEvent], into ledger: WorkoutHealthInsertionJournal = journal,
@@ -80,6 +89,151 @@ func insert(
   try result!.get()
   return writes
 }
+
+let metricCases: [(name: String, power: Double, cadence: Double, valid: [String: Double])] = [
+  ("excessive cadence", 150, 301, ["humanPowerW": 150]),
+  ("negative power", -1, 85, ["cadenceRpm": 85]),
+  ("zero", 0, 0, ["humanPowerW": 0, "cadenceRpm": 0]),
+  ("upper limits", 5000, 300, ["humanPowerW": 5000, "cadenceRpm": 300]),
+  ("above power limit", 5000.0001, 85, ["cadenceRpm": 85]),
+  ("above cadence limit", 150, 300.0001, ["humanPowerW": 150]),
+  ("below power limit", -0.0001, 85, ["cadenceRpm": 85]),
+  ("below cadence limit", 150, -0.0001, ["humanPowerW": 150]),
+  ("both out of range", -1, 301, [:]),
+]
+for fixture in metricCases {
+  for cadenceAuthorized in [false, true] {
+    let label = "phone \(fixture.name), cadence authorized: \(cadenceAuthorized)"
+    let item = try ride()
+    try lifecycle(item.id, 0, "start")
+    let seed = try event(item.id, 1, power: .number(fixture.power), cadence: .number(fixture.cadence))
+    try archive.append(seed)
+    let original = try archive.pageEvents(id: item.id, limit: 1, producer: "cyc")[0].event
+    check(original == seed, label + ": stored originals preserve both metrics")
+    var bounds = WorkoutHealthWriteBounds()
+    let admitted = try journal.admit([original], bounds: &bounds, now: date.addingTimeInterval(2), historical: false)
+    check(admitted == [original], label + ": numeric validity cannot exclude a time-eligible event")
+    var calls = 0
+    let writes = try insert(
+      admitted, authorized: { $0 == "humanPowerW" || cadenceAuthorized }, operation: { _ in calls += 1 })
+    let expected = fixture.valid.filter { $0.key == "humanPowerW" || cadenceAuthorized }
+    check(
+      Dictionary(uniqueKeysWithValues: writes.map { ($0.quantity.metric, $0.quantity.value) }) == expected,
+      label + ": only valid authorized values reach the native operation, without clamping")
+    check(calls == (expected.isEmpty ? 0 : 1), label + ": empty plans never invoke native writes")
+    check(writes.allSatisfy { $0.version == 1 }, label + ": each metric reserves its first write")
+    bounds.settle(writer: "telemetry", id: original.eventId, success: !writes.isEmpty)
+    let results = Dictionary(
+      uniqueKeysWithValues: WorkoutHealthTelemetryPlan.metrics.map { metric in
+        (metric, fixture.valid[metric] == nil ? "invalid" : expected[metric] == nil ? "denied" : "applied")
+      })
+    check(try journal.metricResults([original])[original.eventId] == results, label + ": explicit metric receipts")
+    let repairable = results.values.contains("denied")
+    check(try journal.needsRepair(original) == repairable, label + ": only denied metrics need repair")
+    check(try journal.pending(id: item.id).isEmpty, label + ": every receipt settles automatic insertion")
+    check(try !journal.requiresAutomaticHistory(id: item.id), label + ": settled work cannot stall or loop")
+    let cutoff = date.addingTimeInterval(2)
+    let timing = try WorkoutOwnerTiming(
+      timestamp: WorkoutCoding.timestamp(cutoff), elapsedSeconds: 2, timerSeconds: 2)
+    try archive.update(id: item.id, healthKitState: "saved", stopElapsedSeconds: 2, ownerTiming: timing)
+    try archive.finish(id: item.id, endedAt: cutoff)
+    let reopened = try WorkoutArchive(rootURL: root)
+    let repair = WorkoutHealthInsertionJournal(archive: reopened)
+    check(try repair.metricResults([original])[original.eventId] == results, label + ": receipts survive reopen")
+    check(
+      try repair.outcome(id: item.id) == (repairable ? "unavailable" : "sealed"),
+      label + ": denied companions make initial ride insertion partial")
+    let control = WorkoutControlJournal(store: reopened.store)
+    _ = try control.observe(
+      workoutID: item.id, owner: "phone", phase: "completed", at: cutoff, health: "saved", cutoff: cutoff,
+      timing: timing)
+    let initialSeal = try WorkoutPhoneSealRepair.seal(
+      id: item.id, archive: reopened, transfer: WorkoutTransferJournal(archive: reopened), control: control)
+    check(
+      try initialSeal.resolved && initialSeal.partial == repairable
+        && initialSeal.requirements["cycInsertion"] == (repairable ? "unavailable" : "sealed")
+        && reopened.metadata(id: item.id).finalizationState == (repairable ? "partial" : "complete"),
+      label + ": initial seal preserves partial insertion before authorization")
+    try repair.beginRepair(id: item.id)
+    let page = try repair.historyPage(id: item.id, afterSequence: 0, repairing: true)
+    check(page.events == (repairable ? [original] : []), label + ": repair scans only denied companions")
+    var repairBounds = WorkoutHealthWriteBounds()
+    let repairEvents = try repair.admit(
+      page.events, bounds: &repairBounds, now: date.addingTimeInterval(86400), historical: true)
+    let repairWrites = try insert(repairEvents, into: repair)
+    check(
+      repairWrites.map(\.quantity.metric) == (repairable ? ["cadenceRpm"] : [])
+        && repairWrites.allSatisfy { $0.quantity.value == fixture.cadence && $0.version == 1 },
+      label + ": later authorization writes cadence only, never applied power or invalid metrics")
+    try repair.finishRepair(id: item.id)
+    let finalResults = results.mapValues { $0 == "denied" ? "applied" : $0 }
+    check(
+      try repair.metricResults([original])[original.eventId] == finalResults, label + ": repaired receipts persist")
+    check(try !repair.needsRepair(original), label + ": applied and invalid are both terminal")
+    check(try !repair.requiresAutomaticHistory(id: item.id), label + ": completed repair leaves no automatic work")
+    check(try insert([original], into: repair).isEmpty, label + ": duplicate delivery cannot rewrite a settled event")
+    check(try repair.outcome(id: item.id) == "sealed", label + ": invalid metrics settle without partial completion")
+    let seal = try WorkoutPhoneSealRepair.seal(
+      id: item.id, archive: reopened, transfer: WorkoutTransferJournal(archive: reopened),
+      control: control)
+    let metadata = try reopened.metadata(id: item.id)
+    check(
+      seal.resolved && !seal.partial && metadata.healthKitState == "saved"
+        && metadata.finalizationState == "complete",
+      label + ": History preserves saved Health and partial archive meanings without pending work")
+  }
+}
+let rollbackRide = try ride()
+try lifecycle(rollbackRide.id, 0, "start")
+let invalidBeforeRollback = try event(rollbackRide.id, 11, power: .number(-1), cadence: .number(301))
+var validAfterRollback = try event(rollbackRide.id, 10, power: .number(150), cadence: .number(85))
+validAfterRollback.elapsedSeconds = 12
+try archive.appendBatch([invalidBeforeRollback, validAfterRollback])
+try lifecycle(rollbackRide.id, 20, "stop")
+try archive.update(
+  id: rollbackRide.id, healthKitState: "saved", stopElapsedSeconds: 20,
+  ownerTiming: WorkoutOwnerTiming(
+    timestamp: WorkoutCoding.timestamp(date.addingTimeInterval(20)), elapsedSeconds: 20, timerSeconds: 20))
+try archive.finish(id: rollbackRide.id, endedAt: date.addingTimeInterval(20))
+let rollbackBatch = try archive.pageEvents(id: rollbackRide.id, limit: 2, producer: "cyc").map(\.event)
+check(rollbackBatch == [invalidBeforeRollback, validAfterRollback], "rollback batch preserves capture order and UTC")
+var rollbackBounds = WorkoutHealthWriteBounds()
+let rollbackAdmitted = try journal.admit(
+  rollbackBatch, bounds: &rollbackBounds, now: date.addingTimeInterval(86400), historical: true)
+check(rollbackAdmitted == rollbackBatch, "all-invalid event cannot exclude the next valid event after UTC rollback")
+let rollbackWrites = try insert(rollbackAdmitted)
+check(
+  rollbackWrites.map(\.quantity.metric) == ["humanPowerW", "cadenceRpm"]
+    && rollbackWrites.map(\.quantity.value) == [150, 85]
+    && rollbackWrites.allSatisfy {
+      $0.quantity.eventID == validAfterRollback.eventId && $0.date == date.addingTimeInterval(10)
+    },
+  "historical rollback batch writes both valid companions at their original UTC")
+check(
+  try journal.metricResults(rollbackBatch) == [
+    invalidBeforeRollback.eventId: ["humanPowerW": "invalid", "cadenceRpm": "invalid"],
+    validAfterRollback.eventId: ["humanPowerW": "applied", "cadenceRpm": "applied"],
+  ], "both rollback events settle explicit per-metric receipts")
+for original in rollbackBatch {
+  rollbackBounds.settle(
+    writer: "telemetry", id: original.eventId,
+    success: rollbackWrites.contains { $0.quantity.eventID == original.eventId })
+}
+check(
+  rollbackBounds.omission(
+    writer: "telemetry", start: date.addingTimeInterval(10.5), end: date.addingTimeInterval(10.5), workoutStart: date)
+    == nil,
+  "all-invalid event cannot advance the settled UTC bound")
+check(try journal.outcome(id: rollbackRide.id) == "sealed", "rollback batch settles ride insertion")
+
+let retainedInvalid = WorkoutHealthTelemetryPlan(
+  events: [decoded], previous: [decoded.eventId: ["humanPowerW": "invalid", "cadenceRpm": "denied"]]
+) { _ in true }
+check(
+  retainedInvalid.quantities.map(\.metric) == ["cadenceRpm"]
+    && retainedInvalid.committed[decoded.eventId]?["humanPowerW"] == "invalid",
+  "an invalid receipt remains terminal independently of the supplied value")
+
 try archive.append(decoded)
 var nativeCalls = 0
 archive.store.beforeCommitForTesting = { throw PowerLogStorageError.sqlite(13, "Injected intent failure") }
@@ -273,11 +427,39 @@ try lifecycle(phases.id, 2, "pause")
 try lifecycle(phases.id, 4, "resume")
 try lifecycle(phases.id, 6, "stop")
 for (time, expected) in [(1.0, true), (2.0, false), (3.0, false), (4.0, true), (6.0, false), (7.0, false)] {
+  let original = try event(phases.id, time, power: .integer(1), cadence: .integer(80))
   check(
-    try WorkoutHealthEligibility.permits(
-      event(phases.id, time, power: .integer(1), cadence: .integer(80)), archive: archive) == expected,
+    try WorkoutHealthEligibility.permits(original, archive: archive) == expected,
     "repair respects authoritative lifecycle at \(time)")
+  try archive.append(original)
+  var bounds = WorkoutHealthWriteBounds()
+  let admitted = try journal.admit([original], bounds: &bounds, now: date.addingTimeInterval(10), historical: false)
+  check(admitted == (expected ? [original] : []), "shared eligibility excludes the whole event at \(time)")
+  check(try insert(admitted).count == (expected ? 2 : 0), "only active intervals write native quantities at \(time)")
+  if !expected {
+    check(try journal.metricResults([original]).isEmpty, "time exclusions have no per-metric receipt")
+    check(try !journal.needsRepair(original), "time exclusions stay settled on repair")
+    check(try insert([original]).isEmpty, "time exclusions cannot write on replay")
+  }
 }
+let oldExcludedRide = try ride()
+try lifecycle(oldExcludedRide.id, 0, "start")
+let oldExcluded = try event(oldExcludedRide.id, 1, power: .integer(150), cadence: .integer(301))
+try archive.append(oldExcluded)
+try journal.prepare([oldExcluded])
+try journal.recordExcluded([oldExcluded])
+let excludedRestart = WorkoutHealthInsertionJournal(archive: try WorkoutArchive(rootURL: root))
+var excludedBounds = WorkoutHealthWriteBounds()
+check(
+  try excludedRestart.admit([oldExcluded], bounds: &excludedBounds, now: date.addingTimeInterval(2), historical: false)
+    .isEmpty,
+  "existing excluded numeric receipts are never converted retroactively")
+check(
+  try insert([oldExcluded], into: excludedRestart).isEmpty,
+  "existing exclusions cannot write a valid companion on replay")
+check(
+  try excludedRestart.metricResults([oldExcluded]).isEmpty, "existing excluded receipts remain whole-event receipts")
+check(try excludedRestart.outcome(id: oldExcludedRide.id) == "sealed", "existing excluded outcome retains its meaning")
 let delayedStop = try ride()
 try lifecycle(delayedStop.id, 0, "start")
 try archive.update(id: delayedStop.id, stopElapsedSeconds: 2)

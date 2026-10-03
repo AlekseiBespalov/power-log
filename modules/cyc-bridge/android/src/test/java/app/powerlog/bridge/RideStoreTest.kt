@@ -1,7 +1,6 @@
 package app.powerlog.bridge
 
 import android.database.sqlite.SQLiteDatabase
-import java.io.File
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -28,12 +27,63 @@ class RideStoreTest {
         store = RideStore(RuntimeEnvironment.getApplication(), "test-${UUID.randomUUID()}.sqlite")
         distance = RideDistance(store)
         monitor = RideMonitor(store, distance)
-        id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+        id =
+            store.create(
+                RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                SystemRecordingClock.read(),
+            )
     }
 
     @After
     fun close() {
         store.close()
+    }
+
+    private fun assertStartReading(id: String, reading: RecordingClockReading) {
+        assertEquals(reading.timestamp, store.metadata(id)["startedAt"])
+        store.readableDatabase.rawQuery("SELECT started,checkpoint_at FROM rides WHERE id=?", arrayOf(id)).use { cursor
+            ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(reading.timestamp, cursor.getString(0))
+            assertEquals(reading.timestamp, cursor.getString(1))
+        }
+        assertEquals(RideTiming(0.0, 0.0, reading.timestamp), store.timing(id))
+        assertEquals(listOf(RideEvent(0.0, "start", reading.timestamp)), store.events(id))
+    }
+
+    @Test
+    fun createUsesTheCapturedUtcForEveryStoredStartField() {
+        val reading = RecordingClockReading("2026-01-01T00:00:00.123Z", 12345L)
+        val created = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false), reading)
+        assertStartReading(created, reading)
+        reopen()
+        assertStartReading(created, reading)
+    }
+
+    @Test
+    fun liveReplacementUsesCapturedUtcAndRollsBackAFailedStart() {
+        val reading = RecordingClockReading("2026-01-01T00:00:00.123Z", 12345L)
+        val live = store.replaceLive(reading)
+        assertStartReading(live, reading)
+        val replacement = RecordingClockReading("2026-01-01T00:01:00.456Z", 72345L)
+        val db = store.writableDatabase
+        db.execSQL(
+            "CREATE TEMP TRIGGER fail_start AFTER INSERT ON lifecycle WHEN NEW.action='start' BEGIN SELECT RAISE(ABORT,'injected start failure'); END"
+        )
+        try {
+            assertThrows(android.database.sqlite.SQLiteException::class.java) { store.replaceLive(replacement) }
+            assertStartReading(live, reading)
+            db.rawQuery("SELECT id FROM rides WHERE id LIKE 'live-%'", null).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(live, cursor.getString(0))
+                assertFalse(cursor.moveToNext())
+            }
+        } finally {
+            db.execSQL("DROP TRIGGER fail_start")
+        }
+        val next = store.replaceLive(replacement)
+        assertStartReading(next, replacement)
+        assertThrows(IllegalStateException::class.java) { store.metadata(live) }
     }
 
     @Test
@@ -79,15 +129,22 @@ class RideStoreTest {
     @Test
     fun generatedProvenanceRequiresAnExplicitInternalCreationArgument() {
         val options = BridgeInputs.ride(mapOf("indoor" to true, "saveToHealth" to false, "example" to true))
-        assertEquals(false, store.metadata(store.create(options))["example"])
-        assertEquals(true, store.metadata(store.create(options, example = true))["example"])
+        assertEquals(false, store.metadata(store.create(options, SystemRecordingClock.read()))["example"])
+        assertEquals(
+            true,
+            store.metadata(store.create(options, SystemRecordingClock.read(), example = true))["example"],
+        )
     }
 
     @Test
     fun catalogDefaultIsOneHundredAndValidatedCursorContinuesWithoutSkippingTies() {
         store.writableDatabase.execSQL("UPDATE rides SET started=? WHERE id=?", arrayOf("2026-01-01T00:00:00.000Z", id))
         repeat(100) {
-            val next = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+            val next =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                    SystemRecordingClock.read(),
+                )
             store.writableDatabase.execSQL(
                 "UPDATE rides SET started=? WHERE id=?",
                 arrayOf("2026-01-01T00:00:00.000Z", next),
@@ -362,7 +419,11 @@ class RideStoreTest {
     @Test
     fun stationaryGPSRequiresBothSpeedsBelowThresholdAndNoInvalidSpeedAccuracy() {
         for ((speed, accuracy) in listOf(0.49 to 0.1, 0.5 to 0.1, 0.49 to -1.0, 0.49 to null)) {
-            id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = true))
+            id =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = true),
+                    SystemRecordingClock.read(),
+                )
             gps(0.0, 0.0, speed, accuracy)
             gps(1.0, 0.0001, speed, accuracy)
             val (meters, covered) = distance.total(id, "gps:phone")
@@ -370,7 +431,11 @@ class RideStoreTest {
             else assertTrue(meters > 11.0)
             assertEquals(1.0, covered, 0.0)
         }
-        id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = true))
+        id =
+            store.create(
+                RideOptions(indoor = false, saveToHealth = false, recordGPS = true),
+                SystemRecordingClock.read(),
+            )
         gps(0.0, 0.0, 0.49)
         gps(1.0, 0.0001, 0.5)
         assertTrue(distance.total(id, "gps:phone").first > 11.0)
@@ -458,7 +523,11 @@ class RideStoreTest {
     fun abruptTerminationRetainsOnlyCommittedTime() {
         for (phase in listOf("running", "paused", "finishing")) {
             for (offset in listOf(-3600L, 3600L)) {
-                id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+                id =
+                    store.create(
+                        RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                        SystemRecordingClock.read(),
+                    )
                 val started = store.metadata(id).str("startedAt")
                 val retained = RideTiming(10.0, 6.0, Instant.parse(started).plusSeconds(offset).toString())
                 store.transaction {
@@ -619,7 +688,11 @@ class RideStoreTest {
 
     @Test
     fun pendingHealthJobsSurviveReopeningBeyondTheFirstHistoryPage() {
-        val pending = store.create(RideOptions(indoor = false, saveToHealth = true, recordGPS = false))
+        val pending =
+            store.create(
+                RideOptions(indoor = false, saveToHealth = true, recordGPS = false),
+                SystemRecordingClock.read(),
+            )
         val cutoff = java.time.Instant.parse(store.metadata(pending).str("startedAt")).plusSeconds(10).toString()
         store.seal(pending, RideTiming(10.0, 10.0, cutoff))
         store.writableDatabase.execSQL(
@@ -627,7 +700,11 @@ class RideStoreTest {
             arrayOf("2020-01-01T00:00:00Z", pending),
         )
         repeat(101) {
-            val completed = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+            val completed =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                    SystemRecordingClock.read(),
+                )
             store.seal(completed, RideTiming(10.0, 10.0, iso()))
         }
         assertFalse(store.list(CatalogInput(limit = 100)).any { it.str("id") == pending })
@@ -642,7 +719,11 @@ class RideStoreTest {
 
     @Test
     fun interruptedHealthRideBecomesRetryableInsteadOfUnrequested() {
-        val ride = store.create(RideOptions(indoor = false, saveToHealth = true, recordGPS = false))
+        val ride =
+            store.create(
+                RideOptions(indoor = false, saveToHealth = true, recordGPS = false),
+                SystemRecordingClock.read(),
+            )
         val started = java.time.Instant.parse(store.metadata(ride).str("startedAt"))
         store.update(ride, "running", RideTiming(10.0, 10.0, started.plusSeconds(10).toString()))
         reopen()
@@ -650,10 +731,40 @@ class RideStoreTest {
         val metadata = store.metadata(ride)
         assertTrue(metadata.flag("interrupted"))
         assertEquals("notSaved", metadata["healthKitState"])
-        assertTrue(
-            (metadata["warnings"] as List<*>).any { (it as String).contains("interrupted before Health Connect") }
-        )
+        assertTrue(metadata.str("healthReason").contains("interrupted before Health Connect"))
         assertTrue(store.pendingHealthJobs().isEmpty())
+    }
+
+    @Test
+    fun healthReasonExplainsOnlyAHealthSaveThatDidNotSucceed() {
+        val ride =
+            store.create(
+                RideOptions(indoor = false, saveToHealth = true, recordGPS = false),
+                SystemRecordingClock.read(),
+            )
+        val metadata = store.metadata(ride)
+        assertFalse(metadata.containsKey("warnings"))
+        assertTrue(metadata.containsKey("healthReason"))
+        assertNull(metadata["healthReason"])
+        val cutoff = Instant.parse(metadata.str("startedAt")).plusSeconds(10).toString()
+        store.seal(ride, RideTiming(10.0, 10.0, cutoff))
+        assertNull(store.metadata(ride)["healthReason"])
+        for ((result, reason) in
+            listOf(
+                HealthExportResult("notSaved", 2, 1, "Health Connect saving failed: Injected.") to
+                    "Health Connect saving failed: Injected.",
+                HealthExportResult("pending") to null,
+                HealthExportResult("unavailable", reason = "Clock cutoff.") to "Clock cutoff.",
+                HealthExportResult("saved", 5, 1, "Health Connect omitted 1 items.") to null,
+            )) {
+            store.healthStatus(ride, result)
+            reopen()
+            val saved = store.metadata(ride)
+            assertEquals(result.state, saved["healthKitState"])
+            assertEquals(reason, saved["healthReason"])
+            assertEquals(result.reason, (saved["healthExport"] as Map<*, *>)["reason"])
+            assertFalse(saved.containsKey("warnings"))
+        }
     }
 
     @Test
@@ -789,21 +900,17 @@ class RideStoreTest {
     }
 
     @Test
-    fun exportsAreFinalizedAndFITChecksummed() {
-        val exporter = RideExport(RuntimeEnvironment.getApplication(), store, distance, monitor)
-        assertThrows(IllegalStateException::class.java) { exporter.fit(id, "auto") }
+    fun exportsOpenOnlyForSealedRides() {
+        val refused = assertThrows(Rejection::class.java) { openedExport(store, distance, id, "fit") }
+        assertEquals("gate", refused.code)
         append(0.0, 150.0)
         append(1.0, 250.0)
         store.seal(id, RideTiming(1.0, 1.0, iso()))
-        val file = File(java.net.URI(exporter.fit(id, "auto")))
-        val bytes = file.readBytes()
-        assertEquals(".FIT", bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII))
-        assertEquals(0, FitWriter.crc(bytes))
-        val zip = java.util.zip.ZipFile(File(java.net.URI(exporter.archive(id))))
-        zip.use {
-            assertNotNull(it.getEntry("telemetry.csv"))
-            assertNotNull(it.getEntry("metadata.json"))
-        }
+        for (kind in listOf("fit", "zip")) assertEquals(
+            1.0,
+            openedExport(store, distance, id, kind).num("elapsedEnd"),
+            0.0,
+        )
     }
 
     @Test

@@ -1,0 +1,3 @@
+[
+  "timestamp,elapsedSeconds,activeInterval,run,connection,humanPowerW,cadenceRpm,motorInputPowerW,batteryVoltageV,batteryCurrentA,motorCurrentA,motorRpm,pedalTorqueNm,controllerTempC,motorTempC,consumedAh,consumedWh,throttleVoltageV,faultCode,assistLevel,controllerSpeedMps,cyc.raceMode,cyc.speedRaw"
+]

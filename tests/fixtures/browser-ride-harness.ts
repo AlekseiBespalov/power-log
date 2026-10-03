@@ -1,4 +1,9 @@
+import { ExportReads, createSlicer } from '../../src/core/export/pages';
+import { writeTelemetry } from '../../src/core/export/tables/telemetry';
+import { TextChunks } from '../../src/core/export/tables/text';
+import { readTimeline } from '../../src/core/export/timeline';
 import type { TelemetrySample } from '../../src/core/types';
+import { browserExportSource } from '../../src/services/browser-export-source';
 import { BrowserWorkoutRecorder } from '../../src/services/browser-workout-recorder';
 import {
   browserRideStore,
@@ -59,4 +64,22 @@ export function createRecorder() {
       time = seconds;
     },
   };
+}
+
+export async function telemetryCsv(rideId: string): Promise<string> {
+  const context = { exportedAt: '2026-01-01T00:00:00.000Z', platform: 'web' as const };
+  const opened = await browserExportSource.open({ rideId, kind: 'zip', context });
+  try {
+    const reads = new ExportReads({ platform: 'web', kind: 'zip', slicer: createSlicer() });
+    const timeline = await readTimeline(browserExportSource, opened.session, opened.elapsedEnd, reads, {
+      fitLimits: false,
+    });
+    const chunks: Uint8Array[] = [];
+    const out = new TextChunks({ write: async bytes => void chunks.push(bytes.slice()) });
+    await writeTelemetry({ source: browserExportSource, session: opened.session, reads, timeline, out });
+    await out.end();
+    return chunks.map(chunk => new TextDecoder().decode(chunk)).join('');
+  } finally {
+    await browserExportSource.close(opened.session);
+  }
 }

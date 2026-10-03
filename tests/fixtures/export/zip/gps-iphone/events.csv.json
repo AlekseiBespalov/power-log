@@ -1,0 +1,7 @@
+[
+  "timestamp,elapsedSeconds,timerSeconds,action,interrupted,source",
+  "2026-06-21T22:00:00.000Z,0,0,start,false,watch",
+  "2026-06-21T22:00:05.000Z,5,5,pause,false,watch",
+  "2026-06-21T22:00:06.000Z,6,5,resume,false,watch",
+  "2026-06-21T22:00:10.000Z,10,9,stop,false,watch"
+]

@@ -1,10 +1,6 @@
 import { createCsvParser, type ParsedRecording } from '../core/recordings';
 import { MAX_CSV_BYTES } from '../core/validation';
 
-export async function exportText(name: string, contents: string) {
-  const url = URL.createObjectURL(new Blob([contents], { type: 'text/csv;charset=utf-8' }));
-  await exportWorkoutFile(url, name);
-}
 export async function importRecording(): Promise<{ name: string; recording: ParsedRecording } | null> {
   const file = await chooseCsv();
   if (!file) return null;
@@ -48,11 +44,13 @@ function chooseCsv(): Promise<File | null> {
   });
 }
 
-export async function exportWorkoutFile(uri: string, name: string): Promise<void> {
-  if (!uri.startsWith('blob:')) throw new Error('The browser ride export is unavailable.');
+export function downloadFile(url: string, name: string): void {
   const anchor = document.createElement('a');
-  anchor.href = uri;
+  anchor.href = url;
   anchor.download = name;
   anchor.click();
-  setTimeout(() => URL.revokeObjectURL(uri), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// The browser export sink starts the download when it commits.
+export async function shareExport(_uri: string): Promise<void> {}

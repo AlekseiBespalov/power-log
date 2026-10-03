@@ -19,7 +19,7 @@ const record: WorkoutMetadata = {
   eventCount: 10,
   interrupted: false,
   healthKitState: 'unavailable',
-  warnings: ['Health Connect is unavailable because the clock cutoff is not after the start.'],
+  healthReason: 'Health Connect is unavailable because the clock cutoff is not after the start.',
   watchSyncState: 'notRequired',
   sealRevision: 3,
   verifiedSealRevision: 3,

@@ -47,7 +47,6 @@
             "accuracyMeters": null
           }
         },
-        "warnings": [],
         "error": null
       }
     },
@@ -98,7 +97,6 @@
             "accuracyMeters": 4.25
           }
         },
-        "warnings": [],
         "error": null
       }
     },
@@ -149,7 +147,6 @@
             "accuracyMeters": 62.5
           }
         },
-        "warnings": [],
         "error": null
       }
     },
@@ -200,7 +197,6 @@
             "accuracyMeters": null
           }
         },
-        "warnings": ["GPS was unavailable for part of this ride."],
         "error": "Bluetooth is turned off."
       }
     },
@@ -251,7 +247,6 @@
             "accuracyMeters": null
           }
         },
-        "warnings": [],
         "error": null
       }
     },
@@ -302,7 +297,6 @@
             "accuracyMeters": null
           }
         },
-        "warnings": [],
         "error": null
       }
     },
@@ -353,7 +347,6 @@
             "accuracyMeters": null
           }
         },
-        "warnings": [],
         "error": null
       }
     },
@@ -404,7 +397,6 @@
             "accuracyMeters": 4.2
           }
         },
-        "warnings": [],
         "error": null
       }
     },
@@ -455,7 +447,6 @@
             "accuracyMeters": null
           }
         },
-        "warnings": [],
         "error": null
       }
     }

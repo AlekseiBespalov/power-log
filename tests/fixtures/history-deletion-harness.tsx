@@ -7,8 +7,6 @@ export {
   monitorMounts,
   monitorUnmounts,
   setGlobalDistanceSource,
-  sharedFiles,
-  exportedTexts,
   setCsvImport,
   openedURLs,
 } from './history-deletion-platform';

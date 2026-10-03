@@ -42,15 +42,6 @@ struct CycControllerIdentity: Codable {
 enum CycProtocol {
   static let selectedMask: UInt32 = 0x03c0fb8f
   static let maximumGap = 2.5
-  static let columns = [
-    "timestamp", "elapsedSeconds", "sequence", "humanPowerW", "cadenceRpm",
-    "motorInputPowerW", "batteryVoltageV", "batteryCurrentA", "motorCurrentA", "motorRpm",
-    "pedalTorqueNm", "controllerTempC", "motorTempC", "consumedAh", "consumedWh",
-    "throttleVoltageV", "faultCode", "assistLevel", "raceMode", "speedRaw",
-    "controllerSpeedMps", "controllerModel", "firmwareLabel", "controllerProtocol", "connectionEpoch",
-    "interruptionIndex",
-  ]
-  static let csvHeader = columns.joined(separator: ",")
 
   static func crc(_ bytes: [UInt8]) -> UInt16 {
     var value: UInt16 = 0
@@ -118,7 +109,7 @@ enum CycProtocol {
     v["raceMode"] = Double(unsigned(1))
     v["assistLevel"] = Double(unsigned(1))
     guard cursor == payload.count else { throw CycError.invalid("Unknown trailing telemetry data.") }
-    v["motorInputPowerW"] = v["batteryVoltageV"]! * v["batteryCurrentA"]!
+    v["motorInputPowerW"] = (v["batteryVoltageV"]! * v["batteryCurrentA"]! * 10000 + 0.5).rounded(.down) / 10000
     return v
   }
 }

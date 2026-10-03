@@ -471,7 +471,6 @@ describe('independent monitor reads', () => {
             domain: { start: 0, end: 2 },
             availableMetrics: ['distanceMeters'],
             outcome: 'available',
-            warnings: [],
             metricSources: { distanceMeters: info },
           }),
           readLatest: async r => ({
@@ -609,7 +608,6 @@ describe('independent monitor reads', () => {
             domain: { start: 0, end: 2 },
             availableMetrics: ['distanceMeters'],
             outcome: 'available',
-            warnings: [],
             metricSources,
           };
         },

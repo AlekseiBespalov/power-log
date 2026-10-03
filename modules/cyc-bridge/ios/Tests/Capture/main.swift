@@ -135,11 +135,10 @@ store.beforeCommitForTesting = { throw Fault.disk }
 rejects({ try fault.persist(archive: archive) }, "fault persistence failure is retriable")
 check(pressure.fault?.id == fault.id, "fault survives until durable acknowledgement")
 store.beforeCommitForTesting = nil
+let rideRevision = try archive.revision(id: ride.id)
 try fault.persist(archive: archive)
 pressure.acknowledgeFault(fault.id)
-check(
-  try archive.metadata(id: ride.id).warnings.contains(fault.message),
-  "overflow remains a durable ride notice after later successful writes")
+check(try archive.revision(id: ride.id) == rideRevision, "a capture fault leaves the ride metadata unchanged")
 check(
   try store.read { try $0.get(namespace: "capture-faults", key: fault.id) } != nil,
   "admission gap identity remains available for diagnosis")

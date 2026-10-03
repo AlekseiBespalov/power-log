@@ -22,7 +22,7 @@ import {
 } from './monitor';
 import {
   MAX_SAMPLE_GAP_SECONDS,
-  SAMPLE_COLUMNS,
+  REQUIRED_SAMPLE_COLUMNS,
   sampleAcquisition,
   samplePresentationTime,
   type MonotonicMapping,
@@ -30,7 +30,8 @@ import {
   type TelemetrySample,
 } from './types';
 
-const telemetryFields = new Set<string>(SAMPLE_COLUMNS);
+const telemetryFields = new Set<string>([...REQUIRED_SAMPLE_COLUMNS, 'controllerSpeedMps']);
+type MonitorSample = TelemetrySample & { activeInterval?: number | null };
 export const metricIntegrationGapSeconds = (metric: MonitorMetric) =>
   telemetryFields.has(metric.id) ? MAX_SAMPLE_GAP_SECONDS : metric.gapSeconds;
 
@@ -48,8 +49,8 @@ const originalRange = (points: readonly MonitorPoint[], view: { start: number; e
 
 /** Browser and imported CSV analysis. Originals and their identities survive every read. */
 export class TelemetryMonitor implements MonitorSource {
-  private samples: TelemetrySample[] = [];
-  private cache = new Map<string, { processed: number; points: MonitorPoint[] }>();
+  private samples: MonitorSample[] = [];
+  private cache = new Map<string, { processed: number; points: MonitorPoint[]; gap: boolean }>();
   private renderCache = new Map<string, { series: MonitorPoint[]; bytes: number }>();
   private cacheBytes = 0;
   private available = new Set<string>();
@@ -64,7 +65,7 @@ export class TelemetryMonitor implements MonitorSource {
   constructor(
     readonly key: string,
     readonly live: boolean,
-    samples: readonly TelemetrySample[] = [],
+    samples: readonly MonitorSample[] = [],
     private readonly now = () => performance.now() / 1000,
   ) {
     for (const sample of samples) this.append(sample);
@@ -87,7 +88,7 @@ export class TelemetryMonitor implements MonitorSource {
   private get sourceId() {
     return this.session ? `${this.key}:session:${this.session}` : this.key;
   }
-  append(sample: TelemetrySample, delivery?: SampleDelivery) {
+  append(sample: MonitorSample, delivery?: SampleDelivery) {
     const last = this.samples[this.samples.length - 1];
     if (this.live && last && sample.elapsedSeconds <= last.elapsedSeconds) return;
     this.samples.push(sample);
@@ -106,7 +107,7 @@ export class TelemetryMonitor implements MonitorSource {
       this.start = Math.min(this.start, time);
       this.end = Math.max(this.end, time);
     }
-    const metrics = MONITOR_METRICS.filter(({ id }) => typeof sample[id as keyof TelemetrySample] === 'number').map(
+    const metrics = MONITOR_METRICS.filter(({ id }) => Number.isFinite(sample[id as keyof TelemetrySample])).map(
       ({ id }) => id,
     );
     for (const id of metrics) {
@@ -144,13 +145,16 @@ export class TelemetryMonitor implements MonitorSource {
     return this.samples[Number(point.observationId!.slice(-16))]!;
   }
   private points(id: string) {
-    const cached = this.cache.get(id) ?? { processed: 0, points: [] };
+    const cached = this.cache.get(id) ?? { processed: 0, points: [], gap: false };
     let needsSort = false;
     for (let i = cached.processed; i < this.samples.length; i++) {
       const sample = this.samples[i]!,
         value = sample[id as keyof TelemetrySample],
         elapsedSeconds = sample.elapsedSeconds;
-      if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isFinite(elapsedSeconds)) continue;
+      if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isFinite(elapsedSeconds)) {
+        cached.gap = true;
+        continue;
+      }
       if (cached.points.length && elapsedSeconds <= cached.points[cached.points.length - 1]!.elapsedSeconds)
         needsSort = true;
       const previous = cached.points[cached.points.length - 1];
@@ -159,8 +163,10 @@ export class TelemetryMonitor implements MonitorSource {
         timestamp: sample.timestamp,
         value,
         observationId: `${this.sourceId}:${String(i).padStart(16, '0')}`,
-        startsSegment: !previous || this.original(previous).interruptionIndex !== sample.interruptionIndex,
+        startsSegment:
+          !previous || cached.gap || this.original(previous).interruptionIndex !== sample.interruptionIndex,
       });
+      cached.gap = false;
     }
     if (needsSort) cached.points.sort(pointOrder);
     cached.processed = this.samples.length;
@@ -181,7 +187,6 @@ export class TelemetryMonitor implements MonitorSource {
       ...this.timing(),
       availableMetrics: [...this.available],
       outcome: this.samples.length ? 'available' : this.live ? 'pending' : 'unavailable',
-      warnings: [],
     };
   }
   async readPlot(request: MonitorPlotRequest): Promise<MonitorPlotResult> {
@@ -335,12 +340,16 @@ export class TelemetryMonitor implements MonitorSource {
       const points = this.points(id),
         range = originalRange(points, { start, end }),
         visible = points.slice(range.start, range.end);
-      const selected = visible.filter(point => point.elapsedSeconds >= start && point.elapsedSeconds <= end);
+      const selected = visible.filter(
+        point =>
+          point.elapsedSeconds >= start && point.elapsedSeconds <= end && this.original(point).activeInterval !== null,
+      );
       let coveredSeconds = 0,
         integral = 0;
       const timeline = visible.filter(
         (point, i) =>
           i === 0 ||
+          point.startsSegment ||
           point.elapsedSeconds !== visible[i - 1]!.elapsedSeconds ||
           this.original(point).interruptionIndex !== this.original(visible[i - 1]!).interruptionIndex,
       );
@@ -351,7 +360,12 @@ export class TelemetryMonitor implements MonitorSource {
         if (dt <= 0 || dt > metricIntegrationGapSeconds(metric)) continue;
         const before = this.original(a),
           after = this.original(b);
-        if (before.interruptionIndex !== after.interruptionIndex || before.connectionEpoch !== after.connectionEpoch)
+        if (
+          b.startsSegment ||
+          before.activeInterval === null ||
+          before.interruptionIndex !== after.interruptionIndex ||
+          before.connectionEpoch !== after.connectionEpoch
+        )
           continue;
         const left = Math.max(start, a.elapsedSeconds),
           right = Math.min(end, b.elapsedSeconds);

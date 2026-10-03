@@ -120,15 +120,15 @@ check(
   } == "integer", "typed table preserves integer storage class")
 let mappedRide = try archive.create(
   startedAt: fixedDate, indoor: true, watchEnabled: false, saveToHealth: true, recordGPS: false)
-var uncertainSample = sample
-uncertainSample["timelineMappingUncertainty"] = "Recovered collection UTC anchor"
-_ = try store.appendTelemetry(uncertainSample, collectionID: mappedRide.id, elapsedSeconds: 40.125)
+var remappedSample = sample
+remappedSample["sequence"] = 21
+_ = try store.appendTelemetry(remappedSample, collectionID: mappedRide.id, elapsedSeconds: 40.125)
 check(
   try store.read { try $0.scalarInt("SELECT count(*) FROM observations") } == 1,
-  "membership mapping uncertainty never changes physical identity digest")
+  "membership mapping never changes physical identity digest")
 check(
-  try archive.pageEvents(id: mappedRide.id).first?.event.payload["timelineMappingUncertainty"]?.string
-    == "Recovered collection UTC anchor", "collection mapping uncertainty survives original export decoding")
+  try archive.pageEvents(id: mappedRide.id).first?.event.payload["sequence"]?.integer == 21,
+  "collection mapping survives original export decoding")
 let replay = try store.appendTelemetry(sample, collectionID: first.id, elapsedSeconds: 0.125)
 check(try replay == 0 && archive.metadata(id: first.id).eventCount == 1, "replay does not allocate membership sequence")
 var conflict = sample
@@ -201,9 +201,46 @@ check(
   "tombstone retains original history and excludes selected value")
 let beforeMetadata = try archive.revision(id: first.id)
 _ = try archive.update(
-  id: first.id, warnings: ["Later warning"], sealRevision: 1, verifiedSealRevision: 1, finalizationState: "complete")
+  id: first.id, healthReason: "Later reason", sealRevision: 1, verifiedSealRevision: 1, finalizationState: "complete")
 check(
-  try archive.metadata(id: first.id, atRevision: beforeMetadata).warnings.isEmpty, "revision-bound metadata history")
+  try archive.metadata(id: first.id, atRevision: beforeMetadata).healthReason == nil
+    && archive.metadata(id: first.id).healthReason == "Later reason", "revision-bound metadata history")
+let healthFailure = try archive.create(
+  startedAt: fixedDate, indoor: true, watchEnabled: false, saveToHealth: true, recordGPS: false)
+try archive.update(id: healthFailure.id, healthKitState: "failed", healthReason: "The HealthKit session failed.")
+check(
+  try archive.metadata(id: healthFailure.id).dictionary["healthReason"] as? String == "The HealthKit session failed.",
+  "a Health save that did not succeed keeps its reason")
+try archive.update(id: healthFailure.id, healthReason: String(repeating: "x", count: 4096))
+check(
+  try archive.metadata(id: healthFailure.id).healthReason?.count == 500, "a long Health reason stays within bounds")
+try archive.update(id: healthFailure.id, healthKitState: "saved")
+check(
+  try archive.metadata(id: healthFailure.id).dictionary["healthReason"] == nil, "a later Health save clears the reason")
+let localOnly = try archive.create(
+  startedAt: fixedDate, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false)
+try archive.update(id: localOnly.id, healthReason: "A Watch mirror arrived while the phone owns a workout.")
+check(try archive.metadata(id: localOnly.id).healthReason == nil, "a ride without Health saving has no Health reason")
+let watchRide = try archive.create(
+  startedAt: fixedDate, indoor: true, watchEnabled: true, saveToHealth: true, recordGPS: false)
+try archive.updateSyncReason(id: watchRide.id, "Watch chunk exceeds bound")
+check(
+  try archive.metadata(id: watchRide.id).dictionary["syncReason"] as? String == "Watch chunk exceeds bound",
+  "a failed Watch import keeps its reason with the ride")
+let failedSyncRevision = try archive.revision(id: watchRide.id)
+try archive.updateSyncReason(id: watchRide.id, "Watch chunk exceeds bound")
+check(
+  try archive.revision(id: watchRide.id) == failedSyncRevision, "a repeated sync reason leaves the ride revision alone")
+try archive.updateSyncReason(id: watchRide.id, String(repeating: "y", count: 4096))
+check(try archive.metadata(id: watchRide.id).syncReason?.count == 500, "a long sync reason stays within bounds")
+try archive.updateSyncReason(id: watchRide.id, nil)
+check(
+  try archive.metadata(id: watchRide.id).dictionary["syncReason"] == nil, "a later successful sync clears the reason")
+let clearedSyncRevision = try archive.revision(id: watchRide.id)
+try archive.updateSyncReason(id: watchRide.id, nil)
+check(try archive.revision(id: watchRide.id) == clearedSyncRevision, "clearing an absent sync reason writes nothing")
+try archive.updateSyncReason(id: localOnly.id, "Watch data could not be archived")
+check(try archive.metadata(id: localOnly.id).syncReason == nil, "a phone ride has no Watch sync reason")
 try archive.append(health(first.id, seconds: 4))
 check(
   try archive.metadata(id: first.id).finalizationState == "pending",
@@ -496,7 +533,7 @@ for append in [false, true] {
   if append {
     try boundedArchive.append(health(ride.id, seconds: 1))
   } else {
-    try boundedArchive.update(id: ride.id, warnings: ["Last exact revision"])
+    try boundedArchive.update(id: ride.id, finalizationState: "partial")
   }
   check(try boundedArchive.revision(id: ride.id) == maximumRevision, "last exact collection revision commits")
   let before = try boundedArchive.metadata(id: ride.id)
@@ -506,13 +543,13 @@ for append in [false, true] {
       if append {
         try boundedArchive.append(health(ride.id, seconds: 2))
       } else {
-        try boundedArchive.update(id: ride.id, warnings: ["Must roll back"])
+        try boundedArchive.update(id: ride.id, finalizationState: "complete")
       }
     }, "collection revision cannot advance beyond the bound")
   let after = try boundedArchive.metadata(id: ride.id)
   check(
     after.collectionRevision == before.collectionRevision && after.eventCount == before.eventCount
-      && after.warnings == before.warnings, "failed collection write preserves prior metadata")
+      && after.finalizationState == before.finalizationState, "failed collection write preserves prior metadata")
   check(
     try boundedStore.read { try $0.scalarInt("SELECT count(*) FROM observations") } == originals,
     "failed collection write leaves no orphan original")
@@ -582,6 +619,26 @@ for revisions in [(maximumRevision + 1, 1, 1), (1, maximumRevision + 1, 1), (1, 
   rejectsRevision({ _ = try boundedTransfer.accept(seal: seal) }, "incoming seal revisions respect the bound")
   check(try boundedTransfer.currentSeal(id: sealedRide.id) == nil, "invalid incoming seal is never committed")
 }
+let replanned = try archive.create(
+  startedAt: fixedDate, indoor: false, watchEnabled: false, saveToHealth: false, recordGPS: true)
+func capture(_ seconds: Double) throws -> [WorkoutEvent] {
+  let at = fixedDate.addingTimeInterval(seconds)
+  return [
+    try WorkoutEvent(
+      workoutId: replanned.id, kind: "telemetry", source: "cyc", timestamp: at, elapsedSeconds: seconds,
+      payload: ["humanPowerW": .number(150), "cadenceRpm": .number(80)]),
+    try WorkoutEvent(
+      workoutId: replanned.id, kind: "location", source: "phone", timestamp: at, elapsedSeconds: seconds,
+      payload: ["latitude": .number(0), "longitude": .number(seconds * 0.00001), "horizontalAccuracyM": .number(3)]),
+    try health(replanned.id, seconds: seconds),
+  ]
+}
+for event in try capture(0) { try archive.append(event) }
+let preparedBefore = try store.read { $0.workForTesting.reprepares }
+for second in 1...20 { for event in try capture(Double(second)) { try archive.append(event) } }
+check(
+  try store.read { $0.workForTesting.reprepares } == preparedBefore,
+  "capture inserts of every stream reuse their statement plans")
 print(
   "SQLite storage: \(assertions) assertions passed; identity, exact values, atomic replay/receipt, revision/correction pages, start ordering, monotonic source seals across restart, bounds, crash recovery, single schema version; \(store.runtimeVersion)"
 )

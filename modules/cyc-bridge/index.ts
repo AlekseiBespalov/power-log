@@ -29,6 +29,17 @@ import type {
   MonitorChangesResult,
   NativeMonitorTarget,
 } from '../../src/core/monitor';
+import type {
+  ExportCommitResult,
+  ExportContext,
+  ExportDeflateResult,
+  ExportFileKind,
+  ExportOpenRequest,
+  ExportOpenResult,
+  ExportPageRequest,
+  NativeExportPage,
+  ProjectionName,
+} from '../../src/core/export/types';
 
 type Events = {
   onDevice: (device: Device) => void;
@@ -62,13 +73,21 @@ export declare class CycBridge extends NativeModule<Events> {
   /** Development builds only. */
   addExampleRides?(): Promise<{ added: number }>;
   readWorkout(id: string, distanceSource?: DistanceSource): Promise<WorkoutDetail>;
-  exportWorkout(id: string, distanceSource?: DistanceSource): Promise<string>;
-  exportWorkoutArchive(id: string): Promise<string>;
   getState(): Promise<NativeState>;
   getDiagnostics(): Promise<ConnectionDiagnostics>;
   startScan(): Promise<void>;
   stopScan(): Promise<void>;
   connect(options: ConnectionOptions): Promise<void>;
   disconnect(): Promise<void>;
+  exportOpen(request: ExportOpenRequest): Promise<ExportOpenResult>;
+  exportPage<P extends ProjectionName>(request: ExportPageRequest<P>): Promise<NativeExportPage<P>>;
+  exportClose(session: string): Promise<void>;
+  sinkOpen(kind: ExportFileKind, context: ExportContext): Promise<string>;
+  sinkWrite(id: string, bytes: Uint8Array): Promise<void>;
+  sinkWriteAt(id: string, offset: number, bytes: Uint8Array): Promise<void>;
+  sinkBeginDeflate(id: string): Promise<void>;
+  sinkEndDeflate(id: string): Promise<ExportDeflateResult>;
+  sinkCommit(id: string, name: string): Promise<ExportCommitResult>;
+  sinkAbort(id: string): Promise<void>;
 }
 export default requireOptionalNativeModule<CycBridge>('CycBridge');

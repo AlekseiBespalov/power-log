@@ -11,10 +11,10 @@ Cycling rides and CYC X6/X12 telemetry for iPhone, Android, Apple Watch and the 
 
 | Platform | Capabilities |
 | --- | --- |
-| iPhone | Native Bluetooth, optional GPS/Apple Health, Watch recording, Live Activities, FIT and original ZIP exports (including telemetry CSV) |
-| Android | Native Bluetooth, phone GPS, optional Health Connect saving, recording notification controls, FIT and original ZIP exports |
+| iPhone | Native Bluetooth, optional GPS/Apple Health, Watch recording, Live Activities, FIT and ride-data ZIP exports |
+| Android | Native Bluetooth, phone GPS, optional Health Connect saving, recording notification controls, FIT and ride-data ZIP exports |
 | Apple Watch | HealthKit/GPS, ride controls and automatic transfer to iPhone |
-| Web | Foreground Bluetooth recording, IndexedDB history, CSV import/export and responsive charts |
+| Web | Foreground Bluetooth recording, IndexedDB history, FIT and ride-data ZIP exports, CSV import and responsive charts |
 
 Web Bluetooth needs a compatible browser, such as Chrome on Android, and HTTPS or localhost. Keep the page active while recording; browser storage can be cleared or evicted. Browser distance settings offer Auto and Controller estimate.
 
@@ -29,7 +29,7 @@ npm ci
 npm run web
 ```
 
-The [website workflow](.github/workflows/pages.yml) deploys pushes to `main` to GitHub Pages after the full shared, browser, Swift and FIT checks pass for that commit. Set the repository's Pages source to **GitHub Actions**. For a local Pages build, run `npm run build:pages`; only `dist/` is published. See [public hosting](docs/security.md) for paths, environment isolation and privacy.
+The [website workflow](.github/workflows/pages.yml) builds each push to `main` and deploys it to GitHub Pages. It runs no tests: run `npm run verify` before pushing ([testing](docs/testing.md)). Set the repository's Pages source to **GitHub Actions**. For a local Pages build, run `npm run build:pages`; only `dist/` is published. See [public hosting](docs/security.md) for paths, environment isolation and privacy.
 
 ## Develop for iPhone and Watch
 
@@ -64,11 +64,11 @@ npm ci
 npm run build:android -- --preview
 ```
 
-This produces an installable release-mode preview APK. [Android setup](docs/android.md) covers emulator tests, background recording, optional Health Connect and signed APK releases through GitHub Actions. Android watch recording is not included.
+This produces an installable release-mode preview APK. [Android setup](docs/android.md) covers emulator tests, background recording, optional Health Connect and publishing signed APK releases from the Mac. Android watch recording is not included.
 
 ## Export to Strava
 
-On iPhone or Android: **History → saved ride → Export FIT**, then save the shared file, then **Open Strava upload** and select the file on [Strava's website](https://www.strava.com/upload/select). Export becomes available after saving/syncing finishes. No Strava account setup, API credentials or backend are needed in Power Log. Browser rides export CSV only.
+**History → saved ride → Export FIT**, then save the shared or downloaded file, then **Open Strava upload** and select the file on [Strava's website](https://www.strava.com/upload/select). Export becomes available after saving/syncing finishes. No Strava account setup, API credentials or backend are needed in Power Log. **Export ZIP** saves the ride's original data as CSV tables with a descriptor ([format](docs/storage.md#ride-data-zip)).
 
 ## Documentation
 

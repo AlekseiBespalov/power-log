@@ -590,14 +590,13 @@ print("Native Health effect adapter intent/result fault tests passed")
 // Acquisition time, never delivery age, maps local membership through wall changes and late delivery.
 var timeline = WorkoutTimelineAnchor(epoch: "process", monotonicOrigin: 1000, startedAt: WorkoutCoding.timestamp(stamp))
 let backwardsWall = try timeline.map(epoch: "process", acquisition: 1050, timestamp: stamp.addingTimeInterval(-3600))
-check(backwardsWall.eligible && backwardsWall.elapsed == 50 && backwardsWall.uncertainty == nil)
+check(backwardsWall.eligible && backwardsWall.elapsed == 50 && !backwardsWall.uncertain)
 timeline.stopMonotonic = 1100
 timeline.stopUTC = WorkoutCoding.timestamp(stamp.addingTimeInterval(100))
 let delayedPreStop = try timeline.map(epoch: "process", acquisition: 1099, timestamp: stamp.addingTimeInterval(99))
 check(delayedPreStop.eligible && delayedPreStop.elapsed == 99)
 check(try !timeline.map(epoch: "process", acquisition: 1101, timestamp: stamp.addingTimeInterval(99)).eligible)
-check(
-  try timeline.map(epoch: "new-process", acquisition: 20, timestamp: stamp.addingTimeInterval(99)).uncertainty != nil)
+check(try !timeline.map(epoch: "new-process", acquisition: 20, timestamp: stamp.addingTimeInterval(99)).eligible)
 print("Native acquisition timeline wall-change and delayed-stop tests passed")
 
 // Local double-lap admission fails before minting an origin sequence; stop queues behind the lap.
@@ -816,9 +815,7 @@ check(initialized.phase == "running" && initialized.elapsed == 60 && initialized
 check(initialized.metadata.eventCount == 1 && initialized.metadata.startedAt == WorkoutCoding.timestamp(stamp))
 let adoptedMapping = try initialized.timeline.map(
   epoch: "adopted-epoch", acquisition: 1005, timestamp: stamp.addingTimeInterval(-3600))
-check(
-  adoptedMapping.elapsed == 65 && adoptedMapping.eligible
-    && adoptedMapping.uncertainty?.contains("transit time") == true)
+check(adoptedMapping.elapsed == 65 && adoptedMapping.eligible && adoptedMapping.uncertain)
 print("Nonempty active adoption initializes phase and explicit uncertain epoch without confirming start again")
 
 // Recovered local effects have no phone replay and need no new delegate callback to release queued stop.
@@ -1149,6 +1146,80 @@ check(
     == activeMetadata)
 print("Historical late input reaches verified Health finality while a different owner stays active")
 
+for (power, deniedMetric) in [(-1.0, nil), (-1.0, "cadenceRpm"), (150.0, "humanPowerW")] as [(Double, String?)] {
+  let journal = try WatchWorkoutJournal(rootURL: root.appendingPathComponent(UUID().uuidString))
+  let id = UUID().uuidString.lowercased()
+  let cutoff = stamp.addingTimeInterval(10)
+  try journal.create(
+    id: id,
+    metadata: [
+      "workoutId": id, "startedAt": WorkoutCoding.timestamp(stamp), "phase": "completed",
+      "endedAt": WorkoutCoding.timestamp(cutoff), "stopElapsedSeconds": 10.0, "timerSeconds": 10.0,
+      "saveToHealth": true, "recordGPS": false, "healthKitState": "saved",
+      "finalHealthExtracted": true, "localRecorderEnded": true,
+    ])
+  check(try journal.archive.metadata(id: id).watchEnabled)
+  for (elapsed, action) in [(0.0, "start"), (10.0, "stop")] {
+    try journal.archive.append(
+      WorkoutEvent(
+        workoutId: id, kind: "lifecycle", source: "watch", timestamp: stamp.addingTimeInterval(elapsed),
+        elapsedSeconds: elapsed, payload: ["action": .string(action)]))
+  }
+  let frame = try WorkoutEvent(
+    workoutId: id, kind: "telemetry", source: "cyc", timestamp: stamp.addingTimeInterval(5), elapsedSeconds: 5,
+    payload: ["humanPowerW": .number(power), "cadenceRpm": .number(85)])
+  try journal.transfer.receiveLive([frame], producer: "cyc", firstSequence: 1)
+  let insertion = WorkoutHealthInsertionJournal(archive: journal.archive)
+  var bounds = WorkoutHealthWriteBounds()
+  let admitted = try insertion.admit([frame], bounds: &bounds, now: cutoff, historical: true)
+  var writes: [WorkoutHealthInsertionJournal.Write] = []
+  var completed = false
+  insertion.insert(
+    admitted, authorized: { $0 != deniedMetric },
+    operation: { values, done in
+      writes = values
+      done(.success(()))
+    },
+    completion: {
+      try! $0.get()
+      completed = true
+    })
+  check(completed)
+  check(writes.map(\.quantity.metric) == (deniedMetric == "cadenceRpm" ? [] : ["cadenceRpm"]))
+  let results = try insertion.metricResults(admitted)[frame.eventId]!
+  check(results["humanPowerW"] == (power < 0 ? "invalid" : "denied"))
+  check(results["cadenceRpm"] == (deniedMetric == "cadenceRpm" ? "denied" : "applied"))
+  var metadata = try journal.metadata(id: id)
+  check(WatchWorkoutJournal.applyTelemetryHealthResults(results, to: &metadata) == (deniedMetric != nil))
+  try journal.save(id: id, metadata: metadata)
+  let retained = try WatchWorkoutJournal(rootURL: journal.directory).metadata(id: id)
+  check((retained["cycHealthSamplesIncomplete"] as? Bool == true) == (deniedMetric != nil))
+  check(retained["cycHealthOutcome"] as? String == (deniedMetric == nil ? nil : "unavailable"))
+  check(
+    retained["error"] as? String
+      == (deniedMetric == nil
+        ? nil : "Health write access for CYC power or cadence is unavailable. Raw rider samples remain recorded."))
+  let outcome = try insertion.outcome(id: id)
+  check(outcome == (deniedMetric == nil ? "sealed" : "unavailable"))
+  let owner = try journal.control.observe(
+    workoutID: id, owner: "watch", phase: "completed", at: cutoff, health: "saved", cutoff: cutoff,
+    timing: WorkoutOwnerTiming(timestamp: WorkoutCoding.timestamp(cutoff), elapsedSeconds: 10, timerSeconds: 10))
+  let requirements = try WatchWorkoutJournal.requirements(retained, owner: owner, insertionOutcome: outcome)
+  check(requirements["cycInsertion"] == outcome)
+  let seal = WorkoutSeal(
+    workoutID: id, sealRevision: 1, collectionRevision: try journal.archive.metadata(id: id).collectionRevision!,
+    ownerRevision: owner.ownerRevision, stopCutoff: WorkoutCoding.timestamp(cutoff), healthOutcome: "saved",
+    requirements: requirements,
+    sources: try ["watch", "cyc"].map { try journal.transfer.source(id: id, producer: $0) },
+    stopElapsedSeconds: 10, timerSeconds: 10, saveToHealth: true, recordGPS: false)
+  check(seal.resolved && seal.partial == (deniedMetric != nil))
+  _ = try journal.transfer.accept(seal: seal)
+  check(try journal.transfer.verify(id: id))
+  let record = try journal.archive.metadata(id: id)
+  check(record.healthKitState == "saved" && record.finalizationState == (deniedMetric == nil ? "complete" : "partial"))
+}
+print("Watch CYC receipt metadata and seal distinguish invalid metrics from denied write access")
+
 // The very first accepted owner status may already be terminal; confirming its start never runs native effects.
 for firstPhase in ["running", "paused", "finishing", "completed"] {
   let firstStatusID = UUID().uuidString.lowercased()
@@ -1270,6 +1341,81 @@ try discardedJournal.create(
 check(try discardedJournal.metadataPage().first?.id == discardedID)
 print("Discarded rides retain automatic deletion delivery without a pending-ride warning")
 
+func recoveryRetainsCaptureElapsedAndRawHealthUTC() throws {
+  let start = try WorkoutCoding.date("2026-01-01T10:00:00.000Z")
+  let journal = try WatchWorkoutJournal(rootURL: root.appendingPathComponent("recovery-time-domains"))
+  let id = UUID().uuidString.lowercased()
+  let anchor = WorkoutTimelineAnchor(
+    epoch: "before-restart", monotonicOrigin: 100, startedAt: WorkoutCoding.timestamp(start))
+  let checkpoint = try WorkoutOwnerTiming(
+    timestamp: "2026-01-01T10:01:00.000Z", elapsedSeconds: 60, timerSeconds: 60)
+  try journal.create(
+    id: id,
+    metadata: [
+      "workoutId": id, "startedAt": anchor.startedAt, "phase": "running",
+      "saveToHealth": true, "recordGPS": true,
+      "timelineAnchor": WorkoutCoding.dictionary(anchor), "checkpoint": WorkoutCoding.dictionary(checkpoint),
+    ])
+  let beforeRestart = try WorkoutEvent(
+    workoutId: id, kind: "location", source: "watch", timestamp: WorkoutCoding.date(checkpoint.timestamp),
+    elapsedSeconds: 60,
+    payload: ["latitude": .number(0), "longitude": .number(0), "horizontalAccuracyM": .number(3)])
+  try journal.archive.append(beforeRestart)
+  let restarted = try WatchWorkoutJournal(rootURL: journal.directory)
+  var metadata = try restarted.recoverTiming(
+    id: id, epoch: "after-restart", uptime: 10, resumedAt: start.addingTimeInterval(660), running: true)
+  let retained = try WatchWorkoutJournal.timing(metadata)!
+  let resumed = try WatchWorkoutJournal.timeline(metadata)!
+  check(retained == checkpoint && resumed.startedAt == anchor.startedAt)
+  var clock = WorkoutTimelineAnchor.LocationClock()
+  let sampleEnd = try WorkoutCoding.date("2026-01-01T10:11:01.000Z")
+  let fix = try clock.map(
+    timestamp: sampleEnd, latitude: 0, longitude: 0, accuracy: 3,
+    receivedAt: sampleEnd, uptime: 11, anchor: resumed)!
+  check(fix.elapsed == 61 && clock.admit(fix))
+  let gps = try WorkoutEvent(
+    workoutId: id, kind: "location", source: "watch", timestamp: sampleEnd, elapsedSeconds: fix.elapsed,
+    payload: [
+      "latitude": .number(0), "longitude": .number(0), "horizontalAccuracyM": .number(3),
+      "clockEpoch": .string(fix.epoch), "acquisitionMonotonic": .number(fix.acquisition),
+    ])
+  try restarted.archive.append(gps)
+  let terminal = try retained.advancing(
+    anchor: resumed, at: start.addingTimeInterval(662), from: 10, to: 12, running: true)
+  check(terminal.elapsedSeconds == 62 && terminal.timerSeconds == 62)
+  WatchWorkoutJournal.retain(terminal, in: &metadata, terminal: true)
+  metadata["phase"] = "completed"
+  try restarted.save(id: id, metadata: metadata)
+  let healthID = UUID().uuidString.lowercased()
+  let health = try WorkoutEvent(
+    workoutId: id, kind: "health", source: "watch", timestamp: sampleEnd,
+    elapsedSeconds: restarted.healthElapsed(id: id, date: sampleEnd),
+    payload: [
+      "representation": .string("rawQuantity"), "healthKitIdentifier": .string("HKQuantityTypeIdentifierHeartRate"),
+      "sampleUUID": .string(healthID), "sampleCount": .number(1),
+      "sampleStart": .string(WorkoutCoding.timestamp(sampleEnd)),
+      "sampleEnd": .string(WorkoutCoding.timestamp(sampleEnd)),
+      "heartRateBpm": .number(123), "value": .number(123), "unit": .string("count/min"),
+    ], eventId: healthID)
+  check(health.elapsedSeconds == 661 && health.timestamp == gps.timestamp)
+  try restarted.archive.append(health)
+  let reopened = try WatchWorkoutJournal(rootURL: journal.directory)
+  let originals = try reopened.archive.pageEvents(id: id).map(\.event)
+  check(originals.first { $0.eventId == beforeRestart.eventId } == beforeRestart)
+  let retainedGPS = originals.first { $0.eventId == gps.eventId }!
+  check(retainedGPS.elapsedSeconds == 61 && retainedGPS.timestamp == "2026-01-01T10:11:01.000Z")
+  check(retainedGPS.number("acquisitionMonotonic") == 11)
+  let retainedHealth = originals.first { $0.eventId == healthID }!
+  check(retainedHealth.elapsedSeconds == 661 && retainedHealth.timestamp == retainedGPS.timestamp)
+  check(retainedHealth.payload["sampleStart"] == health.payload["sampleStart"])
+  check(retainedHealth.payload["sampleEnd"] == health.payload["sampleEnd"])
+  check(retainedHealth.number("heartRateBpm") == 123 && retainedHealth.number("value") == 123)
+  check(try WorkoutOwnerTiming.terminal(reopened.archive.metadata(id: id)) == terminal)
+  check(try reopened.archive.metadata(id: id).elapsedSeconds == 62)
+}
+try recoveryRetainsCaptureElapsedAndRawHealthUTC()
+print("Watch recovery retains GPS elapsed 61 and historical Health UTC placement 661 without widening terminal timing")
+
 let timingJournal = try WatchWorkoutJournal(rootURL: root.appendingPathComponent("retained-timing"))
 let timingID = UUID().uuidString.lowercased()
 let timingAnchor = WorkoutTimelineAnchor(
@@ -1305,7 +1451,7 @@ check(retained.elapsedSeconds == 14)
 check(retained.timerSeconds == 12)
 let resumedAnchor = try WatchWorkoutJournal.timeline(resumedMetadata)!
 check(resumedAnchor.startedAt == timingAnchor.startedAt && resumedAnchor.epoch == "new-process")
-check(resumedAnchor.uncertainty != nil)
+check(resumedAnchor.uncertain == true)
 check(
   try resumedAnchor.map(epoch: "new-process", acquisition: 3, timestamp: stamp.addingTimeInterval(10_000)).elapsed == 15
 )
@@ -1446,8 +1592,8 @@ for action in ["pause", "resume"] {
   let recoveredTiming = try WatchWorkoutJournal.timing(recoveredMetadata)!
   check(recoveredTiming.elapsedSeconds == 12 && recoveredTiming.timerSeconds == 6)
   check(recoveredTiming.timestamp == captured.timestamp)
-  check(recoveredMetadata["error"] as? String != nil)
-  check(try WatchWorkoutJournal.timeline(recoveredMetadata)?.uncertainty?.contains("Active time") == true)
+  check(recoveredMetadata["error"] == nil)
+  check(try WatchWorkoutJournal.timeline(recoveredMetadata)?.uncertain == true)
   _ = try WorkoutRecoveredOwnerCommand.reconcile(
     workoutID: transitionID, owner: "watch",
     nativePhase: nativeRunning ? "running" : "paused", observedAt: stamp.addingTimeInterval(1001),
@@ -1460,7 +1606,6 @@ for action in ["pause", "resume"] {
   let recoveredEvents = try timingRestart.archive.pageEvents(id: transitionID).map(\.event)
   let uncertainPause = recoveredEvents.first { $0.payload["action"] == .string("pause") && $0.elapsedSeconds == 8 }!
   check(uncertainPause.timestamp == checkpoint.timestamp && uncertainPause.payload["interrupted"] != .bool(true))
-  check(uncertainPause.payload["timelineMappingUncertainty"] != nil)
   check(recoveredEvents.first { $0.eventId == command.id }?.elapsedSeconds == 12)
   let hardBoundary = recoveredEvents.first { $0.payload["interrupted"] == .bool(true) }!
   check(hardBoundary.timestamp == captured.timestamp && hardBoundary.elapsedSeconds == 12)

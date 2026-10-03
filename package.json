@@ -22,7 +22,6 @@
     "test:swift": "sh scripts/test-swift.sh",
     "test:ios-bundle": "node scripts/check-ios-bundle.mjs",
     "test:native-config": "node --test tests/native-config/*.test.cjs",
-    "test:workout": "sh tests/workout-native/run.sh",
     "test:e2e": "playwright test",
     "build:web": "node scripts/build-pages.mjs /",
     "check": "npm run typecheck && npm run lint && sh scripts/format.sh --ts --check && npm test && npm run test:native-config && npm run test:security && npm run test:notices && npm run build:web",
@@ -38,7 +37,9 @@
     "android": "expo run:android",
     "prebuild:android": "node scripts/build-android.mjs --prepare",
     "build:android": "node scripts/build-android.mjs",
-    "test:android": "node scripts/test-android.mjs"
+    "test:android": "node scripts/test-android.mjs",
+    "verify": "sh scripts/verify.sh",
+    "release:android": "sh scripts/release-android.sh"
   },
   "dependencies": {
     "@expo/metro-runtime": "57.0.15",

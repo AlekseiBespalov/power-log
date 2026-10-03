@@ -2,19 +2,19 @@ package app.powerlog.bridge
 
 import android.Manifest
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
-import androidx.core.content.FileProvider
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import java.io.File
 
 class CycBridgeModule : Module() {
     private var healthContinuation: (() -> Unit)? = null
     private val engine
         get() = RecordingEngine.get(requireNotNull(appContext.reactContext))
+
+    private val exportSource by lazy { ExportSource.create(engine) }
+    private val exportSink by lazy { ExportSink.create(engine.context) }
 
     private val listener: (String, Payload) -> Unit = { name, value -> sendEvent(name, value) }
 
@@ -73,7 +73,12 @@ class CycBridgeModule : Module() {
         manager.askForPermissions({ submit(promise, body = after) }, *required.toTypedArray())
     }
 
-    private fun ridePermissions(input: Payload, promise: Promise, after: (RideOptions) -> Any?) {
+    private fun ridePermissions(
+        input: Payload,
+        promise: Promise,
+        requestHealth: Boolean = true,
+        after: (RideOptions) -> Any?,
+    ) {
         val options =
             try {
                 BridgeInputs.ride(input)
@@ -84,7 +89,7 @@ class CycBridgeModule : Module() {
         val effective = options.effective(engine.capabilities())
         val gps = effective.recordGPS
         val continueRequest = { after(options) }
-        if (!effective.saveToHealth) {
+        if (!effective.saveToHealth || !requestHealth) {
             permissions(gps, true, promise, continueRequest)
             return
         }
@@ -147,10 +152,15 @@ class CycBridgeModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("CycBridge")
         Events("onDevice", "onState", "onSample", "onWorkoutState")
-        OnCreate { engine.listeners.add(listener) }
+        OnCreate {
+            engine.listeners.add(listener)
+            exportSink.cleanup()
+        }
         OnDestroy {
             engine.listeners.remove(listener)
             healthContinuation = null
+            exportSource.closeAll()
+            exportSink.abortAll()
         }
         OnActivityResult { _, (requestCode, _, _) ->
             if (requestCode == 8642) {
@@ -204,7 +214,7 @@ class CycBridgeModule : Module() {
             ridePermissions(options, promise) { engine.permissionStatus() }
         }
         AsyncFunction("startWorkout") { options: Map<String, Any?>, promise: Promise ->
-            ridePermissions(options, promise) { input -> engine.start(input) }
+            ridePermissions(options, promise, requestHealth = false) { input -> engine.start(input) }
         }
         AsyncFunction("pauseWorkout") { id: String?, promise: Promise ->
             submit(promise) { engine.action("pause", id) }
@@ -232,26 +242,32 @@ class CycBridgeModule : Module() {
         }
         AsyncFunction("readWorkout") { id: String, source: String?, promise: Promise ->
             submit(promise, true) {
-                RideExport(engine.context, engine.store, engine.distance, engine.monitor)
+                RideDetail(engine.store, engine.distance, engine.monitor)
                     .detail(id, BridgeInputs.distanceSource(source ?: "auto").wire)
             }
         }
-        AsyncFunction("exportWorkout") { id: String, source: String?, promise: Promise ->
-            submit(promise, true) {
-                val distanceSource = BridgeInputs.distanceSource(source ?: "auto")
-                engine.store.withSavedRide(id) {
-                    RideExport(engine.context, engine.store, engine.distance, engine.monitor)
-                        .fit(id, distanceSource.wire)
-                }
-            }
+        AsyncFunction("exportOpen") { request: Map<String, Any?>, promise: Promise ->
+            exportSource.open(request, promise)
         }
-        AsyncFunction("exportWorkoutArchive") { id: String, promise: Promise ->
-            submit(promise, true) {
-                engine.store.withSavedRide(id) {
-                    RideExport(engine.context, engine.store, engine.distance, engine.monitor).archive(id)
-                }
-            }
+        AsyncFunction("exportPage") { request: Map<String, Any?>, promise: Promise ->
+            exportSource.page(request, promise)
         }
+        AsyncFunction("exportClose") { session: String, promise: Promise -> exportSource.close(session, promise) }
+        AsyncFunction("sinkOpen") { kind: String, context: Map<String, Any?>, promise: Promise ->
+            exportSink.open(kind, context, promise)
+        }
+        AsyncFunction("sinkWrite") { id: String, bytes: ByteArray, promise: Promise ->
+            exportSink.write(id, bytes, promise)
+        }
+        AsyncFunction("sinkWriteAt") { id: String, offset: Double, bytes: ByteArray, promise: Promise ->
+            exportSink.writeAt(id, offset, bytes, promise)
+        }
+        AsyncFunction("sinkBeginDeflate") { id: String, promise: Promise -> exportSink.beginDeflate(id, promise) }
+        AsyncFunction("sinkEndDeflate") { id: String, promise: Promise -> exportSink.endDeflate(id, promise) }
+        AsyncFunction("sinkCommit") { id: String, name: String, promise: Promise ->
+            exportSink.commit(id, name, promise)
+        }
+        AsyncFunction("sinkAbort") { id: String, promise: Promise -> exportSink.abort(id, promise) }
         listOf(
                 "describeMonitorSource" to MonitorOperation.Describe,
                 "readMonitorLatest" to MonitorOperation.Latest,
@@ -270,22 +286,10 @@ class CycBridgeModule : Module() {
         AsyncFunction("shareFile") { uri: String, promise: Promise ->
             try {
                 val context = requireNotNull(appContext.reactContext)
-                val source = File(requireNotNull(Uri.parse(uri).path)).canonicalFile
-                val cache = context.cacheDir.canonicalFile
-                require(source.path.startsWith(cache.path + File.separator) && source.isFile) {
-                    "Export file is unavailable."
-                }
-                val exported = File(File(cache, "exports").apply { mkdirs() }, source.name)
-                if (source != exported) source.copyTo(exported, true)
-                val shared =
-                    FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.powerlog.files",
-                        exported,
-                    )
+                val shared = ExportSharing.shareable(context, uri)
                 val intent =
                     Intent(Intent.ACTION_SEND)
-                        .setType(if (exported.extension == "csv") "text/csv" else "application/octet-stream")
+                        .setType(ExportSharing.mimeType(shared))
                         .putExtra(Intent.EXTRA_STREAM, shared)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 requireNotNull(appContext.currentActivity).startActivity(Intent.createChooser(intent, "Export ride"))

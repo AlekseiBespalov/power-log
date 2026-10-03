@@ -18,7 +18,11 @@ class LongRideTest {
         val distance = RideDistance(store)
         val monitor = RideMonitor(store, distance)
         try {
-            val id = store.create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false))
+            val id =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                    SystemRecordingClock.read(),
+                )
             val samples = 8 * 60 * 60 * 8
             val write = measureTimeMillis {
                 for (batch in 0 until samples step 512) store.transaction {
@@ -116,9 +120,6 @@ class LongRideTest {
             )
             assertTrue("History reads metadata only: $catalog ms", catalog < 2000)
             assertTrue("Full-ride plot must stay responsive: $plot ms", plot < 2000)
-            val exporter = RideExport(context, store, distance, monitor)
-            val fit = java.io.File(java.net.URI(exporter.fit(id, "auto")))
-            assertEquals(0, FitWriter.crc(fit.readBytes()))
         } finally {
             store.close()
             context.deleteDatabase("long-ride-test.sqlite")

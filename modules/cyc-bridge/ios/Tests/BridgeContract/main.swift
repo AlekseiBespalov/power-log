@@ -46,7 +46,7 @@ func snapshot(
   verifiedSealRevision: Int64? = nil, finalizationState: String? = nil, useWatch: Bool = false,
   saveToHealth: Bool = false, recordGPS: Bool = false, recoveryState: String = "idle",
   recoveryMessage: String? = nil, healthKitState: String = "notRequested", installed: Bool = false,
-  streams: RideStreamsSnapshot = off, warnings: [String] = [], error: String? = nil
+  streams: RideStreamsSnapshot = off, error: String? = nil
 ) -> RideSnapshot {
   RideSnapshot(
     supported: true, capabilities: capabilities, id: id, phase: phase, pendingAction: pendingAction,
@@ -55,7 +55,7 @@ func snapshot(
     finalizationState: finalizationState, indoor: false, useWatch: useWatch, saveToHealth: saveToHealth,
     recordGPS: recordGPS, recoveryState: recoveryState, recoveryMessage: recoveryMessage,
     healthKitState: healthKitState,
-    watch: RideWatchSnapshot(installed: installed), streams: streams, warnings: warnings, error: error)
+    watch: RideWatchSnapshot(installed: installed), streams: streams, error: error)
 }
 let snapshots: [String: RideSnapshot] = [
   "idle": snapshot(),
@@ -76,8 +76,7 @@ let snapshots: [String: RideSnapshot] = [
     id: rideID, phase: "recoverable", timerSeconds: 61, collectionRevision: 7, finalizationState: "pending",
     saveToHealth: true, recoveryState: "unresolved",
     recoveryMessage: "Stop requested from the original owner. No recording completion has been confirmed.",
-    healthKitState: "notSaved", warnings: ["GPS was unavailable for part of this ride."],
-    error: "Bluetooth is turned off."),
+    healthKitState: "notSaved", error: "Bluetooth is turned off."),
   "deletion signal": snapshot(
     historyRevision: "5b1d7c9e-0a4f-4e0b-8a61-7d2c3e9f4a10", lastDeletedWorkoutId: rideID),
   "largest safe revision": snapshot(

@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.database.DatabaseErrorHandler
+import android.database.sqlite.SQLiteCursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteException
 import android.database.sqlite.SQLiteOpenHelper
@@ -90,19 +91,46 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
     private val reads = mutableMapOf<String, Int>()
 
     fun <T> withSavedRide(id: String, body: () -> T): T {
+        retain(id)
+        try {
+            return body()
+        } finally {
+            release(id)
+        }
+    }
+
+    fun retain(id: String) =
         synchronized(reads) {
             check(metadata(id).str("phase") == "completed") { "Finish the ride before exporting." }
             reads[id] = (reads[id] ?: 0) + 1
         }
-        try {
-            return body()
-        } finally {
-            synchronized(reads) {
-                val count = reads.getValue(id) - 1
-                if (count == 0) reads.remove(id) else reads[id] = count
-            }
+
+    fun release(id: String) =
+        synchronized(reads) {
+            val count = reads.getValue(id) - 1
+            if (count == 0) reads.remove(id) else reads[id] = count
         }
-    }
+
+    // The factory binds each argument with its own SQLite type; rawQuery would bind every argument as text.
+    fun <T> select(sql: String, args: Array<Any>, read: (Cursor) -> T): T =
+        readableDatabase
+            .rawQueryWithFactory(
+                { _, driver, table, query ->
+                    args.forEachIndexed { index, value ->
+                        when (value) {
+                            is String -> query.bindString(index + 1, value)
+                            is Double -> query.bindDouble(index + 1, value)
+                            is Long -> query.bindLong(index + 1, value)
+                            else -> throw IllegalArgumentException("Unsupported query argument")
+                        }
+                    }
+                    SQLiteCursor(driver, table, query)
+                },
+                sql,
+                null,
+                "",
+            )
+            .use(read)
 
     init {
         setWriteAheadLoggingEnabled(true)
@@ -158,13 +186,18 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
         }
     }
 
-    fun create(options: RideOptions, live: Boolean = false, example: Boolean = false): String = transaction {
+    fun create(
+        options: RideOptions,
+        reading: RecordingClockReading,
+        live: Boolean = false,
+        example: Boolean = false,
+    ): String = transaction {
         val id = (if (live) "live-" else "") + UUID.randomUUID()
         val metadata =
             mapOf(
                 "schemaVersion" to 1,
                 "id" to id,
-                "startedAt" to iso(),
+                "startedAt" to reading.timestamp,
                 "phase" to "running",
                 "indoor" to options.indoor,
                 "watchEnabled" to false,
@@ -177,7 +210,6 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
                 "eventCount" to 0,
                 "interrupted" to false,
                 "healthKitState" to "notRequested",
-                "warnings" to emptyList<String>(),
                 "watchSyncState" to "notRequired",
                 "sampleHz" to options.sampleHz,
                 "example" to example,
@@ -187,24 +219,27 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
             null,
             ContentValues().apply {
                 put("id", id)
-                put("started", metadata["startedAt"] as String)
-                put("checkpoint_at", metadata["startedAt"] as String)
+                put("started", reading.timestamp)
+                put("checkpoint_at", reading.timestamp)
                 put("phase", "running")
                 put("metadata", json(metadata).toString())
             },
         )
-        lifecycle(id, RideTiming(0.0, 0.0, metadata["startedAt"] as String), "start")
+        lifecycle(id, RideTiming(0.0, 0.0, reading.timestamp), "start")
         id
     }
 
     fun metadata(id: String): Payload =
         readableDatabase.rawQuery("SELECT * FROM rides WHERE id=?", arrayOf(id)).use { c ->
             if (!c.moveToFirst()) error("This ride was deleted from Power Log.")
-            JSONObject(c.getString(c.getColumnIndexOrThrow("metadata"))).map() +
+            val stored = JSONObject(c.getString(c.getColumnIndexOrThrow("metadata"))).map()
+            val healthReason = (stored["healthExport"] as? Map<*, *>)?.get("reason") as? String
+            stored +
                 mapOf(
                     "phase" to c.text("phase"),
                     "collectionRevision" to c.long("revision"),
                     "elapsedSeconds" to c.double("elapsed"),
+                    "healthReason" to healthReason.takeIf { stored["healthKitState"] != "saved" },
                 )
         }
 
@@ -235,16 +270,12 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
     }
 
     fun healthStatus(id: String, result: HealthExportResult) {
-        val prior = metadata(id)
-        val previousReason = (prior["healthExport"] as? Map<*, *>)?.get("reason")
-        val warnings = (prior["warnings"] as? List<*>)?.filterIsInstance<String>().orEmpty()
         val data =
-            prior +
+            metadata(id) +
                 mapOf(
                     "healthKitState" to result.state,
                     "healthExport" to
                         mapOf("written" to result.written, "omitted" to result.omitted, "reason" to result.reason),
-                    "warnings" to (warnings.filter { it != previousReason } + listOfNotNull(result.reason)).distinct(),
                 )
         writableDatabase.execSQL(
             "UPDATE rides SET metadata=? WHERE id=?",
@@ -280,24 +311,6 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
             val bits = c.getLong(0)
             storedMetrics.filterIndexed { i, _ -> bits and (1L shl i) != 0L }
         }
-
-    fun eachChronological(id: String, body: (Observation) -> Unit) {
-        var time = -1.0
-        var last = 0L
-        while (true) {
-            val rows =
-                readableDatabase
-                    .rawQuery(
-                        "SELECT * FROM observations WHERE ride=? AND (time>? OR (time=? AND id>?)) ORDER BY time,id LIMIT 512",
-                        arrayOf(id, time.toString(), time.toString(), last.toString()),
-                    )
-                    .use { c -> buildList { while (c.moveToNext()) add(c.observation()) } }
-            if (rows.isEmpty()) return
-            rows.forEach(body)
-            time = rows.last().time
-            last = rows.last().id
-        }
-    }
 
     fun count(id: String, kind: String? = null): Long =
         readableDatabase
@@ -381,9 +394,9 @@ internal class RideStore(context: Context, name: String = "power-log.sqlite") :
         }
     }
 
-    fun replaceLive(): String = transaction {
+    fun replaceLive(reading: RecordingClockReading): String = transaction {
         writableDatabase.delete("rides", "id LIKE 'live-%'", null)
-        create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false), live = true)
+        create(RideOptions(indoor = false, saveToHealth = false, recordGPS = false), reading, live = true)
     }
 
     fun recoverOrphans() = transaction {

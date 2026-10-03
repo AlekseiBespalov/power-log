@@ -23,8 +23,6 @@ final class WorkoutArchive {
           try mutate(id: id) { m in
             m.phase = "recoverable"
             m.interrupted = true
-            let warning = "Workout was interrupted; recovery requires an explicit action."
-            if !m.warnings.contains(warning) { m.warnings.append(warning) }
           }
         }
         after = ids.last!
@@ -141,7 +139,7 @@ final class WorkoutArchive {
   @discardableResult
   func update(
     id: String, phase: String? = nil, healthKitState: String? = nil, healthKitUUID: String? = nil,
-    warnings: [String]? = nil, watchSyncState: String? = nil, sealRevision: Int64? = nil,
+    healthReason: String? = nil, watchSyncState: String? = nil, sealRevision: Int64? = nil,
     verifiedSealRevision: Int64? = nil, finalizationState: String? = nil, stopElapsedSeconds: Double? = nil,
     ownerTiming: WorkoutOwnerTiming? = nil, elapsedSeconds: Double? = nil
   ) throws -> WorkoutMetadata {
@@ -163,17 +161,13 @@ final class WorkoutArchive {
         m.healthKitState = healthKitState
       }
       if let healthKitUUID { m.healthKitUUID = try WorkoutCoding.id(healthKitUUID) }
+      if let healthReason { m.healthReason = String(healthReason.prefix(500)) }
+      if ["saved", "notRequested", "discarded"].contains(m.healthKitState) { m.healthReason = nil }
       if let watchSyncState {
         guard ["pending", "received", "notRequired"].contains(watchSyncState) else {
           throw WorkoutDataError.invalid("Invalid Watch synchronization state")
         }
         m.watchSyncState = watchSyncState
-      }
-      if let warnings {
-        guard warnings.count <= 64, warnings.allSatisfy({ $0.utf8.count <= 1024 }) else {
-          throw WorkoutDataError.invalid("Workout warnings exceed limit")
-        }
-        m.warnings = warnings
       }
       if let sealRevision {
         try PowerLogRevision.validate(sealRevision)
@@ -212,6 +206,12 @@ final class WorkoutArchive {
         m.elapsedSeconds = stopElapsedSeconds
       }
     }
+  }
+  func updateSyncReason(id: String, _ reason: String?) throws {
+    let current = try metadata(id: id)
+    let next = current.watchEnabled ? reason.map { String($0.prefix(500)) } : nil
+    guard current.syncReason != next else { return }
+    try mutate(id: id) { $0.syncReason = next }
   }
   func append(_ event: WorkoutEvent) throws { _ = try store.appendBatch([event]) }
   @discardableResult

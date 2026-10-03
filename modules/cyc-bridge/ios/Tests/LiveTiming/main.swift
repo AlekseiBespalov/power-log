@@ -566,7 +566,7 @@ let malformedData = try JSONSerialization.data(withJSONObject: malformed)
 check(
   (try? JSONDecoder().decode(WorkoutMetadata.self, from: malformedData)) == nil,
   "Catalog elapsed is required in storage")
-let summary = try settled { try WorkoutFIT.summarize(archive: archive, id: ride.id) }
+let summary = try settled { try WorkoutAnalysis.summarize(archive: archive, id: ride.id) }
 check(summary.elapsedSeconds == 20, "FIT summary prefers retained cutoff over a conflicting stop event")
 check(summary.endedAt == WorkoutCoding.timestamp(cutoff), "Summary retains the original backward cutoff UTC")
 let completed = try reader.readLatest(rideRequest)
@@ -652,7 +652,7 @@ try archive.append(health)
 try archive.confirmStart(id: provisional.id, startedAt: start.addingTimeInterval(100))
 try archive.update(id: provisional.id, stopElapsedSeconds: 10)
 try archive.finish(id: provisional.id, endedAt: start.addingTimeInterval(110))
-let healthSummary = try settled { try WorkoutFIT.summarize(archive: archive, id: provisional.id) }
+let healthSummary = try settled { try WorkoutAnalysis.summarize(archive: archive, id: provisional.id) }
 check(healthSummary.maximumHeartRateBpm == 123, "FIT retains admitted Health placement after start confirmation")
 check(
   try reader.readLatest(MonitorRequest(source: "workout", id: provisional.id, metrics: ["heartRateBpm"]))[

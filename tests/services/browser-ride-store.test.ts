@@ -49,7 +49,6 @@ describe('required browser ride metadata', () => {
     'timerSeconds',
     'checkpointAt',
     'availableMetrics',
-    'warnings',
     'lapCount',
   ])('rejects missing %s', field => {
     const record: Record<string, unknown> = { ...browserRide() };
@@ -69,7 +68,6 @@ describe('required browser ride metadata', () => {
     { timerSeconds: 1 },
     { indoor: 'false' },
     { interrupted: 1 },
-    { warnings: [null] },
     { availableMetrics: ['bogus'] },
   ])('rejects malformed fields: %j', patch => {
     expect(() => normalize({ ...browserRide(), ...patch })).toThrow();

@@ -144,3 +144,114 @@ describe('workout permission actions', () => {
     expect(workoutPermissionAction(value, phone).action).toBe('unavailable');
   });
 });
+
+const exerciseWrite = 'android.permission.health.WRITE_EXERCISE';
+const powerWrite = 'android.permission.health.WRITE_POWER';
+const distanceWrite = 'android.permission.health.WRITE_DISTANCE';
+const speedWrite = 'android.permission.health.WRITE_SPEED';
+const routeWrite = 'android.permission.health.WRITE_EXERCISE_ROUTE';
+function androidStatus(): WorkoutPermissionStatus {
+  return {
+    ...status(),
+    health: {
+      available: true,
+      provider: 'healthConnect',
+      requiredWrites: [exerciseWrite],
+      writeAuthorization: Object.fromEntries(
+        [exerciseWrite, powerWrite, distanceWrite, speedWrite, routeWrite].map(type => [type, 'authorized']),
+      ),
+    },
+  };
+}
+
+describe('Android Health Connect permission parity', () => {
+  it('has no setup action with all requested grants', () => {
+    expect(workoutPermissionAction(androidStatus(), phone)).toEqual(workoutPermissionAction(status(), phone));
+  });
+
+  it.each([
+    [powerWrite, 'HKQuantityTypeIdentifierCyclingPower'],
+    [distanceWrite, 'HKQuantityTypeIdentifierDistanceCycling'],
+    [speedWrite, 'HKQuantityTypeIdentifierCyclingSpeed'],
+    [routeWrite, 'HKWorkoutRouteTypeIdentifier'],
+  ])('offers setup for missing %s like an undetermined iPhone write type', (androidType, iphoneType) => {
+    const android = androidStatus();
+    android.health.writeAuthorization[androidType] = 'notDetermined';
+    const iphone = status();
+    iphone.health.writeAuthorization[iphoneType] = 'notDetermined';
+    expect(workoutPermissionAction(android, phone)).toEqual(workoutPermissionAction(iphone, phone));
+    expect(workoutPermissionAction(android, phone)).toMatchObject({ action: 'request', label: 'Set up permissions' });
+    iphone.health.writeAuthorization[iphoneType] = 'denied';
+    expect(workoutPermissionAction(iphone, phone)).toMatchObject({ action: 'settings', settingsTarget: 'health' });
+  });
+
+  it.each(['notDetermined', 'denied', 'unknown'])('offers setup when session access is %s', authorization => {
+    const android = androidStatus();
+    android.health.writeAuthorization[exerciseWrite] = authorization;
+    const iphone = status();
+    iphone.health.writeAuthorization.HKWorkoutTypeIdentifier = 'notDetermined';
+    expect(workoutPermissionAction(android, phone)).toEqual(workoutPermissionAction(iphone, phone));
+    expect(workoutPermissionAction(android, phone)).toMatchObject({ action: 'request', label: 'Set up permissions' });
+  });
+
+  it('offers setup for the initial Android payload with no grants', () => {
+    const android = androidStatus();
+    android.health.writeAuthorization = Object.fromEntries(
+      Object.keys(android.health.writeAuthorization).map(type => [type, 'notDetermined']),
+    );
+    expect(workoutPermissionAction(android, phone).action).toBe('request');
+  });
+
+  it('offers setup for speed and route when GPS is enabled after Health setup without GPS', () => {
+    const android = androidStatus();
+    android.health.writeAuthorization[routeWrite] = 'notDetermined';
+    android.health.writeAuthorization[speedWrite] = 'notDetermined';
+    const iphone = status();
+    iphone.health.writeAuthorization.HKWorkoutRouteTypeIdentifier = 'notDetermined';
+    iphone.health.writeAuthorization.HKQuantityTypeIdentifierCyclingSpeed = 'notDetermined';
+    const options = { ...phone, recordGPS: false };
+    expect(workoutPermissionAction(android, options)).toEqual(workoutPermissionAction(iphone, options));
+    expect(workoutPermissionAction(android, { ...options, recordGPS: true })).toEqual(
+      workoutPermissionAction(iphone, { ...options, recordGPS: true }),
+    );
+    expect(workoutPermissionAction(android, { ...options, recordGPS: true })).toMatchObject({
+      action: 'request',
+      label: 'Set up permissions',
+    });
+    expect(workoutPermissionAction(android, { ...phone, indoor: true }).action).toBe('none');
+    expect(workoutPermissionAction(android, { ...phone, indoor: true, recordGPS: true }).action).toBe('request');
+    android.health.writeAuthorization[powerWrite] = 'notDetermined';
+    expect(workoutPermissionAction(android, options)).toMatchObject({ action: 'request', label: 'Set up permissions' });
+  });
+
+  it.each([powerWrite, distanceWrite])('offers setup for missing %s even with GPS off', type => {
+    const android = androidStatus();
+    android.health.writeAuthorization[type] = 'notDetermined';
+    const options = { ...phone, indoor: true, recordGPS: false };
+    expect(workoutPermissionAction(android, options)).toMatchObject({ action: 'request', label: 'Set up permissions' });
+    const iphone = status();
+    iphone.health.writeAuthorization.HKQuantityTypeIdentifierDistanceCycling = 'notDetermined';
+    expect(workoutPermissionAction(iphone, options).action).toBe('none');
+  });
+
+  it('does not turn optional write grants into a location grant', () => {
+    const android = androidStatus();
+    const iphone = status();
+    android.location = iphone.location = 'notDetermined';
+    expect(workoutPermissionAction(android, phone)).toEqual(workoutPermissionAction(iphone, phone));
+    android.location = iphone.location = 'denied';
+    expect(workoutPermissionAction(android, phone)).toEqual(workoutPermissionAction(iphone, phone));
+  });
+
+  it('ignores Health grants for local-only recording and reports unavailable Health separately', () => {
+    const android = androidStatus();
+    android.health.available = false;
+    android.health.writeAuthorization = {};
+    const iphone = status();
+    iphone.health.available = false;
+    iphone.health.writeAuthorization = {};
+    const options = { ...phone, saveToHealth: false, recordGPS: false };
+    expect(workoutPermissionAction(android, options)).toEqual(workoutPermissionAction(iphone, options));
+    expect(workoutPermissionAction(android, phone)).toEqual(workoutPermissionAction(iphone, phone));
+  });
+});

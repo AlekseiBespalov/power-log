@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../fixtures/protocol.json';
 import { decodeIdentity, decodeSelectiveValues, toTelemetrySample } from '../../src/core/protocol';
-import { parseCsv } from '../support/csv';
-import { exportCsv } from '../helpers/export-csv';
 import { validateSample } from '../../src/core/validation';
 import {
   controllerSpeedPreferenceId,
@@ -39,17 +37,14 @@ describe('controller speed provenance and units', () => {
       });
       expect(result).not.toHaveProperty('speedMps');
       expect(result).not.toHaveProperty('productString');
-      expect(parseCsv(exportCsv([result])).samples).toEqual([result]);
     }
   });
   it('keeps unknown protocol and model variants raw and does not infer old recordings', () => {
     for (const profile of [undefined, identity('X6', 5, 4), identity('X12', 6, 3), identity('X6_Pro')]) {
       expect(toTelemetrySample(values, timing, profile)).not.toHaveProperty('controllerSpeedMps');
     }
-    const old = sample(0, { speedRaw: 24.75 });
-    expect(parseCsv(exportCsv([old])).samples).toEqual([old]);
   });
-  it('rejects missing, malformed or inconsistent unit provenance on import', () => {
+  it('rejects missing, malformed or inconsistent unit provenance in recorded samples', () => {
     const good = toTelemetrySample({ ...values, speedRaw: 36 }, timing, identity());
     for (const patch of [
       { controllerSpeedMps: 36 },

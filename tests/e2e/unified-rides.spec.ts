@@ -85,7 +85,8 @@ for (const width of [390, 1440])
     await expect(page.getByRole('tab', { name: 'Telemetry', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: /^Open ride,/ }).click();
     await expect(page.getByTestId('tab-transition-1').getByTestId('monitor-chart-power')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Export CSV', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Export ZIP', exact: true })).toBeEnabled();
     await expect(page.getByTestId('ride-distance-source')).toContainText('Controller estimate');
     await page
       .getByTestId('tab-transition-1')
@@ -127,7 +128,7 @@ for (const width of [390, 1440])
       contentType: 'text/plain',
     });
     await expect(monitorStatus.filter({ hasText: 'Chart error' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Export FIT', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Export CSV', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`saved-ride-${width}.png`), fullPage: true });
     await distanceChart.screenshot({ path: testInfo.outputPath(`saved-distance-chart-${width}.png`) });

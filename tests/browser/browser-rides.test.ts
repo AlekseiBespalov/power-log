@@ -96,9 +96,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
           const { recorder } = window.rideTests.createRecorder();
           const state = await recorder.getState();
           const record = await window.rideTests.store.get(id);
-          const uri = await recorder.export(id);
-          const csv = await (await fetch(uri)).text();
-          URL.revokeObjectURL(uri);
+          const csv = await window.rideTests.telemetryCsv(id);
           return { state, record, csv, repeated: await window.rideTests.store.recoverOrphan() };
         }, id);
         expect(result.record).toMatchObject({
@@ -112,9 +110,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         });
         expect(result.state.phase).toBe('completed');
         expect(result.repeated).toBeNull();
-        expect(parseCsv(result.csv).samples).toMatchObject([
-          { elapsedSeconds: 4, timestamp: cutoff, interruptionIndex: 0 },
-        ]);
+        expect(parseCsv(result.csv).samples).toMatchObject([{ elapsedSeconds: 4, timestamp: cutoff, run: 1 }]);
       }),
   );
 
@@ -316,9 +312,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         await recorder.stop(started.id!);
         const rows = await window.rideTests.store.page(started.id!, 0, 20),
           detail = await recorder.read(started.id!);
-        const uri = await recorder.export(started.id!),
-          csv = await (await fetch(uri)).text();
-        URL.revokeObjectURL(uri);
+        const csv = await window.rideTests.telemetryCsv(started.id!);
         const monitor = window.rideTests.monitor(started.id!),
           description = await monitor.describeSource({ generation: 1 });
         const query = {
@@ -397,7 +391,13 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(result.paused.statistics.humanPowerW?.sampleMean).toBeUndefined();
       expect(result.plot.series.humanPowerW?.some(point => point.value === 1000)).toBe(true);
       expect(result.csv.split('\n')).toHaveLength(7);
-      expect(parseCsv(result.csv).samples.every(sample => sample.interruptionIndex === 0)).toBe(true);
+      expect(parseCsv(result.csv).samples.map(sample => [sample.activeInterval, sample.run])).toEqual([
+        [1, 1],
+        [1, 1],
+        [null, 2],
+        [2, 3],
+        [2, 3],
+      ]);
     }));
 
   it('does not save on disconnect and freezes source identity while allowing same-bike reconnect', async () =>
@@ -963,9 +963,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
               }
               const distanceQueryMs = performance.now() - distanceQueryStarted;
               const csvStarted = performance.now(),
-                uri = await recorder.export(ride.id!),
-                blob = await (await fetch(uri)).blob();
-              URL.revokeObjectURL(uri);
+                csv = await window.rideTests.telemetryCsv(ride.id!);
               const csvMs = performance.now() - csvStarted;
               let tileBytes = 0,
                 tileCount = 0;
@@ -1039,7 +1037,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
                 expectedDistance,
                 actualDistance: detail.summary.distanceMeters,
                 coveredSeconds: detail.summary.distance?.selected?.coveredSeconds,
-                csvBytes: blob.size,
+                csvBytes: new TextEncoder().encode(csv).length,
                 csvMs,
                 timerSeconds: detail.summary.timerSeconds,
                 sampleCount: detail.metadata.eventCount,

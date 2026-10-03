@@ -121,7 +121,6 @@ _ = try archive.appendBatch([holeEvent], producer: "cyc", firstSequence: 2)
 let healthy = try ride(200)
 let holeOriginals = try WorkoutCoding.encoder().encode(archive.pageEvents(id: hole.id).map(\.event))
 check(try restarted.stageNextPending(), "broken oldest source does not block a healthy producer")
-check(restarted.deferredSource, "missing source is reported separately from healthy forwarding")
 check(
   try store.read { try $0.get(namespace: "telemetry-forward-cursor", key: hole.id) } == nil,
   "deferring a source hole cannot advance its cursor")
@@ -130,7 +129,10 @@ check(
   "deferring a source hole preserves all retained originals")
 let afterHole = WorkoutTelemetryForwarder(archive: archive)
 _ = try afterHole.stageNextPending()
-check(!afterHole.deferredSource, "durable revision-scoped fence avoids unchanged hole retries after recreation")
+check(
+  try store.read { try $0.get(namespace: "telemetry-forward-blocked", key: hole.id) }
+    == Data(String(archive.revision(id: hole.id)).utf8),
+  "durable revision-scoped fence avoids unchanged hole retries after recreation")
 let holeFirst = try WorkoutEvent(
   workoutId: hole.id, kind: "telemetry", source: "cyc", timestamp: start.addingTimeInterval(-1),
   elapsedSeconds: 0, payload: ["humanPowerW": .integer(90), "cadenceRpm": .integer(80)])

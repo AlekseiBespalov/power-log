@@ -45,7 +45,6 @@ struct RideSnapshot {
   let healthKitState: String
   let watch: RideWatchSnapshot
   let streams: RideStreamsSnapshot
-  let warnings: [String]
   let error: String?
 
   var wireMap: [String: Any] {
@@ -74,7 +73,7 @@ struct RideSnapshot {
           "accuracyMeters": streams.gps.accuracyMeters as Any? ?? NSNull(),
         ],
       ],
-      "warnings": warnings, "error": error as Any? ?? NSNull(),
+      "error": error as Any? ?? NSNull(),
     ]
   }
 }

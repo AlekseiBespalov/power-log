@@ -77,42 +77,19 @@ func originalFingerprint() throws -> [Data] {
   }
 }
 
-// Decode the actual standard FIT definition/data messages; inspect numeric wire fields.
-func fitMessages(_ url: URL) throws -> [(Int, [Int: UInt64])] {
-  let bytes = [UInt8](try Data(contentsOf: url))
-  func word(_ at: Int, _ count: Int) -> UInt64 { (0..<count).reduce(0) { $0 | UInt64(bytes[at + $1]) << ($1 * 8) } }
-  var offset = Int(bytes[0])
-  var definitions: [Int: (Int, [(Int, Int)])] = [:]
-  var result: [(Int, [Int: UInt64])] = []
-  let end = offset + Int(word(4, 4))
-  while offset < end {
-    let header = bytes[offset]
-    offset += 1
-    precondition(header & 0x80 == 0, "Generated FIT uses ordinary headers")
-    let local = Int(header & 15)
-    if header & 0x40 != 0 {
-      precondition(bytes[offset + 1] == 0, "Generated FIT uses little endian")
-      let global = Int(word(offset + 2, 2))
-      let count = Int(bytes[offset + 4])
-      offset += 5
-      var fields: [(Int, Int)] = []
-      for _ in 0..<count {
-        fields.append((Int(bytes[offset]), Int(bytes[offset + 1])))
-        offset += 3
-      }
-      definitions[local] = (global, fields)
-    } else {
-      let (global, fields) = definitions[local]!
-      var values: [Int: UInt64] = [:]
-      for (number, size) in fields {
-        let value = word(offset, size)
-        offset += size
-        if value != (UInt64(1) << (size * 8)) - 1 { values[number] = value }
-      }
-      result.append((global, values))
+func exportedMeters(_ id: String, distanceSource: String = "auto") throws -> Double? {
+  let snapshot = try distance.snapshot(id: id, selection: distanceSource)
+  guard snapshot.source != nil else { return nil }
+  var total = 0.0
+  var cursor: WorkoutDistanceCursor?
+  while true {
+    let job = try distance.intervals(snapshot: snapshot, after: cursor, limit: 128) { interval in
+      total += interval.meters
+      return true
     }
+    guard job.examined == 128, let last = job.last else { return total }
+    cursor = last
   }
-  return result
 }
 
 // Reproduce the production symptom: GPS originals with Health off and no cumulative Health snapshots.
@@ -138,6 +115,7 @@ let descriptor = try monitor.describeSource(MonitorRequest(source: "workout", id
 check(
   (descriptor["availableMetrics"] as? [String])?.contains("distanceMeters") == true,
   "distance availability is derived, independent of Health snapshot columns")
+check(descriptor["warnings"] == nil, "Monitor source description carries no ride notices")
 let last = curve.last!
 let identity = last["observationId"] as! String
 let time = last["elapsedSeconds"] as! Double
@@ -345,7 +323,7 @@ check(
   separatedHealth.last?["value"] as? Double == 1980,
   "only accepted nonoverlapping Health intervals contribute to the cumulative curve")
 
-// Compare real Monitor, summary, range and encoded FIT endpoints, including opt-in equivalence.
+// Compare real Monitor, summary and FIT distance intervals, including opt-in equivalence.
 for saves in [false, true] {
   let id = try create(health: saves)
   for i in 0...4 { try location(id, time: Double(i), longitude: Double(i) * 0.00005) }
@@ -353,33 +331,22 @@ for saves in [false, true] {
   _ = try archive.finish(id: id, endedAt: start.addingTimeInterval(4))
   let plot = try monitor.readPlot(request(id))
   let meters = points(plot).last!["value"] as! Double
-  let summary = try WorkoutFIT.summarize(archive: archive, id: id)
-  let output = root.appendingPathComponent(id + ".fit")
-  let exported = try WorkoutFIT.export(archive: archive, id: id, to: output)
-  let decoded = try fitMessages(output)
-  let session = decoded.first { $0.0 == 18 }!.1
-  let records = decoded.filter { $0.0 == 20 }.compactMap { $0.1[5] }
-  let laps = decoded.filter { $0.0 == 19 }.compactMap { $0.1[9] }
+  let summary = try WorkoutAnalysis.summarize(archive: archive, id: id)
+  let exported = try exportedMeters(id)!
   check(abs(meters - snapshot.totalMeters!) < 1e-9, "Health opt-in does not change GPS chart distance")
   check(
-    summary.distanceMeters == meters && exported.distanceMeters == meters,
-    "summary and FIT share Monitor's revisioned distance total")
-  check(
-    abs(Double(session[9]!) / 100 - meters) <= 0.0051 && abs(Double(records.last!) / 100 - meters) <= 0.0051,
-    "parsed FIT session and final record match Monitor within centimeter encoding")
-  check(
-    laps.count == 2 && abs(Double(laps.reduce(0, +)) / 100 - meters) <= 0.011,
-    "parsed GPS laps allocate the same covered distance")
+    summary.distanceMeters == meters && abs(exported - meters) < 1e-9,
+    "summary and FIT distance intervals share Monitor's revisioned distance total")
 }
 try append(health, time: 5, kind: "lifecycle", source: "phone", payload: ["action": .string("lap")])
 _ = try archive.finish(id: health, endedAt: start.addingTimeInterval(10))
-let healthFIT = root.appendingPathComponent("health.fit")
-_ = try WorkoutFIT.export(archive: archive, id: health, to: healthFIT)
-let decodedHealth = try fitMessages(healthFIT)
-check(decodedHealth.first { $0.0 == 18 }!.1[9] == 10_000, "Health full ride retains exact interval amount in FIT")
-check(
-  decodedHealth.filter { $0.0 == 19 }.allSatisfy { $0.1[9] == nil },
-  "parsed FIT omits lap distance at unresolved Health interval cuts")
+check(try exportedMeters(health) == 100, "Health full ride retains exact interval amount for FIT")
+for (from, to) in [(0.0, 5.0), (5.0, 10.0)] {
+  let lap = statistics(try monitor.rangeStats(request(health, from: from, to: to)))!
+  check(
+    lap["unresolvedBoundary"] as? Bool == true && lap["coveredSeconds"] as? Double == 0,
+    "a Health interval cut by a lap leaves that lap distance unavailable")
+}
 let controller = try create(indoor: true)
 for i in 0...2 {
   try append(
@@ -446,20 +413,13 @@ for selection in ["controller", "gps:phone", "auto", "controller", "gps:phone", 
   } else {
     check(info == nil, "unavailable profile never claims the requested source as measured provenance")
   }
-  let summary = try WorkoutFIT.summarize(archive: archive, id: mixed, distanceSource: selection)
+  let summary = try WorkoutAnalysis.summarize(archive: archive, id: mixed, distanceSource: selection)
   check(summary.distanceMeters == expected, "summary cache respects request choice at the same original revision")
-  let file = try root.appendingPathComponent(
-    WorkoutFIT.filename(revision: mixedRevision, seal: 1, distanceSource: selection))
-  let exported = try WorkoutFIT.export(archive: archive, id: mixed, to: file, distanceSource: selection)
-  let messages = try fitMessages(file)
-  let wire = messages.first { $0.0 == 18 }!.1[9]
-  check(exported.distanceMeters == expected, "FIT preparation captures explicit distance source")
+  let exported = try exportedMeters(mixed, distanceSource: selection)
   if let expected {
-    check(
-      wire != nil && abs(Double(wire!) / 100 - expected) <= 0.0051,
-      "wire session distance agrees with the selected summary")
+    check(exported.map { abs($0 - expected) < 1e-9 } == true, "FIT distance intervals follow the selected source")
   } else {
-    check(wire == nil, "unavailable source stays absent in standard FIT totals")
+    check(exported == nil, "an unavailable source gives FIT no distance profile")
   }
   if let point = plot.last {
     let anchor = MonitorObservationAnchor(metric: "distanceMeters", observationId: point["observationId"] as! String)
@@ -497,10 +457,6 @@ semanticChanges.sinceRevision = "distance:controller:\(mixedRevision)"
 check(
   try monitor.changesSince(semanticChanges)["resetRequired"] as? Bool == false,
   "matching interpretation uses ordinary original change tracking")
-check(
-  try WorkoutFIT.filename(revision: mixedRevision, seal: 1, distanceSource: "controller")
-    != WorkoutFIT.filename(revision: mixedRevision, seal: 1, distanceSource: "gps:phone"),
-  "concurrent source exports cannot overwrite each other's upload input")
 let beforeAppend = try store.collection(id: speed).int("revision")!
 try location(speed, time: 4, longitude: 0.0002)
 var changes = MonitorRequest(source: "workout", id: speed)
@@ -557,7 +513,7 @@ for boundary in ["interruption", "epoch", "connection"] {
   }
   _ = try archive.update(id: id, stopElapsedSeconds: 1)
   _ = try archive.finish(id: id, endedAt: start.addingTimeInterval(1))
-  let summary = try WorkoutFIT.summarize(archive: archive, id: id)
+  let summary = try WorkoutAnalysis.summarize(archive: archive, id: id)
   check(
     summary.elapsedSeconds == 1 && summary.timerSeconds == 1, "\(boundary) retains measured elapsed and active timing")
   check(
@@ -582,20 +538,6 @@ for boundary in ["interruption", "epoch", "connection"] {
     check(
       summary.routePreview.filter { $0["startsSegment"] == 1 }.count == 2,
       "\(boundary) route preview preserves separate runs")
-  }
-  let output = root.appendingPathComponent("boundary-" + boundary + ".fit")
-  _ = try WorkoutFIT.export(archive: archive, id: id, to: output)
-  let messages = try fitMessages(output)
-  let powers = messages.filter { $0.0 == 20 }.compactMap { $0.1[7] }
-  check(powers == [100, 300], "\(boundary) does not average opposite runs inside one FIT second")
-  if boundary == "interruption" {
-    let ordered = messages.filter { $0.0 == 21 || ($0.0 == 20 && $0.1[7] != nil) }
-    check(
-      ordered.map { $0.0 } == [21, 20, 21, 21, 20, 21],
-      "compressed interruption emits prior record, stop/start timer events, then resumed record")
-    check(
-      ordered.filter { $0.0 == 21 }.compactMap { $0.1[1] } == [0, 4, 0, 4],
-      "FIT timer ties follow owner sequence despite reverse UUID and transfer arrival order")
   }
 }
 for sameEpoch in [false, true] {
@@ -648,7 +590,7 @@ for sameEpoch in [false, true] {
     check(
       (inspected["points"] as? [String: [String: Any]])?["humanPowerW"]?["value"] as? Double == 200,
       "inspection between resumed cutoff and its next observation stays on the resumed side")
-    let summary = try WorkoutFIT.summarize(archive: archive, id: id, distanceSource: "controller")
+    let summary = try WorkoutAnalysis.summarize(archive: archive, id: id, distanceSource: "controller")
     check(
       abs(summary.telemetryCoveredSeconds - 1.1) < 1e-9 && abs((summary.riderWorkJoules ?? 0) - 120) < 1e-9,
       "FIT retains the valid integration edge after an equal-time restart")
@@ -754,7 +696,7 @@ for selection in ["controller", "gps:phone"] {
     check(
       selected(try monitor.inspectAt(request(id, at: 1 + gap / 2, selection: selection))) == nil,
       "\(selection) reconnect remains unsupported for inspection")
-    let summary = try WorkoutFIT.summarize(archive: archive, id: id, distanceSource: selection)
+    let summary = try WorkoutAnalysis.summarize(archive: archive, id: id, distanceSource: selection)
     check(summary.distanceMeters == profile.totalMeters, "\(selection) export summary retains measured distance")
   }
 }

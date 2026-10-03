@@ -7,7 +7,6 @@ const native = vi.hoisted(() => {
     getWorkoutPermissions: vi.fn(),
     requestWorkoutPermissions: vi.fn(),
     discardWorkout: vi.fn(),
-    exportWorkoutArchive: vi.fn(),
     listWorkouts: vi.fn(),
   };
   return { bridge: bridge as typeof bridge | null };
@@ -39,13 +38,11 @@ describe('native workout permissions', () => {
 
   it('dispatches required methods without per-method build gates', async () => {
     native.bridge!.discardWorkout.mockResolvedValue(unavailableWorkoutState);
-    native.bridge!.exportWorkoutArchive.mockResolvedValue('file:///example.zip');
     native.bridge!.listWorkouts.mockResolvedValue([]);
     await workouts.getPermissions();
     expect(native.bridge!.getWorkoutPermissions).toHaveBeenCalledOnce();
     expect(await workouts.discard('ride')).toEqual(unavailableWorkoutState);
     expect(native.bridge!.discardWorkout).toHaveBeenCalledExactlyOnceWith('ride');
-    expect(await workouts.exportOriginal('ride')).toBe('file:///example.zip');
     expect(await workouts.list()).toEqual({ records: [], unreadableCount: 0, unindexedCount: 0 });
   });
 

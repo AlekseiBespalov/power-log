@@ -29,7 +29,7 @@ for language in $languages; do
       ;;
     swift)
       if [ "$mode" = --write ]; then swift_args="format --in-place"; else swift_args="lint --strict"; fi
-      xcrun swift-format $swift_args --configuration .swift-format --recursive modules/cyc-bridge/ios apple/WatchApp apple/LiveActivity artifacts/app-store/source tests/workout-native tests/catalog-native scripts || status=1
+      xcrun swift-format $swift_args --configuration .swift-format --recursive modules/cyc-bridge/ios apple/WatchApp apple/LiveActivity artifacts/app-store/source tests/catalog-native scripts || status=1
       ;;
     kotlin)
       jar=$(ktfmt_jar) || { echo "Could not download ktfmt $ktfmt_version" >&2; status=1; continue; }

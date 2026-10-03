@@ -26,7 +26,6 @@ test('ride history pages beyond 100 IndexedDB records and refresh resets to the 
           timerSeconds: 60,
           checkpointAt: '2026-01-01T00:01:00.000Z',
           availableMetrics: [],
-          warnings: [],
           lapCount: 0,
         });
       tx.oncomplete = () => resolve();
@@ -62,7 +61,6 @@ test('ride history pages beyond 100 IndexedDB records and refresh resets to the 
         timerSeconds: 60,
         checkpointAt: '2026-01-02T00:01:00.000Z',
         availableMetrics: [],
-        warnings: [],
         lapCount: 0,
       });
       tx.oncomplete = () => resolve();
@@ -100,7 +98,6 @@ for (const width of [390, 1440])
             timerSeconds: 60,
             checkpointAt: '2026-01-02T00:01:00.000Z',
             availableMetrics: [],
-            warnings: [],
             lapCount: 0,
           });
           tx.objectStore('samples').put({ recordingId: id, sequence: 1, marker: id });
@@ -171,7 +168,6 @@ test('deleting the open ride closes its charts', async ({ page }) => {
         timerSeconds: 2,
         checkpointAt: rows[2]!.timestamp,
         availableMetrics: ['humanPowerW', 'cadenceRpm'],
-        warnings: [],
         lapCount: 0,
       });
       for (const sample of rows) tx.objectStore('samples').put({ ...sample, recordingId: 'open-record' });

@@ -2,14 +2,13 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { WorkoutProvider, useWorkout } from '../../src/services/workout-context';
 import { SavedRides } from '../../src/features/history/saved-rides';
-import { emit, workouts } from '../fixtures/history-deletion-backend';
+import { emit, exportHooks, workouts } from '../fixtures/history-deletion-backend';
 import * as platform from '../fixtures/history-deletion-platform';
 export * from '../fixtures/history-deletion-harness';
 
 type Held = { promise: Promise<void>; resolve(): void; reject(error: Error): void };
 const held = new Map<string, Held>();
-const exportRide = workouts.export,
-  removeRide = workouts.remove,
+const removeRide = workouts.remove,
   listRides = workouts.list,
   chooseCSV = platform.importRecording;
 let catalogFailure: string | undefined;
@@ -26,9 +25,8 @@ Object.assign(platform, {
     return chooseCSV();
   },
 });
-workouts.export = async (id, source) => {
+exportHooks.before = async id => {
   await held.get(`export:${id}`)?.promise;
-  return exportRide(id, source);
 };
 workouts.remove = async id => {
   await held.get(`remove:${id}`)?.promise;

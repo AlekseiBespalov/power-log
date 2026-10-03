@@ -25,7 +25,23 @@ check(try transfer.verify(id: metadata.id), "example seals verify")
 check(
   try transfer.currentSeal(id: metadata.id)?.sources.allSatisfy { $0.provenance == WorkoutExampleRides.provenance }
     == true, "seals carry generated provenance")
-let summary = try WorkoutFIT.summarize(archive: archive, id: metadata.id)
+let representations = try archive.store.read { db in
+  try db.rows(
+    "SELECT o.representation AS representation,count(*) AS rows,sum(h.heartRateBpm IS NOT NULL) AS heart,sum(h.activeEnergyKcal IS NOT NULL AND h.basalEnergyKcal IS NOT NULL AND h.distanceMeters IS NOT NULL) AS totals FROM collection_memberships m JOIN observations o ON o.id=m.observation_id JOIN health_samples h ON h.observation_id=m.observation_id WHERE m.collection_id=? AND m.kind='health' GROUP BY o.representation ORDER BY o.representation",
+    [.text(metadata.id)], limit: 8)
+}
+check(
+  representations.map { $0.string("representation") } == ["builderMostRecent", "cumulativeWorkoutTotal"],
+  "example Health rows use only the declared builder representations")
+let latest = representations[0]
+let cumulative = representations[1]
+check(
+  latest.int("heart") == latest.int("rows") && latest.int("totals") == 0 && latest.int("rows") == 91,
+  "heart rate is a most-recent builder value each second")
+check(
+  cumulative.int("totals") == cumulative.int("rows") && cumulative.int("heart") == 0 && cumulative.int("rows") == 91,
+  "energy and distance are cumulative workout totals each second")
+let summary = try WorkoutAnalysis.summarize(archive: archive, id: metadata.id)
 check(summary.elapsedSeconds >= 89, "example rides summarize their whole duration")
 let plot = try reader.readPlot(
   MonitorRequest(source: "workout", id: metadata.id, metrics: ["humanPowerW", "heartRateBpm"], buckets: 64))
