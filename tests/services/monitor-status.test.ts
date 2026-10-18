@@ -52,11 +52,21 @@ describe('monitor source status', () => {
     },
   );
 
-  it.each([true, false])('retains partial and unavailable status with live=%s', live => {
-    expect(monitorSourceStatus(source({ outcome: 'partial', availableMetrics: ['humanPowerW'] }), live)?.label).toBe(
-      live ? 'Missing readings' : 'Incomplete ride',
-    );
-    expect(monitorSourceStatus(source({ outcome: 'unavailable' }), live)?.label).toBe('No measurements');
-    expect(monitorSourceStatus(source({ outcome: 'available', availableMetrics: ['humanPowerW'] }), live)).toBeNull();
+  it('marks a saved ride without measurements', () => {
+    expect(monitorSourceStatus(source({ outcome: 'unavailable' }), false)?.label).toBe('No measurements');
+    expect(monitorSourceStatus(source({ outcome: 'available', availableMetrics: ['humanPowerW'] }), false)).toBeNull();
   });
+
+  it('shows available measurements without a partial-coverage warning', () => {
+    expect(monitorSourceStatus(source({ outcome: 'partial', availableMetrics: ['humanPowerW'] }), false)).toBeNull();
+  });
+
+  it.each(['pending', 'partial', 'available'] as const)(
+    'labels a live %s source only by whether measurements have arrived',
+    outcome => {
+      expect(monitorSourceStatus(source({ outcome }), true)?.label).toBe('Awaiting data');
+      const readings = ['humanPowerW', 'cadenceRpm', 'batteryInputPowerW', 'speedMps'];
+      expect(monitorSourceStatus(source({ outcome, availableMetrics: readings }), true)).toBeNull();
+    },
+  );
 });

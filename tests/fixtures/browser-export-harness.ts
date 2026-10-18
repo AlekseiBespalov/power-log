@@ -2,9 +2,11 @@ import type { ExportPage, ExportPageRequest, ExportSource, ProjectionName } from
 import { BROWSER_BATCH, browserRideStore, type BrowserRide, type RideRow } from '../../src/services/browser-ride-store';
 import { cleanBrowserExports, openBrowserExportSink } from '../../src/services/browser-export-sink';
 import { browserRow } from '../support/browser-ride';
+export { browserSummary } from '../../src/services/browser-analytics';
+export { exportFit } from '../../src/core/export/fit-export';
 export { crc32 } from '../../src/core/export/crc32';
 export { ExportError } from '../../src/core/export/types';
-export { ensureBrowserDistance } from '../../src/services/browser-distance-store';
+export { ensureBrowserDistance, browserDistanceStats } from '../../src/services/browser-distance-store';
 export { browserTransaction, idbRequest } from '../../src/services/browser-ride-store';
 export { BrowserExportSource, browserExportSource } from '../../src/services/browser-export-source';
 export { BROWSER_EXPORT_MEMORY_LIMIT } from '../../src/services/browser-export-sink';
@@ -16,10 +18,10 @@ export const at = (seconds: number) => new Date(START + seconds * 1000).toISOStr
 
 export type SeedRow = Partial<Omit<RideRow, 'recordingId' | 'sequence'>> & { elapsedSeconds: number };
 export type SeedStep =
-  { rows: SeedRow[] } | { action: 'pause' | 'resume' | 'lap' | 'save'; elapsed: number; timer?: number };
+  { rows: SeedRow[] } | { action: 'pause' | 'resume' | 'lap' | 'stop'; elapsed: number; timer?: number };
 
 export async function seedRide(steps: SeedStep[]): Promise<BrowserRide> {
-  let record = await browserRideStore.begin(OWNER, true, at(0));
+  let record = await browserRideStore.begin(OWNER, { indoor: true, recordGPS: false, sampleHz: 2 }, at(0));
   let sequence = 0;
   for (const step of steps) {
     if ('action' in step) {

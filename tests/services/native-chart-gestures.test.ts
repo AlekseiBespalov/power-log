@@ -135,6 +135,32 @@ describe('production native gesture callbacks', () => {
     expect(shared.value.cursor).toBe(50);
     expect(receive).toHaveBeenLastCalledWith(expect.objectContaining({ final: true, cursor: 50 }));
   });
+  it('moves the selected original horizontally when the finger stays below the line', () => {
+    const points = [40, 50, 60, 70].map((elapsedSeconds, index) => ({
+      elapsedSeconds,
+      value: 80 + index,
+      observationId: `sample:${index}`,
+      timestamp: new Date(Date.UTC(2026, 0, 1) + elapsedSeconds * 1000).toISOString(),
+      startsSegment: index === 0,
+    }));
+    const { shared, receive, nav, inspect } = setup({
+      key: 'view:1',
+      sourceId: 'ride',
+      revision: '7',
+      height: 134,
+      min: 0,
+      max: 100,
+      series: [{ metric: 'energyWh', scale: 1, points }],
+    });
+    nav.onTouchesDown!({ numberOfTouches: 1 });
+    inspect.onStart!({ numberOfPointers: 1, x: 108, y: 120 });
+    expect(shared.value.snap?.point).toBe(points[1]);
+    inspect.onUpdate!({ numberOfPointers: 1, x: 142, y: 120 });
+    expect(shared.value.snap?.point).toBe(points[2]);
+    inspect.onFinalize!({ x: 174, y: 120 });
+    expect(shared.value.snap?.point).toBe(points[3]);
+    expect(receive).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 70, final: true }));
+  });
   it('uses terminal touch coordinates for pan settlement and suppresses the remaining finger', () => {
     const { shared, receive, nav, inspect, tap } = setup();
     nav.onTouchesDown!({ numberOfTouches: 1 });

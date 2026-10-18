@@ -1,4 +1,6 @@
+import { InspectionRequestGate, InspectionRequestContext, inspectionContextsMatch } from '../../../shared/js';
 import type { MonitorSnap } from '../../core/monitor-hit-test';
+import { presentFailure } from '../../core/failures';
 import { clampChartViewport, type ChartViewport } from '../../core/chart-viewport';
 import type {
   MonitorData,
@@ -41,25 +43,31 @@ const executionLane = (kind: ReadKind): ReadExecutionLane =>
   kind === 'plot' ? 'plot' : kind === 'statistics' || kind === 'comparison' ? 'statistics' : 'fast';
 /** Generations govern publication; the shared scheduler governs actual execution. */
 class ReadLane {
-  private generation = 0;
+  private gate = new InspectionRequestGate();
   constructor(
     private readonly consumer: string,
     private readonly kind: ReadKind,
   ) {}
   invalidate() {
-    this.generation++;
+    this.gate.cancel();
     reads.cancel(this.consumer, this.kind);
   }
-  run<T>(operation: (generation: number) => Promise<T>, accept: (value: T) => void, reject: (error: unknown) => void) {
-    const generation = ++this.generation;
+  run<T extends MonitorEnvelope>(
+    context: InspectionRequestContext,
+    operation: (generation: number, signal: AbortSignal) => Promise<T>,
+    accept: (value: T) => void,
+    reject: (error: unknown) => void,
+  ) {
+    const ticket = this.gate.begin(context);
+    const generation = Number(ticket.generation);
     void reads
-      .schedule(executionLane(this.kind), this.consumer, this.kind, () => operation(generation))
+      .schedule(executionLane(this.kind), this.consumer, this.kind, signal => operation(generation, signal))
       .then(
         value => {
-          if (generation === this.generation) accept(value);
+          if (this.gate.acceptsGeneration(ticket, String(value.generation))) accept(value);
         },
         error => {
-          if (generation === this.generation) reject(error);
+          if (this.gate.accepts(ticket)) reject(error);
         },
       );
   }
@@ -353,7 +361,7 @@ export class MonitorReadController {
       selectionRevision: selectionResult?.revision,
       referenceRevision: endpointsMatch ? referenceResult?.revision : undefined,
       selectionPending,
-      selectionSeconds: selectionResult?.seconds ?? this.state.cursorSeconds ?? undefined,
+      selectionSeconds: selectionResult?.seconds,
       referenceSeconds: this.state.referenceSeconds ?? undefined,
     });
     this.state = { ...this.state, intervalStatistics, data };
@@ -361,16 +369,22 @@ export class MonitorReadController {
 
   private request<T extends MonitorEnvelope & { status: string }>(
     kind: ReadKind,
-    operation: (generation: number) => Promise<T>,
+    operation: (generation: number, signal: AbortSignal) => Promise<T>,
     accept: (result: T, semanticKey?: string) => void,
   ) {
     if (!this.active || this.disposed) return;
     const semanticKey = this.source.semanticKey;
     this.emit({ loading: { ...this.state.loading, [kind]: true } });
     this.lanes[kind].run(
-      async generation => {
-        const result = await operation(generation);
-        if (result.generation !== generation) throw new Error('Source returned an invalid request generation.');
+      new InspectionRequestContext(
+        this.state.description?.sourceId ?? this.source.key,
+        this.state.description?.revision ?? 'unresolved',
+        this.source.semanticKey?.startsWith('distance:') ? this.source.semanticKey.slice(9) : 'auto',
+        String(this.state.interactionVersion),
+        '0',
+      ),
+      async (generation, signal) => {
+        const result = await operation(generation, signal);
         if ((kind === 'source' || kind === 'changes') && result.status !== 'ok') throw new ReadDeferred();
         return result;
       },
@@ -393,18 +407,28 @@ export class MonitorReadController {
           deferred: { ...this.state.deferred, [kind]: readPressure(error) },
           errors: readPressure(error)
             ? this.state.errors
-            : { ...this.state.errors, [kind]: error instanceof Error ? error.message : String(error) },
+            : { ...this.state.errors, [kind]: presentFailure(error).text },
         });
       },
     );
   }
   private current(result: MonitorEnvelope & { status: 'ok' | 'retry' }, admitted = this.state.description) {
     const latest = this.state.description;
+    const context = (sourceId: string, revision: string) =>
+      new InspectionRequestContext(
+        sourceId,
+        revision,
+        this.source.semanticKey?.startsWith('distance:') ? this.source.semanticKey.slice(9) : 'auto',
+        String(this.state.interactionVersion),
+        '0',
+      );
+    const received = context(result.sourceId, result.revision);
     if (
       result.status === 'retry' ||
-      result.sourceId !== latest?.sourceId ||
-      result.sourceId !== admitted?.sourceId ||
-      result.revision !== admitted.revision
+      !admitted ||
+      !latest ||
+      !inspectionContextsMatch(context(admitted.sourceId, admitted.revision), received) ||
+      !inspectionContextsMatch(context(latest.sourceId, admitted.revision), received)
     ) {
       if (!this.retryScheduled) {
         this.retryScheduled = true;
@@ -460,7 +484,7 @@ export class MonitorReadController {
     if (external) this.retryScheduled = false;
     this.request(
       'source',
-      generation => this.source.describeSource({ generation }),
+      (generation, signal) => this.source.describeSource({ generation, signal }),
       description => {
         const previous = this.state.description;
         const replaced = previous !== undefined && previous.sourceId !== description.sourceId;
@@ -477,7 +501,8 @@ export class MonitorReadController {
           const previousPlot = this.plot;
           this.request(
             'changes',
-            generation => this.source.changesSince({ generation, sinceRevision: previousPlot.revision }),
+            (generation, signal) =>
+              this.source.changesSince({ generation, signal, sinceRevision: previousPlot.revision }),
             changes => {
               if (
                 changes.sourceId !== description.sourceId ||
@@ -504,7 +529,6 @@ export class MonitorReadController {
               )
                 this.readGeometry(false);
               else {
-                // The journal proves geometry in this fixed window unchanged through R.
                 this.plot = { ...previousPlot, revision: changes.revision };
                 this.readStatistics(false);
               }
@@ -552,7 +576,7 @@ export class MonitorReadController {
     const metrics = [...this.metrics];
     this.request(
       'latest',
-      generation => this.source.readLatest({ generation, metrics }),
+      (generation, signal) => this.source.readLatest({ generation, signal, metrics }),
       (result, semanticKey) => {
         if (
           result.status !== 'ok' ||
@@ -649,10 +673,11 @@ export class MonitorReadController {
     let admitted = description;
     this.request(
       'plot',
-      generation => {
+      (generation, signal) => {
         admitted = this.state.description ?? description;
         return this.source.readPlot({
           generation,
+          signal,
           expectedRevision: admitted.revision,
           metrics,
           startSeconds: view.start,
@@ -686,10 +711,11 @@ export class MonitorReadController {
     let admitted = description;
     this.request(
       'statistics',
-      generation => {
+      (generation, signal) => {
         admitted = this.state.description ?? description;
         return this.source.rangeStats({
           generation,
+          signal,
           expectedRevision: admitted.revision,
           metrics,
           startSeconds: view.start,
@@ -718,10 +744,11 @@ export class MonitorReadController {
     const anchor = kind === 'cursor' ? this.cursorAnchor : this.referenceAnchor;
     this.request(
       kind,
-      generation => {
+      (generation, signal) => {
         admitted = this.state.description ?? description;
         return this.source.inspectAt({
           generation,
+          signal,
           expectedRevision: admitted.revision,
           metrics,
           seconds,
@@ -753,10 +780,11 @@ export class MonitorReadController {
       endAnchor = forward ? this.cursorAnchor : this.referenceAnchor;
     this.request(
       'comparison',
-      generation => {
+      (generation, signal) => {
         admitted = this.state.description ?? description;
         return this.source.rangeStats({
           generation,
+          signal,
           expectedRevision: admitted.revision,
           metrics,
           startSeconds: Math.min(startSeconds, endSeconds),
@@ -829,7 +857,6 @@ export class MonitorReadController {
         revision: validSnap.revision,
         seconds: validSnap.point.elapsedSeconds,
         points: {
-          ...(this.selection?.revision === validSnap.revision ? this.selection.points : {}),
           [validSnap.metric]: validSnap.point,
         },
         gaps: {},
@@ -902,7 +929,6 @@ export class MonitorReadController {
         this.state = { ...this.state, loading: { ...this.state.loading, statistics: false } };
       }
       this.interacting = true;
-      // Move the retained drawing immediately; never issue one database cohort per touch.
       if (!this.detailTimer)
         this.detailTimer = setTimeout(() => {
           this.detailTimer = undefined;

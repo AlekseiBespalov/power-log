@@ -6,6 +6,7 @@ The sheets scale existing captures into a grid; no app content is composited or 
 """
 from PIL import Image, ImageDraw, ImageFont
 import os
+import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'screenshots')
 OUT = os.path.join(ROOT, 'overview')
@@ -60,5 +61,9 @@ def compose(name, title, folder, per_row, width, items):
     print(f'{os.path.relpath(path, ROOT)}  {canvas.size[0]} x {canvas.size[1]}')
 
 
+selected = set(sys.argv[1:]) or {sheet[2] for sheet in SHEETS}
+if selected - {sheet[2] for sheet in SHEETS}:
+    raise SystemExit('Usage: overview-sheets.py [iphone web macos]')
 for name, title, folder, per_row, width, items in SHEETS:
-    compose(name, title, folder, per_row, width, items)
+    if folder in selected:
+        compose(name, title, folder, per_row, width, items)

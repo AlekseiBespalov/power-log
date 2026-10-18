@@ -1,30 +1,43 @@
 # Power Log contributor instructions
 
-Power Log reads CYC X6 and X12 telemetry and records cycling workouts with a SwiftUI Apple Watch companion. The iPhone app uses React Native/Expo with native Swift transport and durable capture. Android implements the same interfaces in Kotlin with a foreground recording service, phone GPS, SQLite and optional Health Connect saving; Android watch recording is excluded. Web supports analysis and foreground rides through IndexedDB. Ride and History are shared product concepts; telemetry is a measurement source, not a separate recording mode. iPhone rides export FIT files for manual upload on Strava's website; there is no account integration or relay.
+Power Log records cycling rides from CYC X6/X12 telemetry, GPS and Health. React Native/Expo shares the phone UI;
+Swift owns iPhone capture and the SwiftUI Watch companion, Kotlin owns Android's foreground service, and web uses
+foreground capture with IndexedDB. Product and design decisions are in [docs/decisions.md](docs/decisions.md); check
+them before changing behaviour.
+
+`shared/` supplies pure Kotlin Multiplatform `telemetry` (decoder in `telemetry.cyc`), `gps`, `analytics`,
+`inspection`, `presentation`, `completion`, `lifecycle`, `health` and `protocol` packages. iPhone consumes
+`PowerLogCore.xcframework`, Android the JVM artifact, TypeScript generated `shared/js/`. Platform adapters own
+IO, transactions, clocks and scheduling. The [code map](docs/architecture.md#code-map) lists the files behind each
+concept. Searches skip generated `shared/js/*.mjs`, `package-lock.json` and App Store screenshots (`.ignore`); use
+`rg --no-ignore` to include them.
+
+## Hard rules
+
+- Only controller requests 111 (identity) and 50 (selective telemetry). No drive, configuration, calibration,
+  firmware or keepalive command, and no arbitrary Bluetooth write API.
+- Local recordings are private. Never copy device identifiers, raw identity serials, personal ride locations or
+  credentials into tracked fixtures, and never send or upload records without a rider action.
+- Until the first public release every change is made in place, with no migrations, compatibility readers or dual
+  paths; an unreadable store is still refused visibly, never erased.
+- The rider never hits a dead end: every waiting state offers an explicit action.
 
 ## Boundaries
-- Keep routes thin in `src/app/`; domain code in `src/core/`; feature UI in `src/features/`; reusable primitives in `src/components/`; platform access in `src/services/` and `modules/cyc-bridge/`.
-- Monitoring presets are independently configurable. Use the shared metric catalog, MonitorSource query boundary and multi-lane chart component for live/history; do not reintroduce a two-minute retention cap. Preserve original exact cursor/minimum/A-B observations independently of chart decimation. Different units use aligned lanes, and source/selection changes must invalidate stale query results.
-- iPhone and Android share the same TypeScript screen layout, bottom tabs, controls, gestures, animations and haptic actions. Branch on native versus web for presentation, not iOS versus Android. Platform-specific permissions, health providers and capabilities remain in adapters. Web may change responsive placement and interaction handles; chart and reading surfaces, metric colors and labels remain consistent. Charts use dark cards with visible borders on every platform, including empty charts; summary readings sit directly on the containing panel.
-- Hardware operations and capture must survive an inactive React UI. Never make JavaScript timers the mobile background recorder.
-- Only identity 111 and selective telemetry 50 are permitted controller requests in this app. No drive/configuration/calibration/firmware/COMM_ALIVE commands. Do not expose an arbitrary BLE write API.
-- Rider power is never motor electrical input power; label battery input watts accurately. CYC cadence is smoothed RPM.
-- Missing or stale capture data is unavailable, never synthetic zero power. By explicit user preference, the UI masks interruptions shorter than six seconds: retain the last values and normal connection appearance, and keep chart lines visually continuous. At six seconds it displays unavailable and exposes the reconnect error. Chart continuity and a live held tail are rendering only: never create TelemetrySample objects, recorded samples, HealthKit data or exports from a held value. Chart inspection must retain original observation timestamps; longer gaps remain visible. Preserve crank counters across reconnects and record actual gaps. Reject unknown/malformed frames.
-- Clearly distinguish live device data from generated example rides. Example rides carry generated provenance and omit the Strava upload-page shortcut.
-- Local recordings are private. Do not copy device identifiers, raw identity serials, personal ride locations or credentials into tracked fixtures. Do not send or upload records without user action.
+
+- Keep routes thin in `src/app/`; domain code in `src/core/`; feature UI in `src/features/`; reusable primitives in `src/components/`; platform access in `src/services/` and `modules/power-log-bridge/`.
+- Use the shared metric catalog, MonitorSource query boundary and multi-lane chart component for live and History charts.
+- Keep platform-specific permissions, Health providers and capabilities in adapters.
 - Keep native generated `ios/` and `android/` application folders reproducible with Expo prebuild/config plugins. Maintained native sources live in `modules/` and `apple/`; Watch tests must not enter the application source phase.
-- One native owner per ride: Watch when selected, phone otherwise. With Watch and Health saving off, the phone owns a local lifecycle without HealthKit. GPS and Health choices are frozen at Start; skipping Health must never become a later save or discard of the local ride. Do not equate HealthKit saved status with complete local Watch synchronization. Preserve timestamps and stable event IDs across live/recovery transfers, and enforce recording verification before export.
-- Historical samples retain their original sample time. Display freshness must not discard valid HealthKit backfill. No motor power or controller temperature may masquerade as rider power or ambient temperature.
-- Strava sharing is manual: export FIT and open the official upload page only after user action. Do not collect Strava credentials or add automatic uploads.
 
 ## Engineering
+
 - Use Conventional Commits: `type(scope): concise imperative description`, with an optional scope. Choose the matching type: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `ci`, `build`, or `chore`.
-- Until the first public release, every change is made in place: schemas, storage keys, database names, cache formats, bridge fields and Watch↔phone messages are edited directly, with no migrations, upgrade code, compatibility readers, transitional dual paths, version-triggered rebuilds or stored policy versions. Local recordings, caches and settings are disposable; testers reinstall the phone and Watch apps together and clear browser site data when a store changes. Failure handling still applies: never erase or hide an unreadable store. From the first public release on, each schema or derived-format change ships its own forward migration or cache invalidation.
 - Code is formatted by Prettier, swift-format and ktfmt at 120 columns (`sh scripts/format.sh`). One statement per line; at most one level of nested ternary; typed domain records at boundaries, with metric-keyed maps allowed. There is no file-length rule.
 - TypeScript strict mode with unused-local/parameter checks; explicit domain types; isolate platform APIs behind typed interfaces. Validate imported/untrusted records at the boundary.
 - Use actual published Expo-compatible dependency versions and one committed lockfile. Prefer maintained native APIs over layering miscellaneous BLE wrappers.
 - Add meaningful tests for protocol fixtures, CRC/framing, stale data, reconnects, persistence, imports/exports and record lifecycle. Do not put tests under route directories or rely on snapshot-only tests.
-- Run type checking, lint, tests and a web export before delivery. Report native builds and real Bluetooth/device verification separately.
+- Run checks appropriate to the change. `sh scripts/verify.sh .` is the everyday check: in parallel, it reruns every check whose inputs changed since its last pass. `sh scripts/verify.sh . --full` (working directory) and `npm run verify` (clean HEAD) run the release tier: every check regardless of earlier passes, plus emulator, simulator, app-build, generation and soak checks, macOS/iOS common tests, native Watch Release links and `*VolumeTest` classes; it requires emulator-5554, and `POWER_LOG_SKIP_CONNECTED=1` makes it explicitly partial. `node scripts/checks.mjs --list [--full]` lists the checks. After changing shared Kotlin, run `npm run build:core-js`; `npm run check:core-js` fails until the checked-in JS matches its sources. `npm run verify:stress` runs the live-ride soak at full workload. Report host, simulator/emulator, linked build and physical evidence separately.
+- Apple Lab: `POWER_LOG_LAB=1 npm run build:ios-simulator` builds `app.powerlog.lab`; `sh scripts/test-lab-apple.sh --simulators` runs phone/Watch crash paths directly with `xcrun simctl` after Health authorization, using the booted pair in `POWER_LOG_LAB_PHONE_UDID` and `POWER_LOG_LAB_WATCH_UDID`. Android instrumentation uses `app.powerlog.bridge.test` on emulator-5554. Production Release rejects Lab code; physical checks remain in [docs/testing.md](docs/testing.md#phase-6-checklist).
 - Before installing an iOS build, run `npm run test:ios-bundle -- /absolute/path/to/PowerLog.app` and verify signing. After installation, confirm the process remains alive and inspect the app when possible; a successful launch request is not proof of successful startup.
-- Keep README.md and docs/ aligned with the implemented system. Put any necessary primary-source reference beside the contract it supports; do not retain research journals, review rounds or speculative plans. Avoid sprawling abstractions, redundant state libraries, placeholder buttons, and claims of untested capabilities.
+- `docs/` holds only `architecture.md` (overall design and code map), `decisions.md` (crucial choices) and `testing.md` (commands, tiers, device checks). Never restate code in Markdown; an external fact the code depends on goes in a short comment at its point of use, with its primary source. Do not retain research journals, review rounds or speculative plans. Avoid sprawling abstractions, redundant state libraries, placeholder buttons, and claims of untested capabilities.
 - No commits, pushes, deployment, cloud builds or account integrations unless requested. Keep maintained code inside this project; device backups and exported personal recordings are not source fixtures.

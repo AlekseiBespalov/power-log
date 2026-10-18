@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { failureCode, presentFailure } from '../core/failures';
 import { ReadCancelled, readConsumer, readPressure, reads } from './read-scheduler';
 import { useForegroundActivity } from './use-foreground-activity';
+import { RetryBackoff } from './retry-backoff';
 
-/** Keep a useful completed summary while one newest replacement waits globally. */
 export function useReadResource<T>(
   identity: string | null,
   revision: string | null,
-  load: (consumer: string, current: () => boolean) => Promise<T>,
+  load: (consumer: string, current: () => boolean, signal?: AbortSignal) => Promise<T>,
 ) {
   const active = useForegroundActivity();
   const [consumer] = useState(() => readConsumer('summary'));
@@ -29,6 +30,7 @@ export function useReadResource<T>(
   useEffect(() => {
     if (!identity || !active) return;
     let current = true;
+    const backoff = new RetryBackoff();
     let retry: ReturnType<typeof setTimeout> | undefined;
     const loadCurrent = operation.current;
     const run = () => {
@@ -37,7 +39,7 @@ export function useReadResource<T>(
         loading: true,
       }));
       void reads
-        .schedule('summary', consumer, 'summary', () => loadCurrent(consumer, () => current))
+        .schedule('summary', consumer, 'summary', signal => loadCurrent(consumer, () => current, signal))
         .then(
           data => {
             if (current) setState({ identity, revision, data, loading: false });
@@ -45,17 +47,14 @@ export function useReadResource<T>(
           error => {
             if (!current || error instanceof ReadCancelled) return;
             if (readPressure(error)) {
-              retry = setTimeout(run, 1000);
+              retry = setTimeout(run, backoff.next());
               return;
             }
-            const errorCode =
-              typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
-                ? error.code
-                : undefined;
+            const errorCode = failureCode(error);
             setState(previous => ({
               ...previous,
-              ...(errorCode === 'ERR_RIDE_DELETED' ? { data: undefined } : {}),
-              error: error instanceof Error ? error.message : String(error),
+              ...(errorCode === 'rideDeleted' ? { data: undefined } : {}),
+              error: presentFailure(error).text,
               errorCode,
               loading: false,
             }));

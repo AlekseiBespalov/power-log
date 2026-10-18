@@ -1,0 +1,1222 @@
+{
+  "fixtures": [
+    "F24",
+    "F38"
+  ],
+  "cases": [
+    {
+      "id": "means-and-brackets",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2000000",
+      "rideEndUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "2000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "3",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": 133.33333333333334,
+      "coveredUs": "2000000",
+      "integral": 300
+    },
+    {
+      "id": "clipped-original-edges",
+      "metric": "humanPowerW",
+      "startUs": "500000",
+      "endUs": "1500000",
+      "rideEndUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "2000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "1",
+      "minimum": "b",
+      "maximum": "b",
+      "mean": 200,
+      "coveredUs": "1000000",
+      "integral": 175
+    },
+    {
+      "id": "zero-interior-bracket",
+      "metric": "humanPowerW",
+      "startUs": "250000",
+      "endUs": "750000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "0",
+      "minimum": null,
+      "maximum": null,
+      "mean": null,
+      "coveredUs": "500000",
+      "integral": 75
+    },
+    {
+      "id": "invalid-power-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": -1,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "missing-power-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "upper-power-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": 32766.000001,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "cadence-barrier",
+      "metric": "cadenceRpm",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 80,
+          "kind": "telemetry"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": 254.000001,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 80,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 80,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "missing-heart-barrier",
+      "metric": "heartRateBpm",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "health"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "invalid-heart-barrier",
+      "metric": "heartRateBpm",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": 255,
+          "kind": "health"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "missing-speed-barrier",
+      "metric": "speedMps",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 5,
+          "kind": "location"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "location"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 5,
+          "kind": "location"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 5,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "missing-altitude-barrier",
+      "metric": "altitudeMeters",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 5,
+          "kind": "location"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "location"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 5,
+          "kind": "location"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 5,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "missing-accuracy-barrier",
+      "metric": "horizontalAccuracyM",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 5,
+          "kind": "location"
+        },
+        {
+          "id": "barrier",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "location"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 5,
+          "kind": "location"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 5,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "speed-accuracy-barrier",
+      "metric": "speedMps",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 5,
+          "kind": "location"
+        },
+        {
+          "id": "b",
+          "timeUs": "500000",
+          "value": 5,
+          "accuracy": -1,
+          "kind": "location"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 5,
+          "kind": "location"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 5,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "unselected-is-not-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "500000",
+          "value": null,
+          "selected": false,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "1000000",
+      "integral": 100
+    },
+    {
+      "id": "other-channel-is-not-barrier",
+      "metric": "heartRateBpm",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "500000",
+          "value": null,
+          "declared": [
+            "activeEnergyKcal"
+          ],
+          "kind": "health"
+        },
+        {
+          "id": "c",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "1000000",
+      "integral": 100
+    },
+    {
+      "id": "pause-endpoint-excluded",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2000000",
+      "rideEndUs": "2000000",
+      "lifecycle": [
+        {
+          "timeUs": "1000000",
+          "action": "pause"
+        }
+      ],
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "2000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "1",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "committed-interruption-close",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2000000",
+      "rideEndUs": "2000000",
+      "lifecycle": [
+        {
+          "timeUs": "1000000",
+          "action": "pause",
+          "interrupted": true,
+          "controllerSequence": "2"
+        },
+        {
+          "timeUs": "1500000",
+          "action": "resume"
+        }
+      ],
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "2000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "3",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": 133.33333333333334,
+      "coveredUs": "1000000",
+      "integral": 150
+    },
+    {
+      "id": "connection-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "connection": "a",
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "connection": "b",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "clock-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "clock": "a",
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "clock": "b",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "zero-width",
+      "metric": "humanPowerW",
+      "startUs": "1000000",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "1",
+      "minimum": "b",
+      "maximum": "b",
+      "mean": 200,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "absent-channel",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [],
+      "absent": true
+    },
+    {
+      "id": "semantic-assistLevel",
+      "metric": "assistLevel",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "semantic-raceMode",
+      "metric": "raceMode",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "semantic-faultCode",
+      "metric": "faultCode",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "semantic-consumedAh",
+      "metric": "consumedAh",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "semantic-consumedWh",
+      "metric": "consumedWh",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "semantic-crankRevolutions",
+      "metric": "crankRevolutions",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "semantic-activeEnergyKcal",
+      "metric": "activeEnergyKcal",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "health"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "semantic-basalEnergyKcal",
+      "metric": "basalEnergyKcal",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "health"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": "9007199254740992",
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "b",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "circular-statistics",
+      "metric": "courseDegrees",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 350,
+          "kind": "location"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 10,
+          "kind": "location"
+        },
+        {
+          "id": "invalid",
+          "timeUs": "1000000",
+          "value": 360,
+          "kind": "location"
+        }
+      ],
+      "count": "2",
+      "minimum": "b",
+      "maximum": "a",
+      "mean": null,
+      "coveredUs": "0",
+      "integral": null,
+      "suppressed": true
+    },
+    {
+      "id": "humanPowerW-gap-2499999",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2499999",
+      "rideEndUs": "2499999",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "2499999",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "2499999",
+      "integral": 249.9999
+    },
+    {
+      "id": "humanPowerW-gap-2500000",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2500000",
+      "rideEndUs": "2500000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "2500000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "2500000",
+      "integral": 250.0
+    },
+    {
+      "id": "humanPowerW-gap-2500001",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2500001",
+      "rideEndUs": "2500001",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "2500001",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "heartRateBpm-gap-9999999",
+      "metric": "heartRateBpm",
+      "startUs": "0",
+      "endUs": "9999999",
+      "rideEndUs": "9999999",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "9999999",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "9999999",
+      "integral": 999.9999
+    },
+    {
+      "id": "heartRateBpm-gap-10000000",
+      "metric": "heartRateBpm",
+      "startUs": "0",
+      "endUs": "10000000",
+      "rideEndUs": "10000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "10000000",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "10000000",
+      "integral": 1000.0
+    },
+    {
+      "id": "heartRateBpm-gap-10000001",
+      "metric": "heartRateBpm",
+      "startUs": "0",
+      "endUs": "10000001",
+      "rideEndUs": "10000001",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "10000001",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "unrelated-kind-is-not-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "rideEndUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "other",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "minimum": "a",
+      "maximum": "a",
+      "mean": 100,
+      "coveredUs": "1000000",
+      "integral": 100
+    },
+    {
+      "id": "n1-collapsed-range",
+      "metric": "humanPowerW",
+      "startUs": "1000000",
+      "endUs": "1000000",
+      "rideEndUs": "2000000",
+      "lifecycle": [],
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000002,
+          "value": 100
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000008,
+          "value": 200
+        }
+      ],
+      "count": "2",
+      "minimum": "b",
+      "maximum": "a",
+      "mean": 150,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "n1-metadata-stop",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2000000",
+      "rideEndUs": "1000000",
+      "lifecycle": [],
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000002,
+          "value": 100
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000008,
+          "value": 200
+        }
+      ],
+      "count": "2",
+      "minimum": "b",
+      "maximum": "a",
+      "mean": 150,
+      "coveredUs": "0",
+      "integral": 0
+    },
+    {
+      "id": "n1-lifecycle-stop",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2000000",
+      "rideEndUs": "2000000",
+      "lifecycle": [
+        {
+          "timeUs": "1000000",
+          "action": "stop"
+        }
+      ],
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000002,
+          "value": 100
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000008,
+          "value": 200
+        }
+      ],
+      "count": "2",
+      "minimum": "b",
+      "maximum": "a",
+      "mean": 150,
+      "coveredUs": "0",
+      "integral": 0
+    }
+  ]
+}

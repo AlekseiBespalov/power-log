@@ -1,7 +1,15 @@
+import { inspectionFixtures, fixtureSample } from '../support/inspection-fixtures';
+import { TelemetryMonitor } from '../../src/core/monitor-data';
 import { describe, expect, it } from 'vitest';
-import { groupMonitorMetrics, monitorScale } from '../../src/core/monitor-chart';
-import { monitorRasterScene, monitorRasterSelection } from '../../src/core/monitor-raster';
+import { groupMonitorMetrics, monitorDisplayDomain, monitorScale } from '../../src/core/monitor-chart';
+import {
+  MONITOR_AXIS,
+  monitorAxisFrame,
+  monitorRasterScene,
+  monitorRasterSelection,
+} from '../../src/core/monitor-raster';
 import type { MonitorData, MonitorPoint } from '../../src/core/monitor';
+import { nativeMonitorRasterScene, nativeMonitorRasterSelection } from '../../src/services/native-monitor-raster';
 const point = (elapsedSeconds: number, value: number, startsSegment?: boolean): MonitorPoint => ({
   elapsedSeconds,
   value,
@@ -19,6 +27,79 @@ const data = (series: MonitorData['series']): MonitorData => ({
   series,
 });
 describe('native raster packets', () => {
+  it('constructs Apple geometry once and leaves held-tail decisions to the core', () => {
+    const input = data({ batteryVoltageV: [point(1, 48, true)] });
+    const group = groupMonitorMetrics(['batteryVoltageV'])[0]!;
+    const scale = monitorScale(group.metrics, input);
+    let reads = 0;
+    Object.defineProperty(input.series.batteryVoltageV![0]!, 'value', {
+      get: () => {
+        reads++;
+        return 48;
+      },
+    });
+    expect(nativeMonitorRasterScene(input, group, scale, 1).series[0]!.points).toEqual([[1, 48, true]]);
+    expect(reads).toBe(1);
+    Object.defineProperty(input, 'liveAcquiredAt', {
+      get: () => {
+        throw new Error('legacy tail computation');
+      },
+    });
+    expect(nativeMonitorRasterSelection('ios', input, group, null, null, 2)).not.toHaveProperty('tails');
+    expect(nativeMonitorRasterSelection('android', data({}), group, null, null, 2)).toHaveProperty('tails', []);
+  });
+  it('Android selection skips Apple-only acquisition candidates', () => {
+    const input = data({ batteryVoltageV: [point(1, 48, true)] });
+    let reads = 0;
+    input.monotonicAt = 2;
+    Object.defineProperty(input, 'liveAcquiredAt', {
+      get: () => {
+        if (++reads > 1) throw new Error('Apple-only candidate construction');
+        return undefined;
+      },
+    });
+    const group = groupMonitorMetrics(['batteryVoltageV'])[0]!;
+    const selection = nativeMonitorRasterSelection('android', input, group, null, null, 2);
+    expect(selection).toHaveProperty('tails', []);
+    expect(selection).not.toHaveProperty('tailCandidates');
+    expect(reads).toBe(1);
+  });
+  it('preserves core segment evidence and original times across normalized-time ties', () => {
+    const input = data({
+      batteryVoltageV: [point(1.0000008, 48, true), point(1.0000002, 47, false), point(1.0000002, 46, false)],
+    });
+    const group = groupMonitorMetrics(['batteryVoltageV'])[0]!;
+    const scene = nativeMonitorRasterScene(input, group, monitorScale(group.metrics, input), 1);
+    expect(scene.series[0]!.points).toEqual([
+      [1.0000008, 48, true],
+      [1.0000002, 47, false],
+      [1.0000002, 46, false],
+    ]);
+  });
+  it('matches the iPhone axis inset, text frame, padding and edge clamping', () => {
+    expect(MONITOR_AXIS).toEqual({ textHeight: 14, inset: 4, horizontalPadding: 4, verticalPadding: 2, gridOffset: 2 });
+    expect(monitorAxisFrame('y', 8, 22.1, 360, 140)).toEqual({ x: 12, y: 12, width: 31, height: 18 });
+    expect(monitorAxisFrame('y', 106, 22.1, 360, 140)).toEqual({ x: 12, y: 94, width: 31, height: 18 });
+    expect(monitorAxisFrame('x', 0, 22.1, 360, 140)).toEqual({ x: 12, y: 118, width: 31, height: 18 });
+    expect(monitorAxisFrame('x', 0.5, 22.1, 360, 140)).toEqual({ x: 164.5, y: 118, width: 31, height: 18 });
+    expect(monitorAxisFrame('x', 1, 22.1, 360, 140)).toEqual({ x: 317, y: 118, width: 31, height: 18 });
+  });
+  it('keeps empty raster geometry fixed as the live clock advances and emits no held tails', () => {
+    const input = data({ batteryVoltageV: [] });
+    input.domain = { start: 0, end: 10 };
+    delete input.plotViewport;
+    const group = groupMonitorMetrics(['batteryVoltageV'])[0]!;
+    const scale = monitorScale(group.metrics, input);
+    const initial = monitorRasterScene(input, group, scale, 1);
+    for (const nowSeconds of [30, 120, 3600]) {
+      input.nowSeconds = nowSeconds;
+      expect(monitorDisplayDomain(input, true, nowSeconds)).toEqual(input.domain);
+      expect(monitorRasterScene(input, group, scale, 1)).toEqual(initial);
+      expect(monitorRasterSelection(input, group, null, null, nowSeconds).tails).toEqual([]);
+    }
+    expect(initial).toMatchObject({ start: 0, end: 10, series: [{ points: [] }] });
+  });
+
   it('never borrows a current Health reading for the plotted tail after a clock rollback', () => {
     const old = point(100, 120);
     const current = point(40, 140);
@@ -92,3 +173,33 @@ describe('native raster packets', () => {
     expect(monitorRasterScene(input, group, monitorScale(group.metrics, input), 1)).toEqual(before);
   });
 });
+
+for (const row of inspectionFixtures('plot')) {
+  it(`runs reduced original geometry fixture ${row.id}`, async () => {
+    const monitor = new TelemetryMonitor(
+      row.id,
+      false,
+      row.points.map((p, i) => fixtureSample(p, row.metric, i)),
+    );
+    const description = await monitor.describeSource({ generation: 1 });
+    const plot = await monitor.readPlot({
+      generation: 1,
+      expectedRevision: description.revision,
+      metrics: [row.metric],
+      buckets: 1,
+      startSeconds: Number(row.startUs ?? 0) / 1e6,
+      endSeconds: Number(row.endUs ?? Math.max(...row.points.map(p => Number(p.timeUs)))) / 1e6,
+    });
+    if (plot.status !== 'ok') throw new Error('Unexpected retry');
+    const input = { ...description, ...plot, statistics: {} },
+      group = groupMonitorMetrics([row.metric])[0]!;
+    const scene = monitorRasterScene(input, group, monitorScale(group.metrics, input), 1);
+    expect(scene.revision).toBe(description.revision);
+    expect(scene.series[0]?.points.map(p => p[0])).toEqual(
+      (row.expected as string[]).map(id => Number(row.points.find(p => p.id === id)!.timeUs) / 1e6),
+    );
+    expect(scene.series[0]?.points.map(p => p[2])).toEqual(
+      row.segments!.map((segment, i) => i === 0 || segment !== row.segments![i - 1]),
+    );
+  });
+}

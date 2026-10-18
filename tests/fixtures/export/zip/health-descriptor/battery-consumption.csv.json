@@ -1,0 +1,8 @@
+[
+  "timestamp,elapsedSeconds,controllerEnergyWh,controllerChargeAh,calculatedEnergyWh,calculatedChargeAh",
+  "2026-05-01T07:30:01.000Z,1,,,,",
+  "2026-05-01T07:30:02.000Z,2,,,,",
+  "2026-05-01T07:30:03.000Z,3,,,,",
+  "2026-05-01T07:30:04.000Z,4,,,,",
+  "2026-05-01T07:30:05.000Z,5,,,,"
+]

@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionPresentation } from '../../src/services/session-presentation';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { MonotonicClock } from '../../src/services/monotonic-clock';
+import type { SampleDelivery, TelemetrySample } from '../../src/core/types';
+import freshness from '../fixtures/contract/presentation/freshness.json';
 
 afterEach(() => vi.useRealTimers());
 const delivery = () => ({ receivedAtSeconds: performance.now() / 1000 });
@@ -10,6 +13,113 @@ const frame = (sequence: number, faultCode = 0) => ({
 });
 
 describe('shared session presentation', () => {
+  it.each(freshness.connection.filter(row => row.deadline !== null))(
+    'publishes the core connection deadline for $connection at $now',
+    async row => {
+      vi.useFakeTimers();
+      await vi.advanceTimersByTimeAsync(row.now * 1000);
+      const presentation = new SessionPresentation();
+      presentation.receiveState({ status: row.connection as 'connected' | 'reconnecting' });
+      presentation.receiveSample(frame(1, 7), { receivedAtSeconds: row.acquired });
+      presentation.setActive(true);
+      expect(presentation.getSnapshot().display).toBe(row.display);
+      await vi.advanceTimersByTimeAsync(Math.max(1, (row.deadline! - row.now) * 1000));
+      expect(presentation.getSnapshot().display).toBe(row.deadline === 102.501 ? 'held' : 'unavailable');
+      presentation.setActive(false);
+    },
+  );
+  it.each(freshness.connection)('projects the connection fixture $connection at $now', row => {
+    vi.useFakeTimers();
+    let now = 100;
+    const presentation = new SessionPresentation(() => now);
+    presentation.setActive(true);
+    presentation.receiveState({ status: row.connection as 'connected' | 'reconnecting' | 'idle' });
+    presentation.receiveSample(frame(1, 7), {
+      acquiredAtMonotonic: row.acquired ?? 100,
+      clock: { toJS: () => row.acquired, subscribe: () => () => {} },
+    });
+    now = row.now;
+    presentation.receiveState({ status: row.connection as 'connected' | 'reconnecting' | 'idle', error: 'fixture' });
+    expect(presentation.getSnapshot()).toMatchObject({
+      display: row.display,
+      faultCode: row.display === 'unavailable' ? null : 7,
+    });
+    presentation.setActive(false);
+  });
+  it('makes readings unavailable immediately when the native mapping is invalidated', async () => {
+    vi.useFakeTimers();
+    let now = 10;
+    const clock = new MonotonicClock(
+      async () => 100,
+      () => now,
+    );
+    await clock.sync();
+    const presentation = new SessionPresentation(() => now);
+    presentation.setActive(true);
+    presentation.receiveState({ status: 'connected' });
+    presentation.receiveSample(frame(1, 7), { acquiredAtMonotonic: 100, clock });
+    now += 0.25;
+    await vi.advanceTimersByTimeAsync(250);
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'live', faultCode: 7 });
+    clock.invalidate();
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'unavailable', faultCode: null });
+    presentation.setActive(false);
+  });
+  it('keeps the newest observation when out-of-order native frames arrive before synchronization', async () => {
+    vi.useFakeTimers();
+    const clock = new MonotonicClock(
+      async () => 101,
+      () => 10,
+    );
+    const presentation = new SessionPresentation(() => 10);
+    presentation.setActive(true);
+    presentation.receiveState({ status: 'connected' });
+    presentation.receiveSample({ ...frame(2, 9), connectionEpoch: 'same' }, { acquiredAtMonotonic: 101, clock });
+    presentation.receiveSample({ ...frame(1, 7), connectionEpoch: 'same' }, { acquiredAtMonotonic: 100, clock });
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'unavailable', faultCode: null });
+    await clock.sync();
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'live', faultCode: 9 });
+    presentation.setActive(false);
+  });
+  it('admits immutable evidence once and reuses it during publications without a new sample', () => {
+    vi.useFakeTimers();
+    let now = 10;
+    const presentation = new SessionPresentation(() => now);
+    const admission = vi.spyOn(
+      presentation as unknown as { observe(sample: TelemetrySample, delivery: SampleDelivery): unknown },
+      'observe',
+    );
+    presentation.setActive(true);
+    presentation.receiveState({ status: 'connected' });
+    const sample = frame(1, 7);
+    presentation.receiveSample(sample, { receivedAtSeconds: 10 });
+    sample.faultCode = 9;
+    now += 1;
+    presentation.receiveState({ status: 'reconnecting' });
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'held', faultCode: 7 });
+    now += 1;
+    presentation.receiveState({ status: 'connected' });
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'live', faultCode: 7 });
+    expect(admission).toHaveBeenCalledOnce();
+    presentation.setActive(false);
+  });
+  it('shortens expiry for an earlier duplicate acquisition without replacing its value', () => {
+    vi.useFakeTimers();
+    let now = 10;
+    const presentation = new SessionPresentation(() => now);
+    presentation.setActive(true);
+    presentation.receiveState({ status: 'connected' });
+    const sample = { ...frame(1, 7), connectionEpoch: 'same' };
+    presentation.receiveSample(sample, { receivedAtSeconds: 10 });
+    presentation.receiveSample({ ...sample, faultCode: 9 }, { receivedAtSeconds: 8 });
+    now = 13.999999;
+    presentation.receiveState({ status: 'reconnecting' });
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'held', faultCode: 7 });
+    now = 14;
+    presentation.receiveState({ status: 'connected' });
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'unavailable', faultCode: null });
+    presentation.setActive(false);
+  });
   it('expires a stopped stream across a backward wall jump and rejects duplicate or aged delivery', async () => {
     vi.useFakeTimers();
     const presentation = new SessionPresentation();
@@ -30,6 +140,18 @@ describe('shared session presentation', () => {
     presentation.receiveSample({ ...frame(2), connectionEpoch: 'second' }, delivery());
     await vi.advanceTimersByTimeAsync(250);
     expect(presentation.getSnapshot().display).toBe('live');
+    presentation.setActive(false);
+  });
+  it('drops a rejected future acquisition instead of adopting it at a later publication', () => {
+    vi.useFakeTimers();
+    let now = 10;
+    const presentation = new SessionPresentation(() => now);
+    presentation.setActive(true);
+    presentation.receiveState({ status: 'connected' });
+    presentation.receiveSample(frame(1, 7), { receivedAtSeconds: 20 });
+    now = 20;
+    presentation.receiveState({ status: 'reconnecting' });
+    expect(presentation.getSnapshot()).toMatchObject({ display: 'unavailable', faultCode: null });
     presentation.setActive(false);
   });
   it('does not broadcast ordinary readings or the display clock through connection consumers', async () => {

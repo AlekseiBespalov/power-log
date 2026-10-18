@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Download, type Page } from '@playwright/test';
 import { browserTestBundle } from '../helpers/browser-test-bundle';
 import type * as Harness from '../fixtures/browser-export-harness';
+import { readFit } from '../fixtures/export/fit/ride';
 import { PROJECTIONS } from '../../src/core/export/catalog';
 import type {
   ExportContext,
@@ -23,6 +24,63 @@ const bundle = browserTestBundle('tests/fixtures/browser-export-harness.ts', 'ex
 const DAY = 24 * 60 * 60 * 1000;
 const MiB = 1024 * 1024;
 const at = (seconds: number) => new Date(Date.UTC(2026, 0, 1) + seconds * 1000).toISOString();
+it('exports and measures exact microsecond interval ends across page boundaries', async () =>
+  run(async page => {
+    const result = await page.evaluate(async () => {
+      const api = window.exportTests;
+      const rows = Array.from({ length: 258 }, (_, sequence) => {
+        const us = sequence < 256 ? sequence * 3906 : 1000001 + (sequence - 256) * 125000;
+        return {
+          elapsedSeconds: us / 1e6 + Number.EPSILON * Math.max(1, us / 1e6),
+          elapsedUs: String(us),
+          controllerModel: 'X6',
+          firmwareLabel: '20260101',
+          controllerProtocol: '5.3',
+          speedRaw: 36,
+          controllerSpeedMps: 10,
+          connectionEpoch: 'exact',
+        };
+      });
+      const ride = await api.seedRide([{ rows }, { action: 'stop', elapsed: 2 }]);
+      const distance = await api.ensureBrowserDistance(ride.id);
+      const stats = await api.browserDistanceStats(distance, 0, 2);
+      const source = new api.BrowserExportSource({ maxRows: 256 });
+      const context = { platform: 'web', exportedAt: api.at(10) } as const;
+      const opened = await source.open({ rideId: ride.id, kind: 'fit', context });
+      const pages = await api.pages(source, opened.session, 'distance');
+      await source.close(opened.session);
+      const bytes: number[] = [];
+      await api.exportFit(
+        source,
+        async () => ({
+          async write(chunk) {
+            bytes.push(...chunk);
+          },
+          async writeAt(offset, chunk) {
+            chunk.forEach((value, i) => {
+              bytes[offset + i] = value;
+            });
+          },
+          async commit() {
+            return { uri: 'exact.fit' };
+          },
+          async abort() {},
+          async beginDeflate() {
+            throw new Error('Unused');
+          },
+          async endDeflate() {
+            throw new Error('Unused');
+          },
+        }),
+        { rideId: ride.id, context },
+      );
+      return { stats, pages, length: bytes.length };
+    });
+    expect(result.stats?.distance).toBeCloseTo(11.25001, 5);
+    expect(result.pages.map(page => page.rows)).toEqual([256, 1]);
+    expect(result.pages[0]!.last).toEqual([1000001, 256]);
+    expect(result.length).toBeGreaterThan(0);
+  }));
 let browser: Browser;
 beforeAll(async () => {
   browser = await chromium.launch({ headless: true });
@@ -53,6 +111,7 @@ const decode = (base64: string) => Buffer.from(base64, 'base64');
 
 const TELEMETRY_ZIP = [
   'elapsedSeconds',
+  'producerSequence',
   'timestamp',
   'active',
   'interval',
@@ -78,8 +137,17 @@ const TELEMETRY_ZIP = [
 ];
 const ZIP_ONLY = ['timestamp', 'throttleVoltageV', 'faultCode', 'controllerSpeedMps', 'raceMode', 'speedRaw'];
 const TELEMETRY_FIT = TELEMETRY_ZIP.filter(name => !ZIP_ONLY.includes(name));
-const LIFECYCLE_ZIP = ['elapsedSeconds', 'timestamp', 'producer', 'action'];
-const DISTANCE_FIT = ['start', 'end', 'meters', 'segment', 'startSpeed', 'endSpeed'];
+const LIFECYCLE_ZIP = [
+  'elapsedSeconds',
+  'timestamp',
+  'producer',
+  'producerSequence',
+  'clockEpoch',
+  'interrupted',
+  'controllerSequence',
+  'action',
+];
+const DISTANCE_FIT = ['startUs', 'endUs', 'meters', 'segment', 'startSpeed', 'endSpeed'];
 const sorted = (names: readonly string[]) => [...names].sort();
 function catalogColumns(projection: ProjectionName, kind: ExportKind): string[] {
   const consumers = kind === 'zip' ? ['zip'] : ['fit', 'discovery'];
@@ -91,6 +159,7 @@ function catalogColumns(projection: ProjectionName, kind: ExportKind): string[] 
 function telemetryColumns(rows: readonly object[], names: readonly string[]) {
   const value = (row: Record<string, unknown>, name: string) => {
     if (name === 'active') return row.active ? 1 : 0;
+    if (name === 'producerSequence') return Number(row.producerSequence);
     if (name === 'connection') return row.connectionEpoch;
     if (name === 'controllerSpeedMps') return row.controllerSpeedMps ?? NaN;
     return row[name];
@@ -130,14 +199,14 @@ describe('browser export source over the real IndexedDB store', () => {
         const source = new api.BrowserExportSource();
         const attempt = (rideId: string, extra: Record<string, unknown> = {}) =>
           api.failure(() => source.open({ rideId, kind: 'zip', context, ...extra }));
-        const ride = await api.store.begin('owner', true, api.at(0));
+        const ride = await api.store.begin('owner', { indoor: true, recordGPS: false, sampleHz: 2 }, api.at(0));
         const running = await attempt(ride.id);
         await api.store.transition(ride.id, 'owner', 'pause', 5, 5, api.at(5));
         const paused = await attempt(ride.id);
-        await api.store.transition(ride.id, 'owner', 'save', 9, 5, api.at(9));
+        await api.store.transition(ride.id, 'owner', 'stop', 9, 5, api.at(9));
         const zip = await source.open({ rideId: ride.id, kind: 'zip', context });
         const fit = await source.open({ rideId: ride.id, kind: 'fit', context });
-        const recovered = await api.store.begin('second', false, api.at(20));
+        const recovered = await api.store.begin('second', { indoor: false, recordGPS: false, sampleHz: 2 }, api.at(20));
         await api.store.append(
           recovered.id,
           'second',
@@ -146,7 +215,10 @@ describe('browser export source over the real IndexedDB store', () => {
           2,
           api.at(23),
         );
-        await api.store.recoverOrphan();
+        await api.store.interruptCurrent();
+        const recoveredGate = await attempt(recovered.id);
+        await api.store.claim(recovered.id, 'recovered');
+        await api.store.transition(recovered.id, 'recovered', 'stop', 3, 2, api.at(23));
         const interrupted = await source.open({ rideId: recovered.id, kind: 'zip', context });
         return {
           running,
@@ -154,6 +226,7 @@ describe('browser export source over the real IndexedDB store', () => {
           zip,
           fit,
           interrupted,
+          recoveredGate,
           interruptedEvents: await api.pages(source, interrupted.session, 'lifecycle'),
           missing: await attempt('missing-ride'),
           csv: await attempt(ride.id, { kind: 'csv' }),
@@ -173,6 +246,7 @@ describe('browser export source over the real IndexedDB store', () => {
       expect(result.zip.producers).toEqual({ gps: [], health: [] });
       expect(result.zip.distanceProfile).toBeNull();
       expect(result.zip.metadata).toEqual({
+        batteryConsumptionSource: 'controller',
         startedAt: at(0),
         endedAt: at(9),
         ownerTiming: { timestamp: at(9), elapsedSeconds: 9, timerSeconds: 5 },
@@ -182,12 +256,11 @@ describe('browser export source over the real IndexedDB store', () => {
         saveToHealth: false,
         recordGPS: false,
         health: { provider: null, state: 'notRequested', workoutUUID: null, export: null },
-        watchSyncState: 'notRequired',
-        finalizationState: 'complete',
         example: false,
-        sampleHz: null,
+        sampleHz: 2,
       });
       expect(result.fit).toMatchObject({ elapsedEnd: 9, distanceProfile: null, metadata: result.zip.metadata });
+      expect(result.recoveredGate).toMatchObject({ code: 'gate' });
       expect(result.interrupted).toMatchObject({
         elapsedEnd: 3,
         metadata: {
@@ -198,81 +271,90 @@ describe('browser export source over the real IndexedDB store', () => {
           interrupted: true,
         },
       });
-      expect(result.interruptedEvents.flatMap(page => page.columns.action)).toEqual(['start', 'interrupted']);
+      expect(result.interruptedEvents.flatMap(page => page.columns.action)).toEqual(['start', 'interruption', 'stop']);
     }));
 
-  it('pages telemetry at the 4096-row ceiling with the web catalog columns and per-pass connections', async () =>
-    run(async page => {
-      const result = await page.evaluate(async () => {
-        const api = window.exportTests;
-        const context: ExportContext = { exportedAt: '2026-02-01T00:00:00.000Z', platform: 'web' };
-        const first = { controllerModel: 'X6', firmwareLabel: '20260101', controllerProtocol: '5.3' };
-        const second = { controllerModel: 'X12', firmwareLabel: '20260102', controllerProtocol: '6.1' };
-        const elapsed = (index: number) => (index < 4094 ? index : index < 4098 ? 4093 : index - 4) * 0.125;
-        const row = (index: number) => ({
-          elapsedSeconds: elapsed(index),
-          humanPowerW: index,
-          active: index < 1000 || index >= 1500,
-          interval: index < 1500 ? 0 : 1,
-          ...(index < 4098
-            ? { ...first, connectionEpoch: 'connection-a', controllerSpeedMps: 5, speedRaw: 18 }
-            : { ...second, connectionEpoch: 'connection-b' }),
+  it(
+    'pages telemetry at the 4096-row ceiling with the web catalog columns and per-pass connections',
+    async () =>
+      run(async page => {
+        const result = await page.evaluate(async () => {
+          const api = window.exportTests;
+          const context: ExportContext = { exportedAt: '2026-02-01T00:00:00.000Z', platform: 'web' };
+          const first = { controllerModel: 'X6', firmwareLabel: '20260101', controllerProtocol: '5.3' };
+          const second = { controllerModel: 'X12', firmwareLabel: '20260102', controllerProtocol: '6.1' };
+          const elapsed = (index: number) => (index < 4094 ? index : index < 4098 ? 4093 : index - 4) * 0.125;
+          const row = (index: number) => ({
+            elapsedSeconds: elapsed(index),
+            humanPowerW: index,
+            active: index < 1000 || index >= 1500,
+            interval: index < 1500 ? 0 : 1,
+            ...(index < 4098
+              ? { ...first, connectionEpoch: 'connection-a', controllerSpeedMps: 5, speedRaw: 18 }
+              : { ...second, connectionEpoch: 'connection-b' }),
+          });
+          const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => row(from + i));
+          const ride = await api.seedRide([
+            { rows: range(0, 1000) },
+            { action: 'pause', elapsed: 124.95, timer: 124.95 },
+            { rows: range(1000, 1500) },
+            { action: 'resume', elapsed: 187.45, timer: 124.95 },
+            { rows: range(1500, 4100) },
+            { action: 'stop', elapsed: 600, timer: 537.5 },
+          ]);
+          const source = new api.BrowserExportSource();
+          const zip = await source.open({ rideId: ride.id, kind: 'zip', context });
+          const fit = await source.open({ rideId: ride.id, kind: 'fit', context });
+          const zipPages = await api.pages(source, zip.session, 'telemetry');
+          const again = await source.page({ session: zip.session, projection: 'telemetry', after: null });
+          return {
+            stored: await api.storedRows(ride.id),
+            zipPages,
+            fitPages: await api.pages(source, fit.session, 'telemetry'),
+            again: { rows: again.rows, connections: again.connections },
+          };
         });
-        const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => row(from + i));
-        const ride = await api.seedRide([
-          { rows: range(0, 1000) },
-          { action: 'pause', elapsed: 124.95, timer: 124.95 },
-          { rows: range(1000, 1500) },
-          { action: 'resume', elapsed: 187.45, timer: 124.95 },
-          { rows: range(1500, 4100) },
-          { action: 'save', elapsed: 600, timer: 537.5 },
+        expect(result.stored).toHaveLength(4100);
+        const [first, second] = result.zipPages;
+        expect(result.zipPages).toHaveLength(2);
+        expect([first!.rows, first!.done, first!.last]).toEqual([4096, false, [4093 * 0.125, 4095]]);
+        expect([second!.rows, second!.done, second!.last]).toEqual([4, true, [4095 * 0.125, 4099]]);
+        expect(first!.connections).toEqual([
+          { token: 'connection-a', vendor: 'controller', model: 'X6', firmware: '20260101', protocol: '5.3' },
         ]);
-        const source = new api.BrowserExportSource();
-        const zip = await source.open({ rideId: ride.id, kind: 'zip', context });
-        const fit = await source.open({ rideId: ride.id, kind: 'fit', context });
-        const zipPages = await api.pages(source, zip.session, 'telemetry');
-        const again = await source.page({ session: zip.session, projection: 'telemetry', after: null });
-        return {
-          stored: await api.storedRows(ride.id),
-          zipPages,
-          fitPages: await api.pages(source, fit.session, 'telemetry'),
-          again: { rows: again.rows, connections: again.connections },
-        };
-      });
-      expect(result.stored).toHaveLength(4100);
-      const [first, second] = result.zipPages;
-      expect(result.zipPages).toHaveLength(2);
-      expect([first!.rows, first!.done, first!.last]).toEqual([4096, false, [4093 * 0.125, 4095]]);
-      expect([second!.rows, second!.done, second!.last]).toEqual([4, true, [4095 * 0.125, 4099]]);
-      expect(first!.connections).toEqual([
-        { token: 'connection-a', vendor: 'cyc', model: 'X6', firmware: '20260101', protocol: '5.3' },
-      ]);
-      expect(second!.connections).toEqual([
-        { token: 'connection-b', vendor: 'cyc', model: 'X12', firmware: '20260102', protocol: '6.1' },
-      ]);
-      expect(result.again).toEqual({ rows: 4096, connections: first!.connections });
-      for (const [pages, names, kind] of [
-        [result.zipPages, TELEMETRY_ZIP, 'zip'],
-        [result.fitPages, TELEMETRY_FIT, 'fit'],
-      ] as const) {
-        expect(sorted(names)).toEqual(sorted(catalogColumns('telemetry', kind)));
-        for (const page of pages) {
-          expect(sorted(Object.keys(page.columns))).toEqual(sorted(names));
-          for (const [name, buffer] of Object.entries(page.buffers))
-            expect(buffer, name).toEqual([0, page.rows * 8, page.rows * 8]);
+        expect(second!.connections).toEqual([
+          { token: 'connection-b', vendor: 'controller', model: 'X12', firmware: '20260102', protocol: '6.1' },
+        ]);
+        expect(result.again).toEqual({ rows: 4096, connections: first!.connections });
+        for (const [pages, names, kind] of [
+          [result.zipPages, TELEMETRY_ZIP, 'zip'],
+          [result.fitPages, TELEMETRY_FIT, 'fit'],
+        ] as const) {
+          expect(sorted(names)).toEqual(sorted(catalogColumns('telemetry', kind)));
+          for (const page of pages) {
+            expect(sorted(Object.keys(page.columns))).toEqual(sorted(names));
+            for (const [name, buffer] of Object.entries(page.buffers))
+              expect(buffer, name).toEqual([0, page.rows * 8, page.rows * 8]);
+          }
+          expect(joined(pages)).toEqual(telemetryColumns(result.stored, names));
         }
-        expect(joined(pages)).toEqual(telemetryColumns(result.stored, names));
-      }
-      expect(result.fitPages.map(page => [page.rows, page.done, page.last, page.connections])).toEqual(
-        result.zipPages.map(page => [page.rows, page.done, page.last, page.connections]),
-      );
-      const columns = joined(result.zipPages);
-      expect(columns.active!.slice(998, 1002)).toEqual([1, 1, 0, 0]);
-      expect(columns.interval!.slice(1498, 1502)).toEqual([0, 0, 1, 1]);
-      expect(columns.controllerSpeedMps!.slice(4096)).toEqual([5, 5, NaN, NaN]);
-      expect(columns.connection!.slice(4096)).toEqual(['connection-a', 'connection-a', 'connection-b', 'connection-b']);
-      expect(columns.humanPowerW).toEqual(Array.from({ length: 4100 }, (_, index) => index));
-    }));
+        expect(result.fitPages.map(page => [page.rows, page.done, page.last, page.connections])).toEqual(
+          result.zipPages.map(page => [page.rows, page.done, page.last, page.connections]),
+        );
+        const columns = joined(result.zipPages);
+        expect(columns.active!.slice(998, 1002)).toEqual([1, 1, 0, 0]);
+        expect(columns.interval!.slice(1498, 1502)).toEqual([0, 0, 1, 1]);
+        expect(columns.controllerSpeedMps!.slice(4096)).toEqual([5, 5, NaN, NaN]);
+        expect(columns.connection!.slice(4096)).toEqual([
+          'connection-a',
+          'connection-a',
+          'connection-b',
+          'connection-b',
+        ]);
+        expect(columns.humanPowerW).toEqual(Array.from({ length: 4100 }, (_, index) => index));
+      }),
+    20_000,
+  );
 
   it('splits equal-elapsed groups across any row or byte ceiling without skipping or repeating rows', async () =>
     run(async page => {
@@ -283,8 +365,8 @@ describe('browser export source over the real IndexedDB store', () => {
         const rows = groups
           .flatMap((count, group) => Array.from({ length: count }, () => group * 0.5))
           .map((elapsedSeconds, index) => ({ elapsedSeconds, humanPowerW: 100 + index }));
-        const ride = await api.seedRide([{ rows }, { action: 'save', elapsed: 10 }]);
-        const rowBytes = 21 * 8 + api.at(0).length + 'test-epoch'.length;
+        const ride = await api.seedRide([{ rows }, { action: 'stop', elapsed: 10 }]);
+        const rowBytes = 22 * 8 + api.at(0).length + 'test-epoch'.length;
         const read = async (limits: { maxRows?: number; maxBytes?: number }) => {
           const source = new api.BrowserExportSource(limits);
           const { session } = await source.open({ rideId: ride.id, kind: 'zip', context });
@@ -349,7 +431,7 @@ describe('browser export source over the real IndexedDB store', () => {
           { rows: [12, 13].map(second => moving(second, 1)) },
           { action: 'lap', elapsed: 13.5, timer: 11.5 },
           { rows: [14, 15].map(second => moving(second, 1)) },
-          { action: 'save', elapsed: 16, timer: 14 },
+          { action: 'stop', elapsed: 16, timer: 14 },
         ]);
         const events = await api.browserTransaction(['ride-lifecycle'], 'readonly', tx =>
           api.idbRequest(tx.objectStore('ride-lifecycle').getAll(IDBKeyRange.bound([ride.id], [ride.id, []]))),
@@ -363,11 +445,17 @@ describe('browser export source over the real IndexedDB store', () => {
         const chosen = await five.open({ rideId: ride.id, kind: 'fit', context, distanceSource: 'controller' });
         const still = await api.seedRide([
           { rows: [{ elapsedSeconds: 0 }, { elapsedSeconds: 1 }] },
-          { action: 'save', elapsed: 2 },
+          { action: 'stop', elapsed: 2 },
         ]);
         const unmeasured = await five.open({ rideId: still.id, kind: 'fit', context });
         return {
-          events: events as { revision: number; action: string; elapsedSeconds: number; timestamp: string }[],
+          events: events as {
+            revision: string;
+            producerSequence: string;
+            action: string;
+            elapsedSeconds: number;
+            timestamp: string;
+          }[],
           profiles: [fit.distanceProfile, chosen.distanceProfile, gps.distanceProfile, unmeasured.distanceProfile],
           lifecycleZip: await api.pages(one, zip.session, 'lifecycle'),
           lifecycleFit: await api.pages(five, fit.session, 'lifecycle'),
@@ -382,55 +470,69 @@ describe('browser export source over the real IndexedDB store', () => {
       expect(result.profiles).toEqual([
         { source: 'controller', kind: 'controller' },
         { source: 'controller', kind: 'controller' },
-        null,
+        { source: 'controller', kind: 'controller' },
         null,
       ]);
       const { events } = result;
-      expect(events.map(event => event.action)).toEqual(['start', 'pause', 'resume', 'lap', 'save']);
+      expect(events.map(event => event.action)).toEqual(['start', 'pause', 'resume', 'lap', 'stop']);
       expect(sorted(LIFECYCLE_ZIP)).toEqual(sorted(catalogColumns('lifecycle', 'zip')));
       expect(result.lifecycleZip.map(page => [page.rows, page.done, page.last])).toEqual(
-        events.map((event, index) => [1, index === events.length - 1, [event.revision]]),
+        events.map((event, index) => [1, index === events.length - 1, [Number(event.revision)]]),
       );
       expect(increasing(result.lifecycleZip.map(page => page.last))).toBe(true);
       expect(joined(result.lifecycleZip)).toEqual({
         elapsedSeconds: events.map(event => event.elapsedSeconds),
         timestamp: events.map(event => event.timestamp),
         producer: events.map(() => 'browser'),
+        producerSequence: events.map(event => Number(event.producerSequence)),
+        clockEpoch: events.map(() => null),
+        interrupted: events.map(() => 0),
+        controllerSequence: events.map(() => NaN),
         action: events.map(event => event.action),
       });
       expect(result.lifecycleFit).toEqual([
         {
           rows: 5,
-          last: [events[4]!.revision],
+          last: [Number(events[4]!.revision)],
           done: true,
           connections: undefined,
           columns: {
             elapsedSeconds: [0, 9.5, 11.5, 13.5, 16],
             producer: ['browser', 'browser', 'browser', 'browser', 'browser'],
-            action: ['start', 'pause', 'resume', 'lap', 'save'],
+            producerSequence: events.map(event => Number(event.producerSequence)),
+            interrupted: [0, 0, 0, 0, 0],
+            controllerSequence: [NaN, NaN, NaN, NaN, NaN],
+            clockEpoch: [null, null, null, null, null],
+            action: ['start', 'pause', 'resume', 'lap', 'stop'],
           },
-          buffers: { elapsedSeconds: [0, 40, 40] },
+          buffers: {
+            elapsedSeconds: [0, 40, 40],
+            producerSequence: [0, 40, 40],
+            interrupted: [0, 40, 40],
+            controllerSequence: [0, 40, 40],
+          },
         },
       ]);
       const speed = (second: number) => 4 + (second % 5);
-      const intervals = [...Array.from({ length: 9 }, (_, i) => [i, i + 1, 0]), [12, 13, 1], [13, 14, 1], [14, 15, 1]];
+      const intervals = [...Array.from({ length: 9 }, (_, i) => [i, i + 1, 0]), [12, 13, 2], [13, 14, 2], [14, 15, 2]];
       expect(sorted(DISTANCE_FIT)).toEqual(sorted(catalogColumns('distance', 'fit')));
       expect(result.distance.map(page => [page.rows, page.done, page.last])).toEqual([
-        [5, false, [5, 5]],
-        [5, false, [13, 13]],
-        [2, true, [15, 15]],
+        [5, false, [5000000, 5]],
+        [5, false, [13000000, 13]],
+        [2, true, [15000000, 15]],
       ]);
       expect(joined(result.distance)).toEqual({
-        start: intervals.map(([start]) => start),
-        end: intervals.map(([, end]) => end),
+        startUs: intervals.map(([start]) => String(start! * 1e6)),
+        endUs: intervals.map(([, end]) => String(end! * 1e6)),
         meters: intervals.map(([start, end]) => (speed(start!) + speed(end!)) / 2),
         segment: intervals.map(([, , segment]) => segment),
         startSpeed: intervals.map(([start]) => speed(start!)),
         endSpeed: intervals.map(([, end]) => speed(end!)),
       });
-      expect(result.distanceOne.map(page => page.last)).toEqual(intervals.map(([, end]) => [end, end]));
+      expect(result.distanceOne.map(page => page.last)).toEqual(intervals.map(([, end]) => [end! * 1e6, end]));
       expect(increasing(result.distanceOne.map(page => page.last))).toBe(true);
-      for (const pages of result.withoutProfile)
+      expect(result.withoutProfile[0]).toEqual(result.distance);
+      for (const pages of result.withoutProfile.slice(1))
         expect(pages).toEqual([
           {
             rows: 0,
@@ -438,7 +540,9 @@ describe('browser export source over the real IndexedDB store', () => {
             done: true,
             connections: undefined,
             columns: Object.fromEntries(DISTANCE_FIT.map(name => [name, []])),
-            buffers: Object.fromEntries(DISTANCE_FIT.map(name => [name, [0, 0, 0]])),
+            buffers: Object.fromEntries(
+              DISTANCE_FIT.filter(name => name !== 'startUs' && name !== 'endUs').map(name => [name, [0, 0, 0]]),
+            ),
           },
         ]);
     }));
@@ -458,14 +562,14 @@ describe('browser export source over the real IndexedDB store', () => {
               speedRaw: 18,
             })),
           },
-          { action: 'save', elapsed: 30 },
+          { action: 'stop', elapsed: 30 },
         ]);
         const source = new api.BrowserExportSource({ maxRows: 10 });
         const bump = () =>
           api.browserTransaction(['recordings'], 'readwrite', async tx => {
             const store = tx.objectStore('recordings');
-            const record = (await api.idbRequest(store.get(ride.id))) as { revision: number };
-            await api.idbRequest(store.put({ ...record, revision: record.revision + 1 }));
+            const record = (await api.idbRequest(store.get(ride.id))) as { revision: string };
+            await api.idbRequest(store.put({ ...record, revision: (BigInt(record.revision) + 1n).toString() }));
           });
         const attempt = (session: string, projection: string, after: number[] | null = null) =>
           api.failure(() => source.page({ session, projection: projection as 'telemetry', after }));
@@ -484,7 +588,7 @@ describe('browser export source over the real IndexedDB store', () => {
         const reopened = await source.open({ rideId: ride.id, kind: 'fit', context });
         const beforeRebuild = await source.page({ session: reopened.session, projection: 'distance', after: null });
         await api.browserTransaction(['distance-profiles'], 'readwrite', tx =>
-          api.idbRequest(tx.objectStore('distance-profiles').delete(ride.id)),
+          api.idbRequest(tx.objectStore('distance-profiles').delete(IDBKeyRange.bound([ride.id], [ride.id, []]))),
         );
         await api.ensureBrowserDistance(ride.id);
         const rebuilt = await attempt(reopened.session, 'distance', beforeRebuild.last);
@@ -530,12 +634,14 @@ describe('browser export source over the real IndexedDB store', () => {
           controllerSpeedMps: 5,
           speedRaw: 18,
         }));
-        const ride = await api.seedRide([{ rows }, { action: 'save', elapsed: 300 }]);
+        const ride = await api.seedRide([{ rows }, { action: 'stop', elapsed: 300 }]);
         const source = new api.BrowserExportSource();
         const healthy = await source.open({ rideId: ride.id, kind: 'fit', context });
         await api.browserTransaction(['distance-profiles'], 'readwrite', async tx => {
           const profiles = tx.objectStore('distance-profiles');
-          const profile = (await api.idbRequest(profiles.get(ride.id))) as Record<string, unknown>;
+          const profile = (await api.idbRequest(
+            profiles.openCursor(IDBKeyRange.bound([ride.id], [ride.id, []]), 'prev'),
+          ))!.value as Record<string, unknown>;
           await api.idbRequest(profiles.put({ ...profile, generation: '' }));
         });
         const broken = await source.open({ rideId: ride.id, kind: 'fit', context });
@@ -550,7 +656,7 @@ describe('browser export source over the real IndexedDB store', () => {
           (error: Error) => ({ name: error.name, message: error.message, dom: error instanceof DOMException }),
         );
         IDBDatabase.prototype.transaction = transaction;
-        const gone = await api.seedRide([{ rows }, { action: 'save', elapsed: 300 }]);
+        const gone = await api.seedRide([{ rows }, { action: 'stop', elapsed: 300 }]);
         const opening = api.failure(() => source.open({ rideId: gone.id, kind: 'fit', context }));
         await api.store.remove(gone.id);
         return {
@@ -572,7 +678,9 @@ describe('browser export source over the real IndexedDB store', () => {
           done: true,
           connections: undefined,
           columns: Object.fromEntries(DISTANCE_FIT.map(name => [name, []])),
-          buffers: Object.fromEntries(DISTANCE_FIT.map(name => [name, [0, 0, 0]])),
+          buffers: Object.fromEntries(
+            DISTANCE_FIT.filter(name => name !== 'startUs' && name !== 'endUs').map(name => [name, [0, 0, 0]]),
+          ),
         },
       ]);
       expect(result.telemetry).toBe(300);
@@ -588,7 +696,7 @@ describe('browser export source over the real IndexedDB store', () => {
         const context: ExportContext = { exportedAt: '2026-02-01T00:00:00.000Z', platform: 'web' };
         const ride = await api.seedRide([
           { rows: [0, 1, 2].map(second => ({ elapsedSeconds: second })) },
-          { action: 'save', elapsed: 3 },
+          { action: 'stop', elapsed: 3 },
         ]);
         const source = new api.BrowserExportSource();
         const zip = await source.open({ rideId: ride.id, kind: 'zip', context });
@@ -620,10 +728,14 @@ describe('browser export source over the real IndexedDB store', () => {
         ];
         await api.browserTransaction(['samples', 'ride-lifecycle'], 'readwrite', async tx => {
           const samples = tx.objectStore('samples');
-          const sample = (await api.idbRequest(samples.get([ride.id, 1]))) as Record<string, unknown>;
+          const sample = (await api.idbRequest(samples.index('byLocalSequence').get([ride.id, 1]))) as Record<
+            string,
+            unknown
+          >;
           await api.idbRequest(samples.put({ ...sample, humanPowerW: 'strong' }));
           const lifecycle = tx.objectStore('ride-lifecycle');
-          const event = (await api.idbRequest(lifecycle.get([ride.id, 1]))) as Record<string, unknown>;
+          const event = (await api.idbRequest(lifecycle.openCursor(IDBKeyRange.bound([ride.id], [ride.id, []]))))!
+            .value as Record<string, unknown>;
           await api.idbRequest(lifecycle.put({ ...event, action: 'teleport' }));
         });
         const unreadable = [await attempt(zip.session, 'telemetry'), await attempt(zip.session, 'lifecycle')];
@@ -644,22 +756,35 @@ describe('browser export source over the real IndexedDB store', () => {
         return { outside, absent, cursors, unreadable, closed, stillOpen };
       });
       for (const outcome of Object.values(result.outside)) expect(outcome).toMatchObject({ code: 'unsupported' });
-      for (const page of result.absent)
+      const absentColumns = [
+        catalogColumns('gps', 'zip'),
+        [],
+        catalogColumns('gps', 'fit'),
+        catalogColumns('gpsDiscovery', 'fit'),
+        [],
+      ];
+      for (const [index, page] of result.absent.entries())
         expect(page).toEqual({
           rows: 0,
           last: null,
           done: true,
           connections: undefined,
-          columns: {},
-          buffers: {},
+          columns: Object.fromEntries(absentColumns[index]!.map(name => [name, []])),
+          buffers: Object.fromEntries(
+            absentColumns[index]!.filter(name =>
+              PROJECTIONS[index === 3 ? 'gpsDiscovery' : 'gps'].columns.some(
+                column => column.name === name && column.type === 'number',
+              ),
+            ).map(name => [name, [0, 0, 0]]),
+          ),
         });
       for (const outcome of result.cursors) expect(outcome).toMatchObject({ code: 'cursor' });
       expect(result.unreadable).toHaveLength(4);
       for (const outcome of result.unreadable)
         expect(outcome).toMatchObject({ code: 'gate', message: expect.stringContaining("can't read this ride") });
       expect(result.unreadable.slice(2).map(outcome => outcome!.message)).toEqual([
-        "Power Log can't read this ride's saved data, so it can't be exported. Invalid recording phase.",
-        "Power Log can't read this ride's saved data, so it can't be exported. Invalid recording phase.",
+        "Power Log can't read this ride's saved data, so it can't be exported.",
+        "Power Log can't read this ride's saved data, so it can't be exported.",
       ]);
       expect(result.closed).toMatchObject({ code: 'cancelled' });
       expect(result.stillOpen).toBe(true);
@@ -1044,3 +1169,110 @@ describe('browser export sink', () => {
       expect(result.kind).toMatchObject({ code: 'unsupported' });
     }));
 });
+
+it('FIT and History agree on supported work at the normalized 2.5-second boundary', async () =>
+  run(async page => {
+    const result = await page.evaluate(async () => {
+      const api = window.exportTests;
+      const ride = await api.seedRide([
+        {
+          rows: [
+            { elapsedSeconds: 0.1, humanPowerW: 100 },
+            { elapsedSeconds: 2.6000000000000005, humanPowerW: 100 },
+          ],
+        },
+        { action: 'stop', elapsed: 3 },
+      ]);
+      const summary = await api.browserSummary(ride, 'auto', []);
+      const bytes: number[] = [];
+      await api.exportFit(
+        api.browserExportSource,
+        async () => ({
+          async write(chunk) {
+            bytes.push(...chunk);
+          },
+          async writeAt(offset, chunk) {
+            chunk.forEach((value, index) => {
+              bytes[offset + index] = value;
+            });
+          },
+          async beginDeflate() {
+            throw new Error('Unused');
+          },
+          async endDeflate() {
+            throw new Error('Unused');
+          },
+          async commit() {
+            return { uri: 'memory.fit' };
+          },
+          async abort() {},
+        }),
+        { rideId: ride.id, context: { platform: 'web', exportedAt: api.at(4) } },
+      );
+      return { bytes, work: summary.riderWorkJoules, covered: summary.telemetryCoveredSeconds };
+    });
+    expect(result.work).toBe(250);
+    expect(result.covered).toBe(2.5);
+    expect(
+      readFit(Uint8Array.from(result.bytes))
+        .find(message => message.global === 18)!
+        .fields.get(48),
+    ).toBe(result.work);
+  }));
+it('FIT and History retain one integer end boundary', async () =>
+  run(async page => {
+    const result = await page.evaluate(async () => {
+      const api = window.exportTests;
+      const ride = await api.seedRide([
+        {
+          rows: [
+            { elapsedSeconds: 0, humanPowerW: 100 },
+            { elapsedSeconds: 0.51250005, humanPowerW: 200 },
+          ],
+        },
+        { action: 'stop', elapsed: 0.512500125 },
+      ]);
+      const summary = await api.browserSummary(ride, 'auto', []);
+      const bytes: number[] = [];
+      await api.exportFit(
+        api.browserExportSource,
+        async () => ({
+          async write(chunk) {
+            bytes.push(...chunk);
+          },
+          async writeAt(offset, chunk) {
+            chunk.forEach((value, index) => {
+              bytes[offset + index] = value;
+            });
+          },
+          async beginDeflate() {
+            throw new Error('Unused');
+          },
+          async endDeflate() {
+            throw new Error('Unused');
+          },
+          async commit() {
+            return { uri: 'memory.fit' };
+          },
+          async abort() {},
+        }),
+        { rideId: ride.id, context: { platform: 'web', exportedAt: api.at(4) } },
+      );
+      return {
+        bytes,
+        maximum: summary.maximumRiderPowerW,
+        elapsed: summary.elapsedSeconds,
+        timer: summary.timerSeconds,
+      };
+    });
+    expect(result.maximum).toBe(200);
+    const session = readFit(Uint8Array.from(result.bytes)).find(message => message.global === 18)!.fields;
+    expect(session.get(21)).toBe(result.maximum);
+    expect(session.get(7)).toBe(513);
+    expect(session.get(8)).toBe(513);
+    expect(
+      readFit(Uint8Array.from(result.bytes))
+        .find(message => message.global === 18)!
+        .fields.get(7),
+    ).toBe(Math.round(result.elapsed * 1000));
+  }));

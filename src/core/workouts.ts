@@ -1,12 +1,31 @@
+import type { BatteryConsumptionSource, BatteryConsumptionSummary } from './consumption';
+import {
+  completionCanDelete,
+  completionExportReady,
+  presentationStreamStatus,
+  presentationResolveOptions,
+  presentationSampleRates,
+} from '../../shared/js';
+import { presentationCapabilities, presentationOptions } from './presentation-inputs';
+
+import { failureCode, rideFailure, type RideFailureState } from './failures';
+import {
+  retainWorkoutCompletion,
+  workoutCompletion,
+  validDecimal,
+  validateWorkoutPayload,
+  watchWorkoutId,
+} from './workout-payload';
 import type { CatalogPage, CatalogRequest } from './catalog';
 import type { DistanceSource, WorkoutDistanceInfo } from './distance';
-/** Portable ride contracts; each platform adapter owns durable capture. */
+export const sampleRates: readonly number[] = Array.from(presentationSampleRates());
 export type WorkoutPhase =
-  'idle' | 'preparing' | 'running' | 'paused' | 'recoverable' | 'finishing' | 'completed' | 'failed';
+  'idle' | 'preparing' | 'running' | 'paused' | 'interrupted' | 'finishing' | 'completed' | 'failed';
 export type StreamStatus =
   | 'off'
   | 'waiting'
   | 'receiving'
+  | 'backfilled'
   | 'weak'
   | 'stale'
   | 'paused'
@@ -15,7 +34,108 @@ export type StreamStatus =
   | 'notDetermined'
   | 'unavailable';
 export type WorkoutStream = { status: StreamStatus };
-export type WorkoutState = {
+export type LifecycleAction = 'start' | 'pause' | 'resume' | 'lap' | 'stop';
+export type RideActionRequest = {
+  actionId: string;
+  rideId: string;
+  action: RideAction;
+  requestedAt: string;
+  options: {
+    indoor: boolean;
+    recordingOwner: 'phone';
+    saveToHealth: boolean;
+    recordGPS: boolean;
+    sampleHz: 2 | 4 | 8;
+  };
+  elapsedSeconds: number;
+  timerSeconds: number;
+};
+export type RideAction = 'start' | 'pause' | 'resume' | 'lap' | 'stop' | 'discard';
+
+export type HealthProvider = 'appleHealth' | 'healthConnect';
+export type OwnerHealth =
+  'pending' | 'saved' | 'failed' | 'notSaved' | 'unavailable' | 'unknown' | 'discarded' | 'notRequested';
+export type HealthComponent =
+  | 'workout'
+  | 'route'
+  | 'laps'
+  | 'rider-power'
+  | 'cycling-cadence'
+  | 'cycling-speed'
+  | 'cycling-distance'
+  | 'association'
+  | 'readback';
+export type HealthReason =
+  | 'permission'
+  | 'locked'
+  | 'quota'
+  | 'invalid'
+  | 'fixedSize'
+  | 'integrityConflict'
+  | 'ambiguous'
+  | 'outcomeAbsent'
+  | 'providerDeleted'
+  | 'localHistory'
+  | 'discard'
+  | 'closedSource'
+  | 'builderLost'
+  | 'readbackUnavailable'
+  | 'nativeOwnerLost'
+  | 'numericOverflow'
+  | 'noValidReading'
+  | 'noCoverage'
+  | 'inactive'
+  | 'transientFailure'
+  | 'missingSource'
+  | 'clock';
+export type ComponentResult = {
+  component: HealthComponent;
+  sourceRevision: string;
+  required: boolean;
+  providerIds: string[];
+} & (
+  | { state: 'notRequested' | 'pending' | 'saved'; reason?: HealthReason }
+  | { state: 'unavailable' | 'failed' | 'fenced'; reason: HealthReason }
+);
+export type WorkoutHealthResult = {
+  componentResults?: ComponentResult[];
+  recordingOwner?: 'phone';
+  healthPublisher?: 'phone' | 'watch';
+  healthRetryAvailable?: boolean;
+  exportEligible?: boolean;
+};
+
+export type ExternalRideControl = {
+  rideId: string;
+  controlToken: string;
+  expectedPhase: string;
+  action: 'finish';
+};
+export function externalRideControl(value: unknown): ExternalRideControl {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid external ride control');
+  const record = value as Record<string, unknown>;
+  if (
+    Object.keys(record).some(key => !['rideId', 'controlToken', 'expectedPhase', 'action'].includes(key)) ||
+    !['running', 'paused'].includes(record.expectedPhase as string) ||
+    record.action !== 'finish'
+  )
+    throw new Error('Invalid external ride control');
+  return {
+    rideId: watchWorkoutId(record.rideId),
+    controlToken: watchWorkoutId(record.controlToken),
+    expectedPhase: record.expectedPhase as string,
+    action: 'finish',
+  };
+}
+
+export type WorkoutState = WorkoutHealthResult & {
+  healthReason?: string | null;
+  healthBusy?: boolean | null;
+  sessionBusy?: boolean | null;
+  endingOwner?: boolean | null;
+  startBusy?: boolean | null;
+  finalizationBusy?: boolean | null;
+  readWorkoutIds?: string[];
   supported: boolean;
   capabilities: {
     phoneWorkout: boolean;
@@ -27,119 +147,136 @@ export type WorkoutState = {
     foregroundOnly: boolean;
   };
   id: string | null;
+  controlToken?: string | null;
+  externalFinish?: ExternalRideControl | null;
   phase: WorkoutPhase;
   historyRevision: string;
   lastDeletedWorkoutId: string | null;
-  collectionRevision: number | null;
-  sealRevision: number | null;
-  verifiedSealRevision: number | null;
-  finalizationState: 'pending' | 'complete' | 'partial' | null;
+  collectionRevision: string | null;
   indoor: boolean;
   useWatch: boolean;
   saveToHealth: boolean;
   recordGPS: boolean;
+  distanceSource?: DistanceSource;
+  batteryConsumptionSource?: BatteryConsumptionSource;
   timerSeconds: number;
-  pendingAction: string | null;
-  recoveryState: 'idle' | 'checking' | 'unresolved' | 'resolved';
-  recoveryMessage: string | null;
-  healthKitState: string;
+  pendingAction: RideAction | null;
+  foreignOwner: 'anotherBrowserTab' | null;
+  recoveryState: 'idle' | 'checking' | 'unresolved' | 'storage' | 'checkingStorage' | 'absent' | 'resolved';
+  healthKitState: OwnerHealth;
   watch: { installed: boolean };
   streams: {
-    cyc: WorkoutStream;
+    controller: WorkoutStream;
     heartRate: WorkoutStream;
     gps: WorkoutStream & { source: 'phone' | 'watch'; accuracyMeters: number | null };
   };
-  error: string | null;
+  failure: RideFailureState | null;
 };
 type UncheckedStream = { status: unknown };
-type UncheckedWorkoutState = Omit<WorkoutState, 'streams' | 'capabilities'> & {
+type UncheckedWorkoutState = Omit<
+  WorkoutState,
+  'streams' | 'capabilities' | 'pendingAction' | 'foreignOwner' | 'failure'
+> & {
+  pendingAction: unknown;
+  foreignOwner?: unknown;
+  failure?: unknown;
   capabilities: { [K in keyof WorkoutState['capabilities']]: unknown };
   streams: {
-    cyc: UncheckedStream;
+    controller: UncheckedStream;
     heartRate: UncheckedStream;
     gps: UncheckedStream & { source: 'phone' | 'watch'; accuracyMeters: unknown };
   };
 };
 
 export function parseStreamStatus(status: unknown): StreamStatus {
-  switch (status) {
-    case 'off':
-    case 'waiting':
-    case 'receiving':
-    case 'weak':
-    case 'stale':
-    case 'paused':
-    case 'denied':
-    case 'restricted':
-    case 'notDetermined':
-    case 'unavailable':
-      return status;
-    default:
-      return 'waiting';
-  }
+  return presentationStreamStatus(typeof status === 'string' ? status : null) as StreamStatus;
 }
 
 export function normalizeWorkoutState(state: UncheckedWorkoutState): WorkoutState {
+  if (!validDecimal(state.historyRevision, 'revision')) throw new Error('Invalid workout catalog revision');
+  if (state.controlToken != null) watchWorkoutId(state.controlToken);
+  if (state.externalFinish != null && !state.controlToken) throw new Error('Invalid external ride control');
+  const externalFinish =
+    state.externalFinish == null ? state.externalFinish : externalRideControl(state.externalFinish);
+  const completion = validateWorkoutPayload(state);
+  const pendingAction = state.pendingAction;
+  if (
+    pendingAction !== null &&
+    pendingAction !== 'start' &&
+    pendingAction !== 'pause' &&
+    pendingAction !== 'resume' &&
+    pendingAction !== 'lap' &&
+    pendingAction !== 'stop' &&
+    pendingAction !== 'discard'
+  )
+    throw new Error('Invalid pending ride action');
+  if (state.foreignOwner != null && state.foreignOwner !== 'anotherBrowserTab')
+    throw new Error('Invalid foreign ride owner');
   const nonnegative = (value: unknown) =>
     typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
   const stream = (value: UncheckedStream): WorkoutStream => ({
     status: parseStreamStatus(value.status),
   });
-  return {
-    ...state,
-    capabilities: {
-      phoneWorkout: state.capabilities.phoneWorkout === true,
-      watchWorkout: state.capabilities.watchWorkout === true,
-      phoneHealth: state.capabilities.phoneHealth === true,
-      watchHealth: state.capabilities.watchHealth === true,
-      healthProvider:
-        state.capabilities.healthProvider === 'appleHealth' || state.capabilities.healthProvider === 'healthConnect'
-          ? state.capabilities.healthProvider
-          : null,
-      gps: state.capabilities.gps === true,
-      foregroundOnly: state.capabilities.foregroundOnly === true,
-    },
-    streams: {
-      cyc: stream(state.streams.cyc),
-      heartRate: stream(state.streams.heartRate),
-      gps: {
-        ...stream(state.streams.gps),
-        source: state.streams.gps.source,
-        accuracyMeters: nonnegative(state.streams.gps.accuracyMeters),
+  return retainWorkoutCompletion(
+    {
+      ...state,
+      ...(state.externalFinish != null ? { externalFinish } : {}),
+      collectionRevision: completion.collectionRevision ?? null,
+      pendingAction,
+      foreignOwner: state.foreignOwner ?? null,
+      failure: state.failure == null ? null : rideFailure(failureCode(state.failure)),
+      capabilities: {
+        phoneWorkout: state.capabilities.phoneWorkout === true,
+        watchWorkout: state.capabilities.watchWorkout === true,
+        phoneHealth: state.capabilities.phoneHealth === true,
+        watchHealth: state.capabilities.watchHealth === true,
+        healthProvider:
+          state.capabilities.healthProvider === 'appleHealth' || state.capabilities.healthProvider === 'healthConnect'
+            ? state.capabilities.healthProvider
+            : null,
+        gps: state.capabilities.gps === true,
+        foregroundOnly: state.capabilities.foregroundOnly === true,
+      },
+      streams: {
+        controller: stream(state.streams.controller),
+        heartRate: stream(state.streams.heartRate),
+        gps: {
+          ...stream(state.streams.gps),
+          source: state.streams.gps.source,
+          accuracyMeters: nonnegative(state.streams.gps.accuracyMeters),
+        },
       },
     },
-  };
+    completion,
+  );
 }
-export type WorkoutMetadata = {
+export type WorkoutMetadata = WorkoutHealthResult & {
   schemaVersion: number;
   id: string;
   startedAt: string;
   elapsedSeconds: number;
   endedAt?: string;
   phase: string;
-  healthProvider?: 'healthConnect';
+  healthProvider?: HealthProvider;
   saveToHealth?: boolean;
   recordGPS?: boolean;
+  distanceSource?: DistanceSource;
+  batteryConsumptionSource?: BatteryConsumptionSource;
   storage?: 'native' | 'browser';
+  sampleHz?: 2 | 4 | 8;
   example?: boolean;
   indoor: boolean;
   watchEnabled: boolean;
-  sport: string;
-  subSport: string;
-  eventCount: number;
+  eventCount: string;
   interrupted: boolean;
-  healthKitState: string;
+  healthKitState: OwnerHealth;
   healthKitUUID?: string;
   healthReason?: string | null;
-  watchSyncState: 'pending' | 'received' | 'notRequired';
-  syncReason?: string | null;
-  collectionRevision?: number;
-  sealRevision?: number;
-  verifiedSealRevision?: number;
-  finalizationState?: 'pending' | 'complete' | 'partial';
+  collectionRevision?: string;
 };
 export type RoutePoint = { latitude: number; longitude: number; [key: string]: number };
 export type WorkoutSummary = {
+  batteryConsumption?: BatteryConsumptionSummary;
   distance?: WorkoutDistanceInfo;
   schemaVersion: number;
   id: string;
@@ -149,10 +286,6 @@ export type WorkoutSummary = {
   timerSeconds: number;
   distanceMeters?: number;
   gpsDistanceMeters?: number;
-  healthDistanceMeters?: number;
-  healthDistanceProvisional?: boolean;
-  healthDistanceSource?: string;
-  healthDistanceReportedAt?: string;
   averageSpeedMps?: number;
   maximumSpeedMps?: number;
   ascentMeters?: number;
@@ -168,10 +301,11 @@ export type WorkoutSummary = {
   riderWorkJoules?: number;
   telemetryCoveredSeconds: number;
   heartRateCoveredSeconds: number;
-  eventCount: number;
-  telemetryCount: number;
-  locationCount: number;
-  healthCount: number;
+  eventCount: string;
+  telemetryCount: string;
+  locationCount: string;
+  healthCount: string;
+  lifecycleCount: string;
   lapCount: number;
   routePreview: RoutePoint[];
   provenance: Record<string, string>;
@@ -185,6 +319,8 @@ export type WorkoutOptions = {
   saveToHealth?: boolean | null;
   recordGPS?: boolean | null;
   sampleHz?: 2 | 4 | 8 | null;
+  distanceSource?: DistanceSource | null;
+  batteryConsumptionSource?: BatteryConsumptionSource | null;
 };
 export type WorkoutPermissions = {
   health: {
@@ -209,18 +345,19 @@ export interface WorkoutAdapter {
   resume(id?: string): Promise<WorkoutState>;
   lap(id?: string): Promise<WorkoutState>;
   stop(id?: string): Promise<WorkoutState>;
-  recover(id: string): Promise<WorkoutState>;
+  refreshHealth?(id: string): Promise<WorkoutState>;
+  retryHealthSave?(id: string): Promise<WorkoutState>;
+  finishExternal?(request: ExternalRideControl, discard: boolean): Promise<WorkoutState>;
+  cancelExternal?(request: ExternalRideControl): Promise<WorkoutState>;
   remove(id: string): Promise<WorkoutState>;
   discard(id: string): Promise<WorkoutState>;
   list(options?: CatalogRequest): Promise<CatalogPage<WorkoutMetadata>>;
-  /** Development builds only: writes the fictional example rides that are not stored yet and returns how many were added. */
   addExampleRides?(): Promise<number>;
-  /** Browser only: whether saved rides are protected from storage eviction. */
   storagePersistence?(): Promise<StoragePersistence>;
-  read(id: string, distanceSource?: DistanceSource): Promise<WorkoutDetail>;
+  read(id: string, distanceSource?: DistanceSource, signal?: AbortSignal): Promise<WorkoutDetail>;
 }
 export const workoutInProgress = (phase: WorkoutPhase) =>
-  ['preparing', 'running', 'paused', 'recoverable', 'finishing'].includes(phase);
+  ['preparing', 'running', 'paused', 'interrupted', 'finishing'].includes(phase);
 export const unavailableWorkoutState: WorkoutState = {
   supported: false,
   capabilities: {
@@ -234,96 +371,72 @@ export const unavailableWorkoutState: WorkoutState = {
   },
   id: null,
   phase: 'idle',
-  historyRevision: '',
+  historyRevision: '0',
   lastDeletedWorkoutId: null,
   collectionRevision: null,
-  sealRevision: null,
-  verifiedSealRevision: null,
-  finalizationState: null,
   indoor: false,
   useWatch: false,
   saveToHealth: false,
   recordGPS: false,
   timerSeconds: 0,
   pendingAction: null,
+  foreignOwner: null,
   recoveryState: 'idle',
-  recoveryMessage: null,
   healthKitState: 'notSaved',
   watch: { installed: false },
   streams: {
-    cyc: { status: 'unavailable' },
+    controller: { status: 'unavailable' },
     heartRate: { status: 'unavailable' },
     gps: { status: 'unavailable', source: 'phone', accuracyMeters: null },
   },
-  error: null,
+  failure: null,
+  sessionBusy: false,
 };
 
-/** Ended and Health saved are independent from verification of the current snapshot. */
 export function workoutExportReady(record: WorkoutMetadata): boolean {
-  if (record.storage === 'browser')
-    return record.phase === 'completed' && Boolean(record.endedAt) && record.finalizationState === 'complete';
-  return (
-    record.phase === 'completed' &&
-    (record.sealRevision ?? 0) > 0 &&
-    record.verifiedSealRevision === record.sealRevision &&
-    (record.finalizationState === 'complete' || record.finalizationState === 'partial')
-  );
+  try {
+    return completionExportReady(workoutCompletion(record));
+  } catch {
+    return false;
+  }
 }
 
-/** UI eligibility only; native storage verifies owner and in-flight work again before deletion. */
-export function workoutCanDelete(record: WorkoutMetadata, current: WorkoutState): boolean {
-  if (record.storage === 'browser' && record.phase === 'recoverable')
-    return record.id !== current.id || (!workoutInProgress(current.phase) && !current.pendingAction);
-  if (!['completed', 'failed'].includes(record.phase)) return false;
-  return (
-    record.id !== current.id ||
-    (!workoutInProgress(current.phase) && !current.pendingAction && current.recoveryState !== 'checking')
-  );
-}
-
-/** Historical phone repair never selects that ride as the current owner. */
-export function workoutRecoveryAction(record: WorkoutMetadata, currentID: string | null): 'repair' | 'recover' | null {
-  if (record.storage === 'browser') return null;
-  if (
-    record.healthProvider === 'healthConnect' &&
-    record.phase === 'completed' &&
-    record.saveToHealth &&
-    record.healthKitState === 'notSaved'
-  )
-    return 'repair';
-  if (workoutExportReady(record) && record.finalizationState !== 'partial') return null;
-  if (
-    record.phase === 'completed' &&
-    !record.watchEnabled &&
-    (record.healthKitState === 'saved' ||
-      (record.saveToHealth === false && record.healthKitState === 'notRequested' && Boolean(record.endedAt)))
-  )
-    return 'repair';
-  return record.id === currentID ? 'recover' : null;
+export type WorkoutDeletionFacts = {
+  healthBusy?: boolean | null;
+  startBusy?: boolean | null;
+  finalizationBusy?: boolean | null;
+  targetPending?: boolean | null;
+  targetRecovering?: boolean | null;
+  targetBusy?: boolean | null;
+};
+export function workoutCanDelete(
+  record: WorkoutMetadata,
+  current: WorkoutState,
+  facts?: WorkoutDeletionFacts,
+): boolean {
+  return completionCanDelete(record.id, record.phase, current, {
+    healthBusy: null,
+    startBusy: null,
+    finalizationBusy: null,
+    targetPending: null,
+    targetRecovering: null,
+    targetBusy: null,
+    ...facts,
+  });
 }
 
 export function effectiveWorkoutOptions(
   options: { [K in keyof WorkoutOptions]: unknown },
   capabilities: WorkoutState['capabilities'],
 ): { [K in keyof WorkoutOptions]-?: NonNullable<WorkoutOptions[K]> } {
-  if (typeof options.indoor !== 'boolean') throw new Error('indoor must be a boolean');
-  const boolean = (field: 'useWatch' | 'saveToHealth' | 'recordGPS', fallback: boolean): boolean => {
-    const value = options[field];
-    if (value == null) return fallback;
-    if (typeof value !== 'boolean') throw new Error(`${field} must be a boolean`);
-    return value;
-  };
-  const requestedWatch = boolean('useWatch', false);
-  const saveToHealth = boolean('saveToHealth', true);
-  const recordGPS = boolean('recordGPS', !options.indoor);
-  const sampleHz = options.sampleHz ?? 2;
-  if (sampleHz !== 2 && sampleHz !== 4 && sampleHz !== 8) throw new Error('Sample rate must be 2, 4, or 8 Hz');
-  const useWatch = capabilities.watchWorkout && requestedWatch;
+  const resolved = presentationResolveOptions(presentationOptions(options), presentationCapabilities(capabilities));
   return {
-    sampleHz,
-    indoor: options.indoor,
-    useWatch,
-    saveToHealth: (useWatch ? capabilities.watchHealth : capabilities.phoneHealth) && saveToHealth,
-    recordGPS: capabilities.gps && recordGPS,
+    indoor: resolved.indoor,
+    useWatch: resolved.useWatch,
+    saveToHealth: resolved.saveToHealth,
+    recordGPS: resolved.recordGPS,
+    sampleHz: resolved.sampleHz as 2 | 4 | 8,
+    distanceSource: resolved.distanceSource as DistanceSource,
+    batteryConsumptionSource: resolved.batteryConsumptionSource as BatteryConsumptionSource,
   };
 }

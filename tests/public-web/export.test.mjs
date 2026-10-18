@@ -85,6 +85,7 @@ test('public export works under the Pages path without external requests', { tim
       await policy.getByRole('link', { name: 'Back to Settings', exact: true }).click();
       assert.equal(new URL(page.url()).pathname, `${prefix}/settings`);
       await page.getByRole('link', { name: 'History', exact: true }).click();
+      await page.getByRole('button', { name: 'History actions', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
     }
     await page.goto(`${origin}${prefix}/?value=${'%FF'.repeat(500)}`);

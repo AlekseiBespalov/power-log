@@ -1,69 +1,238 @@
 # Testing
 
-Use Node 24 and `npm ci`; `npm run verify` and `npm run release:android` pick Homebrew's `node@24` when it is installed. Browser checks need Playwright Chromium (`npx playwright install chromium`); Apple checks need macOS and full Xcode with iOS/watchOS SDKs. Android checks need JDK 17 and the Android SDK.
+Use Node 24 and `npm ci`; the scripts pick Homebrew's `node@24` when it is installed. Browser checks need Playwright
+Chromium, Apple checks need macOS with full Xcode and the iOS/watchOS SDKs, Android checks need JDK 17 and the Android
+SDK, and FIT checks need Garmin's FIT Python SDK from `FIT_PYTHON` or `~/.cache/power-log/fit-venv`. Tests use
+disposable stores and synthetic or sanitized inputs.
 
-| Command | Coverage |
+## Commands
+
+| Command | Purpose |
 | --- | --- |
-| `npm run check` | Types, lint, unit tests, native target generation, dependency regressions, notice generation and web build |
-| `npm run test:native-config` | Native target generation, Watch privacy resources, shared Apple versions/build numbers and publishing prerequisites |
-| `npm run test:e2e` | Browser UI, layouts, gestures, history and exports |
-| `npm run test:browser` | IndexedDB/Web Locks, recording/recovery and production-provider integration |
-| `npm run test:swift` | Native protocol, storage, capture, chart, ownership and sync regressions, the shared bridge-contract fixtures; Expo module parse and both SDK typechecks |
-| `npm run build:ios-simulator` | Linked simulator build of the generated iPhone app, its Expo module, app-delegate subscriber and embedded Watch app (`bundle install` first) |
-| `npm run test:public-web` | Production Pages routes, notice files, parser safety and unexpected network requests |
+| `sh scripts/verify.sh .` | Everyday tier in the working directory |
+| `sh scripts/verify.sh . --full` | Release tier in the working directory |
+| `npm run verify` | Release tier on clean `HEAD` in a temporary worktree: the release gate |
+| `npm run verify:stress` | Live-ride soak at full workload on a quiet Mac |
+| `node scripts/checks.mjs` | The runner: `--full`, `--only`/`--skip`, `--force`, `--jobs n`, `--explain`, `--list` |
+| `npm run check` | The `check` group of the everyday tier |
+| `npm run test:core` | Release-tier core checks |
+| `npm test`, `npm run test:browser`, `npm run test:e2e` | Vitest, browser and Playwright suites |
+| `bash scripts/test-swift.sh [--only id[,id]]` | Swift host suites, or chosen ones by id from `scripts/swift-suites.mjs` |
+| `npm run test:android [-- --emulator]` | Android JVM suites; with `emulator-5554` also connected suites and crash paths |
+| `npm run prepare:android` | Generate the Android project without building; `build:android` already prepares it |
+| `npm run test:crash-paths` | Android interrupted-store checks and browser reload checks |
+| `npm run test:lab-apple` | Apple Lab host checks |
+| `npm run build:ios-simulator` | Linked iPhone simulator Release build with the final-bundle Lab check |
+| `npm run build:core-js` | Regenerates `shared/js` after a shared Kotlin change |
+| `sh scripts/format.sh` | Prettier, swift-format and ktfmt (`--check` or `--write`) |
 
-The FIT family and iPhone cross-check suites decode their FIT files with Garmin's FIT Python SDK when `garmin-fit-sdk` 21.217.0 is installed; the other FIT tests read files with the tests' own decoder. Set `FIT_PYTHON` to that interpreter (CI does, and then a missing SDK fails the run), or keep a virtual environment at `~/.cache/power-log/fit-venv`; without either, the Garmin checks are skipped. ZIP tests extract every entry with Python's `zipfile`. Tests use disposable stores and synthetic/sanitized inputs; see [fixture provenance](../tests/fixtures/README.md). Swift typechecks are not linked app builds; `build:ios-simulator` is.
+## Tiers
 
-The ride snapshot and ride-option rules are fixed by `tests/fixtures/contract/`: the Swift runner and Android JVM tests serialize production values and compare them structurally, and Vitest feeds the same files through the TypeScript consumers. They prove snapshot serialization and consumption, not Expo argument conversion, which the linked builds and physical acceptance cover. For Android, run `npm run test:android` and `npm run test:android -- --emulator`; the emulator run includes the ride fixture and the corrupt-database test through the real `RideStore` open path. See [Android](android.md) for APK builds and physical acceptance.
+The everyday tier is the development loop: it reruns only the checks whose inputs, toolchain or environment changed
+since their last pass. The release tier (`--full`, `npm run verify`) runs every check regardless of earlier passes and
+adds simulator, emulator, app-build, generation and soak checks; it requires `emulator-5554`
+(`"$ANDROID_HOME/emulator/emulator" -avd PowerLog_API36 -port 5554`), and `POWER_LOG_SKIP_CONNECTED=1` marks a run
+as partial. `node scripts/checks.mjs --list [--full]` prints the checks, their tiers and their inputs.
 
-The Watch journal and `ClockHealth` Swift suites guard the [two time domains](measurements.md#evidence-and-limits): monotonic capture elapsed excludes recovery downtime, while original UTC stays unchanged through forward and backward wall-clock jumps. A Watch recovery fixture retains elapsed 60 at 10:01, resumes at 10:11 and stores a GPS fix at elapsed 61 alongside a raw Health sample at UTC 10:11:01 with UTC-derived placement 661; valid historical Health data remains stored even beyond the measured stop. Clock contracts retain measured terminal timing, original Health write dates and UTC-based omission rules. FIT's start-plus-elapsed placement can differ from Health after recovery or clock changes; these tests do not assert Health/FIT equality or validate native HealthKit execution.
+Large-volume variants of Kotlin common and Android unit tests live in `*VolumeTest` classes, which only the release
+tier runs; their behaviour stays covered every day by the ordinary classes. `npm run verify:stress` runs the live-ride
+soak before every release and during the device pass. Timings are comparable only on an awake Mac on power.
 
-GitHub runs only the website deploy. Before merging or releasing, `npm run verify` checks the commit on this Mac in a fresh temporary worktree of `HEAD`, so ignored local files and generated native folders cannot hide a missing file. With `CI=1` it installs dependencies with `npm ci`, then runs the audit (`scripts/audit.mjs` fails on any moderate or worse advisory it does not accept by name), `npm run check`, the browser, end-to-end and public-web suites, the Swift and Kotlin format checks, the Swift suite, the linked iPhone simulator build and the Android preview build with its unit tests; the worktree is removed when everything passes and kept for inspection when something fails. FIT decoding there is mandatory and uses the Garmin SDK from `FIT_PYTHON` (default `~/.cache/power-log/fit-venv`).
+## Qualification evidence
 
-## iOS build and installation
+Report host, simulator or emulator, linked-build and physical evidence separately, and name each as such; compilation,
+linking and a launch request are not executions or passes. A linked app or a generated eight-hour fixture does not
+prove eight hours of unattended recording. Keep run-specific logs, timings and device evidence outside Git.
 
-```sh
-npm run prebuild:ios
-(cd ios && bundle exec pod install)
-# Build Debug or Release in ios/PowerLog.xcworkspace.
-npm run test:ios-bundle -- /absolute/path/to/PowerLog.app
-codesign --verify --deep --strict /absolute/path/to/PowerLog.app
-```
+## Apple Health Lab
 
-Prebuild regenerates native targets, including the configured UIScene lifecycle, Live Activity extension and Watch privacy manifest resource. The phone, Watch and Live Activity use the version from `package.json` and the positive integer `POWER_LOG_IOS_BUILD_NUMBER` (default `1`). Before installation, confirm neither device is recording and preserve user-selected rides. Install matching phone/Watch versions, confirm each process stays alive and inspect the UI. Release must launch with Metro stopped. An install/launch command succeeding does not prove startup or background reliability.
+`POWER_LOG_LAB=1 npm run build:ios-simulator` builds Debug **Power Log Lab** (`app.powerlog.lab`, with its own
+Watch and Live Activity identities). Production Release rejects Lab code. Regenerate `ios/` with
+`expo prebuild --clean --platform ios --no-install` when switching between Lab and production.
 
-## Benchmarks
+`sh scripts/test-lab-apple.sh --simulators` uses a booted paired iPhone and Watch selected by
+`POWER_LOG_LAB_PHONE_UDID` and `POWER_LOG_LAB_WATCH_UDID`. Authorize the requested Health types on both simulators.
+`--no-build` reuses a build only when its source digest matches; `--phone-only` and `--watch-only` are partial runs.
+Results, process identities and source digests are retained under `test-results/lab-apple/runtime/<run-id>/`.
 
-Use `npm run benchmark:native` or a focused mode: `-- --capture`, `-- --transfer-profile`, `-- --projection`, `-- --chart-navigation`, `-- --distance`, `-- --watch-sync` (Watch transfer workloads; add `--smoke` for a short run). Browser scale checks use `npm run benchmark:browser`; `npm run benchmark:csv` streams 700,000 synthetic CSV rows and reports parse time and peak heap.
+The phone cases exercise normal recording and controls, then a real process interruption followed by Finish of the
+same retained ride. The Watch cases exercise native-session cleanup, cancellation during Start, Health-off finish,
+and `watch-health-save`: an actual Health save with quantity, route and lap readback. These replace the
+retired archive-replication and mutation-ledger recovery cases. Neither a simulated provider nor simulator Health
+establishes locked-device delivery, real Bluetooth operation or physical Health behavior.
 
-These runners use production storage/query/transfer code with synthetic 57-minute/eight-hour workloads. The Watch stress model adds four Watch records per CYC sample plus heart-rate/location observations; it tests exact digests, retries and verification. Mac timings and highly compressible fixtures do not establish radio latency, real-ride size, phone flash writes or battery use. Capture comparisons report matched durability paths; WAL growth is not total disk-write volume.
+## Phase 6 checklist
 
-Development builds expose fictional rides in Settings → Developer. They carry generated provenance, export like other examples and hide the Strava shortcut; [screenshot instructions](../artifacts/app-store/README.md) describe reproduction. [MonitorRasterFrames](../modules/cyc-bridge/ios/MonitorRasterFrames.swift) documents the opt-in physical frame sampler: callback cadence is a main-thread proxy, not touch-to-photon latency.
+Physical qualification of the simplified implementation is pending. Implementation may proceed before these checks
+at the rider's request; that authorization does not count as a device pass. Use the iPhone 17 Pro Max, Watch Ultra 3
+and S22 Ultra. Record source/build digest, OS, controller firmware, rate, run IDs and timing/memory evidence outside
+Git. A skipped or scaled-down row is not a pass.
 
-Formatting is enforced per language: `sh scripts/format.sh --ts|--swift|--kotlin --check` (or `--write`); `npm run check` runs the TypeScript check and `npm run verify` all three. `npm run format` writes all three. Kotlin uses a pinned standalone ktfmt, downloaded to `~/.cache/power-log` on first use.
+Before installing an iOS build, run `npm run test:ios-bundle -- /absolute/path/to/PowerLog.app` and
+`codesign --verify --deep --strict` on it. Install matching phone/Watch versions, confirm no device is recording,
+preserve personal rides and confirm both processes remain alive. Use signed Release builds without a debugger for
+ordinary acceptance; use the separate Debug Lab for controlled termination and provider probes.
 
-## Physical acceptance
+### Phone recording and Watch companion
 
-Use signed Release builds launched normally without a debugger, on battery. Record device/OS/controller, requested rate, workload and actual results. Xcode and Mirroring are diagnostic supplements; real fingers are required for gesture checks.
+1. Record at least 60 minutes with X6 at 8 Hz, Health on, locked iPhone and wrist-down Watch. Include controlled
+   5-minute and 20-minute disconnects. The phone remains the app recorder and GPS source; the Watch remains the
+   Health writer. Check Watch Start, Pause, Resume, Lap, Finish and Discard, including duplicate taps and lost replies.
+2. Check original controller and Watch measurement times, subsecond chart detail, phone GPS route, History and FIT/ZIP.
+   Watch buffering is bounded to 60 seconds, 2,048 observations and 512 KiB; older unavailable data may be lost and
+   must appear as gaps. Routine phone-to-Watch messages are capped at one per second; controls bypass that pacing.
+3. Finish and Discard with Watch unreachable or Health slow. Local completion and export must remain available within
+   the stated UI deadline; no saved Health outcome may be invented. Reconnect and verify bounded terminal delivery
+   ends the old session where possible. Exercise another Start with an old native session still active.
+4. Cancel during Watch authorization, let authorization complete late, and lose the reply to Watch-originated Finish.
+   Neither may leave a new unintended native workout running. End orphaned sessions after app termination; never
+   transfer Watch Health publication to the phone or restart the local ride automatically.
+   Deliver ride A's delayed Finish/Discard reply and observation acknowledgement after ride B starts; B must keep
+   recording, its native session must stay active and its buffered observations must remain intact.
+5. Repeat with Health off. The app must not create a saved workout; document any sensor samples or Activity credit
+   already recorded by the system. Discard leaves saved Health records alone, stops an available native session,
+   requests no new workout save and shows no Health-related text or warning.
+6. Select 2, 4 and 8 Hz and controller/GPS distance on the phone, then Start from either device, including native
+   phone relaunch without React. Verify actual capture rate and frozen distance. After a failed preference save,
+   phone Start must expose the failure rather than silently use older settings. Changing preferences during a ride
+   must not change its capture rate, distance or detailed graphs.
 
-1. **Capture:** test X6/X12 at 2/4/8 Hz, distinct identity/names, nonzero pedal values, reconnects and a moving speed comparison against CYC Ride Control in both unit settings. Compare foreground with at least 30 minutes locked. Exercise controller/radio outages, app switches, termination/restoration and history inspection while recording.
-2. **Ownership:** cover Watch, Health and GPS choices on/off, including indoor GPS on, outdoor GPS off, Watch with Health off and phone-only with both off. Exercise pause/resume/lap and finish while unreachable. Verify one owner, correct stop cutoff, one Health workout when requested (none, with Health `unavailable` and a clock reason, when the clock put the cutoff before the start) and no app-created workout when saving is off. Include forward and backward clock changes while running, across Pause/Resume and with delayed GPS fixes, a backward clock change before Finish, a restart afterwards, another Start, late Health callbacks, a Finish while the phone is unreachable followed by reconnection, and verified export on both Apple owners. Delay a Watch ride's Health save after Stop and confirm the phone refuses another Start until the Watch confirms its session ended; deny cadence, grant it, then Retry Health save (also after a restart) and confirm the missing samples arrive. Repeat on each iPhone tier: iOS 16.x (phone-owned rides only, no Health), iOS 17–25 (phone-owned rides without Health, Watch-owned rides with Health) and iOS 26+; include a locked-screen ride with GPS off and one with GPS on below iOS 26.
-3. **Synchronization:** record a 60-minute Watch ride with repeated locks/switches, then a two-hour soak. Restart either app; compare final original counts/digests, missing tails, staging cleanup and archive receipt. Health outcome and archive completeness must stay distinct.
-4. **Controls:** test Watch start while the phone app is hidden and Lock Screen Pause/Resume/Finish, with Live Activities enabled, disabled and dismissed. Include repeated taps and unreachable Watch. A moving system timer does not prove telemetry freshness. With the controller disconnected, GPS and Watch heart-rate readings stay live; a reading delivered late (Watch fallback transport, busy JavaScript thread, a phone that slept) is never shown as live past its hold after it was measured: six seconds for controller readings, ten for GPS and fifteen for heart rate, with held chart tails capped at six seconds.
-5. **Charts/UI:** inspect short, 57-minute and eight-hour rides, including an eight-hour ride where GPS speed is absent for hours and then resumes (cursor inspection, A–B statistics, whole-ride statistics and live refresh must stay within the interaction target); test peaks/exact readouts, pan/pinch, full screen, repeated reorder/scroll, narrow/desktop layouts and larger text. Refreshes, missing data, settings and tab/modal transitions must not shift surrounding layout.
-6. **Removal:** discard from both owners, including offline/restart, then start another ride. Delete a completed ride with an offline Watch copy; reconnect and confirm it stays deleted. Reject deletion of active rides; retain previously saved Apple Health workouts.
-7. **Exports:** export FIT and ZIP from iPhone, Android and the browser for matching rides; compare the extracted files and decoded FIT timing, coverage and provenance. Check the share sheet, Save to Files, a share that completes after Power Log restarts and the manual Strava page link. Do not submit a file without explicit user authorization.
+Record HR latency, backlog, CPU, heat and memory at 8 Hz. Compare a 30-minute locked Watch run with the prior qualified
+baseline and report the difference; do not infer performance from the message cap alone.
 
-Repeat critical background cases three times. Eight-hour generated fixtures establish storage/query scale, not eight-hour unattended recording.
+### Interrupted recording and storage failures
+
+On each platform, terminate after committed samples and reopen. The ride must be marked Interrupted and offer Finish
+saved portion and Discard. Finish preserves committed originals and ends at the last saved in-ride measurement or
+meaningful event, excluding restart bookkeeping; no Recover into Paused or automatic recording resumption exists.
+Include a retained lap/pause after the last sensor sample and a long delay before reopening: event bounds and active
+time must be correct in History and FIT/ZIP, with no restart downtime counted as riding time.
+Exercise storage-full/write failures without silently erasing data or claiming uncommitted observations were saved.
+A browser reload test, emulator SQLite reopen test and actual process kill are distinct kinds of evidence.
+
+On Apple, separately check native-session cleanup after phone and Watch termination. Uncertain prior Health writes
+must not be replayed. A process restart may lose buffered samples and may leave Health incomplete; it must not hide
+the retained local ride or block its Finish/Discard actions.
+
+### Health publication, collection and permissions
+
+1. Record ordinary phone-only and Watch-assisted Apple rides and an Android Health Connect ride. Check one requested
+   workout, expected time bounds, admitted quantities and route. Compare values and units with local originals and
+   decoded FIT. No late correction should replace already published samples.
+2. Deny permissions, grant them, and exercise only retry actions actually offered for a known failed save. A request
+   whose outcome is uncertain must remain uncertain and must never be blindly repeated. A provider timeout must not
+   block local History/export. Watch Health is written only by the Watch, even after a phone restart.
+3. Add a delayed HR series and run automatic or explicit readback. Supported physiology must appear in graphs, summary
+   and exports after refresh, without importing Power Log's own published samples. Check deterministic source choice
+   and compatible basal-energy coverage. Provider edits/deletions are not continuously mirrored.
+   On Android, refresh a ride with Health saving off: permitted measurements can be imported without provider writes,
+   a publication job or an endless worker loop. Check denied reads and an unavailable provider as bounded outcomes.
+4. Export during a refresh and delete during an export. The read must retain a coherent revision or fail clearly for
+   a retry, never mix revisions. Deleting local History leaves already saved Health records intact.
+5. Use the full eight-hour synthetic workload separately from actual capture: 230,400 controller originals at 8 Hz,
+   supported Health seconds, missing intervals, original GPS edges and route. Apple route publication is capped at
+   30,000 admitted points; Android encoding must fit its 900,000-byte limit. Verify local raw originals remain intact.
+
+Measure save/readback time and peak/post-cleanup memory separately from framework overhead. Phone readback is bounded
+at Finish, +15 minutes and +60 minutes while the process remains alive, plus explicit refresh. Do not call provider
+probes, generated storage workloads or simulator runs physical acceptance.
+
+### Live Activity and notification controls
+
+1. Start with real controller and HR inputs, then stop new data. Check foreground, locked and suspended states around
+   controller +6 seconds and HR +15 seconds. Capture publication, `staleDate`, evaluation and visible-card timestamps.
+   No reading may be refreshed merely by delivery of an old sample or by a moving timer.
+2. With the phone process cold, invoke Pause/Resume/Finish from an existing Activity or Android notification. Finish
+   must open the Save/Discard confirmation; Cancel must not send Stop/Discard. Replay controls from an old ride or phase.
+3. Repeat with Live Activities disabled/dismissed and with a slow/unreachable Watch. Verify accessible labels, haptics,
+   one admitted action per current intent and an explicit action for every waiting/error state.
+
+### Eight-hour query/export measurements
+
+1. With the iPhone procedure below, measure accepted cold Ride summary, chart first-open and distance build, then the
+   same warm requests, also while another ride captures at 8 Hz. Check that finalization warms the summary before the
+   first History open. Measure FIT peak resident/footprint and memory after export closes. Record page counts, peaks and
+   five-run medians. Latency and memory acceptance stays open until the user sets thresholds from this device pass.
+2. On the S22 install the current Android Lab APK, clear only its disposable long-ride store and run
+   `adb -s <s22-serial> shell am instrument -w -e class app.powerlog.bridge.LongRideTest#eightHoursRetainsOriginalsAndBoundsInteractiveReads -e powerlogVolume full app.powerlog.bridge.test/androidx.test.runner.AndroidJUnitRunner`.
+   Retain the `PowerLogPlotComparison` and `PowerLogBenchmark` logcat lines and test output, and measure cold/warm
+   detail, first History open after finalization, complete power plot, full distance plot, cursor, A–B and whole-ride
+   statistics with the current build. Pass: geometry, counts, endpoints and every assertion pass, and no cold summary
+   work is deferred onto the first History open. Emulator results do not qualify the S22.
+
+#### iPhone eight-hour fixture and collection procedure
+
+Use a freshly installed, signed development app with disposable data on the iPhone 17 Pro Max; never overwrite a
+personal recording container. Run the scripts in `scripts/device-eight-hour/` from the checkout and keep everything under
+ignored `test-results/device-eight-hour/`. The fixture is a generated phone-recorded eight-hour 8 Hz ride with one GPS and
+HR observation per second, a pause, an invalid span and missing speed; it exercises local reads, not capture or Health
+publication.
+
+1. Before any read warms a cache, generate it with
+   `sh scripts/device-eight-hour/generate.sh --full test-results/device-eight-hour/original/PowerLog`.
+2. Before **each cold operation**, `python3 scripts/device-eight-hour/stage.py` stages a copy without derived caches,
+   verifies every other table and prints the ride ID, counts and original hash; record them and keep the original for
+   every repeat. This is an application-cache cold run; do not purge OS disk caches.
+3. Build a signed Debug development app for the iPhone in Xcode with Metro as in the README. With
+   `POWER_LOG_DEVICE_APP` and `POWER_LOG_DEVICE_ID` set (and `POWER_LOG_DEVICE_BUNDLE` when the bundle ID is not
+   `app.powerlog`), run `sh scripts/device-eight-hour/device.sh install`. Terminate Power Log in Xcode before each
+   transfer, run `device.sh push` and `device.sh pull`, and check the copy with
+   `python3 scripts/device-eight-hour/stage.py test-results/device-eight-hour/copied/PowerLog` before launching. Start
+   the app on Live, confirm its process stays alive and keep History closed until the measurement.
+4. Collect accepted bridge timings in the device's React Native DevTools console: after each restart put the ride ID
+   into `console.js` and paste it. Cold summary: restore the staging store, restart, run `await measureSummary()`.
+   Chart first-open: restore and restart, prebuild distance outside the timer with `distance.lldb`, read no plot or
+   statistics, run `await measureChart()`. A timing ends when the result is accepted and excludes rendering; a retry,
+   stale identity, error or cancellation is a failed request, not a sample. Save console output with
+   build/configuration, OS, fixture hash, run and operation, and retain screen recordings of visible first-open and
+   gestures separately.
+5. Collect distance build, page counts and memory in a **separate diagnostic repeat** with the same staged inputs. In
+   Xcode, pause in a Swift bridge frame and `command source` `diagnostics.lldb` once, `reset.lldb` before each
+   operation, `collect.lldb` after it and `stop.lldb` at the end. For a **cold distance build** restore and restart, put
+   the ride ID into `distance.lldb` and source it; repeat for warm. Summary pages hold at most 256 entries and distance
+   pages at most 128; retain page, row and byte totals, scan counts and idle, sampled-peak (100 ms resolution) and
+   post-request `phys_footprint`. Summary page callbacks count both passes; projection diagnostics count scans and
+   adapter bytes, not process memory. Observe FIT separately through sharing and after the exporter closes. Keep this
+   instrumented Debug run separate from uninstrumented bridge timings and Release UI acceptance.
+6. Run five cold/warm repeats per operation, then repeat bridge reads while a separate phone-recorded ride captures at
+   8 Hz. Retain raw values and five-run medians. Copy the store back after each read and compare the fixture's original
+   rows, memberships and metadata with the immutable input, isolating the live ride for capture runs. On a real
+   completed ride check that finalization warmed the summary before History opens.
+
+Pass: exact summary/inspection/export values, unchanged fixture originals, bounded pages, accepted current request
+identities and cancellation drain. Record device summary/chart/distance measurements beside the quiet-Mac references
+for the same cold operations, **8.1 s / 5.1 s / 1.4 s**, with idle/peak/post-cleanup footprint and
+build/instrumentation context; they are host references, not phone thresholds, so derive no limits from them. The
+setup and collection commands are not a device pass.
+
+### Capture, charts and sharing
+
+Use the real X6/X12 with both phones and Watch-assisted Apple rides at 2/4/8 Hz. Compare matched foreground and at least
+30-minute locked runs; repeat radio outages, manual disconnect/reconnect, app switches and History inspection during
+capture. Check continuous crank counters, original acquisition times, no overlapping controller requests and honest
+gaps. Compare speed with Controller Ride Control in both unit settings. Phone GPS stays enabled on Watch rides when
+chosen; distance source freezes at Start and does not change when later preferences change.
+
+Exercise short, 57-minute and eight-hour rides, including hours without GPS speed followed by resumed fixes. Preserve
+exact cursor values, A–B statistics, rapid power/current/speed changes, peaks, pan/pinch, full screen, chart customization,
+metric ordering, larger text, narrow/desktop layouts and platform Back gestures. Settings, missing data, refreshes and
+modal transitions must not unexpectedly move surrounding UI. Check graphs while another ride captures at 8 Hz.
+
+Export FIT and optional full raw ZIP on iPhone, Android and web, compare decoded timing/coverage/provenance, and check
+share sheet/Save to Files and the manual Strava page link. Do not upload a file without explicit rider action. Local
+History must retain multiple independent rides; Discard affects only its selected ride. Include Android permission
+prompts, screen-off GPS, notification controls and vendor background limits. An actual unattended long ride remains
+separate evidence from generated eight-hour fixtures.
 
 | Measurement | Acceptance target, not a measured guarantee |
 | --- | --- |
 | Available-link delivery | ≥95% of requested rate per 60-second window; background within 5% of matched foreground |
-| Unexplained gaps | None beyond `max(0.5 seconds, 3 / requestedHz)`; classify controlled outages separately |
+| Gaps | Record and explain gaps; controlled outages and bounded-buffer losses must not become zeros or fabricated edges |
 | Background CPU / writes | Aim ≤3 CPU seconds/minute at 8 Hz and <100 KB/s sustained; report spikes, bytes/sample, WAL/checkpoints and DB growth |
 | Admission | BLE enqueue p95 <5 ms; report oldest buffered sample and worst commit delay |
 | Hidden UI | No periodic chart/catalog/display work after cancellation drains; no growing event backlog |
 | Interaction | Real gesture-to-presentation p95 <50 ms; no stalls >100 ms |
-| Durability | No lost acknowledged originals, resource termination or growing queues; bounded cost with ride length |
+| Storage | Committed originals remain readable, atomic errors remain visible, and memory/queue cost remains bounded |
 
-Keep run-specific logs outside Git. Report source tests, linked builds, startup and physical acceptance separately. Apple references: [background Bluetooth execution](https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html), [CPU profiling](https://developer.apple.com/documentation/xcode/addressing-cpu-bottlenecks).
+Apple references: [background Bluetooth execution](https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html),
+[CPU profiling](https://developer.apple.com/documentation/xcode/addressing-cpu-bottlenecks).

@@ -1,0 +1,316 @@
+{
+  "fixtures": ["F24", "F26", "F38"],
+  "cases": [
+    {
+      "id": "compact-parent-composition",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "6000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "101",
+          "timeUs": "0",
+          "value": 100
+        },
+        {
+          "id": "b",
+          "reference": "102",
+          "timeUs": "1000000",
+          "value": 10
+        },
+        {
+          "id": "c",
+          "reference": "103",
+          "timeUs": "2000000",
+          "value": 200
+        },
+        {
+          "id": "d",
+          "reference": "104",
+          "timeUs": "3000000",
+          "value": 50
+        },
+        {
+          "id": "e",
+          "reference": "105",
+          "timeUs": "4000000",
+          "value": 300
+        },
+        {
+          "id": "f",
+          "reference": "106",
+          "timeUs": "5000000",
+          "value": 150
+        }
+      ],
+      "buckets": [
+        ["0", "2000000"],
+        ["2000000", "4000000"],
+        ["4000000", "6000000"]
+      ],
+      "count": "6",
+      "coveredUs": "5000000",
+      "integral": 685,
+      "minimum": "102",
+      "maximum": "105",
+      "expected": ["101", "102", "105", "106"],
+      "segments": [0, 0, 0, 0],
+      "identityReads": false
+    },
+    {
+      "id": "compact-identity-on-ties",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "2000000",
+      "points": [
+        {
+          "id": "z",
+          "reference": "9",
+          "timeUs": "0",
+          "value": 100
+        },
+        {
+          "id": "a",
+          "reference": "10",
+          "timeUs": "0",
+          "value": 100
+        },
+        {
+          "id": "right",
+          "reference": "11",
+          "timeUs": "1000000",
+          "value": 200
+        }
+      ],
+      "buckets": [
+        ["0", "1000000"],
+        ["1000000", "2000000"]
+      ],
+      "count": "3",
+      "coveredUs": "1000000",
+      "integral": 150,
+      "minimum": "10",
+      "maximum": "11",
+      "expected": ["10", "11"],
+      "segments": [0, 0],
+      "identityReads": true
+    },
+    {
+      "id": "compact-missing-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "4000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "101",
+          "timeUs": "0",
+          "value": 100
+        },
+        {
+          "id": "missing",
+          "reference": "102",
+          "timeUs": "1000000",
+          "value": null
+        },
+        {
+          "id": "c",
+          "reference": "103",
+          "timeUs": "2000000",
+          "value": 200
+        },
+        {
+          "id": "d",
+          "reference": "104",
+          "timeUs": "3000000",
+          "value": 300
+        }
+      ],
+      "buckets": [
+        ["0", "1000000"],
+        ["1000000", "2000000"],
+        ["2000000", "3000000"],
+        ["3000000", "4000000"]
+      ],
+      "count": "3",
+      "coveredUs": "1000000",
+      "integral": 250,
+      "minimum": "101",
+      "maximum": "104",
+      "expected": ["101", "103", "104"],
+      "segments": [0, 1, 1],
+      "identityReads": false
+    },
+    {
+      "id": "compact-invalid-barrier",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "4000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "101",
+          "timeUs": "0",
+          "value": 100
+        },
+        {
+          "id": "invalid",
+          "reference": "102",
+          "timeUs": "1000000",
+          "value": "NaN"
+        },
+        {
+          "id": "c",
+          "reference": "103",
+          "timeUs": "2000000",
+          "value": 200
+        },
+        {
+          "id": "d",
+          "reference": "104",
+          "timeUs": "3000000",
+          "value": 300
+        }
+      ],
+      "buckets": [
+        ["0", "1000000"],
+        ["1000000", "2000000"],
+        ["2000000", "3000000"],
+        ["3000000", "4000000"]
+      ],
+      "count": "3",
+      "coveredUs": "1000000",
+      "integral": 250,
+      "minimum": "101",
+      "maximum": "104",
+      "expected": ["101", "103", "104"],
+      "segments": [0, 1, 1],
+      "identityReads": false
+    },
+    {
+      "id": "compact-parent-incoming-seed",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "6000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "101",
+          "timeUs": "0",
+          "value": 100
+        },
+        {
+          "id": "b",
+          "reference": "102",
+          "timeUs": "1000000",
+          "value": 10
+        },
+        {
+          "id": "c",
+          "reference": "103",
+          "timeUs": "2000000",
+          "value": 200
+        },
+        {
+          "id": "d",
+          "reference": "104",
+          "timeUs": "3000000",
+          "value": 50
+        },
+        {
+          "id": "e",
+          "reference": "105",
+          "timeUs": "4000000",
+          "value": 300
+        },
+        {
+          "id": "f",
+          "reference": "106",
+          "timeUs": "5000000",
+          "value": 150
+        }
+      ],
+      "buckets": [
+        ["1000000", "2000000"],
+        ["2000000", "4000000"],
+        ["4000000", "6000000"]
+      ],
+      "count": "6",
+      "coveredUs": "5000000",
+      "integral": 685,
+      "minimum": "102",
+      "maximum": "105",
+      "expected": ["101", "102", "105", "106"],
+      "segments": [0, 0, 0, 0],
+      "identityReads": false,
+      "parentStartUs": "1000000"
+    },
+    {
+      "id": "compact-exact-semantic-counter",
+      "metric": "consumedWh",
+      "startUs": "0",
+      "endUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "101",
+          "timeUs": "0",
+          "value": "9007199254740992"
+        },
+        {
+          "id": "b",
+          "reference": "102",
+          "timeUs": "1000000",
+          "value": "9007199254740993"
+        }
+      ],
+      "buckets": [
+        ["0", "1000000"],
+        ["1000000", "2000000"]
+      ],
+      "count": "2",
+      "coveredUs": "0",
+      "integral": null,
+      "minimum": "101",
+      "maximum": "102",
+      "expected": ["101", "102"],
+      "segments": [0, 0],
+      "identityReads": false
+    },
+    {
+      "id": "compact-course-parent-wrap",
+      "metric": "courseDegrees",
+      "startUs": "0",
+      "endUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "101",
+          "timeUs": "0",
+          "value": 350,
+          "kind": "location"
+        },
+        {
+          "id": "b",
+          "reference": "102",
+          "timeUs": "1000000",
+          "value": 10,
+          "kind": "location"
+        }
+      ],
+      "buckets": [
+        ["0", "1000000"],
+        ["1000000", "2000000"]
+      ],
+      "count": "2",
+      "coveredUs": "0",
+      "integral": null,
+      "minimum": "102",
+      "maximum": "101",
+      "expected": ["101", "102"],
+      "segments": [0, 1],
+      "identityReads": false
+    }
+  ]
+}

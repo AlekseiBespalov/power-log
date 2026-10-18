@@ -2,8 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   FIT_BASE_TYPES,
-  FIT_DEVELOPER_APPLICATION_ID,
-  FIT_DEVELOPER_DATA_INDEX,
   FIT_DEVELOPER_FIELDS,
   FIT_MESSAGES,
   HEALTH_METRICS,
@@ -49,8 +47,8 @@ const EXPECTED_TABLES: Record<string, ExpectedColumn[]> = {
     ['faultCode', 'integer'],
     ['assistLevel', 'integer'],
     ['controllerSpeedMps', 'number', 'm/s'],
-    ['cyc.raceMode', 'integer', null, 'cyc'],
-    ['cyc.speedRaw', 'number', null, 'cyc'],
+    ['controller.raceMode', 'integer', null, 'controller'],
+    ['controller.speedRaw', 'number', null, 'controller'],
   ],
   gps: [
     ['timestamp', 'datetime'],
@@ -62,8 +60,9 @@ const EXPECTED_TABLES: Record<string, ExpectedColumn[]> = {
     ['longitude', 'number', 'deg'],
     ['altitudeMeters', 'number', 'm'],
     ['verticalAccuracyM', 'number', 'm'],
-    ['ellipsoidalAltitudeMeters', 'number', 'm'],
-    ['ellipsoidalVerticalAccuracyM', 'number', 'm'],
+    ['originalAltitudeMeters', 'number', 'm'],
+    ['originalVerticalAccuracyM', 'number', 'm'],
+    ['originalAltitudeDatum', 'string'],
     ['horizontalAccuracyM', 'number', 'm'],
     ['speedMps', 'number', 'm/s'],
     ['speedAccuracyMps', 'number', 'm/s'],
@@ -76,13 +75,22 @@ const EXPECTED_TABLES: Record<string, ExpectedColumn[]> = {
     ['elapsedSeconds', 'number', 's'],
     ['activeInterval', 'integer'],
     ['source', 'string'],
-    ['sourceApp', 'string'],
     ['metric', 'string'],
     ['value', 'number'],
     ['unit', 'string'],
     ['kind', 'string'],
     ['sampleCount', 'integer'],
-    ['sampleId', 'string'],
+    ['provider', 'string'],
+    ['parentId', 'string'],
+    ['memberIndex', 'string'],
+    ['dataOrigin', 'string'],
+    ['originalEventId', 'string'],
+    ['originalEndTimestamp', 'string'],
+    ['logicalKey', 'string'],
+    ['targetEventId', 'string'],
+    ['originRevision', 'string'],
+    ['valueBits', 'string'],
+    ['evidence', 'string'],
   ],
   events: [
     ['timestamp', 'datetime'],
@@ -95,6 +103,18 @@ const EXPECTED_TABLES: Record<string, ExpectedColumn[]> = {
 };
 
 describe('export CSV tables', () => {
+  it('declares original GPS evidence only for ZIP on every recording platform', () => {
+    for (const [name, type] of [
+      ['originalAltitudeMeters', 'number'],
+      ['originalVerticalAccuracyM', 'number'],
+      ['originalAltitudeDatum', 'string'],
+    ] as const) {
+      expect(column('gps', name)).toEqual({ name, type, platforms: ['ios', 'android', 'web'], consumers: ['zip'] });
+    }
+    expect(PROJECTIONS.gps.columns.map(c => c.name)).not.toContain('ellipsoidalAltitudeMeters');
+    expect(PROJECTIONS.gps.columns.map(c => c.name)).not.toContain('ellipsoidalVerticalAccuracyM');
+  });
+
   it('lists every table column with its type, unit and vendor in order', () => {
     expect(tables.map(item => [item.name, item.path, item.projection])).toEqual([
       ['telemetry', 'telemetry.csv', 'telemetry'],
@@ -125,7 +145,7 @@ describe('export CSV tables', () => {
     for (const channel of channels) {
       const fields = telemetry.fields.filter(field => field.reads.length === 1 && field.reads[0] === channel);
       expect(fields.map(field => field.name)).toEqual([
-        channel === 'raceMode' || channel === 'speedRaw' ? `cyc.${channel}` : channel,
+        channel === 'raceMode' || channel === 'speedRaw' ? `controller.${channel}` : channel,
       ]);
       expect(column('telemetry', channel)).toEqual({
         name: channel,
@@ -166,7 +186,15 @@ describe('export projections', () => {
     const types = new Map<string, string>();
     for (const [name, definition] of Object.entries(PROJECTIONS)) {
       const items = columns(name as ProjectionName);
-      expect(new Set(items.map(item => item.name)).size).toBe(items.length);
+      for (const platform of ['ios', 'android', 'web'] as const)
+        for (const kind of ['zip', 'fit'] as const) {
+          const delivered = items.filter(
+            item =>
+              item.platforms.includes(platform) &&
+              item.consumers.some(consumer => consumer === kind || (kind === 'fit' && consumer === 'discovery')),
+          );
+          expect(new Set(delivered.map(item => item.name)).size, `${name}:${platform}:${kind}`).toBe(delivered.length);
+        }
       const kinds = new Set(
         items.flatMap(item => item.consumers.map(consumer => (consumer === 'zip' ? 'zip' : 'fit'))),
       );
@@ -180,19 +208,44 @@ describe('export projections', () => {
     }
   });
 
-  it('omits original timestamps from FIT reads except Android GPS discovery', () => {
+  it('retains canonical controller continuity for both derived ZIP and FIT reads', () => {
+    const continuity = new Set([
+      'elapsedSeconds',
+      'producer',
+      'producerSequence',
+      'clockEpoch',
+      'connection',
+      'active',
+      'interval',
+      'action',
+      'interrupted',
+      'controllerSequence',
+    ]);
+    for (const name of ['telemetry', 'lifecycle'] as const)
+      for (const platform of ['ios', 'android', 'web'] as const) {
+        const delivered = (kind: 'fit' | 'zip') =>
+          columns(name)
+            .filter(
+              item => item.platforms.includes(platform) && item.consumers.includes(kind) && continuity.has(item.name),
+            )
+            .map(item => item.name);
+        expect(delivered('zip'), `${name}:${platform}`).toEqual(delivered('fit'));
+      }
+  });
+
+  it('omits original timestamps from FIT reads', () => {
     const timestamps = Object.keys(PROJECTIONS).flatMap(name =>
       columns(name as ProjectionName)
         .filter(item => item.name === 'timestamp' && item.consumers.some(consumer => consumer !== 'zip'))
         .map(item => [name, item.platforms]),
     );
-    expect(timestamps).toEqual([['gpsDiscovery', ['android']]]);
+    expect(timestamps).toEqual([]);
   });
 });
 
 describe('export Health mapping', () => {
-  it('maps every WatchHealthMetrics identifier', () => {
-    const swift = readFileSync('apple/WatchApp/WatchHealthMetrics.swift', 'utf8');
+  it('maps every WorkoutAppleHealthMetrics identifier', () => {
+    const swift = readFileSync('modules/power-log-bridge/ios/WorkoutHealthMetrics.swift', 'utf8');
     const identifiers = [...swift.matchAll(/identifier: \.(\w+)/g)].map(
       ([, name]) => `HKQuantityTypeIdentifier${name![0]!.toUpperCase()}${name!.slice(1)}`,
     );
@@ -235,6 +288,7 @@ describe('export Health mapping', () => {
       finalWorkoutTotal: { kind: 'final' },
       workoutAssociation: { kind: null },
       healthTombstone: { kind: null },
+      intervalRecord: { kind: 'intervalRecord' },
       workoutMetadata: { kind: null },
     });
     for (const { key } of HEALTH_METRICS)
@@ -245,25 +299,6 @@ describe('export Health mapping', () => {
 });
 
 describe('export FIT catalog', () => {
-  it('matches the developer-field table of docs/storage.md', () => {
-    const docs = readFileSync('docs/storage.md', 'utf8');
-    const rows = [...docs.matchAll(/^\| (\d+) \| `(\w+)` \| (\w+) \| (\S+) \| (.+) \|$/gm)].map(
-      ([, number, name, type, units, value]) => ({
-        number: Number(number),
-        name,
-        type,
-        units,
-        policy: /last value in the bin/.test(value!) ? 'last' : 'mean',
-      }),
-    );
-    expect(rows).toHaveLength(10);
-    expect(
-      FIT_DEVELOPER_FIELDS.map(({ number, name, type, units, policy }) => ({ number, name, type, units, policy })),
-    ).toEqual(rows);
-    expect(docs).toContain(`application ID \`${FIT_DEVELOPER_APPLICATION_ID}\``);
-    expect(docs).toContain(`developer data index ${FIT_DEVELOPER_DATA_INDEX}`);
-  });
-
   it('reads each developer field from a FIT telemetry channel and fits its description', () => {
     const description: readonly FitField[] = FIT_MESSAGES.fieldDescription.fields;
     const nameSize = description.find(field => field.name === 'field_name')!.size;
@@ -300,4 +335,24 @@ describe('export FIT catalog', () => {
       }
     }
   });
+});
+
+it('declares one Health origin and member identity on both phones', () => {
+  const provenance = [
+    'provider',
+    'providerParentId',
+    'memberIndex',
+    'dataOrigin',
+    'originalEventId',
+    'originalEndTimestamp',
+    'logicalKey',
+    'targetEventId',
+    'originRevision',
+    'valueBits',
+    'evidence',
+  ];
+  for (const name of provenance) expect(column('healthZip', name)?.platforms).toEqual(['ios', 'android']);
+  for (const name of ['sampleUUID', 'sourceBundleIdentifier']) expect(column('healthZip', name)).toBeUndefined();
+  for (const name of ['sampleId', 'sourceApp'])
+    expect(table('health').fields.map(field => field.name)).not.toContain(name);
 });

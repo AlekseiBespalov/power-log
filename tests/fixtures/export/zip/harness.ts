@@ -31,7 +31,14 @@ export interface CanonicalRide {
 }
 
 export const FIXTURES = 'tests/fixtures/export/zip';
-export const ENTRY_NAMES = ['telemetry.csv', 'gps.csv', 'health.csv', 'events.csv', 'datapackage.json'] as const;
+export const ENTRY_NAMES = [
+  'telemetry.csv',
+  'battery-consumption.csv',
+  'gps.csv',
+  'health.csv',
+  'events.csv',
+  'datapackage.json',
+] as const;
 
 const settle = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
@@ -53,8 +60,11 @@ export function canonicalPage<P extends ProjectionName>(
   if (rows.length > 0)
     for (const column of expected) {
       if (column.type === 'number')
-        columns[column.name] = Float64Array.from(rows, row => {
-          const value = row[column.name] ?? null;
+        columns[column.name] = Float64Array.from(rows, (row, index) => {
+          const value =
+            column.name === 'producerSequence' && !Object.hasOwn(row, column.name)
+              ? start + index + 1
+              : (row[column.name] ?? null);
           if (typeof value === 'string') throw new Error(`Fixture ${projection}.${column.name} must be numeric`);
           return value === null ? NaN : value;
         });
@@ -302,15 +312,41 @@ export function readZip(file: Uint8Array): ZipEntry[] {
 
 export const entryText = (entry: ZipEntry) => new TextDecoder('utf-8', { fatal: true }).decode(entry.data);
 
+const DESCRIPTOR_VALUES = ['name', 'id', 'created', 'powerLog:ride', 'powerLog:sources', 'powerLog:batteryConsumption'];
+
+function descriptor(family: string): string {
+  const full = readFileSync(join(FIXTURES, 'gps-iphone', 'datapackage.json'), 'utf8');
+  if (family === 'gps-iphone') return full;
+  const values = JSON.parse(readFileSync(join(FIXTURES, family, 'datapackage-values.json'), 'utf8'));
+  return JSON.stringify({ ...JSON.parse(full), ...values }, null, 2) + '\n';
+}
+
+export function writeDescriptors(captures: Map<string, string>) {
+  const full = captures.get('gps-iphone')!;
+  const reference = JSON.parse(full) as Record<string, unknown>;
+  const values = new Map<string, string>();
+  for (const [family, text] of captures) {
+    if (family === 'gps-iphone') continue;
+    const capture = JSON.parse(text) as Record<string, unknown>;
+    const varying = Object.fromEntries(DESCRIPTOR_VALUES.map(key => [key, capture[key]]));
+    if (JSON.stringify({ ...reference, ...varying }, null, 2) + '\n' !== text)
+      throw new Error(`The ${family} descriptor has additional differences; retain them explicitly before updating`);
+    values.set(family, JSON.stringify(varying, null, 2) + '\n');
+  }
+  writeFileSync(join(FIXTURES, 'gps-iphone', 'datapackage.json'), full);
+  for (const [family, text] of values) writeFileSync(join(FIXTURES, family, 'datapackage-values.json'), text);
+}
+
 export function expectedEntries(family: string): Record<(typeof ENTRY_NAMES)[number], string> {
   const read = (name: string) => readFileSync(join(FIXTURES, family, name), 'utf8');
   const table = (name: string) => (JSON.parse(read(`${name}.json`)) as string[]).map(record => `${record}\n`).join('');
   return {
     'telemetry.csv': table('telemetry.csv'),
+    'battery-consumption.csv': table('battery-consumption.csv'),
     'gps.csv': table('gps.csv'),
     'health.csv': table('health.csv'),
     'events.csv': table('events.csv'),
-    'datapackage.json': read('datapackage.json'),
+    'datapackage.json': descriptor(family),
   };
 }
 

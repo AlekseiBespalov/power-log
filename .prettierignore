@@ -9,3 +9,13 @@ artifacts
 coverage
 package-lock.json
 *.md
+shared/build
+shared/.gradle
+shared/.kotlin
+shared/js/*.mjs
+shared/js/*.d.ts
+modules/power-log-bridge/ios/Frameworks
+tests/fixtures/contract/analytics/
+tests/fixtures/contract/watch-protocol/
+tests/fixtures/contract/health/
+tests/fixtures/export/zip/*/datapackage.json

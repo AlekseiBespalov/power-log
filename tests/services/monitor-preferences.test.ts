@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultMonitorPreferences, validateMonitorPreferences } from '../../src/core/monitor';
+import {
+  defaultMonitorPreferences,
+  monitorPreferencesJson,
+  parseMonitorPreferences,
+  type MonitorViewId,
+} from '../../src/core/monitor';
 import { MonitorPreferencesController } from '../../src/services/monitor-preferences-controller';
+import preferenceFixture from '../fixtures/contract/presentation/preferences.json';
 import type { MonitorPreferencesStore } from '../../src/services/monitor-preferences-store';
 
 function deferred<T>() {
@@ -18,37 +24,147 @@ const store = () => ({
 });
 
 describe('persistent monitor preferences', () => {
+  it('persists the export power choice independently of recording and display edits', async () => {
+    const storage = store();
+    const controller = new MonitorPreferencesController(storage);
+    await controller.hydrate();
+    expect(controller.snapshot().preferences.fitPowerSource).toBe('rider');
+    controller.setFitPowerSource('battery');
+    controller.setSpeedUnit('mph');
+    controller.setBatteryConsumptionSource('calculated');
+    controller.setSampleHz(8);
+    controller.selectView('battery');
+    controller.updateView('ride', { range: 600 });
+    await controller.flush();
+    const saved = storage.save.mock.calls.at(-1)![0];
+    const reloaded = parseMonitorPreferences(monitorPreferencesJson(saved));
+    expect(reloaded.fitPowerSource).toBe('battery');
+    expect(reloaded.workoutOptions).toEqual(defaultMonitorPreferences().workoutOptions);
+    const { fitPowerSource: _source, ...unset } = JSON.parse(monitorPreferencesJson(saved));
+    expect(parseMonitorPreferences(JSON.stringify(unset)).fitPowerSource).toBe('rider');
+    expect(() => parseMonitorPreferences(JSON.stringify({ ...unset, fitPowerSource: 'unknown' }))).toThrow();
+  });
+
+  it('applies session edits after an unreadable load without saving or clearing its error', async () => {
+    const fixture = preferenceFixture.loadFailure;
+    const storage = store();
+    storage.load.mockRejectedValue(new Error(fixture.error));
+    const controller = new MonitorPreferencesController(storage);
+    await controller.hydrate();
+    const error = controller.snapshot().error;
+    controller.selectView(fixture.edit.activeView as MonitorViewId);
+    controller.selectView(fixture.edit.historyView as MonitorViewId, 'history');
+    controller.setHistoryRange(600);
+    controller.setSpeedUnit('mph');
+    controller.setDistanceSource('controller');
+    controller.setSampleHz(8);
+    controller.setWorkoutOptions({ indoor: true, useWatch: false, saveToHealth: false, recordGPS: true });
+    controller.updateView('ride', { numbers: ['faultCode'], charts: ['motorTempC'], range: 30, webColumns: 3 });
+    await controller.flush();
+    expect(controller.snapshot().preferences).toMatchObject({
+      ...fixture.edit,
+      speedUnit: 'mph',
+      distanceSource: 'controller',
+      sampleHz: 8,
+      workoutOptions: { indoor: true, useWatch: false, saveToHealth: false, recordGPS: true },
+      views: { ride: { numbers: ['faultCode'], charts: ['motorTempC'], range: 30, webColumns: 3 } },
+    });
+    controller.resetView('ride');
+    expect(controller.snapshot().preferences.views.ride).toEqual(defaultMonitorPreferences().views.ride);
+    expect(controller.snapshot().error).toBe(error);
+    expect(error).toContain(fixture.error);
+    expect(error).toContain(fixture.notice);
+    expect(storage.save).not.toHaveBeenCalled();
+  });
+  it('waits for hydration and pending saves before admitting a recording', async () => {
+    const storage = store(),
+      pending = deferred<Awaited<ReturnType<MonitorPreferencesStore['load']>>>(),
+      saved = deferred<void>();
+    storage.load.mockReturnValue(pending.promise);
+    storage.save.mockReturnValue(saved.promise);
+    const controller = new MonitorPreferencesController(storage);
+    const ready = vi.fn();
+    const admission = controller.prepareRecording().then(ready);
+    controller.setSampleHz(4);
+    pending.resolve({ preferences: { ...defaultMonitorPreferences(), sampleHz: 8 } });
+    await controller.hydrate();
+    expect(ready).not.toHaveBeenCalled();
+    saved.resolve();
+    await admission;
+    expect(ready.mock.calls[0]?.[0].sampleHz).toBe(4);
+  });
+
+  it('refuses recording after an unreadable load but accepts a recovered committed revision', async () => {
+    const storage = store();
+    storage.load.mockRejectedValueOnce(new Error('Read denied'));
+    await expect(new MonitorPreferencesController(storage).prepareRecording()).rejects.toThrow('Read denied');
+    storage.load.mockResolvedValue({
+      preferences: defaultMonitorPreferences(),
+      warning: 'Recovered previous settings.',
+    });
+    await expect(new MonitorPreferencesController(storage).prepareRecording()).resolves.toMatchObject({ sampleHz: 2 });
+  });
+
+  it('rejects failed persistence instead of admitting the previously committed rate', async () => {
+    const storage = store(),
+      controller = new MonitorPreferencesController(storage);
+    await controller.hydrate();
+    storage.save.mockRejectedValueOnce(new Error('Disk full'));
+    controller.setSampleHz(8);
+    await expect(controller.prepareRecording()).rejects.toThrow('Could not save monitor settings. Disk full');
+    expect(controller.snapshot().preferences.sampleHz).toBe(8);
+    controller.setDistanceSource('controller');
+    await expect(controller.prepareRecording()).resolves.toMatchObject({ sampleHz: 8, distanceSource: 'controller' });
+  });
+
   it('persists shared analysis and next-ride settings without changing a captured start snapshot', async () => {
     const storage = store(),
       controller = new MonitorPreferencesController(storage);
     await controller.hydrate();
     controller.setSampleHz(8);
     controller.setDistanceSource('controller');
+    controller.setBatteryConsumptionSource('calculated');
     controller.setSpeedUnit('m/s');
     controller.setWorkoutOptions({ indoor: false, useWatch: false, saveToHealth: false, recordGPS: true });
     const captured = {
       ...controller.snapshot().preferences.workoutOptions,
       sampleHz: controller.snapshot().preferences.sampleHz,
+      batteryConsumptionSource: controller.snapshot().preferences.batteryConsumptionSource,
     };
     controller.setSampleHz(2);
+    controller.setBatteryConsumptionSource('controller');
     controller.setWorkoutOptions(previous => ({ ...previous, useWatch: true }));
     controller.resetView('ride');
     await controller.flush();
-    expect(captured).toEqual({ indoor: false, useWatch: false, saveToHealth: false, recordGPS: true, sampleHz: 8 });
+    expect(captured).toEqual({
+      indoor: false,
+      useWatch: false,
+      saveToHealth: false,
+      recordGPS: true,
+      sampleHz: 8,
+      batteryConsumptionSource: 'calculated',
+    });
     storage.load.mockResolvedValue({ preferences: storage.save.mock.calls.at(-1)![0] });
     const next = new MonitorPreferencesController(storage);
     await next.hydrate();
     expect(next.snapshot().preferences).toMatchObject({
       sampleHz: 2,
+      batteryConsumptionSource: 'controller',
       distanceSource: 'controller',
       speedUnit: 'm/s',
       workoutOptions: { useWatch: true },
     });
     for (const sampleHz of [0, 3, 8.1, '8', NaN])
-      expect(validateMonitorPreferences({ ...defaultMonitorPreferences(), sampleHz }).sampleHz).toBe(2);
-    for (const distanceSource of ['unknown', '__proto__', 'constructor', null])
-      expect(validateMonitorPreferences({ ...defaultMonitorPreferences(), distanceSource }).distanceSource).toBe(
-        'auto',
+      expect(() => parseMonitorPreferences(JSON.stringify({ ...preferenceFixture.defaults, sampleHz }))).toThrow(
+        'Invalid saved monitor settings',
+      );
+    for (const distanceSource of ['unknown', '__proto__', 'constructor'])
+      expect(
+        parseMonitorPreferences(JSON.stringify({ ...preferenceFixture.defaults, distanceSource })).distanceSource,
+      ).toBe('auto');
+    for (const distanceSource of [null, 7])
+      expect(() => parseMonitorPreferences(JSON.stringify({ ...preferenceFixture.defaults, distanceSource }))).toThrow(
+        'Invalid saved monitor settings',
       );
   });
   it('persists speed units across recreation and view resets', async () => {
@@ -62,8 +178,12 @@ describe('persistent monitor preferences', () => {
     const next = new MonitorPreferencesController(storage);
     await next.hydrate();
     expect(next.snapshot().preferences.speedUnit).toBe('mph');
-    expect(validateMonitorPreferences({ ...defaultMonitorPreferences(), speedUnit: 'knots' }).speedUnit).toBe('km/h');
-    expect(validateMonitorPreferences({ ...defaultMonitorPreferences(), speedUnit: undefined }).speedUnit).toBe('km/h');
+    expect(() =>
+      parseMonitorPreferences(JSON.stringify({ ...preferenceFixture.defaults, speedUnit: 'knots' })),
+    ).toThrow('Invalid saved monitor settings');
+    expect(() =>
+      parseMonitorPreferences(JSON.stringify({ ...preferenceFixture.defaults, speedUnit: undefined })),
+    ).toThrow('Invalid saved monitor settings');
   });
   it('persists each web layout independently and rejects invalid column counts', async () => {
     const storage = store(),
@@ -77,14 +197,16 @@ describe('persistent monitor preferences', () => {
     await next.hydrate();
     expect(next.snapshot().preferences.views.ride.webColumns).toBe(3);
     expect(next.snapshot().preferences.views.battery.webColumns).toBe(1);
-    const saved = next.snapshot().preferences;
+    const saved = preferenceFixture.defaults;
     for (const invalid of [0, 4, 2.5, '3', null])
-      expect(
-        validateMonitorPreferences({
-          ...saved,
-          views: { ...saved.views, ride: { ...saved.views.ride, webColumns: invalid } },
-        }).views.ride.webColumns,
-      ).toBe(2);
+      expect(() =>
+        parseMonitorPreferences(
+          JSON.stringify({
+            ...saved,
+            views: { ...saved.views, ride: { ...saved.views.ride, webColumns: invalid } },
+          }),
+        ),
+      ).toThrow('Invalid saved monitor settings');
   });
   it('preserves Watch-off across recreation and a late settings load without blocking on save failure', async () => {
     const storage = store(),
@@ -203,17 +325,23 @@ describe('persistent monitor preferences', () => {
     expect(controller.snapshot().preferences.activeView).toBe('temperature');
   });
 
-  it('validates loaded and edited metric IDs without accepting duplicates', async () => {
+  it('rejects malformed loaded and edited metric selections without replacing them', async () => {
     const storage = store(),
       saved = defaultMonitorPreferences();
     saved.views.ride.charts = ['fake', 'motorTempC', 'motorTempC'];
     storage.load.mockResolvedValue({ preferences: saved });
     const controller = new MonitorPreferencesController(storage);
     await controller.hydrate();
-    expect(controller.snapshot().preferences.views.ride.charts).toEqual(['motorTempC']);
-    controller.updateView('temperature', { numbers: ['batteryCurrentA', 'unknown', 'batteryCurrentA'] });
-    await controller.flush();
-    expect(controller.snapshot().preferences.views.temperature.numbers).toEqual(['batteryCurrentA']);
+    expect(controller.snapshot().error).toContain('Invalid saved monitor settings');
+    controller.updateView('temperature', { numbers: ['batteryCurrentA'] });
+    expect(storage.save).not.toHaveBeenCalled();
+    const clean = new MonitorPreferencesController(store());
+    await clean.hydrate();
+    const previous = clean.snapshot().preferences;
+    expect(() =>
+      clean.updateView('temperature', { numbers: ['batteryCurrentA', 'unknown', 'batteryCurrentA'] }),
+    ).toThrow();
+    expect(clean.snapshot().preferences).toBe(previous);
   });
 
   it('retains visible choices on save failure and recovers on the next save', async () => {
@@ -258,11 +386,11 @@ describe('History and live selections', () => {
     });
     controller.selectView('temperature');
     expect(controller.snapshot().preferences).toMatchObject({ activeView: 'temperature', historyView: 'battery' });
-    expect(
-      validateMonitorPreferences({ ...defaultMonitorPreferences(), historyView: 'nope', historyRange: 7 }),
-    ).toMatchObject({ historyRange: 'all' });
-    expect(
-      validateMonitorPreferences({ ...defaultMonitorPreferences(), historyView: 'nope' }).historyView,
-    ).toBeUndefined();
+    expect(() =>
+      parseMonitorPreferences(JSON.stringify({ ...preferenceFixture.defaults, historyView: 'nope', historyRange: 7 })),
+    ).toThrow('Invalid saved monitor settings');
+    expect(() =>
+      parseMonitorPreferences(JSON.stringify({ ...preferenceFixture.defaults, historyView: 'nope' })),
+    ).toThrow('Invalid saved monitor settings');
   });
 });

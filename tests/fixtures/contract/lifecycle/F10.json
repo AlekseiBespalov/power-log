@@ -1,0 +1,62 @@
+{
+  "actions": [
+    {
+      "action": "pause",
+      "at": 3,
+      "admitted": true,
+      "phase": "paused",
+      "timer": 3,
+      "elapsed": 3,
+      "events": 2
+    },
+    {
+      "action": "lap",
+      "at": 4,
+      "admitted": false,
+      "phase": "paused",
+      "timer": 3,
+      "elapsed": 4,
+      "events": 2
+    },
+    {
+      "action": "resume",
+      "at": 7,
+      "admitted": true,
+      "phase": "running",
+      "timer": 3,
+      "elapsed": 7,
+      "events": 3
+    },
+    {
+      "action": "lap",
+      "at": 8,
+      "admitted": true,
+      "phase": "running",
+      "timer": 4,
+      "elapsed": 8,
+      "events": 4
+    },
+    {
+      "action": "lap",
+      "at": 8,
+      "duplicate": true,
+      "admitted": true,
+      "phase": "running",
+      "timer": 4,
+      "elapsed": 8,
+      "events": 4
+    },
+    {
+      "action": "stop",
+      "at": 14,
+      "admitted": true,
+      "phase": "completed",
+      "timer": 10,
+      "elapsed": 14,
+      "events": 5
+    }
+  ],
+  "timer": 10,
+  "elapsed": 14,
+  "lapCount": 2
+}

@@ -14,8 +14,17 @@ import {
 } from './text';
 
 const TABLE = TABLES[2];
+const PROVENANCE_FIELDS = TABLE.fields.slice(TABLE.fields.findIndex(field => field.name === 'provider'));
 const METRICS = HEALTH_METRICS;
-const METRIC_INDEX = new Map<string, number>(METRICS.map((metric, index) => [metric.identifier, index]));
+const METRIC_INDEX = new Map<string, number>(
+  METRICS.flatMap(
+    (metric, index) =>
+      [
+        [metric.identifier, index],
+        [metric.metric, index],
+      ] as [string, number][],
+  ),
+);
 const REPRESENTATIONS: Readonly<Record<string, HealthRepresentationDefinition>> = HEALTH_REPRESENTATIONS;
 const SUBJECT = 'a Health record';
 const NOT_MEASURED = 'notMeasured';
@@ -73,17 +82,16 @@ export async function writeHealth(input: TableInput, producers: ProducerSet): Pr
     const timestamps: Texts | undefined = columns.timestamp;
     const starts: Texts | undefined = columns.sampleStart;
     const sources: Texts | undefined = columns.producer;
-    const apps: Texts | undefined = columns.sourceBundleIdentifier;
     const identifiers: Texts | undefined = columns.identifier;
     const values = columns.value;
     const units: Texts | undefined = columns.unit;
     const representations: Texts | undefined = columns.representation;
     const counts = columns.sampleCount;
-    const samples: Texts | undefined = columns.sampleUUID;
     for (let i = 0; i < rows; i++) {
       const count = counts ? counts[i]! : NaN;
       const kind = rowKind(representations?.[i] ?? null, count);
-      if (kind !== NOT_MEASURED) {
+      const provenance = columns.originalEventId?.[i] != null;
+      if (kind !== NOT_MEASURED || provenance) {
         const producer = checkProducer(SUBJECT, sources?.[i], producers);
         const identifier = identifiers?.[i] ?? null;
         const generic = values ? values[i]! : NaN;
@@ -92,19 +100,35 @@ export async function writeHealth(input: TableInput, producers: ProducerSet): Pr
         const known = identifier === null ? undefined : METRIC_INDEX.get(identifier);
         const time = csvNumber(elapsed ? elapsed[i]! : NaN, SUBJECT, 'elapsedSeconds');
         const active = interval[i] === 0 ? '' : interval[i];
-        const prefix = `${csvText(timestamps?.[i])},${csvText(starts?.[i])},${time},${active},${csvText(producer)},${csvText(apps?.[i])},`;
-        const suffix = `,${csvText(samples?.[i])}`;
-        for (let m = 0; m < METRICS.length; m++) {
-          const column = named[m];
-          let value = column ? column[i]! : NaN;
-          if (Number.isNaN(value) && known === m) value = generic;
-          if (Number.isNaN(value)) continue;
-          const metric = METRICS[m]!;
-          const valueKind = kind ?? metric.kindWithoutRepresentation;
-          out.line(valueLine(prefix, metric.metric, SCALES[m]!(value), metric.unit, valueKind, count, suffix));
+        const prefix = `${csvText(timestamps?.[i])},${csvText(starts?.[i])},${time},${active},${csvText(producer)},`;
+        const suffix = `,${PROVENANCE_FIELDS.map(field =>
+          csvText(columns[field.reads[0] as keyof typeof columns]?.[i] as string | null | undefined),
+        ).join(',')}`;
+        if (kind === NOT_MEASURED) {
+          out.line(`${prefix}${csvText(identifier)},,,${csvText(representations?.[i])},${suffix}`);
+        } else {
+          for (let m = 0; m < METRICS.length; m++) {
+            const column = named[m];
+            let value = column ? column[i]! : NaN;
+            if (Number.isNaN(value) && known === m) value = generic;
+            if (Number.isNaN(value)) continue;
+            const metric = METRICS[m]!;
+            const valueKind = kind ?? metric.kindWithoutRepresentation;
+            out.line(
+              valueLine(
+                prefix,
+                metric.metric,
+                identifier === metric.metric && units?.[i] === metric.unit ? value : SCALES[m]!(value),
+                metric.unit,
+                valueKind,
+                count,
+                suffix,
+              ),
+            );
+          }
+          if (identifier !== null && known === undefined && !Number.isNaN(generic))
+            out.line(valueLine(prefix, identifier, generic, units?.[i] ?? null, kind, count, suffix));
         }
-        if (identifier !== null && known === undefined && !Number.isNaN(generic))
-          out.line(valueLine(prefix, identifier, generic, units?.[i] ?? null, kind, count, suffix));
       }
       if (i % ROW_BATCH === ROW_BATCH - 1) {
         if (out.due) await out.drain();

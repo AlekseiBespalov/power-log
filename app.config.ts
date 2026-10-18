@@ -1,6 +1,7 @@
 import type { ExpoConfig } from 'expo/config';
 import { version } from './package.json';
 
+const lab = process.env.POWER_LOG_LAB === '1';
 const iosBuildNumber = process.env.POWER_LOG_IOS_BUILD_NUMBER ?? '1';
 if (!/^[1-9]\d*$/.test(iosBuildNumber) || !Number.isSafeInteger(Number(iosBuildNumber)))
   throw new Error('Invalid iOS build number');
@@ -12,7 +13,7 @@ const config: ExpoConfig = {
   name: process.env.POWER_LOG_ANDROID_PREVIEW === '1' ? 'Power Log Preview' : 'Power Log',
   slug: 'power-log',
   version,
-  scheme: 'power-log',
+  scheme: lab ? 'power-log-lab' : 'power-log',
   icon: './assets/Assets.xcassets/AppIcon.appiconset/AppIcon.png',
   orientation: 'default',
   userInterfaceStyle: 'dark',
@@ -36,13 +37,30 @@ const config: ExpoConfig = {
     ],
   },
   ios: {
+    deploymentTarget: '26.0',
     buildNumber: iosBuildNumber,
-    bundleIdentifier: process.env.POWER_LOG_BUNDLE_ID ?? 'app.powerlog.mobile',
+    bundleIdentifier: lab ? 'app.powerlog.lab' : (process.env.POWER_LOG_BUNDLE_ID ?? 'app.powerlog.mobile'),
     appleTeamId: process.env.POWER_LOG_APPLE_TEAM_ID,
     supportsTablet: true,
     entitlements: { 'com.apple.developer.healthkit': true },
     privacyManifests: { NSPrivacyTracking: false, NSPrivacyAccessedAPITypes: [] },
     infoPlist: {
+      ...(lab
+        ? {
+            CFBundleDisplayName: 'Power Log Lab',
+            UIApplicationSceneManifest: {
+              UIApplicationSupportsMultipleScenes: false,
+              UISceneConfigurations: {
+                UIWindowSceneSessionRoleApplication: [
+                  {
+                    UISceneConfigurationName: 'Default Configuration',
+                    UISceneDelegateClassName: 'EXExpoAppSceneDelegate',
+                  },
+                ],
+              },
+            },
+          }
+        : {}),
       NSBluetoothAlwaysUsageDescription: 'Power Log reads your CYC bike telemetry.',
       NSHealthShareUsageDescription:
         'Power Log reads your workout heart rate, energy and cycling measurements to show and save your ride.',
@@ -59,15 +77,17 @@ const config: ExpoConfig = {
     'expo-router',
     'expo-dev-client',
     'expo-document-picker',
+    ...(lab ? ['./plugins/with-power-log-lab'] : []),
     // Precompiled Expo modules require React.framework; building them from source keeps the app launchable
     // when the React Native prebuilt is unavailable and pod install falls back to a source build.
     [
       'expo-build-properties',
       {
-        android: { minSdkVersion: 28 },
+        android: { minSdkVersion: 28, kotlinVersion: '2.1.20' },
         ios: { buildReactNativeFromSource: false, usePrecompiledModules: false, enableSceneSupport: true },
       },
     ],
+    './plugins/with-power-log-core',
     './plugins/with-power-log-watch',
     './plugins/with-power-log-live-activity',
     './plugins/with-power-log-android',

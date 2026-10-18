@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { haptics } from '../../src/services/haptics';
 
 const feedback = vi.hoisted(() => ({
   os: 'web',
@@ -20,7 +21,6 @@ vi.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success', Warning: 'warning' },
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' },
 }));
-import { haptics } from '../../src/services/haptics';
 
 beforeEach(() => {
   feedback.os = 'web';

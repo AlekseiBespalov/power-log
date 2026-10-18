@@ -1,0 +1,225 @@
+{
+  "fixtures": ["F24", "F26"],
+  "cases": [
+    {
+      "id": "original-boundary-tie",
+      "timeUs": "5000000",
+      "before": {
+        "id": "a",
+        "timeUs": "0",
+        "value": 0,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "0",
+        "kind": "distance",
+        "tieKey": "1"
+      },
+      "after": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "2"
+      },
+      "expected": "a"
+    },
+    {
+      "id": "no-interpolated-distance",
+      "timeUs": "7000000",
+      "before": {
+        "id": "a",
+        "timeUs": "0",
+        "value": 0,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "0",
+        "kind": "distance",
+        "tieKey": "4"
+      },
+      "after": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "5"
+      },
+      "expected": "b"
+    },
+    {
+      "id": "different-segments",
+      "timeUs": "5000000",
+      "before": {
+        "id": "a",
+        "timeUs": "0",
+        "value": 0,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "0",
+        "kind": "distance",
+        "tieKey": "7"
+      },
+      "after": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 2,
+        "startUs": "0",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "8"
+      },
+      "expected": null
+    },
+    {
+      "id": "uncovered-boundary",
+      "timeUs": "5000000",
+      "before": {
+        "id": "a",
+        "timeUs": "0",
+        "value": 0,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "0",
+        "kind": "distance",
+        "tieKey": "10"
+      },
+      "after": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 1,
+        "startUs": "6000000",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "11"
+      },
+      "expected": null
+    },
+    {
+      "id": "exact-is-original",
+      "timeUs": "10000000",
+      "before": null,
+      "after": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "14"
+      },
+      "expected": "b"
+    },
+    {
+      "id": "anchor-through-microsecond",
+      "timeUs": "10000001",
+      "anchor": "b",
+      "before": {
+        "id": "a",
+        "timeUs": "0",
+        "value": 0,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "0",
+        "kind": "distance",
+        "tieKey": "16"
+      },
+      "after": null,
+      "anchored": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "18"
+      },
+      "expected": "b"
+    },
+    {
+      "id": "mismatched-anchor-fallback",
+      "timeUs": "7000000",
+      "anchor": "a",
+      "before": {
+        "id": "a",
+        "timeUs": "0",
+        "value": 0,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "0",
+        "kind": "distance",
+        "tieKey": "19"
+      },
+      "after": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "20"
+      },
+      "anchored": {
+        "id": "a",
+        "timeUs": "0",
+        "value": 0,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "0",
+        "kind": "distance",
+        "tieKey": "21"
+      },
+      "expected": "b"
+    },
+    {
+      "id": "no-trailing-distance",
+      "timeUs": "11000000",
+      "before": {
+        "id": "b",
+        "timeUs": "10000000",
+        "value": 10,
+        "segment": 1,
+        "startUs": "0",
+        "endUs": "10000000",
+        "kind": "distance",
+        "tieKey": "22"
+      },
+      "after": null,
+      "expected": null
+    },
+    {
+      "id": "numeric-equal-time-tie",
+      "timeUs": "1000000",
+      "before": {
+        "id": "distance:g:9",
+        "timeUs": "1000000",
+        "value": 9,
+        "segment": 0,
+        "startUs": "0",
+        "endUs": "1000000",
+        "tieKey": "9",
+        "kind": "distance"
+      },
+      "after": {
+        "id": "distance:g:10",
+        "timeUs": "1000000",
+        "value": 10,
+        "segment": 0,
+        "startUs": "0",
+        "endUs": "1000000",
+        "tieKey": "10",
+        "kind": "distance"
+      },
+      "expected": "distance:g:9"
+    }
+  ]
+}

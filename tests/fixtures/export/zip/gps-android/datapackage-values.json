@@ -1,0 +1,54 @@
+{
+  "name": "power-log-ride-live-2b7c9d1e-3f4a-4b5c-8d6e-7f8a9b0c1d2e",
+  "id": "live-2b7c9d1e-3f4a-4b5c-8d6e-7f8a9b0c1d2e",
+  "created": "2026-07-04T12:00:00+00:00",
+  "powerLog:ride": {
+    "startedAt": "2026-07-04T10:00:00.000Z",
+    "endedAt": "2026-07-04T10:00:09.000Z",
+    "elapsedSeconds": 9,
+    "timerSeconds": 7,
+    "ownerTiming": {
+      "timestamp": "2026-07-04T10:00:09.000Z",
+      "elapsedSeconds": 9,
+      "timerSeconds": 7
+    },
+    "indoor": false,
+    "interrupted": true,
+    "watchEnabled": false,
+    "saveToHealth": true,
+    "recordGPS": true,
+    "sport": "cycling",
+    "subSport": "e_biking",
+    "health": {
+      "provider": "healthConnect",
+      "state": "saved",
+      "workoutUUID": null,
+      "export": {
+        "written": 12,
+        "omitted": 1,
+        "reason": "One sample was outside the ride"
+      }
+    },
+    "example": false,
+    "sampleHz": 4,
+    "batteryConsumptionSource": "controller"
+  },
+  "powerLog:sources": {
+    "connections": [
+      {
+        "connection": 1,
+        "vendor": "controller",
+        "model": "X6",
+        "firmware": null,
+        "protocol": "4.2"
+      }
+    ],
+    "gps": [
+      "phone"
+    ],
+    "health": []
+  },
+  "powerLog:batteryConsumption": {
+    "status": "available"
+  }
+}

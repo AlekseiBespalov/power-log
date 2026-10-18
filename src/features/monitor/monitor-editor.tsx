@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { Platform, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Platform, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, colors, Label } from '../../components/ui';
+import { Button, colors, Label, Pressable, type, MIN_TOUCH_TARGET } from '../../components/ui';
 import { type MonitorView, type SpeedUnit } from '../../core/monitor';
 import { searchMonitorMetrics, toggleMonitorMetric } from './monitor-editor-model';
 import { SortableMetrics } from './sortable-metrics';
@@ -115,7 +115,7 @@ function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
             color: colors.text,
             paddingHorizontal: 12,
             paddingRight: Platform.OS === 'ios' ? 12 : 44,
-            fontSize: 14,
+            fontSize: type.body,
           }}
         />
         {Platform.OS !== 'ios' && searchFocused && query.length > 0 && (
@@ -138,7 +138,7 @@ function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
               justifyContent: 'center',
             }}
           >
-            <Text style={{ color: colors.muted, fontSize: 22 }}>×</Text>
+            <Text style={{ color: colors.muted, fontSize: type.title }}>×</Text>
           </Pressable>
         )}
       </View>
@@ -158,7 +158,7 @@ function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
       >
         <Text
           accessibilityRole="header"
-          style={{ color: colors.text, fontSize: 18, fontWeight: '600', flex: 1, minWidth: 0 }}
+          style={{ color: colors.text, fontSize: type.title, fontWeight: '600', flex: 1, minWidth: 0 }}
         >
           {view.name} layout
         </Text>
@@ -190,7 +190,7 @@ function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
                     aria-checked={checked}
                     onPress={() => change(toggleMonitorMetric(selected, metric.id))}
                     style={({ pressed }) => ({
-                      minHeight: 48,
+                      minHeight: MIN_TOUCH_TARGET,
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: 10,
@@ -200,14 +200,14 @@ function EditorContent({ view, speedUnit, onChange, onReset, onClose }: Props) {
                     })}
                   >
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: metric.color }} />
-                    <Text style={{ flex: 1, paddingVertical: 8, color: colors.text, fontSize: 13 }}>
+                    <Text style={{ flex: 1, paddingVertical: 8, color: colors.text, fontSize: type.body }}>
                       {metric.label}
                     </Text>
-                    <Text style={{ color: colors.muted, fontSize: 12 }}>{metric.unit}</Text>
+                    <Text style={{ color: colors.muted, fontSize: type.caption }}>{metric.unit}</Text>
                     <Text
                       style={{
                         color: checked ? colors.accent : colors.muted,
-                        fontSize: 21,
+                        fontSize: type.title,
                         width: 24,
                         textAlign: 'center',
                       }}

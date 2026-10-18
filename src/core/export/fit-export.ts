@@ -1,8 +1,10 @@
+import type { BatteryConsumptionSource } from '../consumption';
 import type { DistanceSource } from '../distance';
-import { FitAnchor, fitClock, parseStartedAt, type FitClock } from './clock';
+import { fitClock, parseStartedAt, type FitClock } from './clock';
 import { DistanceRanges } from './fit/distance';
-import { FitGeometry, GPS_MAX_HORIZONTAL_ACCURACY_M } from './fit/geometry';
-import { HealthDiscovery, type HealthPlan } from './fit/health';
+import { analyticsValid } from '../../../shared/js';
+import { FitGeometry } from './fit/geometry';
+import { HealthDiscovery, type HealthPlan, type HealthOriginSelection } from './fit/health';
 import { FIT_RECORD_LIMIT, WitnessSeconds, needsPlanning, noRecords, planRecordInterval } from './fit/planner';
 import {
   DistanceStream,
@@ -22,13 +24,15 @@ import {
   writeSession,
   type SummaryInput,
 } from './fit/summaries';
+import { readAnalyticsTimeline } from './analytics-timeline';
 import { FIT_MAX_MESSAGE_INDEX, FitWriter } from './fit/writer';
 import { ExportReads, createSlicer, exportCancelled, readProjection, type ProjectionPage } from './pages';
-import { RunTracker, readTimeline, type Timeline } from './timeline';
+import { RunTracker, type Timeline } from './timeline';
 import {
   ExportError,
   type ExportCommitResult,
   type ExportContext,
+  type FitPowerSource,
   type ExportDistanceProfile,
   type ExportOpenResult,
   type ExportSink,
@@ -42,6 +46,7 @@ export interface FitExportRequest {
   readonly rideId: string;
   readonly context: ExportContext;
   readonly distanceSource?: DistanceSource;
+  readonly powerSource?: FitPowerSource;
   readonly signal?: AbortSignal;
 }
 
@@ -53,6 +58,7 @@ export interface FitExportTuning {
 export interface FitExportResult extends ExportCommitResult {
   readonly records: number;
   readonly recordInterval: number;
+  readonly health: HealthPlan;
 }
 
 const PRODUCER_SETS: readonly (readonly string[])[] = [[], ['phone'], ['watch'], ['phone', 'watch']];
@@ -76,8 +82,7 @@ function distanceProfile(value: unknown): ExportDistanceProfile | null {
     (profile.source === 'controller' && profile.kind === 'controller') ||
     (profile.kind === 'gps' &&
       (profile.source === 'gps:phone' || profile.source === 'gps:watch') &&
-      profile.producer === profile.source.slice(4)) ||
-    (profile.kind === 'health' && (profile.source === 'health:phone' || profile.source === 'health:watch'));
+      profile.producer === profile.source.slice(4));
   if (!valid) throw invalidSession('distance settings');
   return value as ExportDistanceProfile;
 }
@@ -94,14 +99,13 @@ function countGoodFixes(page: ProjectionPage<'gpsDiscovery'>, good: Record<Produ
   for (let i = 0; i < page.rows; i++) {
     const accuracy = horizontalAccuracyM ? horizontalAccuracyM[i]! : NaN;
     const source = producer?.[i];
-    if ((source === 'phone' || source === 'watch') && accuracy >= 0 && accuracy <= GPS_MAX_HORIZONTAL_ACCURACY_M)
+    if ((source === 'phone' || source === 'watch') && analyticsValid('horizontalAccuracyM', accuracy, null))
       good[source]++;
   }
 }
 
 async function discoverGps(
   input: FitSession,
-  anchor: FitAnchor,
   present: ProducerSet,
   profile: ExportDistanceProfile | null,
   owner: Producer,
@@ -109,25 +113,46 @@ async function discoverGps(
   if (present.length === 0) return null;
   const fixed = profile?.kind === 'gps' ? profile.producer : null;
   const counting = fixed === null && present.length > 1;
-  const android = input.reads.options.platform === 'android';
-  if (!counting && !android) return fixed ?? present[0]!;
+  if (!counting) return fixed ?? present[0]!;
   const good: Record<Producer, number> = { phone: 0, watch: 0 };
-  const cursor = android ? input.timeline.cursor('gpsDiscovery') : null;
   for await (const page of readProjection(input.source, input.session, 'gpsDiscovery', input.reads)) {
-    if (cursor) anchor.addPage(page, cursor.map(page).interval);
     if (counting) countGoodFixes(page, good);
   }
-  if (!counting) return fixed ?? present[0]!;
   const other: Producer = owner === 'watch' ? 'phone' : 'watch';
   return good[owner] > 0 ? owner : good[other] > 0 ? other : null;
 }
 
-async function discoverHealth(input: FitSession, owner: Producer): Promise<HealthPlan> {
-  const discovery = new HealthDiscovery(owner, input.timeline.end);
-  const cursor = input.timeline.cursor('healthFit');
+async function discoverHealth(
+  input: FitSession,
+  owner: Producer,
+  origins: HealthOriginSelection | null,
+): Promise<HealthPlan> {
+  const discovery = new HealthDiscovery(owner, input.timeline.end, origins);
+  for await (const page of readProjection(input.source, input.session, 'healthFit', input.reads)) discovery.add(page);
+  discovery.prepareConsumption();
   for await (const page of readProjection(input.source, input.session, 'healthFit', input.reads))
-    discovery.add(page, cursor.map(page).interval);
+    discovery.addConsumption(page);
   return discovery.plan();
+}
+
+function retainedHealthOrigins(opened: ExportOpenResult): HealthOriginSelection | null {
+  const health = opened.metadata.health as typeof opened.metadata.health & {
+    readback?: {
+      healthOrigins?: { heartRate?: unknown; activeEnergy?: unknown; basalEnergy?: unknown };
+      basalUnavailableReason?: unknown;
+    };
+  };
+  const origins = health.readback?.healthOrigins;
+  if (origins === undefined) return null;
+  const origin = (value: unknown): string | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string') throw invalidSession('Health origins');
+    return value;
+  };
+  return {
+    heartRate: origin(origins.heartRate),
+    activeEnergy: origin(origins.activeEnergy),
+  };
 }
 
 interface Streams {
@@ -143,12 +168,16 @@ function streams(
   health: HealthPlan,
   statistics: RideStatistics | null,
   ranges: DistanceRanges | null,
+  consumptionSource: BatteryConsumptionSource,
+  powerSource: FitPowerSource,
 ): Streams {
   const { source, session, reads, timeline } = input;
   const platform = reads.options.platform;
   const list: WitnessStream[] = [];
   if (profile)
-    list.push(new DistanceStream(readProjection(source, session, 'distance', reads), clock, timeline, ranges));
+    list.push(
+      new DistanceStream(readProjection(source, session, 'distance', reads), clock, timeline, ranges, profile.kind),
+    );
   list.push(
     new TelemetryStream(
       readProjection(source, session, 'telemetry', reads),
@@ -156,6 +185,8 @@ function streams(
       timeline.cursor('telemetry'),
       new RunTracker(platform, 'telemetry'),
       statistics,
+      consumptionSource,
+      powerSource,
     ),
   );
   let geometry: FitGeometry | null = null;
@@ -192,7 +223,7 @@ export async function exportFit(
   request: FitExportRequest,
   tuning: FitExportTuning = {},
 ): Promise<FitExportResult> {
-  const { rideId, context, distanceSource, signal } = request;
+  const { rideId, context, distanceSource, powerSource = 'rider', signal } = request;
   if (tuning.recordInterval !== undefined && !(Number.isInteger(tuning.recordInterval) && tuning.recordInterval >= 1))
     throw new RangeError('A FIT record interval is a whole number of seconds');
   if (signal?.aborted) throw exportCancelled();
@@ -208,26 +239,34 @@ export async function exportFit(
   let sink: ExportSink | undefined;
   try {
     if (signal?.aborted) throw exportCancelled();
+    const consumptionSource = opened.metadata.batteryConsumptionSource;
+    if (consumptionSource !== 'controller' && consumptionSource !== 'calculated')
+      throw invalidSession('battery consumption source');
     const profile = distanceProfile(opened.distanceProfile);
     const producers = opened.producers as Partial<Record<string, unknown>> | null;
     const gpsProducers = producerSet(producers?.gps, 'GPS');
     const healthProducers = producerSet(producers?.health, 'Health');
-    const timeline = await readTimeline(source, session, opened.elapsedEnd, reads, { fitLimits: true });
+    const timeline = await readAnalyticsTimeline(source, session, opened.elapsedEnd, reads);
     if (timeline.laps.length > FIT_MAX_MESSAGE_INDEX + 1)
       throw new ExportError('limit', 'A FIT file can hold at most 4096 laps, and this ride has more.');
     const start = parseStartedAt(opened.metadata.startedAt);
     const owner: Producer = opened.metadata.watchEnabled ? 'watch' : 'phone';
     const input: FitSession = { source, session, reads, timeline };
-    const anchor = new FitAnchor(context.platform, start);
-    const gps = await discoverGps(input, anchor, gpsProducers, profile, owner);
+    const gps = await discoverGps(input, gpsProducers, profile, owner);
     const health: HealthPlan =
-      healthProducers.length > 0 ? await discoverHealth(input, owner) : { heartRate: null, calories: NaN };
-    const clock = fitClock(start, await anchor.value(slicer));
+      healthProducers.length > 0
+        ? await discoverHealth(input, owner, retainedHealthOrigins(opened))
+        : {
+            heartRate: null,
+            calories: NaN,
+            basal: { valueKcal: null, reason: 'missingOperand', selectedOrigin: null },
+          };
+    const clock = fitClock(start);
     const groups = lifecycleGroups(timeline);
     let interval = tuning.recordInterval ?? 1;
     if (tuning.recordInterval === undefined && needsPlanning(clock, timeline.end, tuning.recordLimit)) {
       const witnesses = new WitnessSeconds();
-      const timing = streams(input, clock, profile, gps, health, null, null);
+      const timing = streams(input, clock, profile, gps, health, null, null, consumptionSource, powerSource);
       await mergeWitnesses(timing.list, groups, timeline.intervals, witnesses, slicer);
       interval = (await planRecordInterval(witnesses, clock.second(0), slicer, tuning.recordLimit ?? FIT_RECORD_LIMIT))
         .interval;
@@ -239,9 +278,9 @@ export async function exportFit(
     const ranges = profile ? new DistanceRanges(profile.kind, timeline) : null;
     const summary: SummaryInput = { writer, clock, timeline, ranges };
     writeFileId(summary);
-    writer.developerMetadata();
-    const statistics = new RideStatistics();
-    const emission = streams(input, clock, profile, gps, health, statistics, ranges);
+    writer.developerMetadata(consumptionSource);
+    const statistics = new RideStatistics(timeline.endUs);
+    const emission = streams(input, clock, profile, gps, health, statistics, ranges, consumptionSource, powerSource);
     const emitter = new RecordEmitter(writer, clock, interval, lifecycleWriter(summary));
     await mergeWitnesses(emission.list, groups, timeline.intervals, emitter, slicer);
     emitter.finish();
@@ -258,7 +297,7 @@ export async function exportFit(
     await source.close(session);
     if (signal?.aborted) throw exportCancelled();
     const committed = await sink.commit(`power-log-${rideId}.fit`);
-    return { ...committed, records: emitter.records, recordInterval: interval };
+    return { ...committed, records: emitter.records, recordInterval: interval, health };
   } catch (error) {
     await sink?.abort().catch(() => undefined);
     await source.close(session).catch(() => undefined);

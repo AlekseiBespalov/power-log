@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EXPORT_PAGE_MAX_BYTES, EXPORT_PAGE_MAX_ROWS } from '../../src/core/export/catalog';
 import {
@@ -118,7 +119,7 @@ async function collect<P extends ProjectionName>(
 
 const identity = (token: string, model: string | null = 'X12'): ExportConnection => ({
   token,
-  vendor: 'cyc',
+  vendor: 'controller',
   model,
   firmware: '20250604',
   protocol: '5.3',
@@ -155,6 +156,30 @@ describe('native page conversion', () => {
     });
   });
 
+  it('decodes original GPS evidence emitted by both native phones', () => {
+    const converted = fromNativePage(
+      {
+        rows: 1,
+        last: [1],
+        done: true,
+        columns: {
+          originalAltitudeMeters: binary([130]),
+          originalVerticalAccuracyM: binary([-1]),
+          originalAltitudeDatum: ['wgs84Ellipsoid'],
+        },
+      },
+      'gps',
+    );
+    expect(Array.from(converted.columns.originalAltitudeMeters!)).toEqual([130]);
+    expect(Array.from(converted.columns.originalVerticalAccuracyM!)).toEqual([-1]);
+    expect(converted.columns.originalAltitudeDatum).toEqual(['wgs84Ellipsoid']);
+    for (const platform of ['ios', 'android'] as const) {
+      expect(projectionColumns('gps', platform, 'zip').map(c => c.name)).toEqual(
+        expect.arrayContaining(['originalAltitudeMeters', 'originalVerticalAccuracyM', 'originalAltitudeDatum']),
+      );
+      expect(projectionColumns('gps', platform, 'fit').map(c => c.name)).not.toContain('originalAltitudeMeters');
+    }
+  });
   it('accepts an empty final page', () => {
     const converted = fromNativePage(native(0, { elapsedSeconds: new Uint8Array(0), connection: [] }), 'telemetry');
     expect(converted.columns.elapsedSeconds!.length).toBe(0);
@@ -266,6 +291,41 @@ describe('page checks', () => {
 });
 
 describe('paged projection reads', () => {
+  it('reads Android distance pages across a fractional microsecond boundary', async () => {
+    const fixture = JSON.parse(
+      readFileSync('modules/power-log-bridge/android/src/test/resources/distance-export-pages.json', 'utf8'),
+    ) as {
+      pages: {
+        rows: number;
+        done: boolean;
+        last: ExportCursor | null;
+        columns: Record<string, string | (string | null)[]>;
+      }[];
+    };
+    const pages = fixture.pages.map(page =>
+      fromNativePage(
+        {
+          ...page,
+          columns: Object.fromEntries(
+            Object.entries(page.columns).map(([name, encoded]) => [
+              name,
+              Array.isArray(encoded) ? encoded : new Uint8Array(Buffer.from(encoded, 'base64')),
+            ]),
+          ),
+        },
+        'distance',
+      ),
+    );
+    const from = source({ distance: pages });
+    const ends: (string | null)[] = [];
+    for await (const page of readProjection(from.value, 'session', 'distance', reads('android', 'fit')))
+      ends.push(...page.columns.endUs!);
+    expect(ends).toEqual(['4038999', '5500000']);
+    expect(from.requests.map(request => request.after)).toEqual([null, pages[0]!.last, pages[1]!.last]);
+    expect(pages[0]!.last![0]).toBe(4038999);
+    expect(pages[0]!.last).toHaveLength(2);
+  });
+
   const lifecycle = (rows: number, last: ExportCursor | null, done: boolean) =>
     page('lifecycle', rows, last, done, {
       elapsedSeconds: Array.from({ length: rows }, (_, i) => i),
@@ -380,9 +440,9 @@ describe('paged projection reads', () => {
       [3, 2, 0],
     ]);
     expect(context.connections.entries).toEqual([
-      { connection: 1, vendor: 'cyc', model: 'X12', firmware: '20250604', protocol: '5.3' },
-      { connection: 2, vendor: 'cyc', model: 'X6', firmware: '20250604', protocol: '5.3' },
-      { connection: 3, vendor: 'cyc', model: null, firmware: '20250604', protocol: '5.3' },
+      { connection: 1, vendor: 'controller', model: 'X12', firmware: '20250604', protocol: '5.3' },
+      { connection: 2, vendor: 'controller', model: 'X6', firmware: '20250604', protocol: '5.3' },
+      { connection: 3, vendor: 'controller', model: null, firmware: '20250604', protocol: '5.3' },
     ]);
   });
 
@@ -418,7 +478,7 @@ describe('paged projection reads', () => {
 
   it('checks every page against the projection of its session', async () => {
     const missing = page('lifecycle', 1, [0, 1], true, { elapsedSeconds: [0], action: ['start'] });
-    delete (missing.columns as Record<string, unknown>).cycSequence;
+    delete (missing.columns as Record<string, unknown>).controllerSequence;
     expect(await rejection(() => collect(source({ lifecycle: [missing] }).value, 'lifecycle', reads()))).toBe('page');
     const android = page('lifecycle', 1, [0, 1], true, { elapsedSeconds: [0], action: ['start'] });
     expect(await rejection(() => collect(source({ lifecycle: [android] }).value, 'lifecycle', reads('android')))).toBe(

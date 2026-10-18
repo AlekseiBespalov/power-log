@@ -1,4 +1,5 @@
-/** UTC export time and monotonic capture time are intentionally separate. */
+import { coreRequiredSampleColumns, coreSampleIdentityColumns } from '../../shared/js';
+
 export interface TelemetrySample {
   timestamp: string;
   elapsedSeconds: number;
@@ -54,7 +55,6 @@ export interface NativeState {
   recoverableConnectionError?: boolean;
 }
 
-/** Local transport health; contains no device identifiers or telemetry values. */
 export interface ConnectionDiagnostics {
   status: ConnectionStatus;
   requestedHz: number;
@@ -65,29 +65,24 @@ export interface ConnectionDiagnostics {
   lastGapSeconds: number | null;
 }
 
-export const REQUIRED_SAMPLE_COLUMNS = [
-  'timestamp',
-  'elapsedSeconds',
-  'sequence',
-  'humanPowerW',
-  'cadenceRpm',
-  'motorInputPowerW',
-  'batteryVoltageV',
-  'batteryCurrentA',
-  'motorCurrentA',
-  'motorRpm',
-  'pedalTorqueNm',
-  'controllerTempC',
-  'motorTempC',
-  'consumedAh',
-  'consumedWh',
-  'throttleVoltageV',
-  'faultCode',
-  'assistLevel',
-  'raceMode',
-  'speedRaw',
-] as const satisfies readonly (keyof TelemetrySample)[];
-export const SAMPLE_IDENTITY_COLUMNS = ['controllerModel', 'firmwareLabel', 'controllerProtocol'] as const;
+export type TelemetryMeasurements = Omit<
+  TelemetrySample,
+  | 'timestamp'
+  | 'elapsedSeconds'
+  | 'sequence'
+  | 'controllerSpeedMps'
+  | 'controllerModel'
+  | 'firmwareLabel'
+  | 'controllerProtocol'
+  | 'connectionEpoch'
+  | 'interruptionIndex'
+>;
+export const REQUIRED_SAMPLE_COLUMNS = coreRequiredSampleColumns() as readonly (
+  keyof TelemetryMeasurements | 'timestamp' | 'elapsedSeconds' | 'sequence'
+)[];
+export const SAMPLE_IDENTITY_COLUMNS = coreSampleIdentityColumns() as readonly (
+  'controllerModel' | 'firmwareLabel' | 'controllerProtocol'
+)[];
 
 export type SampleTiming = Pick<TelemetrySample, 'timestamp' | 'elapsedSeconds' | 'sequence'>;
 export interface MonotonicMapping {
@@ -107,10 +102,7 @@ export function samplePresentationTime(delivery: SampleDelivery): number | null 
   const seconds = sampleAcquisition(delivery);
   return seconds !== null && 'clock' in delivery ? delivery.clock.toJS(seconds) : seconds;
 }
-export type TelemetryMeasurements = Pick<
-  TelemetrySample,
-  Exclude<(typeof REQUIRED_SAMPLE_COLUMNS)[number], keyof SampleTiming>
->;
+
 export const MAX_SAMPLE_GAP_SECONDS = 2.5;
 
 export function isFreshSample(

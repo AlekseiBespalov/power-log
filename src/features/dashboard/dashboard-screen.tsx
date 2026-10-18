@@ -9,7 +9,7 @@ import { colors } from '../../components/ui';
 import { MonitorPanel } from '../monitor/monitor-panel';
 import { nativeMonitorSource } from '../../services/monitor-source';
 import { workoutMonitorSource } from '../../services/workout-monitor-source';
-import { RideActionBar, RideControlsProvider, RideStatus } from '../workout/workout-screen';
+import { RideActionBar, RideControlsProvider, RideEmptyState, RideStatus } from '../workout/workout-screen';
 import { ConnectionSettings } from './connection-settings';
 
 export function DashboardScreen() {
@@ -23,7 +23,7 @@ export function DashboardScreen() {
   const monitorSource = useMemo(
     () =>
       workoutId
-        ? workoutMonitorSource(workoutId, true, distanceSource)
+        ? workoutMonitorSource(workoutId, true)
         : adapter.kind === 'native'
           ? nativeMonitorSource('live', undefined, true, distanceSource)
           : session.monitor,
@@ -36,7 +36,11 @@ export function DashboardScreen() {
       <AppShell footer={bottomBar ? <RideActionBar /> : undefined}>
         <RideStatus connection={<ConnectionSettings />} />
         {!bottomBar && <RideActionBar inline />}
-        <MonitorPanel source={monitorSource} bikeAvailable={available} />
+        <MonitorPanel
+          source={monitorSource}
+          bikeAvailable={available}
+          emptyState={!available && !workoutId ? <RideEmptyState /> : undefined}
+        />
         {available && session.faultCode !== null && session.faultCode !== 0 && (
           <Text accessibilityRole="alert" style={{ color: colors.red }}>
             Controller fault: {session.faultCode}

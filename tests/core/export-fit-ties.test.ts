@@ -20,7 +20,7 @@ import type { FitWriter } from '../../src/core/export/fit/writer';
 import type { ActivityInterval } from '../../src/core/export/timeline';
 import { FIT_START, readFit, records, runFit, type LifecycleRow, type TelemetryRow } from '../fixtures/export/fit/ride';
 
-const clock = () => fitClock({ startSec: 1767225600, startMs: 0 }, 0);
+const clock = () => fitClock({ startSec: 1767225600, startMs: 0 });
 
 interface Row {
   stream: number;
@@ -241,7 +241,7 @@ describe('a FIT export with large equal-elapsed groups', () => {
     const half = 100_000;
     const lifecycle: LifecycleRow[] = [
       { t: 0, action: 'start', sequence: 1 },
-      { t: 5, action: 'pause', sequence: 2, interrupted: true, epoch: 'old', cyc: 3 * half },
+      { t: 5, action: 'pause', sequence: 2, interrupted: true, epoch: 'old', controller: 3 * half },
       { t: 5, action: 'resume', sequence: 3, epoch: 'new' },
       { t: 10, action: 'stop', sequence: 4 },
     ];

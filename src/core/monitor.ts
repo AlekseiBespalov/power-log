@@ -1,9 +1,22 @@
+import type { FitPowerSource } from './export/types';
+import {
+  coreMetricDeclarations,
+  presentationMetric,
+  presentationFormatMetric,
+  presentationFormatPoint,
+  presentationFormatDifference,
+  presentationMetricAllowsMean,
+  presentationDefaultPreferences,
+  presentationParsePreferences,
+  presentationPresetLabel,
+  presentationReadingAvailable,
+  type PresentationPreferences,
+} from '../../shared/js';
 import type { ChartViewport } from './chart-viewport';
-import { DISTANCE_SOURCE_LABELS, type DistanceSource, type MetricSourceInfo } from './distance';
-import { isRecord } from './validation';
+import type { DistanceSource, MetricSourceInfo } from './distance';
+import type { BatteryConsumptionSource } from './consumption';
 export type { MetricSourceInfo } from './distance';
 
-/** Revisions and original identities cross the bridge losslessly as strings. */
 export type MonitorRevision = string;
 export interface MonitorPoint {
   elapsedSeconds: number;
@@ -23,10 +36,10 @@ export interface MonitorStatistics {
   coveredSeconds?: number;
   integral?: number;
   distance?: number;
+  amount?: number;
   unresolvedBoundary?: boolean;
   partial?: boolean;
 }
-/** Rendering model assembled from independent snapshot reads. */
 export interface MonitorData {
   metricSources?: Record<string, MetricSourceInfo>;
   sourceId: string;
@@ -39,9 +52,7 @@ export interface MonitorData {
   mapMonotonicSeconds?: (seconds: number) => number | null;
   series: Record<string, MonitorPoint[]>;
   statistics: Record<string, MonitorStatistics>;
-  /** Coordinates used to build the retained drawing; independent of a gesture preview. */
   plotViewport?: ChartViewport;
-  /** Identity of the admitted geometry query, including its reduction budget. */
   plotGeneration?: number;
   latest?: Record<string, MonitorPoint | null>;
   selection?: Record<string, MonitorPoint | null>;
@@ -56,8 +67,13 @@ export interface MonitorData {
   selectionRevision?: MonitorRevision;
   referenceRevision?: MonitorRevision;
 }
-export type NativeMonitorTarget = { source: 'live' | 'workout'; id?: string; distanceSource?: DistanceSource };
-export type MonitorDescribeRequest = { generation: number };
+export type NativeMonitorTarget = {
+  source: 'live' | 'workout';
+  id?: string;
+  distanceSource?: DistanceSource;
+  cancellationId?: string;
+};
+export type MonitorDescribeRequest = { generation: number; signal?: AbortSignal };
 export type MonitorLatestRequest = MonitorDescribeRequest & { metrics: string[] };
 export type MonitorSnapshotRequest = MonitorDescribeRequest & { expectedRevision: MonitorRevision };
 export type MonitorPlotRequest = MonitorSnapshotRequest & {
@@ -127,13 +143,10 @@ export type MonitorChange = {
 };
 export type MonitorChangesResult = MonitorEnvelope & { status: 'ok'; resetRequired: boolean; changes: MonitorChange[] };
 export interface MonitorSource {
-  /** Stable across ordinary data/seal revisions; changes for a different ride/session. */
   key: string;
   live: boolean;
   mapMonotonicSeconds?(seconds: number): number | null;
-  /** Optional catalog revision hint causes a refresh without replacing source identity. */
   revisionHint?: string;
-  /** Analytical choices invalidate pending reads without replacing the ride. */
   semanticKey?: string;
   describeSource(request: MonitorDescribeRequest): Promise<MonitorDescribeResult>;
   readLatest(request: MonitorLatestRequest): Promise<MonitorLatestResult>;
@@ -155,341 +168,41 @@ export type MonitorMetric = {
   kind?: 'step';
   zero?: boolean;
   semantics?: 'cumulative' | 'counter' | 'distance' | 'category' | 'circular';
+  description?: string;
 };
 
-export const MONITOR_METRICS: readonly MonitorMetric[] = [
-  {
-    id: 'humanPowerW',
-    label: 'Rider power',
-    shortLabel: 'Rider',
-    unit: 'W',
-    group: 'Rider',
-    color: '#ff8735',
-    decimals: 0,
-    gapSeconds: 6,
-    zero: true,
-  },
-  {
-    id: 'cadenceRpm',
-    label: 'Cadence',
-    shortLabel: 'Cadence',
-    unit: 'rpm',
-    group: 'Rider',
-    color: '#ad98e4',
-    decimals: 0,
-    gapSeconds: 6,
-    zero: true,
-  },
-  {
-    id: 'heartRateBpm',
-    label: 'Heart rate',
-    shortLabel: 'Heart rate',
-    unit: 'bpm',
-    group: 'Rider',
-    color: '#fb7185',
-    decimals: 0,
-    gapSeconds: 15,
-  },
-  {
-    id: 'pedalTorqueNm',
-    label: 'Pedal torque',
-    shortLabel: 'Torque',
-    unit: 'Nm',
-    group: 'Rider',
-    color: '#e9b65a',
-    decimals: 1,
-    gapSeconds: 6,
-    zero: true,
-  },
-  {
-    id: 'activeEnergyKcal',
-    label: 'Active energy',
-    shortLabel: 'Active energy',
-    unit: 'kcal',
-    group: 'Rider',
-    color: '#f6b26b',
-    decimals: 0,
-    gapSeconds: 120,
-    zero: true,
-  },
-  {
-    id: 'basalEnergyKcal',
-    label: 'Resting energy',
-    shortLabel: 'Resting energy',
-    unit: 'kcal',
-    group: 'Rider',
-    color: '#b8a184',
-    decimals: 0,
-    gapSeconds: 120,
-    zero: true,
-  },
-  {
-    id: 'batteryVoltageV',
-    label: 'Battery voltage',
-    shortLabel: 'Voltage',
-    unit: 'V',
-    group: 'Battery',
-    color: '#f4cf5b',
-    decimals: 2,
-    gapSeconds: 6,
-  },
-  {
-    id: 'batteryCurrentA',
-    label: 'Battery current',
-    shortLabel: 'Battery current',
-    unit: 'A',
-    group: 'Battery',
-    color: '#57c6f5',
-    decimals: 1,
-    gapSeconds: 6,
-    zero: true,
-  },
-  {
-    id: 'motorInputPowerW',
-    label: 'Motor input power',
-    shortLabel: 'Motor input',
-    unit: 'W',
-    group: 'Battery',
-    color: '#3d8bfd',
-    decimals: 0,
-    gapSeconds: 6,
-    zero: true,
-  },
-  {
-    id: 'consumedAh',
-    label: 'Battery charge used',
-    shortLabel: 'Charge used',
-    unit: 'Ah',
-    group: 'Battery',
-    color: '#cbb48f',
-    decimals: 2,
-    gapSeconds: 6,
-    zero: true,
-    semantics: 'counter',
-  },
-  {
-    id: 'consumedWh',
-    label: 'Battery energy used',
-    shortLabel: 'Energy used',
-    unit: 'Wh',
-    group: 'Battery',
-    color: '#e2ae71',
-    decimals: 1,
-    gapSeconds: 6,
-    zero: true,
-    semantics: 'counter',
-  },
-  {
-    id: 'motorCurrentA',
-    label: 'Motor current',
-    shortLabel: 'Motor current',
-    unit: 'A',
-    group: 'Motor',
-    color: '#e693c1',
-    decimals: 1,
-    gapSeconds: 6,
-    zero: true,
-  },
-  {
-    id: 'motorTempC',
-    label: 'Motor temperature',
-    shortLabel: 'Motor',
-    unit: '°C',
-    group: 'Motor',
-    color: '#ff9875',
-    decimals: 1,
-    gapSeconds: 6,
-  },
-  {
-    id: 'controllerTempC',
-    label: 'Controller temperature',
-    shortLabel: 'Controller',
-    unit: '°C',
-    group: 'Motor',
-    color: '#6bd4c5',
-    decimals: 1,
-    gapSeconds: 6,
-  },
-  {
-    id: 'motorRpm',
-    label: 'Motor speed',
-    shortLabel: 'Motor speed',
-    unit: 'rpm',
-    group: 'Motor',
-    color: '#84b1f5',
-    decimals: 0,
-    gapSeconds: 6,
-    zero: true,
-  },
-  {
-    id: 'throttleVoltageV',
-    label: 'Throttle voltage',
-    shortLabel: 'Throttle',
-    unit: 'V',
-    group: 'Motor',
-    color: '#d3a8e6',
-    decimals: 2,
-    gapSeconds: 6,
-  },
-  {
-    id: 'speedMps',
-    label: 'GPS speed',
-    shortLabel: 'GPS',
-    unit: 'km/h',
-    group: 'Route',
-    color: '#91c77a',
-    decimals: 1,
-    gapSeconds: 10,
-    scale: 3.6,
-    zero: true,
-  },
-  {
-    id: 'healthSpeedMps',
-    label: 'Health cycling speed',
-    shortLabel: 'Health',
-    unit: 'km/h',
-    group: 'Route',
-    color: '#81c4b2',
-    decimals: 1,
-    gapSeconds: 10,
-    scale: 3.6,
-    zero: true,
-  },
-  {
-    id: 'controllerSpeedMps',
-    label: 'Controller speed',
-    shortLabel: 'Controller',
-    unit: 'km/h',
-    group: 'Route',
-    color: '#8799ac',
-    decimals: 1,
-    gapSeconds: 6,
-    scale: 3.6,
-    zero: true,
-  },
-  {
-    id: 'distanceMeters',
-    label: 'Ride distance',
-    shortLabel: 'Distance',
-    unit: 'km',
-    group: 'Route',
-    color: '#aed195',
-    decimals: 2,
-    gapSeconds: 120,
-    scale: 0.001,
-    zero: true,
-    semantics: 'distance',
-  },
-  {
-    id: 'altitudeMeters',
-    label: 'Altitude',
-    shortLabel: 'Altitude',
-    unit: 'm',
-    group: 'Route',
-    color: '#b6bcd0',
-    decimals: 0,
-    gapSeconds: 10,
-  },
-  {
-    id: 'horizontalAccuracyM',
-    label: 'GPS accuracy',
-    shortLabel: 'GPS accuracy',
-    unit: 'm',
-    group: 'Route',
-    color: '#94a3b8',
-    decimals: 1,
-    gapSeconds: 10,
-    zero: true,
-  },
-  {
-    id: 'verticalAccuracyM',
-    label: 'Altitude accuracy',
-    shortLabel: 'Altitude accuracy',
-    unit: 'm',
-    group: 'Route',
-    color: '#acb4ce',
-    decimals: 1,
-    gapSeconds: 10,
-    zero: true,
-  },
-  {
-    id: 'courseDegrees',
-    label: 'Course',
-    shortLabel: 'Course',
-    unit: '°',
-    group: 'Route',
-    color: '#73aaa7',
-    decimals: 0,
-    gapSeconds: 10,
-    semantics: 'circular',
-  },
-  {
-    id: 'assistLevel',
-    label: 'Assist level',
-    shortLabel: 'Assist',
-    unit: '',
-    group: 'Status',
-    color: '#dcad77',
-    decimals: 0,
-    gapSeconds: 6,
-    kind: 'step',
-    zero: true,
-  },
-  {
-    id: 'raceMode',
-    label: 'Race mode',
-    shortLabel: 'Race mode',
-    unit: '',
-    group: 'Status',
-    color: '#ed9c94',
-    decimals: 0,
-    gapSeconds: 6,
-    kind: 'step',
-    zero: true,
-  },
-  {
-    id: 'faultCode',
-    label: 'Controller fault code',
-    shortLabel: 'Fault code',
-    unit: '',
-    group: 'Status',
-    color: '#d7dde5',
-    decimals: 0,
-    gapSeconds: 6,
-    kind: 'step',
-    zero: true,
-  },
-  {
-    id: 'speedRaw',
-    label: 'Controller speed (unit unknown)',
-    shortLabel: 'Unit unknown',
-    unit: 'raw',
-    group: 'Route',
-    color: '#8799ac',
-    decimals: 2,
-    gapSeconds: 6,
-  },
-];
+export const MONITOR_METRICS: readonly MonitorMetric[] = coreMetricDeclarations().map(metric => ({
+  id: metric.id,
+  label: metric.label,
+  shortLabel: metric.shortLabel,
+  unit: metric.unit,
+  group: metric.group as MonitorMetric['group'],
+  color: metric.color,
+  decimals: metric.decimals,
+  gapSeconds: metric.gapSeconds,
+  ...(metric.scale === 1 ? {} : { scale: metric.scale }),
+  ...(metric.kind == null ? {} : { kind: metric.kind as MonitorMetric['kind'] }),
+  ...(metric.zero == null ? {} : { zero: metric.zero }),
+  ...(metric.semantics == null ? {} : { semantics: metric.semantics as MonitorMetric['semantics'] }),
+  ...(metric.description == null ? {} : { description: metric.description }),
+}));
 export type SpeedUnit = 'km/h' | 'mph' | 'm/s';
-const imperialSpeedMetrics = new Map(
-  MONITOR_METRICS.filter(metric => ['speedMps', 'controllerSpeedMps', 'healthSpeedMps'].includes(metric.id)).map(
-    metric => [metric.id, { ...metric, unit: 'mph', scale: 1 / 0.44704 }],
-  ),
-);
-const siSpeedMetrics = new Map(
-  MONITOR_METRICS.filter(metric => ['speedMps', 'controllerSpeedMps', 'healthSpeedMps'].includes(metric.id)).map(
-    metric => [metric.id, { ...metric, unit: 'm/s', scale: 1 }],
-  ),
-);
-export const metricById = (id: string, speedUnit: SpeedUnit = 'km/h') =>
-  (speedUnit === 'mph' ? imperialSpeedMetrics.get(id) : speedUnit === 'm/s' ? siSpeedMetrics.get(id) : undefined) ??
-  MONITOR_METRICS.find(metric => metric.id === id);
+const metricCache = new Map<string, MonitorMetric>(MONITOR_METRICS.map(metric => [`km/h:${metric.id}`, metric]));
+export function metricById(id: string, speedUnit: SpeedUnit = 'km/h'): MonitorMetric | undefined {
+  if (!metricCache.has(`km/h:${id}`)) return undefined;
+  const key = `${speedUnit}:${id}`;
+  let metric = metricCache.get(key);
+  if (!metric) {
+    const declaration = presentationMetric(id, speedUnit);
+    metric = { ...metricCache.get(`km/h:${id}`)!, unit: declaration.unit, scale: declaration.scale };
+    metricCache.set(key, metric);
+  }
+  return metric;
+}
 export function metricAllowsMean(metric: MonitorMetric): boolean {
-  return !metric.semantics && metric.kind !== 'step' && !['activeEnergyKcal', 'basalEnergyKcal'].includes(metric.id);
+  return presentationMetricAllowsMean(metric.id);
 }
 export const controllerSpeedPreferenceId = (id: string) => (id === 'speedRaw' ? 'controllerSpeedMps' : id);
-const isPreferenceMetric = (id: unknown): id is string =>
-  typeof id === 'string' && !!metricById(id) && controllerSpeedPreferenceId(id) === id;
 export function monitorQueryMetrics(ids: readonly string[]): string[] {
   return [...new Set(ids.flatMap(id => (id === 'controllerSpeedMps' ? [id, 'speedRaw'] : [id])))];
 }
@@ -498,44 +211,23 @@ export function resolveMonitorMetrics(ids: readonly string[], available: readonl
   return ids.map(id => (id === 'controllerSpeedMps' && unknownUnit ? 'speedRaw' : id));
 }
 export const metricValue = (metric: MonitorMetric, value: number) => value * (metric.scale ?? 1);
-export const formatMetric = (metric: MonitorMetric, value: number | null | undefined) =>
-  value == null || !Number.isFinite(value) ? '—' : metricValue(metric, value).toFixed(metric.decimals);
-/** Exact integer originals never pass through Number on their way to a text readout. */
-export function formatExactMetricInteger(metric: MonitorMetric, original: string): string | null {
-  if (!/^-?(?:0|[1-9][0-9]*)$/.test(original)) return null;
-  const scale = String(metric.scale ?? 1),
-    match = /^([0-9]+)(?:\.([0-9]+))?$/.exec(scale);
-  if (!match) return null;
-  const decimal = match[2] ?? '',
-    denominator = 10n ** BigInt(decimal.length);
-  const numerator = BigInt(original) * BigInt(match[1]! + decimal) * 10n ** BigInt(metric.decimals);
-  const magnitude = numerator < 0n ? -numerator : numerator;
-  const rounded = magnitude / denominator + ((magnitude % denominator) * 2n >= denominator ? 1n : 0n);
-  const digits = rounded.toString().padStart(metric.decimals + 1, '0');
-  const text = metric.decimals ? `${digits.slice(0, -metric.decimals)}.${digits.slice(-metric.decimals)}` : digits;
-  return `${numerator < 0n ? '-' : ''}${text}`;
+const metricSpeedUnit = (metric: MonitorMetric): SpeedUnit =>
+  metric.unit === 'mph' || metric.unit === 'm/s' ? metric.unit : 'km/h';
+export function formatMetric(metric: MonitorMetric, value: number | null | undefined): string {
+  return presentationFormatMetric(metric.id, value ?? null, metricSpeedUnit(metric));
 }
 export function formatMetricPoint(metric: MonitorMetric, point: MonitorPoint | null | undefined): string {
-  if (!point) return '—';
-  return (
-    (point.exactValue === undefined ? null : formatExactMetricInteger(metric, point.exactValue)) ??
-    formatMetric(metric, point.value)
-  );
+  return presentationFormatPoint(metric.id, point?.value ?? null, point?.exactValue ?? null, metricSpeedUnit(metric));
 }
 export function formatMetricDifference(metric: MonitorMetric, a: MonitorPoint | null, b: MonitorPoint | null): string {
-  if (!a || !b || !metricAllowsMean(metric)) return '—';
-  if (
-    a.exactValue !== undefined &&
-    b.exactValue !== undefined &&
-    /^-?[0-9]+$/.test(a.exactValue) &&
-    /^-?[0-9]+$/.test(b.exactValue)
-  ) {
-    const difference = BigInt(b.exactValue) - BigInt(a.exactValue),
-      text = formatExactMetricInteger(metric, difference.toString());
-    if (text !== null) return `${difference > 0n ? '+' : ''}${text}`;
-  }
-  const delta = metricValue(metric, b.value) - metricValue(metric, a.value);
-  return Number.isFinite(delta) ? `${delta > 0 ? '+' : ''}${delta.toFixed(metric.decimals)}` : '—';
+  return presentationFormatDifference(
+    metric.id,
+    a?.value ?? null,
+    b?.value ?? null,
+    a?.exactValue ?? null,
+    b?.exactValue ?? null,
+    metricSpeedUnit(metric),
+  );
 }
 
 export type MonitorViewId = 'ride' | 'battery' | 'temperature';
@@ -549,6 +241,8 @@ export interface MonitorView {
   range: MonitorRange;
   webColumns: MonitorColumns;
 }
+export class MonitorPreferencesError extends Error {}
+
 export interface MonitorPreferences {
   version: 1;
   activeView: MonitorViewId;
@@ -556,132 +250,90 @@ export interface MonitorPreferences {
   historyRange: MonitorRange;
   speedUnit: SpeedUnit;
   distanceSource: DistanceSource;
+  batteryConsumptionSource: BatteryConsumptionSource;
+  fitPowerSource: FitPowerSource;
   sampleHz: 2 | 4 | 8;
   views: Record<MonitorViewId, MonitorView>;
   workoutOptions: import('./workouts').WorkoutOptions;
 }
-export function defaultMonitorPreferences(): MonitorPreferences {
-  return {
+export const MONITOR_VIEW_IDS = ['ride', 'battery', 'temperature'] as const;
+
+const retainedPreferences = new WeakMap<MonitorPreferences, PresentationPreferences>();
+export function monitorPreferencesFromCore(core: PresentationPreferences, retain = false): MonitorPreferences {
+  const views = {} as MonitorPreferences['views'];
+  for (const id of MONITOR_VIEW_IDS) {
+    const view = core.view(id);
+    views[id] = {
+      id,
+      name: presentationPresetLabel(id),
+      numbers: view.numbers,
+      charts: view.charts,
+      range: (view.range === 'all' ? 'all' : Number(view.range)) as MonitorRange,
+      webColumns: view.webColumns as MonitorColumns,
+    };
+  }
+  const options = core.options;
+  const result: MonitorPreferences = {
     version: 1,
-    activeView: 'ride',
-    historyRange: 'all',
-    speedUnit: 'km/h',
-    distanceSource: 'auto',
-    sampleHz: 2,
-    workoutOptions: { indoor: false, useWatch: false, saveToHealth: true },
-    views: {
-      ride: {
-        id: 'ride',
-        name: 'Ride',
-        numbers: ['humanPowerW', 'cadenceRpm', 'motorInputPowerW', 'controllerSpeedMps'],
-        charts: ['humanPowerW', 'motorInputPowerW', 'cadenceRpm'],
-        range: 120,
-        webColumns: 2,
-      },
-      battery: {
-        id: 'battery',
-        name: 'Battery',
-        numbers: ['batteryVoltageV', 'batteryCurrentA', 'motorInputPowerW'],
-        charts: ['batteryVoltageV', 'batteryCurrentA', 'motorInputPowerW'],
-        range: 120,
-        webColumns: 2,
-      },
-      temperature: {
-        id: 'temperature',
-        name: 'Temperature',
-        numbers: ['motorTempC', 'controllerTempC', 'motorInputPowerW'],
-        charts: ['motorTempC', 'controllerTempC', 'motorInputPowerW'],
-        range: 600,
-        webColumns: 2,
-      },
+    activeView: core.activeView as MonitorViewId,
+    ...(core.historyView === null ? {} : { historyView: core.historyView as MonitorViewId }),
+    historyRange: (core.historyRange === 'all' ? 'all' : Number(core.historyRange)) as MonitorRange,
+    speedUnit: core.speedUnit as SpeedUnit,
+    distanceSource: core.distanceSource as DistanceSource,
+    batteryConsumptionSource: core.batteryConsumptionSource as BatteryConsumptionSource,
+    fitPowerSource: core.fitPowerSource as FitPowerSource,
+    sampleHz: core.sampleHz as 2 | 4 | 8,
+    views,
+    workoutOptions: {
+      indoor: options.indoor,
+      useWatch: options.useWatch!,
+      saveToHealth: options.saveToHealth!,
+      ...(options.recordGPS === null ? {} : { recordGPS: options.recordGPS }),
     },
   };
-}
-const MONITOR_VIEW_IDS = ['ride', 'battery', 'temperature'] as const;
-const MONITOR_RANGES: readonly unknown[] = [30, 120, 600, 'all'];
-export function validateStoredMonitorPreferences(input: unknown): MonitorPreferences {
-  const ids: readonly unknown[] = MONITOR_VIEW_IDS;
-  const invalid = (): never => {
-    throw new Error('Invalid saved monitor settings.');
-  };
-  if (
-    !isRecord(input) ||
-    input.version !== 1 ||
-    !ids.includes(input.activeView as string) ||
-    (input.historyView !== undefined && !ids.includes(input.historyView as string)) ||
-    !MONITOR_RANGES.includes(input.historyRange as number | string) ||
-    !['km/h', 'mph', 'm/s'].includes(input.speedUnit as string) ||
-    typeof input.distanceSource !== 'string' ||
-    !Object.hasOwn(DISTANCE_SOURCE_LABELS, input.distanceSource) ||
-    ![2, 4, 8].includes(input.sampleHz as number) ||
-    !isRecord(input.workoutOptions) ||
-    !isRecord(input.views)
-  )
-    return invalid();
-  const options = input.workoutOptions;
-  if (
-    typeof options.indoor !== 'boolean' ||
-    typeof options.useWatch !== 'boolean' ||
-    typeof options.saveToHealth !== 'boolean' ||
-    (options.recordGPS !== undefined && typeof options.recordGPS !== 'boolean') ||
-    (options.sampleHz !== undefined && ![2, 4, 8].includes(options.sampleHz as number))
-  )
-    return invalid();
-  for (const id of MONITOR_VIEW_IDS) {
-    const view = input.views[id];
-    if (
-      !isRecord(view) ||
-      view.id !== id ||
-      typeof view.name !== 'string' ||
-      !MONITOR_RANGES.includes(view.range as number | string) ||
-      ![1, 2, 3].includes(view.webColumns as number)
-    )
-      return invalid();
-    for (const key of ['numbers', 'charts']) {
-      const values = view[key];
-      if (!Array.isArray(values) || !values.every(isPreferenceMetric) || new Set(values).size !== values.length)
-        return invalid();
+  if (retain) {
+    for (const view of Object.values(views)) {
+      Object.freeze(view.numbers);
+      Object.freeze(view.charts);
+      Object.freeze(view);
     }
-  }
-  return validateMonitorPreferences(input);
-}
-export function validateMonitorPreferences(input: unknown): MonitorPreferences {
-  const result = defaultMonitorPreferences();
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return result;
-  const data = input as Record<string, unknown>;
-  if (data.version !== 1) return result;
-  if (data.speedUnit === 'mph' || data.speedUnit === 'm/s') result.speedUnit = data.speedUnit;
-  if (typeof data.distanceSource === 'string' && Object.hasOwn(DISTANCE_SOURCE_LABELS, data.distanceSource))
-    result.distanceSource = data.distanceSource as DistanceSource;
-  if ([2, 4, 8].includes(data.sampleHz as number)) result.sampleHz = data.sampleHz as 2 | 4 | 8;
-  if (data.workoutOptions && typeof data.workoutOptions === 'object') {
-    const options = data.workoutOptions as Record<string, unknown>;
-    if (typeof options.indoor === 'boolean') result.workoutOptions.indoor = options.indoor;
-    if (typeof options.useWatch === 'boolean') result.workoutOptions.useWatch = options.useWatch;
-    if (typeof options.saveToHealth === 'boolean') result.workoutOptions.saveToHealth = options.saveToHealth;
-    if (typeof options.recordGPS === 'boolean') result.workoutOptions.recordGPS = options.recordGPS;
-  }
-  if (MONITOR_VIEW_IDS.includes(data.activeView as MonitorViewId)) result.activeView = data.activeView as MonitorViewId;
-  if (MONITOR_VIEW_IDS.includes(data.historyView as MonitorViewId))
-    result.historyView = data.historyView as MonitorViewId;
-  if (MONITOR_RANGES.includes(data.historyRange)) result.historyRange = data.historyRange as MonitorRange;
-  const views = data.views && typeof data.views === 'object' ? (data.views as Record<string, unknown>) : {};
-  for (const id of MONITOR_VIEW_IDS) {
-    const view = views[id];
-    if (!view || typeof view !== 'object') continue;
-    const candidate = view as Record<string, unknown>;
-    for (const key of ['numbers', 'charts'] as const)
-      if (Array.isArray(candidate[key])) {
-        result.views[id][key] = [...new Set((candidate[key] as unknown[]).filter(isPreferenceMetric))];
-      }
-    if (MONITOR_RANGES.includes(candidate.range)) result.views[id].range = candidate.range as MonitorRange;
-    if ([1, 2, 3].includes(candidate.webColumns as number))
-      result.views[id].webColumns = candidate.webColumns as MonitorColumns;
+    Object.freeze(views);
+    Object.freeze(result.workoutOptions);
+    Object.freeze(result);
+    retainedPreferences.set(result, core);
   }
   return result;
 }
-
-/** A held display value keeps its original point and expires at the exact gap boundary. */
+export function defaultMonitorPreferences(): MonitorPreferences {
+  return monitorPreferencesFromCore(presentationDefaultPreferences());
+}
+function preferenceRecord(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+  const value = input as MonitorPreferences;
+  if (!value.views || typeof value.views !== 'object') return input;
+  const views = Object.fromEntries(
+    Object.entries(value.views).map(([id, view]) => {
+      if (!view || typeof view !== 'object') return [id, view];
+      const { id: _id, name: _name, ...fields } = view;
+      return [id, fields];
+    }),
+  );
+  const { sampleHz: _sampleHz, ...workoutOptions } = value.workoutOptions ?? {};
+  return { ...value, workoutOptions, views };
+}
+export function monitorPreferencesCore(input: MonitorPreferences): PresentationPreferences {
+  const retained = retainedPreferences.get(input);
+  if (retained) return retained;
+  const contents = JSON.stringify(preferenceRecord(input));
+  if (contents === undefined) throw new Error('Invalid saved monitor settings.');
+  return presentationParsePreferences(contents);
+}
+export function parseMonitorPreferences(contents: string): MonitorPreferences {
+  return monitorPreferencesFromCore(presentationParsePreferences(contents), true);
+}
+export function monitorPreferencesJson(preferences: MonitorPreferences): string {
+  return monitorPreferencesCore(preferences).storedJson;
+}
 export function currentMonitorPoint(
   point: MonitorPoint | null | undefined,
   live: boolean,
@@ -692,12 +344,5 @@ export function currentMonitorPoint(
 ): MonitorPoint | null {
   if (!point || !live) return point ?? null;
   if (acquiredAt != null && mapMonotonicSeconds) acquiredAt = mapMonotonicSeconds(acquiredAt);
-  return acquiredAt != null &&
-    monotonicAt !== undefined &&
-    Number.isFinite(acquiredAt) &&
-    Number.isFinite(monotonicAt) &&
-    monotonicAt >= acquiredAt &&
-    monotonicAt - acquiredAt < gapSeconds
-    ? point
-    : null;
+  return presentationReadingAvailable(acquiredAt ?? null, monotonicAt ?? null, gapSeconds) ? point : null;
 }

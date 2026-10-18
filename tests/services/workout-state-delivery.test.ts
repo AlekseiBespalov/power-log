@@ -6,6 +6,20 @@ import { unavailableWorkoutState, type WorkoutState } from '../../src/core/worko
 const state = (phase: WorkoutState['phase']): WorkoutState => ({ ...unavailableWorkoutState, phase });
 
 describe('workout state delivery', () => {
+  it('publishes reader ownership immediately so historical repair admission follows pin release', () => {
+    const delivered: WorkoutState[] = [];
+    const delivery = new WorkoutStateDelivery(value => delivered.push(value));
+    const initial = state('idle');
+    try {
+      delivery.receive(initial);
+      delivery.receive({ ...initial, readWorkoutIds: ['11111111-1111-4111-8111-111111111111'] });
+      expect(delivered.at(-1)?.readWorkoutIds).toEqual(['11111111-1111-4111-8111-111111111111']);
+      delivery.receive({ ...initial, readWorkoutIds: [] });
+      expect(delivered.at(-1)?.readWorkoutIds).toEqual([]);
+    } finally {
+      delivery.setActive(false);
+    }
+  });
   it('publishes Watch installation changes immediately without transport diagnostics', () => {
     const displayed: WorkoutState[] = [];
     const delivery = new WorkoutStateDelivery(value => displayed.push(value));
@@ -39,6 +53,35 @@ describe('workout state delivery', () => {
       delivery.setActive(true);
       expect(displayed).toHaveLength(count + 1);
       expect(displayed.at(-1)?.timerSeconds).toBe(79);
+    } finally {
+      delivery.setActive(false);
+      vi.useRealTimers();
+    }
+  });
+  it('bounds running Watch updates whose collection revision advances with every event', async () => {
+    vi.useFakeTimers();
+    const displayed: WorkoutState[] = [],
+      delivery = new WorkoutStateDelivery(value => displayed.push(value));
+    const componentResults = (['workout', 'readback', 'rider-power', 'cycling-cadence', 'association'] as const).map(
+      component => ({ component, sourceRevision: '1', required: true, state: 'pending' as const, providerIds: [] }),
+    );
+    try {
+      for (let i = 0; i < 32; i++) {
+        delivery.receive({
+          ...state('running'),
+          useWatch: true,
+          saveToHealth: true,
+          healthKitState: 'pending',
+          collectionRevision: String(i + 3),
+          timerSeconds: i / 8,
+          componentResults,
+          recordingOwner: 'phone',
+          healthPublisher: 'watch',
+        });
+        await vi.advanceTimersByTimeAsync(125);
+      }
+      expect(displayed.length).toBeLessThanOrEqual(5);
+      expect(new Set(displayed.map(value => workoutHistoryRevision(value))).size).toBe(1);
     } finally {
       delivery.setActive(false);
       vi.useRealTimers();
@@ -111,16 +154,61 @@ describe('workout state delivery', () => {
     expect(calls).toBe(2);
   });
   it('invalidates historical deletions without reloading the catalog on every active sample', () => {
-    const active = { ...state('running'), id: 'other-ride', collectionRevision: 50, historyRevision: 'deletion-1' };
-    expect(workoutHistoryRevision({ ...active, collectionRevision: 51, timerSeconds: 100 })).toBe(
+    const active = { ...state('running'), id: 'other-ride', collectionRevision: '50', historyRevision: 'deletion-1' };
+    expect(workoutHistoryRevision({ ...active, collectionRevision: '51', timerSeconds: 100 })).toBe(
       workoutHistoryRevision(active),
     );
     expect(workoutHistoryRevision({ ...active, historyRevision: 'deletion-2' })).not.toBe(
       workoutHistoryRevision(active),
     );
     const completed = { ...active, phase: 'completed' as const };
-    expect(workoutHistoryRevision({ ...completed, collectionRevision: 51 })).not.toBe(
+    expect(workoutHistoryRevision({ ...completed, collectionRevision: '51' })).not.toBe(
       workoutHistoryRevision(completed),
     );
   });
+});
+
+it('publishes unreadable metadata and its storage failure after a running revision', () => {
+  const displayed: WorkoutState[] = [];
+  const delivery = new WorkoutStateDelivery(value => displayed.push(value));
+  const running = {
+    ...state('running'),
+    id: 'ride',
+    collectionRevision: '5',
+  };
+  const failure: WorkoutState = {
+    ...running,
+    phase: 'interrupted',
+    collectionRevision: null,
+    failure: {
+      code: 'storageFailed',
+      message: "Power Log couldn't save this change. Try again. Your recorded data is kept.",
+    },
+  };
+  try {
+    delivery.receive(running);
+    delivery.receive(failure);
+    expect(displayed).toEqual([running, failure]);
+  } finally {
+    delivery.setActive(false);
+  }
+});
+
+it('publishes current-work changes immediately while completed Health remains saved', () => {
+  vi.useFakeTimers();
+  const displayed: WorkoutState[] = [];
+  const delivery = new WorkoutStateDelivery(value => displayed.push(value));
+  const completed = { ...state('completed'), healthKitState: 'saved' as const };
+  try {
+    delivery.receive(completed);
+    for (const key of ['healthBusy', 'sessionBusy', 'startBusy', 'finalizationBusy'] as const) {
+      delivery.receive({ ...completed, [key]: true });
+      expect(displayed.at(-1)?.[key]).toBe(true);
+      delivery.receive({ ...completed, [key]: false });
+      expect(displayed.at(-1)?.[key]).toBe(false);
+    }
+  } finally {
+    delivery.setActive(false);
+    vi.useRealTimers();
+  }
 });

@@ -1,6 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { File, FileMode } from 'expo-file-system';
-import bridge from '../../modules/cyc-bridge';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
+import bridge from '../../modules/power-log-bridge';
 import { Platform, Share } from 'react-native';
 import { createCsvParser, type ParsedRecording } from '../core/recordings';
 import { MAX_CSV_BYTES } from '../core/validation';
@@ -8,9 +8,12 @@ import { MAX_CSV_BYTES } from '../core/validation';
 export async function importRecording(): Promise<{ name: string; recording: ParsedRecording } | null> {
   const selected = await chooseCsv();
   if (!selected) return null;
-  const parser = createCsvParser();
-  const handle = selected.file.open(FileMode.ReadOnly);
+  let handle: ReturnType<File['open']> | undefined;
+  let recording: ParsedRecording;
   try {
+    const parser = createCsvParser();
+    if (selected.file.size > MAX_CSV_BYTES) throw new Error('Choose a CSV no larger than 256 MiB.');
+    handle = selected.file.open(FileMode.ReadOnly);
     let bom = 0;
     for (;;) {
       const bytes = handle.readBytes(64 * 1024);
@@ -28,10 +31,30 @@ export async function importRecording(): Promise<{ name: string; recording: Pars
       await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     if (bom > 0 && bom < 3) parser.write(byteText(UTF8_BOM.subarray(0, bom)));
-    return { name: selected.name, recording: parser.finish() };
-  } finally {
-    handle.close();
+    recording = parser.finish();
+  } catch (error) {
+    releaseCsv(selected.file, handle);
+    throw error;
   }
+  const cleanupError = releaseCsv(selected.file, handle);
+  if (cleanupError) throw cleanupError;
+  return { name: selected.name, recording };
+}
+
+function releaseCsv(file: File, handle: ReturnType<File['open']> | undefined): Error | null {
+  let failure: Error | null = null;
+  try {
+    handle?.close();
+  } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error));
+  }
+  try {
+    const pickerCache = new Directory(Paths.cache, 'DocumentPicker').uri.replace(/\/$/, '') + '/';
+    if (file.uri.startsWith(pickerCache)) file.delete();
+  } catch (error) {
+    failure ??= error instanceof Error ? error : new Error(String(error));
+  }
+  return failure;
 }
 
 const UTF8_BOM = Uint8Array.of(0xef, 0xbb, 0xbf);
@@ -54,7 +77,6 @@ async function chooseCsv(): Promise<{ name: string; file: File } | null> {
   const asset = result.assets[0];
   if (!asset) return null;
   const file = new File(asset.uri);
-  if (file.size > MAX_CSV_BYTES) throw new Error('Choose a CSV no larger than 256 MiB.');
   return { name: asset.name, file };
 }
 

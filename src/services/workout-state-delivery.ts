@@ -1,22 +1,17 @@
+import { completionIdentity, CompletionUpdateCursor, type CompletionSnapshotFields } from '../../shared/js';
+import { workoutCompletion } from '../core/workout-payload';
 import type { WorkoutState } from '../core/workouts';
 
 export function workoutHistoryRevision(state: WorkoutState): string {
-  return JSON.stringify([
-    state.id,
-    state.phase,
-    state.historyRevision,
-    state.phase === 'completed'
-      ? [state.collectionRevision, state.sealRevision, state.verifiedSealRevision, state.finalizationState]
-      : null,
-  ]);
+  return stateKey([completionIdentity(workoutCompletion(state)), state.historyRevision, state.exportEligible]);
 }
 
-/** A delayed refresh must never replace a newer native lifecycle event. */
 export class WorkoutStateDelivery {
-  private revision = 0;
+  private readonly cursor = new CompletionUpdateCursor();
   private active = true;
   private pending?: WorkoutState;
-  private delivered?: WorkoutState;
+  private deliveredControl?: string;
+  private pendingControl?: string;
   private lastPublication = -Infinity;
   private timer?: ReturnType<typeof setTimeout>;
   constructor(private readonly update: (state: WorkoutState) => void) {}
@@ -27,34 +22,38 @@ export class WorkoutStateDelivery {
     if (active) this.publish();
   }
   beginRefresh(): number {
-    return ++this.revision;
+    return this.cursor.beginRefresh();
   }
   receive(state: WorkoutState): void {
-    this.revision += 1;
-    this.admit(state);
+    const completion = workoutCompletion(state);
+    if (this.cursor.receive(completion)) this.admit(state, completion);
   }
   finishRefresh(request: number, state: WorkoutState): void {
-    if (request === this.revision) this.admit(state);
+    const completion = workoutCompletion(state);
+    if (this.cursor.finishRefresh(request, completion)) this.admit(state, completion);
   }
-  private admit(state: WorkoutState) {
+  private admit(state: WorkoutState, completion: CompletionSnapshotFields) {
     this.pending = state;
+    this.pendingControl = stateKey([
+      completionIdentity(completion, true),
+      state.pendingAction,
+      state.healthBusy,
+      state.sessionBusy,
+      state.endingOwner,
+      state.readWorkoutIds?.join(','),
+      state.startBusy,
+      state.finalizationBusy,
+      state.failure?.code,
+      state.historyRevision,
+      state.lastDeletedWorkoutId,
+      state.exportEligible,
+      state.recoveryState,
+      state.supported,
+      state.watch.installed,
+    ]);
     if (!this.active) return;
-    const control = (value: WorkoutState) =>
-      JSON.stringify([
-        value.id,
-        value.phase,
-        value.pendingAction,
-        value.error,
-        value.historyRevision,
-        value.lastDeletedWorkoutId,
-        value.healthKitState,
-        value.recoveryState,
-        value.supported,
-        value.watch.installed,
-        value.finalizationState,
-      ]);
     const delay = Math.max(0, 1000 - (performance.now() - this.lastPublication));
-    if (!this.delivered || control(this.delivered) !== control(state) || !delay) this.publish();
+    if (this.deliveredControl !== this.pendingControl || !delay) this.publish();
     else if (!this.timer)
       this.timer = setTimeout(() => {
         this.timer = undefined;
@@ -65,9 +64,15 @@ export class WorkoutStateDelivery {
     if (!this.active || !this.pending) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
-    this.delivered = this.pending;
+    const state = this.pending;
     this.pending = undefined;
+    this.deliveredControl = this.pendingControl;
+    this.pendingControl = undefined;
     this.lastPublication = performance.now();
-    this.update(this.delivered);
+    this.update(state);
   }
+}
+
+function stateKey(values: (string | boolean | null | undefined)[]): string {
+  return values.map(value => (value == null ? 'n' : `${typeof value}:${String(value).length}:${value}`)).join('');
 }

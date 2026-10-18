@@ -4,7 +4,6 @@ import {
   Animated,
   PanResponder,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +11,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { colors, Label } from '../../components/ui';
+import { colors, Label, type, Pressable, MIN_TOUCH_TARGET } from '../../components/ui';
 import { metricById } from '../../core/monitor';
 import { reorderMonitorMetric } from './monitor-editor-model';
 import { haptics } from '../../services/haptics';
@@ -137,7 +136,6 @@ export function SortableMetrics({ selected, kind, showSelected, onChange, header
     frame.current = null;
     drag.current = null;
     setLifted(null);
-    // A reset or external selection change must not be overwritten by a stale gesture.
     if (commit && current.original.join('|') === selected.join('|') && current.target !== current.index) {
       onChange(reorderMonitorMetric(selected, current.id, current.target));
       AccessibilityInfo.announceForAccessibility(
@@ -176,10 +174,7 @@ export function SortableMetrics({ selected, kind, showSelected, onChange, header
       {header}
       {showSelected && (
         <View style={{ marginBottom: 18 }}>
-          <View style={styles.selectedHeading}>
-            <Label>Selected · {selected.length}</Label>
-            {selected.length > 1 && <Text style={styles.hint}>Drag to reorder</Text>}
-          </View>
+          <Label>Selected · {selected.length}</Label>
           {!selected.length && <Text style={{ color: colors.muted, paddingVertical: 14 }}>No {kind} selected</Text>}
           <View testID="monitor-selected-metrics" style={{ height: selected.length * rowHeight }}>
             {selected.map(id => (
@@ -342,21 +337,13 @@ function SortableMetric(props: RowProps) {
         onPress={remove}
         style={styles.control}
       >
-        <Text style={{ color: colors.red, fontSize: 24 }}>×</Text>
+        <Text style={{ color: colors.red, fontSize: type.value }}>×</Text>
       </Pressable>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  selectedHeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    paddingBottom: 4,
-  },
-  hint: { color: colors.muted, fontSize: 11 },
   row: {
     position: 'absolute',
     left: 0,
@@ -367,6 +354,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  name: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 8 },
-  control: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  name: { flex: 1, color: colors.text, fontSize: type.body, paddingVertical: 8 },
+  control: { width: MIN_TOUCH_TARGET, height: MIN_TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
 });

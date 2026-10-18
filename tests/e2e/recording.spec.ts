@@ -2,7 +2,7 @@ import { expect, test, type CDPSession, type Locator, type Page } from '@playwri
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 
-const noSelection = /Rider power(, last in visible range|: Unavailable)/;
+const noSelection = /Rider power: (avg|min)/;
 
 const samples = [0, 1, 2, 8, 9, 10].map((time, i) => ({
   ...syntheticSample(time, i, `2026-09-08T00:00:${String(time).padStart(2, '0')}.000Z`),
@@ -13,11 +13,13 @@ const samples = [0, 1, 2, 8, 9, 10].map((time, i) => ({
   cadenceRpm: 60 + i * 2,
 }));
 const csv = exportCsv(samples);
-async function importRecording(page: Page) {
+async function importRecording(page: Page, contents = csv) {
   await page.goto('/sessions');
   const chooserEvent = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
-  await (await chooserEvent).setFiles({ name: 'example.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await (await chooserEvent).setFiles({ name: 'example.csv', mimeType: 'text/csv', buffer: Buffer.from(contents) });
 }
 
 type Touch = { id: number; x: number; y: number };
@@ -42,11 +44,11 @@ async function observePointerLifecycle(chart: Locator) {
 const pointerLifecycle = (chart: Locator) =>
   chart.evaluate(element => JSON.parse(element.getAttribute('data-test-pointer-log') ?? '[]') as PointerLog[]);
 async function visibleRange(chart: Locator) {
-  const text = (await chart.getAttribute('aria-valuetext'))!;
-  const match = /Visible (\d{2}:\d{2}\.\d{3}) to (\d{2}:\d{2}\.\d{3})/.exec(text);
-  expect(match, text).not.toBeNull();
-  const seconds = (value: string) => value.split(':').reduce((total, part) => total * 60 + Number(part), 0);
-  return { start: seconds(match![1]!), end: seconds(match![2]!) };
+  const start = await chart.getAttribute('data-visible-start');
+  const end = await chart.getAttribute('data-visible-end');
+  expect(start).not.toBeNull();
+  expect(end).not.toBeNull();
+  return { start: Number(start), end: Number(end) };
 }
 async function expectRange(chart: Locator, start: number, end: number) {
   await expect
@@ -94,7 +96,7 @@ test('Ride keeps connection setup in a sheet and the chart directly below compac
   await expect(page.getByRole('link', { name: 'Ride', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByTestId('ride-setup')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Find bike', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Find bike', exact: true })).toBeVisible();
   const status = (await page.getByTestId('ride-status').boundingBox())!;
   expect(status.height).toBeLessThanOrEqual(48);
   const bar = (await page.getByTestId('ride-controls').boundingBox())!;
@@ -111,7 +113,7 @@ test('Ride keeps connection setup in a sheet and the chart directly below compac
   await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('ride-setup-390.png') });
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.getByTestId('ride-setup-sheet')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Find bike', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Find bike', exact: true })).toBeVisible();
   await expect(page.getByText(/Motor input is battery voltage/)).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Workout', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -129,6 +131,17 @@ test('CSV review retains data and can export after the redesign', async ({ page 
   const { readFile } = await import('node:fs/promises');
   expect(await readFile((await download.path())!, 'utf8')).toBe(csv);
   expect(errors).toEqual([]);
+});
+
+test('CSV summary preserves an invalid power barrier and displays unavailable work', async ({ page }) => {
+  const invalid = [100, -1, 100].map((humanPowerW, index) => ({
+    ...syntheticSample(index / 2, index, new Date(Date.UTC(2026, 0, 1) + index * 500).toISOString()),
+    humanPowerW,
+  }));
+  await importRecording(page, exportCsv(invalid));
+  await expect(page.getByText('Avg power', { exact: true }).locator('../..')).toContainText('—');
+  await expect(page.getByText('Rider work', { exact: true }).locator('../..')).toContainText('—');
+  await expect(page.getByText('Peak power', { exact: true }).locator('../..')).toContainText('100');
 });
 
 test('charts inspect original values, synchronize time and preserve gaps', async ({ page }) => {
@@ -170,8 +183,7 @@ test('one-finger inspection works when zoomed and fullscreen retains selection a
     .getByTestId('monitor-charts')
     .screenshot({ animations: 'disabled', path: testInfo.outputPath('chart-group-inline-390.png') });
   await page.getByRole('button', { name: 'Zoom in charts', exact: true }).click();
-  await expect(chart).toHaveAttribute('aria-valuetext', /Visible 00:02.500 to 00:07.500/);
-  // The visible window is a real gap; keyboard navigation finds the next observation.
+  await expect(chart).toHaveAttribute('aria-valuetext', /Visible 00:02 to 00:07/);
   await chart.focus();
   await page.keyboard.press('ArrowRight');
   await expectRange(chart, 5, 10);
@@ -205,14 +217,14 @@ test('one-finger inspection works when zoomed and fullscreen retains selection a
   await waitForFullscreen(full);
   await full.focus();
   await page.keyboard.press('0');
-  await expect(full).toHaveAttribute('aria-valuetext', /Visible 00:00.000 to 00:10.000/);
+  await expect(full).toHaveAttribute('aria-valuetext', /Visible 00:00 to 00:10/);
   await page.keyboard.press('Home');
   await expect(full).toHaveAttribute('aria-valuetext', /2026-09-08T00:00:00.000Z/);
   await page.keyboard.press('Escape');
   await expect(full).toHaveAttribute('aria-valuetext', noSelection);
   await page.getByRole('button', { name: 'Close fullscreen charts', exact: true }).click();
   await expect(chart).toBeVisible();
-  await expect(chart).toHaveAttribute('aria-valuetext', /Visible 00:00.000 to 00:10.000/);
+  await expect(chart).toHaveAttribute('aria-valuetext', /Visible 00:00 to 00:10/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -262,7 +274,7 @@ test('inline two-finger navigation freezes the remaining finger until a fresh in
   await touch(client, 'touchStart', pairAt(middle, 20, y));
   for (const distance of [25, 30, 35, 40]) await touch(client, 'touchMove', pairAt(middle, distance, y));
   await expectRange(chart, 2.5, 7.5);
-  const twoFingerView = await chart.getAttribute('aria-valuetext');
+  const twoFingerView = await visibleRange(chart);
   // CDP ends the supplied pointer; omitting it from touchMove does not release it.
   await touch(client, 'touchEnd', [{ id: 2, x: middle + 40, y }]);
   for (const distance of [55, 70, 85]) await touch(client, 'touchMove', [{ id: 1, x: middle - distance, y }]);
@@ -271,10 +283,11 @@ test('inline two-finger navigation freezes the remaining finger until a fresh in
   expect(down).toHaveLength(2);
   expect(lifecycle.filter(event => event.type === 'pointerup')).toEqual([{ ...down[1]!, type: 'pointerup' }]);
   expect(lifecycle.filter(event => event.type === 'pointercancel')).toEqual([]);
-  await expect(chart).toHaveAttribute('aria-valuetext', twoFingerView!);
+  await expect.poll(() => visibleRange(chart)).toEqual(twoFingerView);
+  await expect(chart).toHaveAttribute('aria-valuetext', noSelection);
   await touch(client, 'touchEnd', []);
-  await expect(chart).toHaveAttribute('aria-valuetext', twoFingerView!);
-  // A fresh one-finger gesture inspects at this zoom without moving the viewport.
+  await expect.poll(() => visibleRange(chart)).toEqual(twoFingerView);
+  await expect(chart).toHaveAttribute('aria-valuetext', noSelection);
   await touch(client, 'touchStart', [{ id: 3, x: middle, y }]);
   await touch(client, 'touchMove', [{ id: 3, x: middle + 20, y }]);
   await touch(client, 'touchEnd', []);
@@ -303,13 +316,11 @@ test('fullscreen touch pinch and constant-span pan preserve geometry through poi
   const y = box.y + Math.min(100, box.height / 2);
   const client = await context.newCDPSession(page);
 
-  // Actual two-finger pinch, without pressing either zoom button.
   await touch(client, 'touchStart', pairAt(middle, 20, y));
   for (const halfSpan of [25, 30, 35, 40]) await touch(client, 'touchMove', pairAt(middle, halfSpan, y));
   await touch(client, 'touchEnd', []);
   await expectRange(chart, 2.5, 7.5);
 
-  // Moving both fingers left by 20% shifts time by one second; span stays five.
   await touch(client, 'touchStart', pairAt(middle, 25, y));
   for (const fraction of [0.05, 0.1, 0.15, 0.2])
     await touch(client, 'touchMove', pairAt(middle - plotWidth * fraction, 25, y));
@@ -321,29 +332,29 @@ test('fullscreen touch pinch and constant-span pan preserve geometry through poi
     path: testInfo.outputPath('chart-fullscreen-two-finger-pan-390.png'),
   });
 
-  // Simultaneous translation and zoom: time 6 stays under the moving centroid.
   await touch(client, 'touchStart', pairAt(middle, 25, y));
   for (const progress of [0.25, 0.5, 0.75, 1]) {
     await touch(client, 'touchMove', pairAt(middle - plotWidth * 0.2 * progress, 25 + 12.5 * progress, y));
   }
   await expectRange(chart, 5, 5 + 5 / 1.5);
-  const transformed = await chart.getAttribute('aria-valuetext');
+  const transformed = await visibleRange(chart);
   const finalPair = pairAt(middle - plotWidth * 0.2, 37.5, y);
   await touch(client, 'touchEnd', [finalPair[1]!]);
   for (const offset of [10, 25, 40])
     await touch(client, 'touchMove', [{ ...finalPair[0]!, x: finalPair[0]!.x + offset }]);
-  await expect(chart).toHaveAttribute('aria-valuetext', transformed!);
+  await expect.poll(() => visibleRange(chart)).toEqual(transformed);
+  await expect(chart).toHaveAttribute('aria-valuetext', noSelection);
   await touch(client, 'touchEnd', []);
-  await expect(chart).toHaveAttribute('aria-valuetext', transformed!);
+  await expect.poll(() => visibleRange(chart)).toEqual(transformed);
+  await expect(chart).toHaveAttribute('aria-valuetext', noSelection);
 
-  // A third finger invalidates the pair; it must not produce a viewport jump.
   await touch(client, 'touchStart', pairAt(middle, 25, y));
   await touch(client, 'touchStart', [...pairAt(middle, 25, y), { id: 3, x: middle, y: y + 50 }]);
   await touch(client, 'touchMove', [...pairAt(middle - 30, 35, y), { id: 3, x: middle - 30, y: y + 50 }]);
-  await expect(chart).toHaveAttribute('aria-valuetext', transformed!);
+  await expect.poll(() => visibleRange(chart)).toEqual(transformed);
+  await expect(chart).toHaveAttribute('aria-valuetext', noSelection);
   await touch(client, 'touchEnd', []);
 
-  // Fresh one-finger inspection at zoomed time 8 gives the original 160 W sample.
   const range = await visibleRange(chart);
   const sampleX = box.x + 8 + ((8 - range.start) / (range.end - range.start)) * plotWidth;
   await touch(client, 'touchStart', [{ id: 4, x: sampleX - 20, y }]);
@@ -457,7 +468,7 @@ test('retained Ride screen suspends its monitor clocks in History and resumes on
   await page.getByTestId('monitor-view-picker').evaluate(element => element.setAttribute('data-retained-ride', 'true'));
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await expect(page).toHaveURL(/\/sessions$/);
-  await expect(page.locator('[data-retained-ride="true"]')).toHaveCount(1); // actual Stack retains the same DOM
+  await expect(page.locator('[data-retained-ride="true"]')).toHaveCount(1);
   await expect(page.locator('[data-retained-ride="true"]')).toBeHidden();
   await expect.poll(async () => (await clocks()).read).toBe(0);
   await expect.poll(async () => (await clocks()).display).toBe(0);
@@ -512,7 +523,7 @@ test('pending and current exact minima keep the narrow chart card height stable'
       ),
     { x: box.x + 8 + 0.2 * (box.width - 16), y: box.y + 60 },
   );
-  await expect(minimum).toHaveAttribute('aria-label', /previous interval 00:00.000 to 00:10.000/);
+  await expect(minimum).toHaveAttribute('aria-label', /previous interval 00:00 to 00:10/);
   await expect(minimum).toHaveAttribute('aria-label', /, interval /);
   const observations = await page.evaluate(
     () =>

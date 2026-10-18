@@ -25,16 +25,18 @@ status=0
 for language in $languages; do
   case "$language" in
     ts)
-      npx prettier "$mode" "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "modules/cyc-bridge/*.ts" "plugins/*.js" "scripts/*.mjs" "*.ts" "*.js" || status=1
+      set --
+      [ -z "${POWER_LOG_PRETTIER_CACHE:-}" ] || set -- --cache --cache-location "$POWER_LOG_PRETTIER_CACHE" --cache-strategy content
+      npx prettier "$mode" "$@" "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "modules/power-log-bridge/*.ts" "plugins/*.js" "scripts/*.mjs" "shared/scripts/*.mjs" "shared/js/package.json" "*.ts" "*.js" || status=1
       ;;
     swift)
       if [ "$mode" = --write ]; then swift_args="format --in-place"; else swift_args="lint --strict"; fi
-      xcrun swift-format $swift_args --configuration .swift-format --recursive modules/cyc-bridge/ios apple/WatchApp apple/LiveActivity artifacts/app-store/source tests/catalog-native scripts || status=1
+      xcrun swift-format $swift_args --configuration .swift-format --recursive modules/power-log-bridge/ios apple/WatchApp apple/LiveActivity lab/apple tests/lab-apple artifacts/app-store/source tests/catalog-native scripts || status=1
       ;;
     kotlin)
       jar=$(ktfmt_jar) || { echo "Could not download ktfmt $ktfmt_version" >&2; status=1; continue; }
       if [ "$mode" = --write ]; then ktfmt_args=""; else ktfmt_args="--dry-run --set-exit-if-changed"; fi
-      find modules/cyc-bridge/android/src -name '*.kt' -print0 | xargs -0 java -jar "$jar" --kotlinlang-style --enable-editorconfig $ktfmt_args || status=1
+      find modules/power-log-bridge/android/src shared -type d \( -name build -o -name .gradle -o -name .kotlin \) -prune -o -type f \( -name '*.kt' -o -name '*.kts' \) -print0 | xargs -0 java -jar "$jar" --kotlinlang-style --enable-editorconfig $ktfmt_args || status=1
       ;;
   esac
 done

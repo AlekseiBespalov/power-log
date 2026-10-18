@@ -1,6 +1,15 @@
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle, type TextProps } from 'react-native';
-import type { ReactNode } from 'react';
+import {
+  Pressable as NativePressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type ViewStyle,
+  type TextProps,
+} from 'react-native';
+import type { ComponentProps, ReactNode } from 'react';
 
+export { formatDuration } from '../core/formatting';
 export const colors = {
   bg: '#0b0d10',
   surface: '#15191f',
@@ -15,9 +24,49 @@ export const colors = {
   red: '#ff8994',
   warning: '#ffbe55',
 };
-export const type = { label: 11, caption: 12, body: 14, control: 15, title: 18, value: 26, hero: 38 } as const;
+export const type = {
+  axis: 10,
+  label: 11,
+  caption: 12,
+  body: 14,
+  control: 15,
+  title: 18,
+  value: 26,
+  hero: 38,
+} as const;
+export const lineHeight = {
+  axis: 14,
+  label: 14,
+  caption: 16,
+  body: 20,
+  control: 20,
+  title: 24,
+  value: 32,
+  hero: 46,
+} as const;
+export const systemFontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+export const MIN_TOUCH_TARGET = 48;
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;
 export const radius = { sm: 6, md: 10, lg: 12 } as const;
+
+export function Pressable({ style, ...props }: ComponentProps<typeof NativePressable>) {
+  return (
+    <NativePressable
+      {...props}
+      style={state => {
+        const resolved = typeof style === 'function' ? style(state) : style;
+        const flat = StyleSheet.flatten(resolved);
+        return [
+          resolved,
+          {
+            minWidth: Math.max(MIN_TOUCH_TARGET, typeof flat?.minWidth === 'number' ? flat.minWidth : 0),
+            minHeight: Math.max(MIN_TOUCH_TARGET, typeof flat?.minHeight === 'number' ? flat.minHeight : 0),
+          },
+        ];
+      }}
+    />
+  );
+}
 
 export function Label({ children, color = colors.muted }: { children: ReactNode; color?: string }) {
   return <Text style={[styles.label, { color }]}>{children}</Text>;
@@ -133,11 +182,7 @@ export function Metric({
       ]}
     >
       <View style={{ minHeight: 28 * fontScale, justifyContent: 'flex-end' }}>
-        <Text
-          numberOfLines={2}
-          accessibilityLabel={label}
-          style={[styles.label, { color: colors.muted, lineHeight: 14 }]}
-        >
+        <Text numberOfLines={2} accessibilityLabel={label} style={[styles.label, { color: colors.muted }]}>
           {label}
         </Text>
       </View>
@@ -149,7 +194,7 @@ export function Metric({
             flexShrink: 1,
             minWidth: 0,
             fontSize: large ? type.hero : type.value,
-            lineHeight: large ? 46 : 32,
+            lineHeight: large ? lineHeight.hero : lineHeight.value,
             fontWeight: '600',
             color: missing ? colors.muted : color,
             fontVariant: ['tabular-nums'],
@@ -163,12 +208,6 @@ export function Metric({
     </View>
   );
 }
-export function formatDuration(seconds: number) {
-  const s = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(s / 3600) ? `${Math.floor(s / 3600)}:` : ''}${Math.floor((s / 60) % 60)
-    .toString()
-    .padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
-}
 export const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
@@ -178,9 +217,21 @@ export const styles = StyleSheet.create({
     padding: 14,
     gap: space.md,
   },
-  label: { fontSize: type.label, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
-  heading: { fontSize: type.title, fontWeight: '600', letterSpacing: -0.4, color: colors.text },
-  body: { color: colors.text, fontSize: type.body, lineHeight: 20 },
+  label: {
+    fontSize: type.label,
+    lineHeight: lineHeight.label,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  heading: {
+    fontSize: type.title,
+    lineHeight: lineHeight.title,
+    fontWeight: '600',
+    letterSpacing: -0.4,
+    color: colors.text,
+  },
+  body: { color: colors.text, fontSize: type.body, lineHeight: lineHeight.body },
   button: {
     paddingVertical: 11,
     paddingHorizontal: 16,
@@ -188,12 +239,19 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
     flexShrink: 1,
     maxWidth: '100%',
   },
   secondary: { backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border },
-  buttonText: { color: colors.bg, fontSize: type.control, fontWeight: '600', textAlign: 'center' },
+  buttonText: {
+    color: colors.bg,
+    fontSize: type.control,
+    lineHeight: lineHeight.control,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   chip: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -205,6 +263,6 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   chipDot: { width: 6, height: 6, borderRadius: 3 },
-  chipText: { color: colors.muted, fontSize: type.caption, fontWeight: '600' },
+  chipText: { color: colors.muted, fontSize: type.caption, lineHeight: lineHeight.caption, fontWeight: '600' },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.md },
 });

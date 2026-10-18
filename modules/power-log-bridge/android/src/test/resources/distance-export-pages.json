@@ -1,0 +1,54 @@
+{
+  "pages": [
+    {
+      "rows": 1,
+      "last": [
+        4038999,
+        2
+      ],
+      "done": false,
+      "columns": {
+        "meters": "uYjvxKzHFEA=",
+        "startSpeed": "AAAAAAAAFEA=",
+        "endSpeed": "AAAAAAAAFEA=",
+        "startUs": [
+          "3000000"
+        ],
+        "endUs": [
+          "4038999"
+        ]
+      }
+    },
+    {
+      "rows": 1,
+      "last": [
+        5500000,
+        3
+      ],
+      "done": false,
+      "columns": {
+        "meters": "R3cQO1M4HUA=",
+        "startSpeed": "AAAAAAAAFEA=",
+        "endSpeed": "AAAAAAAAFEA=",
+        "startUs": [
+          "4038999"
+        ],
+        "endUs": [
+          "5500000"
+        ]
+      }
+    },
+    {
+      "rows": 0,
+      "last": null,
+      "done": true,
+      "columns": {
+        "meters": "",
+        "startSpeed": "",
+        "endSpeed": "",
+        "startUs": [],
+        "endUs": []
+      }
+    }
+  ]
+}

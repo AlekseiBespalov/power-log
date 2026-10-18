@@ -1,0 +1,533 @@
+{
+  "fixtures": ["F03", "F06", "F07", "F08", "F17", "F22"],
+  "rideA": "11111111-1111-4111-8111-111111111111",
+  "rideB": "22222222-2222-4222-8222-222222222222",
+  "controller": [
+    {
+      "phase": "running",
+      "age": 2.5,
+      "display": "live",
+      "status": "receiving",
+      "power": 200
+    },
+    {
+      "phase": "running",
+      "age": 2.500001,
+      "display": "held",
+      "status": "receiving",
+      "power": 200
+    },
+    {
+      "phase": "running",
+      "age": 5.999999,
+      "display": "held",
+      "status": "receiving",
+      "power": 200
+    },
+    {
+      "phase": "running",
+      "age": 6,
+      "display": "unavailable",
+      "status": "stale",
+      "power": null
+    },
+    {
+      "phase": "paused",
+      "age": 5,
+      "display": "held",
+      "status": "paused",
+      "power": 200
+    },
+    {
+      "phase": "paused",
+      "age": 6,
+      "display": "unavailable",
+      "status": "paused",
+      "power": null
+    },
+    {
+      "phase": "idle",
+      "age": 0,
+      "display": "unavailable",
+      "status": "off",
+      "power": null
+    }
+  ],
+  "gps": [
+    {
+      "requested": false,
+      "phase": "paused",
+      "age": null,
+      "accuracy": null,
+      "provider": "denied",
+      "status": "off"
+    },
+    {
+      "requested": true,
+      "phase": "paused",
+      "age": 20,
+      "accuracy": 5,
+      "provider": "denied",
+      "status": "paused"
+    },
+    {
+      "requested": true,
+      "phase": "running",
+      "age": 9.999999,
+      "accuracy": 50,
+      "provider": null,
+      "status": "receiving"
+    },
+    {
+      "requested": true,
+      "phase": "running",
+      "age": 10,
+      "accuracy": 50,
+      "provider": null,
+      "status": "stale"
+    },
+    {
+      "requested": true,
+      "phase": "running",
+      "age": 1,
+      "accuracy": 50.000001,
+      "provider": null,
+      "status": "weak"
+    },
+    {
+      "requested": true,
+      "phase": "running",
+      "age": 1,
+      "accuracy": -1,
+      "provider": null,
+      "status": "unavailable"
+    },
+    {
+      "requested": true,
+      "phase": "running",
+      "age": 1,
+      "accuracy": "NaN",
+      "provider": null,
+      "status": "unavailable"
+    },
+    {
+      "requested": true,
+      "phase": "running",
+      "age": null,
+      "accuracy": 5,
+      "provider": null,
+      "status": "waiting"
+    },
+    {
+      "requested": true,
+      "phase": "running",
+      "age": 99,
+      "accuracy": 5,
+      "provider": "denied",
+      "status": "denied"
+    }
+  ],
+  "heart": [
+    {
+      "phase": "running",
+      "age": 14.999999,
+      "text": "150"
+    },
+    {
+      "phase": "running",
+      "age": 15,
+      "text": "\u2014"
+    },
+    {
+      "phase": "paused",
+      "age": 1,
+      "text": "150"
+    },
+    {
+      "phase": "paused",
+      "age": 15,
+      "text": "\u2014"
+    }
+  ],
+  "duplicates": [
+    {
+      "name": "same-id-higher-sequence-later-acquisition",
+      "source": "controller",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": 5,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 200,
+          "backfilled": false
+        },
+        {
+          "id": "a",
+          "sequence": 6,
+          "acquiredUs": "110000000",
+          "deliveredUs": "110000000",
+          "value": 300,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": 5,
+      "expectedAcquiredUs": "100000000",
+      "expectedValue": 200,
+      "nowUs": "110000000",
+      "status": "stale",
+      "expectedOriginalTimeUs": "100000000"
+    },
+    {
+      "name": "same-id-higher-sequence-earlier-acquisition",
+      "source": "controller",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": 5,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 200,
+          "backfilled": false
+        },
+        {
+          "id": "a",
+          "sequence": 6,
+          "acquiredUs": "90000000",
+          "deliveredUs": "105000000",
+          "value": 300,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": 5,
+      "expectedAcquiredUs": "90000000",
+      "expectedValue": 200,
+      "nowUs": "105000000",
+      "status": "stale",
+      "expectedOriginalTimeUs": "100000000"
+    },
+    {
+      "name": "different-id-older-sequence",
+      "source": "controller",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": 5,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 200,
+          "backfilled": false
+        },
+        {
+          "id": "b",
+          "sequence": 4,
+          "acquiredUs": "105000000",
+          "deliveredUs": "105000000",
+          "value": 300,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": 5,
+      "expectedAcquiredUs": "100000000",
+      "expectedValue": 200,
+      "nowUs": "105000000",
+      "status": "receiving",
+      "expectedOriginalTimeUs": "100000000"
+    },
+    {
+      "name": "different-id-newer-sequence",
+      "source": "controller",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": 5,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 200,
+          "backfilled": false
+        },
+        {
+          "id": "b",
+          "sequence": 6,
+          "acquiredUs": "101000000",
+          "deliveredUs": "101000000",
+          "value": 300,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "b",
+      "expectedSequence": 6,
+      "expectedAcquiredUs": "101000000",
+      "expectedValue": 300,
+      "nowUs": "105000000",
+      "status": "receiving",
+      "expectedOriginalTimeUs": "101000000"
+    },
+    {
+      "name": "same-id-backfilled-earlier-heart-acquisition",
+      "source": "heartRate",
+      "observations": [
+        {
+          "id": "heart-a",
+          "sequence": null,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 150,
+          "backfilled": false
+        },
+        {
+          "id": "heart-a",
+          "sequence": null,
+          "acquiredUs": "90000000",
+          "deliveredUs": "105000000",
+          "value": 90,
+          "backfilled": true
+        }
+      ],
+      "expectedId": "heart-a",
+      "expectedSequence": null,
+      "expectedAcquiredUs": "90000000",
+      "expectedOriginalTimeUs": "100000000",
+      "expectedValue": 150,
+      "nowUs": "105000000",
+      "status": "stale"
+    }
+  ],
+  "unsequenced": [
+    {
+      "name": "gps-acquisition-increases",
+      "source": "gps",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": null,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 1,
+          "backfilled": false
+        },
+        {
+          "id": "b",
+          "sequence": null,
+          "acquiredUs": "101000000",
+          "deliveredUs": "101000000",
+          "value": 2,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "b",
+      "expectedSequence": null,
+      "expectedAcquiredUs": "101000000",
+      "expectedValue": 2,
+      "nowUs": "105000000",
+      "status": "receiving",
+      "expectedOriginalTimeUs": "101000000"
+    },
+    {
+      "name": "gps-equal-acquisition-rejected",
+      "source": "gps",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": null,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 1,
+          "backfilled": false
+        },
+        {
+          "id": "b",
+          "sequence": null,
+          "acquiredUs": "100000000",
+          "deliveredUs": "105000000",
+          "value": 2,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": null,
+      "expectedAcquiredUs": "100000000",
+      "expectedValue": 1,
+      "nowUs": "105000000",
+      "status": "receiving",
+      "expectedOriginalTimeUs": "100000000"
+    },
+    {
+      "name": "delayed-older-health-keeps-newer-original",
+      "source": "heartRate",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": null,
+          "acquiredUs": "101000000",
+          "deliveredUs": "101000000",
+          "value": 150,
+          "backfilled": false
+        },
+        {
+          "id": "b",
+          "sequence": null,
+          "acquiredUs": "100000000",
+          "deliveredUs": "105000000",
+          "value": 90,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": null,
+      "expectedAcquiredUs": "101000000",
+      "expectedValue": 150,
+      "nowUs": "105000000",
+      "status": "receiving",
+      "expectedOriginalTimeUs": "101000000"
+    },
+    {
+      "name": "unsequenced-after-sequenced-requires-newer-acquisition",
+      "source": "heartRate",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": 5,
+          "acquiredUs": "101000000",
+          "deliveredUs": "101000000",
+          "value": 150,
+          "backfilled": false
+        },
+        {
+          "id": "b",
+          "sequence": null,
+          "acquiredUs": "100000000",
+          "deliveredUs": "105000000",
+          "value": 90,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": 5,
+      "expectedAcquiredUs": "101000000",
+      "expectedValue": 150,
+      "nowUs": "105000000",
+      "status": "receiving",
+      "expectedOriginalTimeUs": "101000000"
+    },
+    {
+      "name": "sequenced-after-unsequenced-requires-newer-acquisition",
+      "source": "heartRate",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": null,
+          "acquiredUs": "101000000",
+          "deliveredUs": "101000000",
+          "value": 150,
+          "backfilled": false
+        },
+        {
+          "id": "b",
+          "sequence": 6,
+          "acquiredUs": "100000000",
+          "deliveredUs": "105000000",
+          "value": 90,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": null,
+      "expectedAcquiredUs": "101000000",
+      "expectedValue": 150,
+      "nowUs": "105000000",
+      "status": "receiving",
+      "expectedOriginalTimeUs": "101000000"
+    },
+    {
+      "name": "same-unsequenced-id-never-renews",
+      "source": "heartRate",
+      "observations": [
+        {
+          "id": "a",
+          "sequence": null,
+          "acquiredUs": "100000000",
+          "deliveredUs": "100000000",
+          "value": 150,
+          "backfilled": false
+        },
+        {
+          "id": "a",
+          "sequence": null,
+          "acquiredUs": "110000000",
+          "deliveredUs": "110000000",
+          "value": 90,
+          "backfilled": false
+        }
+      ],
+      "expectedId": "a",
+      "expectedSequence": null,
+      "expectedAcquiredUs": "100000000",
+      "expectedValue": 150,
+      "nowUs": "115000000",
+      "status": "stale",
+      "expectedOriginalTimeUs": "100000000"
+    }
+  ],
+  "connection": [
+    {
+      "connection": "connected",
+      "acquired": 100,
+      "now": 102.5,
+      "display": "live",
+      "deadline": 102.501
+    },
+    {
+      "connection": "connected",
+      "acquired": 100,
+      "now": 102.500001,
+      "display": "held",
+      "deadline": 106
+    },
+    {
+      "connection": "connected",
+      "acquired": 100,
+      "now": 105.999999,
+      "display": "held",
+      "deadline": 106
+    },
+    {
+      "connection": "connected",
+      "acquired": 100,
+      "now": 106,
+      "display": "unavailable",
+      "deadline": null
+    },
+    {
+      "connection": "reconnecting",
+      "acquired": 100,
+      "now": 100,
+      "display": "held",
+      "deadline": 106
+    },
+    {
+      "connection": "connected",
+      "acquired": null,
+      "now": 100,
+      "display": "unavailable",
+      "deadline": null
+    },
+    {
+      "connection": "connected",
+      "acquired": 101,
+      "now": 100,
+      "display": "unavailable",
+      "deadline": null
+    },
+    {
+      "connection": "idle",
+      "acquired": 100,
+      "now": 100,
+      "display": "unavailable",
+      "deadline": null
+    }
+  ]
+}

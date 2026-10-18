@@ -1,15 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { BrowserWorkoutRecorder } from '../../src/services/browser-workout-recorder';
 import { BrowserRideStore } from '../../src/services/browser-ride-store';
-import {
-  effectiveWorkoutOptions,
-  unavailableWorkoutState,
-  type WorkoutOptions,
-  type WorkoutState,
-} from '../../src/core/workouts';
+import { effectiveWorkoutOptions, type WorkoutOptions } from '../../src/core/workouts';
 import { TestTelemetryAdapter } from '../support/telemetry-adapter';
 import { browserRide } from '../support/browser-ride';
-import rideSnapshots from '../fixtures/contract/ride-snapshots.json';
 import rideOptions from '../fixtures/contract/ride-options.json';
 
 afterEach(() => {
@@ -17,7 +11,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('reports foreground browser recording without native owners, Health or GPS', async () => {
+it('reports unavailable GPS when the browser has no Geolocation API', async () => {
   const recorder = new BrowserWorkoutRecorder();
   const state = await recorder.getState();
   expect(state.capabilities).toEqual({
@@ -33,67 +27,39 @@ it('reports foreground browser recording without native owners, Health or GPS', 
     { indoor: false, useWatch: true, saveToHealth: true, recordGPS: true },
     state.capabilities,
   );
-  expect(options).toEqual({ indoor: false, useWatch: false, saveToHealth: false, recordGPS: false, sampleHz: 2 });
+  expect(options).toEqual({
+    indoor: false,
+    useWatch: false,
+    saveToHealth: false,
+    recordGPS: false,
+    sampleHz: 2,
+    distanceSource: 'controller',
+    batteryConsumptionSource: 'controller',
+  });
   expect(await recorder.requestPermissions(options)).toMatchObject({
     health: { available: false },
     location: 'unavailable',
   });
 });
 
-function expectSnapshotKeys(actual: object, expected: object) {
-  expect(Object.keys(actual).sort()).toEqual(Object.keys(expected).sort());
-  for (const [key, value] of Object.entries(expected)) {
-    const received: unknown = (actual as Record<string, unknown>)[key];
-    expect(received).not.toBeUndefined();
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      expect(received).not.toBeNull();
-      expect(typeof received).toBe('object');
-      expectSnapshotKeys(received as object, value);
-    }
-  }
-}
-
-it('keeps the retained snapshot key set in browser reads, commands and events', async () => {
+it('reports a foreign owner without inventing a pending action and rejects every ride control', async () => {
   vi.stubGlobal('indexedDB', {});
   vi.stubGlobal('navigator', {
-    locks: { request: (_name: string, _options: unknown, work: (lock: object) => Promise<void>) => work({}) },
+    locks: { request: (_name: string, _options: unknown, work: (lock: null) => Promise<void>) => work(null) },
   });
   const store = new BrowserRideStore();
   const record = browserRide();
-  vi.spyOn(store, 'recoverOrphan').mockResolvedValue(null);
-  vi.spyOn(store, 'begin').mockResolvedValue(record);
-  vi.spyOn(store, 'transition').mockImplementation(async (_id, _token, action) => ({
-    ...record,
-    phase: action === 'save' ? 'completed' : 'paused',
-    endedAt: action === 'save' ? '2026-01-01T00:00:01.000Z' : undefined,
-  }));
-  vi.spyOn(store, 'remove').mockResolvedValue();
+  vi.spyOn(store, 'current').mockResolvedValue(record);
+  const transition = vi.spyOn(store, 'transition');
+  const remove = vi.spyOn(store, 'remove');
   const recorder = new BrowserWorkoutRecorder(store);
-  const source = new TestTelemetryAdapter();
-  recorder.setTelemetrySource(source);
-  await source.connect();
-  const states: WorkoutState[] = [await recorder.getState()];
-  const unsubscribe = recorder.subscribe(state => states.push(state));
-  try {
-    states.push(await recorder.start({ indoor: true }));
-    states.push(await recorder.pause());
-    states.push(await recorder.stop());
-    states.push(await recorder.remove(record.id));
-    states.push(await recorder.getState());
-    expect(new Set(states.map(state => state.phase))).toEqual(new Set(['idle', 'running', 'paused', 'completed']));
-    for (const fixture of rideSnapshots.cases) {
-      expectSnapshotKeys(unavailableWorkoutState, fixture.wire);
-      for (const state of states) {
-        expectSnapshotKeys(state, fixture.wire);
-        expectSnapshotKeys(JSON.parse(JSON.stringify(state)) as object, fixture.wire);
-        expect(state.sealRevision).toBeNull();
-        expect(state.verifiedSealRevision).toBeNull();
-      }
-    }
-  } finally {
-    unsubscribe();
-    if ((await recorder.getState()).id === record.id) await recorder.discard(record.id);
-  }
+  const state = await recorder.getState();
+  expect(state.pendingAction).toBeNull();
+  expect(state.foreignOwner).toBe('anotherBrowserTab');
+  for (const command of ['pause', 'resume', 'lap', 'stop', 'discard'] as const)
+    await expect(recorder[command](record.id)).rejects.toMatchObject({ code: 'ownerForeign' });
+  expect(transition).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
 });
 
 const invalidOptions = [
@@ -108,7 +74,7 @@ it.each(invalidOptions)('rejects malformed browser options before any recording 
   const requestLock = vi.fn();
   vi.stubGlobal('navigator', { locks: { request: requestLock } });
   const store = new BrowserRideStore();
-  const recover = vi.spyOn(store, 'recoverOrphan');
+  const recover = vi.spyOn(store, 'interruptCurrent');
   const begin = vi.spyOn(store, 'begin');
   const recorder = new BrowserWorkoutRecorder(store);
   const source = new TestTelemetryAdapter();
@@ -131,4 +97,23 @@ it.each(invalidOptions)('rejects malformed browser options before any recording 
   } finally {
     unsubscribe();
   }
+});
+
+it('loads the approved browser GPS options through the production adapter', async () => {
+  const fixture = rideOptions.cases.find(item => item.capabilities === 'browser')!;
+  vi.stubGlobal('navigator', {
+    geolocation: { getCurrentPosition: (receive: PositionCallback) => receive({} as GeolocationPosition) },
+    permissions: { query: async () => ({ state: 'granted' }) },
+  });
+  const recorder = new BrowserWorkoutRecorder();
+  const state = await recorder.getState();
+  expect(state.capabilities).toEqual(rideOptions.capabilities.browser);
+  expect(effectiveWorkoutOptions(fixture.input, state.capabilities)).toEqual({
+    ...fixture.expected,
+    batteryConsumptionSource: 'controller',
+  });
+  expect(await recorder.requestPermissions(fixture.input as WorkoutOptions)).toMatchObject({
+    location: 'authorizedWhenInUse',
+    locationAccuracyAuthorization: 'unknown',
+  });
 });

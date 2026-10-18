@@ -36,8 +36,9 @@ expo-env.d.ts
 *.aab
 *.jks
 *.keystore
-/modules/cyc-bridge/android/build/
-/modules/cyc-bridge/android/.gradle/
+/modules/power-log-bridge/android/build/
+/modules/power-log-bridge/android/.gradle/
+/modules/power-log-bridge/ios/Frameworks/
 *.xcarchive/
 *.dSYM/
 
@@ -78,5 +79,14 @@ __pycache__/
 /artifacts/app-store/source/example-values.json
 /artifacts/app-store/source/monitor-preferences.json
 /artifacts/app-store/.cache/
+/artifacts/app-store/screenshots/web/
+/artifacts/app-store/screenshots/macos/
+/artifacts/app-store/screenshots/overview/web-overview.png
+/artifacts/app-store/screenshots/overview/macos-overview.png
 
-modules/cyc-bridge/android/.cxx/
+modules/power-log-bridge/android/.cxx/
+
+/shared/.gradle/
+/shared/.kotlin/
+/shared/build/
+/shared/kotlin-js-store/

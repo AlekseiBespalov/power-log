@@ -1,0 +1,703 @@
+package app.powerlog.bridge
+
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.database.sqlite.SQLiteException
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.SystemClock
+import app.powerlog.core.presentation.*
+import app.powerlog.core.telemetry.*
+import app.powerlog.core.telemetry.cyc.CycProtocol
+import java.io.File
+import java.time.Duration
+import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import org.json.JSONObject
+import org.junit.Assert.*
+import org.junit.Test
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowSystemClock
+
+class RecordingEngineCaptureTest : RecordingEngineTestBase() {
+    @Test
+    fun malformedGpsOriginalsDoNotAbortTheRemainingBatch() = command {
+        val id = start(true)
+        advanceTo(1)
+        val bad =
+            Location(LocationManager.GPS_PROVIDER).apply {
+                time = 0
+                elapsedRealtimeNanos = 1
+            }
+        val valid =
+            Location(LocationManager.GPS_PROVIDER).apply {
+                latitude = 0.0
+                longitude = 0.0
+                accuracy = 5f
+                time = java.time.Instant.parse(iso()).toEpochMilli()
+                elapsedRealtimeNanos = (field("startClock") as Long) * 1000000 + 1000000000
+            }
+        (field("locationListener") as LocationListener).onLocationChanged(listOf(bad, valid))
+        engine.flush()
+        val row = recordStore(id).page(id).single()
+        assertEquals(1.0, row.time, 0.0)
+        assertTrue(row.evidence.flag("distanceBarrier"))
+    }
+
+    @Test
+    fun nativeGpsBatchesAdmitOriginalAcquisitionOrder() = command {
+        val id = start(true)
+        advanceTo(2)
+        val batch =
+            listOf(2.0, 1.0).map { seconds ->
+                Location(LocationManager.GPS_PROVIDER).apply {
+                    latitude = 0.0
+                    longitude = seconds * 0.00001
+                    accuracy = 5f
+                    time =
+                        java.time.Instant.parse(readClock().timestamp).toEpochMilli() -
+                            (2000 - (seconds * 1000).toLong())
+                    elapsedRealtimeNanos = (field("startClock") as Long) * 1000000 + (seconds * 1e9).toLong()
+                }
+            }
+        (field("locationListener") as LocationListener).onLocationChanged(batch)
+        engine.flush()
+        assertEquals(listOf(1.0, 2.0), recordStore(id).page(id).map { it.time })
+    }
+
+    @Test
+    fun gpsAcquisitionFixturesRunThroughTheLocationListenerAndStore() = command {
+        val root = System.getenv("POWER_LOG_CONTRACT_FIXTURES") ?: "../../../tests/fixtures/contract"
+        val fixture = org.json.JSONObject(java.io.File(root, "gps/acquisition.json").readText())
+        val base = java.time.Instant.parse(fixture.getString("baseTimestamp")).toEpochMilli()
+        val cases = fixture.getJSONArray("cases")
+        for (index in 0 until cases.length()) {
+            val case = cases.getJSONObject(index)
+            if (case.has("stop") || case.has("epochStart") || case.has("timestamp")) continue
+            val origin = case.optDouble("origin", 0.0)
+            val id = withUtc(base + (origin * 1000).toLong()) { start(true) }
+            advanceTo((case.getDouble("uptime") - origin).toLong())
+            withUtc(base + case.getString("receiptUs").toLong() / 1000) {
+                val previousClock = readClock
+                val reading = readClock()
+                val nativeRemainder = case.getString("fixUs").toLong() % 1000
+                readClock = {
+                    reading.copy(
+                        timestamp =
+                            java.time.Instant.ofEpochMilli(base)
+                                .plusNanos((case.getString("receiptUs").toLong() - nativeRemainder) * 1000)
+                                .toString()
+                    )
+                }
+                val fix =
+                    Location(LocationManager.GPS_PROVIDER).apply {
+                        latitude = case.optDouble("latitude", 40.0)
+                        longitude = 20.0
+                        accuracy = case.optDouble("accuracy", 5.0).toFloat()
+                        time = base + case.getString("fixUs").toLong() / 1000
+                        elapsedRealtimeNanos =
+                            SystemClock.elapsedRealtimeNanos() -
+                                (case.getString("receiptUs").toLong() - case.getString("fixUs").toLong()) * 1000
+                    }
+                (field("locationListener") as LocationListener).onLocationChanged(fix)
+                engine.flush()
+                readClock = previousClock
+            }
+            val rows = recordStore(id).page(id)
+            assertEquals(case.getString("id"), if (case.getBoolean("mapped")) 1 else 0, rows.size)
+            if (rows.isNotEmpty())
+                assertEquals(
+                    case.getString("id"),
+                    case.getDouble("elapsed"),
+                    rows.single().time,
+                    0.000001,
+                )
+            engine.action("discard", id)
+        }
+    }
+
+    @Test
+    fun gpsAdmissionRetainsFastOriginalsThroughFifteenSecondsAndRejectsOlderAcquisitions() = command {
+        val id = start(true)
+        advanceTo(20)
+        location(5.0, speed = 41f, courseAccuracy = -1f)
+        location(4.999, speed = 3f)
+        location(5.0, speed = 41f)
+        location(4.0, speed = 3f)
+        engine.flush()
+        val original = recordStore(id).page(id).single()
+        assertEquals(5.0, original.time, 0.0)
+        assertEquals(41.0, original.values["speedMps"])
+        assertEquals(
+            -1.0,
+            ((original.evidence["values"] as Map<*, *>)["courseAccuracyDegrees"] as Number).toDouble(),
+            0.0,
+        )
+        assertEquals("stale", stream("gps")["status"])
+        advanceTo(21)
+        location(11.0)
+        location(10.5)
+        location(11.0)
+        location(11.0000005)
+        engine.flush()
+        assertEquals(listOf(5.0, 11.0), recordStore(id).page(id).map { it.time })
+        assertEquals("stale", stream("gps")["status"])
+    }
+
+    @Test
+    fun gpsClockUncertaintyIncludesItsFifteenSecondBoundary() = command {
+        val base = 1767225600000L
+        val id = withUtc(base) { start(true) }
+        advanceTo(2)
+        withUtc(base + 3602000) { location(2.0) }
+        advanceTo(17)
+        withUtc(base + 3617000) { location(17.0) }
+        advanceTo(18)
+        withUtc(base + 3618000) { location(18.0) }
+        engine.flush()
+        val rows = recordStore(id).page(id)
+        assertEquals(listOf(true, true, null), rows.map { it.evidence["distanceBarrier"] })
+        assertEquals(0.0, engine.distance.total(id, "gps:phone").second, 0.0)
+    }
+
+    @Test
+    fun deletionRejectsRecoverableTargetsAndGlobalHealthWorkWithoutRemovingOriginals() = command {
+        val id = start()
+        advanceTo(1)
+        engine.action("stop", id)
+        RideStore.withHealthExecution {
+            assertThrows(IllegalStateException::class.java) { engine.delete(id) }
+        }
+        assertEquals("completed", engine.store.metadata(id)["phase"])
+        val orphan = start()
+        failCapture()
+        assertEquals("interrupted", engine.store.metadata(orphan)["phase"])
+        assertThrows(IllegalStateException::class.java) { engine.delete(orphan) }
+        RideStore.withHealthExecution { assertThrows(IllegalStateException::class.java) { engine.delete(id) } }
+        engine.delete(id)
+        assertEquals(orphan, engine.state()["id"])
+    }
+
+    @Test
+    fun gpsCollectionTimeUsesOriginalUtcAgeAndRejectsAnOverTenSecondEdge() = command {
+        val id = start(gps = true)
+        advanceTo(2)
+        location(1.125, speed = 3f)
+        advanceTo(12)
+        location(11.25, speed = 3f)
+        engine.action("stop", id)
+        val rows = recordStore(id).page(id).filter { it.kind == "location" }
+        assertEquals(listOf(1.125, 11.25), rows.map { it.time })
+        assertEquals(listOf(1125000L, 11250000L), rows.map { it.elapsedUs })
+        assertEquals(0.0, engine.distance.total(id, "gps:phone").first, 0.0)
+    }
+
+    @Test
+    fun moduleDestroyHookCancelsItsSummaryAndMonitorJobsAndPreservesAnotherOwner() {
+        val module = PowerLogBridgeModule { engine }
+        val owner =
+            PowerLogBridgeModule::class.java.getDeclaredField("summaryOwner").apply { isAccessible = true }.get(module)
+                as String
+        val started = java.util.concurrent.CountDownLatch(3)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val results = List(3) { java.util.concurrent.CompletableFuture<String>() }
+        fun promise(index: Int) =
+            object : expo.modules.kotlin.Promise {
+                override fun resolve(value: Any?) {
+                    results[index].complete("resolved")
+                }
+
+                override fun reject(code: String?, message: String?, cause: Throwable?) {
+                    results[index].complete(code)
+                }
+            }
+        fun work(): Any? {
+            started.countDown()
+            try {
+                release.await()
+            } catch (_: InterruptedException) {}
+            return 7
+        }
+        try {
+            engine.summaries.submit(owner, "destroy-summary", promise(0), ::work)
+            engine.monitorReads.submit(
+                owner,
+                "destroy-monitor",
+                MonitorOperation.Plot,
+                promise(1),
+                ::work,
+            )
+            engine.monitorReads.submit(
+                "retained",
+                "retain-monitor",
+                MonitorOperation.Plot,
+                promise(2),
+                ::work,
+            )
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            val hook =
+                module.definition().eventListeners.getValue(expo.modules.kotlin.events.EventName.MODULE_DESTROY)
+                    as expo.modules.kotlin.events.BasicEventListener
+            hook.call()
+            assertEquals("ERR_READ_CANCELLED", results[0].get(1, TimeUnit.SECONDS))
+            assertEquals("ERR_READ_CANCELLED", results[1].get(1, TimeUnit.SECONDS))
+            assertFalse(results[2].isDone)
+            release.countDown()
+            assertEquals("resolved", results[2].get(5, TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+            engine.monitorReads.close()
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    @Test
+    fun moduleMonitorEntrypointsDispatchInteractiveReadsAndCancelTheOriginalNativeJob() {
+        val id = command {
+            val id =
+                engine.store.create(
+                    RideOptions(true, saveToHealth = false, recordGPS = false),
+                    SystemRecordingClock.read(),
+                )
+            engine.store.seal(id, RideTiming(10.0, 10.0, iso()))
+            id
+        }
+        val module = PowerLogBridgeModule { engine }
+        val definition = module.definition()
+        val started = java.util.concurrent.CountDownLatch(1)
+        val interrupted = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val first = java.util.concurrent.atomic.AtomicBoolean(true)
+        engine.store.queryObserver = { sql, _ ->
+            if (sql.contains("FROM distance_intervals") && first.compareAndSet(true, false)) {
+                started.countDown()
+                try {
+                    release.await()
+                } catch (_: InterruptedException) {
+                    interrupted.countDown()
+                }
+            }
+        }
+        fun promise(result: java.util.concurrent.CompletableFuture<String>) =
+            object : expo.modules.kotlin.Promise {
+                override fun resolve(value: Any?) {
+                    result.complete("resolved")
+                }
+
+                override fun reject(code: String?, message: String?, cause: Throwable?) {
+                    result.complete(code)
+                }
+            }
+        val input =
+            mapOf(
+                "source" to "workout",
+                "id" to id,
+                "generation" to 0,
+                "metrics" to emptyList<String>(),
+                "expectedRevision" to engine.store.revision(id).toString(),
+            )
+        fun invoke(
+            name: String,
+            cancellationId: String,
+            result: java.util.concurrent.CompletableFuture<String>,
+        ) {
+            val function = definition.asyncFunctions.getValue(name)
+            val body =
+                function.javaClass.getDeclaredField("body").apply { isAccessible = true }.get(function)
+                    as (Array<out Any?>, expo.modules.kotlin.Promise) -> Unit
+            body(
+                arrayOf(input + mapOf("cancellationId" to cancellationId, "seconds" to 5.0)),
+                promise(result),
+            )
+        }
+        val plot = java.util.concurrent.CompletableFuture<String>()
+        try {
+            invoke("readMonitorPlot", "module-plot", plot)
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            for (name in listOf("readMonitorLatest", "inspectMonitorAt")) {
+                val result = java.util.concurrent.CompletableFuture<String>()
+                invoke(name, name, result)
+                assertEquals("resolved", result.get(1, TimeUnit.SECONDS))
+            }
+            val cancelled = java.util.concurrent.CompletableFuture<String>()
+            val cancel = definition.asyncFunctions.getValue("cancelMonitorRead")
+            val body =
+                cancel.javaClass.getDeclaredField("body").apply { isAccessible = true }.get(cancel)
+                    as (Array<out Any?>, expo.modules.kotlin.Promise) -> Unit
+            body(arrayOf("module-plot"), promise(cancelled))
+            assertEquals("resolved", cancelled.get(1, TimeUnit.SECONDS))
+            assertEquals("ERR_READ_CANCELLED", plot.get(1, TimeUnit.SECONDS))
+            assertTrue(interrupted.await(5, TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+            engine.store.queryObserver = null
+            engine.monitorReads.cancelOwner(
+                PowerLogBridgeModule::class
+                    .java
+                    .getDeclaredField("summaryOwner")
+                    .apply { isAccessible = true }
+                    .get(module) as String
+            )
+        }
+    }
+
+    @Test
+    fun contractCaptureOriginalsRoundTripThroughTheProductionStoreAndAdmission() = command {
+        val fixture = telemetryFixture("admission")
+        val original = fixture.getJSONObject("retainedOriginal")
+        val profile = original.getJSONObject("identity")
+        val controller =
+            CycProtocol.restoreIdentity(
+                profile.getString("controllerModel"),
+                profile.getString("firmwareLabel"),
+                profile.getString("controllerProtocol"),
+            )
+        val values =
+            original.getJSONObject("metrics").let { obj ->
+                obj.keys().asSequence().associateWith(obj::getDouble)
+            }
+        val reading = CycProtocol.restoreReading(values, controller)
+        val rideA = start()
+        val rideB = engine.store.create(RideOptions(false, false, false), SystemRecordingClock.read())
+        val capture = TelemetryCapture(engine.store)
+        fun persist(evidence: TelemetryCaptureEvidence) {
+            engine.store.transaction {
+                engine.store.insert(
+                    evidence.rideId,
+                    evidence.sourceElapsedSeconds,
+                    evidence.timestamp.original,
+                    "telemetry",
+                    true,
+                    1,
+                    evidence.telemetry.values(),
+                    "${controller.controllerModel}|${controller.firmwareLabel}|${controller.controllerProtocol}",
+                    evidence.connectionEpoch,
+                    OriginalIdentity(evidence.observationId, "controller", evidence.sequence),
+                    OriginalEvidence(
+                        evidence.sourceElapsedSeconds,
+                        evidence.acquisitionMonotonic,
+                        evidence.clockEpoch,
+                    ),
+                    detail = evidence.detail(),
+                )
+            }
+            capture.committed(evidence)
+        }
+        val cases = fixture.getJSONArray("cases")
+        var target = rideA
+        for (index in 0 until cases.length()) {
+            val row = cases.getJSONObject(index)
+            if (row.has("adopt")) target = rideB
+            val evidence =
+                TelemetryCaptureEvidence(
+                    target,
+                    "50000000-0000-4000-8000-%012d".format(row.getInt("id")),
+                    fixture.getString("session"),
+                    fixture.getString("epoch"),
+                    fixture.getString("connection"),
+                    row.getString("sequence").toLong(),
+                    app.powerlog.core.protocol.Timestamps.parse(original.getString("timestamp")),
+                    row.getDouble("acquiredAt"),
+                    10.0,
+                    reading,
+                )
+            val decision = capture.prepare(evidence)
+            assertEquals(row.getString("expected"), decision.outcome.name)
+            if (decision.commitOriginal) persist(evidence)
+            val state = if (decision.commitOriginal) TelemetryCaptureState(target, evidence) else decision.next
+            assertEquals(row.getDouble("age"), state.age(row.getDouble("deliveredAt"))!!, 0.0)
+        }
+        val retained =
+            TelemetryCaptureEvidence(
+                rideB,
+                original.getString("observationId"),
+                original.getString("captureSessionId"),
+                original.getString("clockEpoch"),
+                original.getString("connectionEpoch"),
+                original.getString("sequence").toLong(),
+                app.powerlog.core.protocol.Timestamps.parse(original.getString("timestamp")),
+                original.getDouble("acquisitionMonotonic"),
+                original.getDouble("sourceElapsedSeconds"),
+                reading,
+            )
+        assertEquals(TelemetryCaptureOutcome.older, capture.prepare(retained).outcome)
+        val fresh = TelemetryCapture(engine.store)
+        assertTrue(fresh.prepare(retained).commitOriginal)
+        assertThrows(SQLiteException::class.java) {
+            engine.store.transaction {
+                engine.store.insert(
+                    rideB,
+                    10.0,
+                    retained.timestamp.original,
+                    "telemetry",
+                    true,
+                    1,
+                    reading.values(),
+                    "X6|20250725|5.3",
+                    retained.connectionEpoch,
+                    OriginalIdentity(retained.observationId, "controller", retained.sequence),
+                    OriginalEvidence(10.0, retained.acquisitionMonotonic, retained.clockEpoch),
+                    detail = retained.detail(),
+                )
+                throw SQLiteException("fixture rollback")
+            }
+        }
+        assertTrue(fresh.prepare(retained).commitOriginal)
+        persist(retained)
+        val reopened = recordStore(rideB).telemetryOriginal(rideB, retained.observationId)!!
+        assertEquals(retained, reopened)
+        assertEquals(TelemetryCaptureOutcome.replay, fresh.prepare(reopened).outcome)
+        assertNull(fresh.prepare(reopened).next.latest)
+        assertEquals(
+            TelemetryCaptureOutcome.conflict,
+            fresh.prepare(reopened.copy(acquisitionMonotonic = 101.0)).outcome,
+        )
+        val observation = recordStore(rideB).page(rideB).single { it.original!!.eventId == retained.observationId }
+        assertThrows(IllegalArgumentException::class.java) {
+            observation.copy(values = observation.values + ("motorInputPowerW" to 1.0)).telemetryEvidence(rideB)
+        }
+        val malformedEvidence =
+            listOf(
+                observation.evidence - "sourceElapsedSeconds",
+                observation.evidence + ("sourceElapsedSeconds" to "10"),
+                observation.evidence + ("clockDiscontinuitySeconds" to "0.5"),
+                observation.evidence + ("observationSequence" to "0${retained.sequence}"),
+            )
+        for (evidence in malformedEvidence) assertThrows(IllegalArgumentException::class.java) {
+            observation.copy(evidence = evidence).telemetryEvidence(rideB)
+        }
+        assertEquals("6", engine.store.writableDatabase.version.toString())
+    }
+
+    @Test
+    fun rawClockFixturesUseRecordingClockAndNeverRoundedTimestamps() {
+        val cases = telemetryFixture("admission").getJSONArray("clockCases")
+        for (index in 0 until cases.length()) {
+            val row = cases.getJSONObject(index)
+            val previous =
+                RecordingClockReading(
+                    "2026-01-01T00:00:00.000Z",
+                    (row.getDouble("previousMonotonic") * 1000).toLong(),
+                    row.getDouble("firstWall"),
+                )
+            val current =
+                RecordingClockReading(
+                    "2026-01-01T00:00:01.250Z",
+                    (row.getDouble("monotonic") * 1000).toLong(),
+                    row.getDouble("lastWall"),
+                )
+            val result = current.discontinuity(previous)
+            if (row.isNull("expected")) assertNull(result) else assertEquals(row.getDouble("expected"), result!!, 0.0)
+        }
+    }
+
+    @Test
+    fun captureAdmissionWaitsForOriginalCommitAndReconnectRetainsCaptureIdentity() = command {
+        val fixture = telemetryFixture("admission").getJSONObject("retainedOriginal")
+        val identity = CycProtocol.restoreIdentity("X6", "20250725", "5.3")
+        val metrics =
+            fixture.getJSONObject("metrics").let { row ->
+                row.keys().asSequence().associateWith(row::getDouble)
+            }
+        val reading = CycProtocol.restoreReading(metrics, identity)
+        val method =
+            RecordingEngine::class
+                .java
+                .getDeclaredMethod(
+                    "telemetry",
+                    TelemetryReading::class.java,
+                    String::class.java,
+                    RecordingClockReading::class.java,
+                )
+                .apply { isAccessible = true }
+        val delivered = mutableListOf<Payload>()
+        engine.listeners.add { event, value -> if (event == "onSample") delivered.add(value) }
+        val ride = start()
+        advanceTo(1)
+        method.invoke(
+            engine,
+            reading,
+            fixture.getString("connectionEpoch"),
+            SystemRecordingClock.read(),
+        )
+        assertEquals(1, delivered.size)
+        assertEquals(0L, recordStore(ride).count(ride))
+        val original = (field("pending") as List<*>).last()!!
+        val evidence =
+            original.javaClass.getDeclaredField("telemetry").apply { isAccessible = true }.get(original)
+                as TelemetryCaptureEvidence
+        val probe =
+            evidence.copy(
+                observationId = UUID.randomUUID().toString(),
+                acquisitionMonotonic = evidence.acquisitionMonotonic - 0.1,
+                sourceElapsedSeconds = 0.0,
+            )
+        val capture = field("telemetryCapture") as TelemetryCapture
+        assertEquals(TelemetryCaptureOutcome.admitted, capture.prepare(probe).outcome)
+        engine.flush()
+        assertEquals(TelemetryCaptureOutcome.older, capture.prepare(probe).outcome)
+        assertEquals(1, delivered.size)
+        val first = recordStore(ride).page(ride).single().telemetryEvidence(ride)
+        advanceTo(2)
+        method.invoke(
+            engine,
+            reading,
+            "40000000-0000-4000-8000-000000000002",
+            SystemRecordingClock.read(),
+        )
+        assertEquals(2, delivered.size)
+        engine.flush()
+        val second = recordStore(ride).page(ride).last().telemetryEvidence(ride)
+        assertEquals(first.captureSessionId, second.captureSessionId)
+        assertEquals(first.clockEpoch, second.clockEpoch)
+        assertEquals(first.sequence + 1, second.sequence)
+        assertNotEquals(first.connectionEpoch, second.connectionEpoch)
+        engine.action("stop", ride)
+        val next = start()
+        val replay = capture.prepare(second)
+        assertEquals(TelemetryCaptureOutcome.replay, replay.outcome)
+        assertNull(replay.next.latest)
+        assertEquals("waiting", stream("controller")["status"])
+        advanceTo(1)
+        method.invoke(
+            engine,
+            reading,
+            fixture.getString("connectionEpoch"),
+            SystemRecordingClock.read(),
+        )
+        engine.flush()
+        val restarted = recordStore(next).page(next).single().telemetryEvidence(next)
+        assertNull(restarted.clockDiscontinuitySeconds)
+        assertEquals("receiving", stream("controller")["status"])
+    }
+
+    @Test
+    fun explicitConnectionResetsLiveCaptureClockAndCounters() = command {
+        val fixture = telemetryFixture("admission").getJSONObject("retainedOriginal")
+        val metrics =
+            fixture.getJSONObject("metrics").let { row ->
+                row.keys().asSequence().associateWith(row::getDouble)
+            }
+        val reading =
+            CycProtocol.restoreReading(
+                metrics,
+                CycProtocol.restoreIdentity("X6", "20250725", "5.3"),
+            )
+        val method =
+            RecordingEngine::class
+                .java
+                .getDeclaredMethod(
+                    "telemetry",
+                    TelemetryReading::class.java,
+                    String::class.java,
+                    RecordingClockReading::class.java,
+                )
+                .apply { isAccessible = true }
+        val old = engine.source(MonitorTarget.Live)
+        advanceTo(1)
+        repeat(2) {
+            method.invoke(
+                engine,
+                reading,
+                fixture.getString("connectionEpoch"),
+                SystemRecordingClock.read(),
+            )
+        }
+        engine.flush()
+        val prior = recordStore(old).page(old).last().telemetryEvidence(old)
+        val samples = mutableListOf<Payload>()
+        engine.listeners.add { event, value -> if (event == "onSample") samples.add(value) }
+        shadowOf(engine.context.getSystemService(BluetoothManager::class.java).adapter)
+            .setState(BluetoothAdapter.STATE_ON)
+        engine.connect(BridgeInputs.connect(mapOf("deviceId" to "02:00:00:00:00:01", "hz" to 4))) {
+            assertNull(it)
+        }
+        val fresh = engine.source(MonitorTarget.Live)
+        ShadowSystemClock.advanceBy(Duration.ofMillis(250))
+        method.invoke(
+            engine,
+            reading,
+            fixture.getString("connectionEpoch"),
+            RecordingClockReading(
+                iso(System.currentTimeMillis() + 3600000),
+                SystemClock.elapsedRealtime(),
+                (System.currentTimeMillis() + 3600000) / 1000.0,
+            ),
+        )
+        engine.flush()
+        val next = recordStore(fresh).page(fresh).single().telemetryEvidence(fresh)
+        assertNotEquals(prior.captureSessionId, next.captureSessionId)
+        assertEquals(1L, next.sequence)
+        assertNull(next.clockDiscontinuitySeconds)
+        assertEquals(1L, (samples.single()["sequence"] as Number).toLong())
+        engine.bluetooth.disconnect()
+        completeCancellation(engine.bluetooth, engine.handler)
+    }
+
+    @Test
+    fun captureDiscontinuityRetainsTheRawReceiptClockThroughTheEngine() = command {
+        val fixture = telemetryFixture("admission")
+        val row = fixture.getJSONArray("clockCases").getJSONObject(0)
+        val metrics =
+            fixture.getJSONObject("retainedOriginal").getJSONObject("metrics").let { obj ->
+                obj.keys().asSequence().associateWith(obj::getDouble)
+            }
+        val reading =
+            CycProtocol.restoreReading(
+                metrics,
+                CycProtocol.restoreIdentity("X6", "20250725", "5.3"),
+            )
+        val method =
+            RecordingEngine::class
+                .java
+                .getDeclaredMethod(
+                    "telemetry",
+                    TelemetryReading::class.java,
+                    String::class.java,
+                    RecordingClockReading::class.java,
+                )
+                .apply { isAccessible = true }
+        val ride = start()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(100000 - SystemClock.elapsedRealtime()))
+        method.invoke(
+            engine,
+            reading,
+            fixture.getString("connection"),
+            RecordingClockReading("2026-01-01T00:00:00.000Z", 100000, row.getDouble("firstWall")),
+        )
+        engine.flush()
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        method.invoke(
+            engine,
+            reading,
+            fixture.getString("connection"),
+            RecordingClockReading("2026-01-01T00:00:01.250Z", 101000, row.getDouble("lastWall")),
+        )
+        engine.flush()
+        val original = recordStore(ride).page(ride).last().telemetryEvidence(ride)
+        assertEquals(row.getDouble("expected"), original.clockDiscontinuitySeconds!!, 0.0)
+    }
+
+    @Test
+    fun gpsBatchUsesProviderNanosecondsAndRetainsOriginalUtc() = command {
+        val id = start(gps = true)
+        advanceTo(2)
+        val fix =
+            Location(LocationManager.GPS_PROVIDER).apply {
+                latitude = 0.0
+                longitude = 0.0
+                accuracy = 5f
+                time = java.time.Instant.parse(engine.store.metadata(id).str("startedAt")).toEpochMilli() + 2000
+                elapsedRealtimeNanos = (field("startClock") as Long) * 1000000 + 1000000900
+            }
+        (field("locationListener") as LocationListener).onLocationChanged(mutableListOf(fix))
+        engine.flush()
+        val original = recordStore(id).page(id).single()
+        assertEquals(1.0000009, original.time, 0.000000001)
+        assertEquals(1000000L, original.elapsedUs)
+        assertEquals(iso(fix.time), original.timestamp)
+    }
+}

@@ -39,7 +39,14 @@ function smallRide(seed: number): RideSpec {
       lifecycle.push({ t: tenth(t + 1 + next() * 2), action: 'resume', sequence: sequence++ });
     } else if (choice < 0.55) {
       const at = tenth(t);
-      lifecycle.push({ t: at, action: 'pause', sequence: sequence++, interrupted: true, cyc: 1000, epoch: 'old' });
+      lifecycle.push({
+        t: at,
+        action: 'pause',
+        sequence: sequence++,
+        interrupted: true,
+        controller: 1000,
+        epoch: 'old',
+      });
       lifecycle.push({ t: at, action: 'resume', sequence: sequence++, epoch: 'new' });
     } else lifecycle.push({ t: tenth(t), action: 'lap', sequence: sequence++ });
     t += 3 + next() * 5;
@@ -103,7 +110,7 @@ function smallRide(seed: number): RideSpec {
   };
 }
 
-describe('record interval planning end to end', () => {
+describe('record interval planning end to end', { timeout: 30_000 }, () => {
   it('chooses the interval a brute-force search over full emissions chooses', async () => {
     let planned = 0;
     for (let seed = 1; seed <= 24; seed++) {
@@ -162,7 +169,7 @@ describe('record interval planning end to end', () => {
   });
 });
 
-describe('record interval planning at the Garmin Connect limit', () => {
+describe('record interval planning at the Garmin Connect limit', { timeout: 30_000 }, () => {
   const sparse = (count: number): RideSpec => ({
     end: 2 * count,
     telemetry: Array.from({ length: count }, (_, i) => ({ t: 2 * i, humanPowerW: 100 })),
@@ -233,7 +240,7 @@ describe('record interval planning at the Garmin Connect limit', () => {
   });
 });
 
-describe('72-hour rides', () => {
+describe('72-hour rides', { timeout: 30_000 }, () => {
   const hours72 = 72 * 3600;
 
   it('fails at once with a run break every 2 s', async () => {

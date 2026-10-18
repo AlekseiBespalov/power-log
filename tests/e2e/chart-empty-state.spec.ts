@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test';
-import { defaultMonitorPreferences } from '../../src/core/monitor';
+import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 
@@ -41,10 +41,12 @@ test('empty label stays at the plot center through resize, text enlargement and 
   preferences.views.ride.charts = ['speedMps', 'controllerSpeedMps', 'motorInputPowerW'];
   await page.addInitScript(
     value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-    preferences,
+    JSON.parse(monitorPreferencesJson(preferences)),
   );
   await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   const csv = exportCsv(
     [0, 22].map((seconds, index) =>
@@ -55,6 +57,7 @@ test('empty label stays at the plot center through resize, text enlargement and 
     await chooser
   ).setFiles({ name: 'Synthetic missing speed.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
   const chart = page.getByTestId('monitor-chart-speed');
+  await expect(chart.locator('svg text')).toHaveCount(0);
   for (const [width, height] of [
     [320, 640],
     [440, 956],
@@ -73,6 +76,38 @@ test('empty label stays at the plot center through resize, text enlargement and 
   await expectCentered(chart);
   await chart.screenshot({ path: testInfo.outputPath('empty-chart-enlarged.png') });
   await expect(page.getByTestId('monitor-chart-power').getByText('No samples', { exact: true })).toHaveCount(0);
+  const axes = page.getByTestId('monitor-chart-power').locator('svg g[data-axis]');
+  await expect(axes).toHaveCount(6);
+  const frames = await axes.evaluateAll(elements =>
+    elements.map(element => {
+      const rect = element.querySelector('rect')!;
+      const text = element.querySelector('text')!;
+      const bounds = rect.getBBox();
+      return {
+        axis: element.getAttribute('data-axis'),
+        x: bounds.x,
+        y: bounds.y,
+        height: bounds.height,
+        padding: Number(text.getAttribute('x')) - bounds.x,
+        fill: rect.getAttribute('fill'),
+        font: getComputedStyle(text).fontFamily,
+        size: getComputedStyle(text).fontSize,
+        textWidth: text.getComputedTextLength(),
+        backingWidth: bounds.width,
+      };
+    }),
+  );
+  for (const frame of frames) {
+    expect(frame.x).toBeGreaterThanOrEqual(12);
+    expect(frame.y).toBeGreaterThanOrEqual(12);
+    expect(frame.height).toBe(18);
+    expect(frame.padding).toBe(4);
+    expect(frame.fill).toBe('#0b0d10');
+    expect(frame.size).toBe('10px');
+    expect(frame.font).toContain('-apple-system');
+    expect(frame.font).not.toBe('Arial');
+    expect(frame.backingWidth).toBe(Math.ceil(frame.textWidth) + 8);
+  }
   await page.getByTestId('monitor-expand').click();
   const fullscreen = page.getByTestId('monitor-chart-speed-fullscreen');
   for (const [width, height] of [
@@ -87,6 +122,8 @@ test('empty label stays at the plot center through resize, text enlargement and 
   await page.getByTestId('monitor-close').click();
   for (const hasSpeed of [true, false]) {
     const file = page.waitForEvent('filechooser');
+    if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+      await page.getByRole('button', { name: 'History actions', exact: true }).click();
     await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
     const samples = [0, 22].map((seconds, index) => ({
       ...syntheticSample(seconds, index, new Date(Date.UTC(2026, 8, 12) + seconds * 1000).toISOString()),

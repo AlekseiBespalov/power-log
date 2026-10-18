@@ -5,7 +5,6 @@ const { withXcodeProject } = require('@expo/config-plugins');
 const targetName = 'PowerLogWatch';
 const unquote = value => String(value ?? '').replace(/^"|"$/g, '');
 
-/** Maintained Swift sources stay outside Expo's generated ios directory. */
 function configureWatchProject(project, projectRoot, config) {
   const {
     version,
@@ -28,7 +27,6 @@ function configureWatchProject(project, projectRoot, config) {
   if (!phone.dependencies.some(reference => objects.PBXTargetDependency[reference.value]?.target === targetId)) {
     project.addTargetDependency(phoneId, [targetId]);
   }
-  // Modern watchOS apps put the SwiftUI executable directly in the app target.
   target.productType = '"com.apple.product-type.application"';
 
   const configurationList = project.pbxXCConfigurationList()[target.buildConfigurationList];
@@ -54,7 +52,7 @@ function configureWatchProject(project, projectRoot, config) {
       SKIP_INSTALL: 'YES',
       ASSETCATALOG_COMPILER_APPICON_NAME: 'AppIcon',
       LD_RUNPATH_SEARCH_PATHS: '"$(inherited) @executable_path/Frameworks"',
-      OTHER_LDFLAGS: '"$(inherited) -lsqlite3 -lcompression"',
+      OTHER_LDFLAGS: '"$(inherited)"',
       SWIFT_OPTIMIZATION_LEVEL: configuration.name === 'Debug' ? '"-Onone"' : '"-O"',
     });
     if (teamId) configuration.buildSettings.DEVELOPMENT_TEAM = teamId;
@@ -66,49 +64,65 @@ function configureWatchProject(project, projectRoot, config) {
     .sort()
     .map(file => `../apple/WatchApp/${file}`);
   sourcePaths.push(
-    ...[
-      'WorkoutDistance',
-      'WorkoutDistanceStore',
-      'WorkoutTypes',
-      'PowerLogStore',
-      'WorkoutArchive',
-      'WorkoutControl',
-      'WorkoutTransfer',
-      'WorkoutSync',
-    ].map(name => `../modules/cyc-bridge/ios/${name}.swift`),
+    ...['WorkoutCompanion', 'WorkoutCompanionTransport', 'WorkoutNativeHealth', 'WorkoutHealthMetrics'].map(
+      name => `../modules/power-log-bridge/ios/${name}.swift`,
+    ),
   );
 
-  // Rebuild only this target's source phase so subsequent prebuilds pick up new
-  // maintained files without duplicate compilation or stale source references.
-  for (const phaseType of ['PBXSourcesBuildPhase', 'PBXFrameworksBuildPhase', 'PBXResourcesBuildPhase']) {
-    const section = objects[phaseType] ?? {};
-    target.buildPhases = target.buildPhases.filter(reference => {
-      const phase = section[reference.value];
-      if (!phase) return true;
-      for (const file of phase.files ?? []) {
-        const fileRef = objects.PBXBuildFile[file.value]?.fileRef;
-        if (fileRef) {
-          delete objects.PBXFileReference[fileRef];
-          delete objects.PBXFileReference[`${fileRef}_comment`];
-        }
-        delete objects.PBXBuildFile[file.value];
-        delete objects.PBXBuildFile[`${file.value}_comment`];
-      }
-      delete section[reference.value];
-      delete section[`${reference.value}_comment`];
-      return false;
-    });
-  }
-  const phases = [
-    project.addBuildPhase(sourcePaths, 'PBXSourcesBuildPhase', 'Sources', targetId),
-    project.addBuildPhase(
-      ['../assets/Assets.xcassets', '../apple/WatchApp/PrivacyInfo.xcprivacy'],
-      'PBXResourcesBuildPhase',
-      'Resources',
-      targetId,
-    ),
+  const expectedPhases = [
+    ['PBXSourcesBuildPhase', sourcePaths],
+    ['PBXResourcesBuildPhase', ['../assets/Assets.xcassets', '../apple/WatchApp/PrivacyInfo.xcprivacy']],
+    ['PBXFrameworksBuildPhase', []],
   ];
-  project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', targetId);
+  let phases = expectedPhases.map(([type]) => ({
+    buildPhase: target.buildPhases.map(reference => objects[type]?.[reference.value]).find(Boolean),
+  }));
+  const current = expectedPhases.every(([type, paths], index) => {
+    const matches = target.buildPhases.filter(reference => objects[type]?.[reference.value]);
+    const files = phases[index].buildPhase?.files ?? [];
+    return (
+      matches.length === 1 &&
+      files.length === paths.length &&
+      files.every(
+        (file, fileIndex) =>
+          unquote(objects.PBXFileReference[objects.PBXBuildFile[file.value]?.fileRef]?.path) === paths[fileIndex],
+      )
+    );
+  });
+  if (!current) {
+    for (const phaseType of ['PBXSourcesBuildPhase', 'PBXFrameworksBuildPhase', 'PBXResourcesBuildPhase']) {
+      const section = objects[phaseType] ?? {};
+      target.buildPhases = target.buildPhases.filter(reference => {
+        const phase = section[reference.value];
+        if (!phase) return true;
+        for (const file of phase.files ?? []) {
+          const fileRef = objects.PBXBuildFile[file.value]?.fileRef;
+          if (fileRef) {
+            delete objects.PBXFileReference[fileRef];
+            delete objects.PBXFileReference[`${fileRef}_comment`];
+          }
+          delete objects.PBXBuildFile[file.value];
+          delete objects.PBXBuildFile[`${file.value}_comment`];
+        }
+        delete section[reference.value];
+        delete section[`${reference.value}_comment`];
+        return false;
+      });
+    }
+    phases = [
+      project.addBuildPhase(sourcePaths, 'PBXSourcesBuildPhase', 'Sources', targetId),
+      project.addBuildPhase(
+        ['../assets/Assets.xcassets', '../apple/WatchApp/PrivacyInfo.xcprivacy'],
+        'PBXResourcesBuildPhase',
+        'Resources',
+        targetId,
+      ),
+    ];
+    phases.push(project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', targetId));
+  }
+  for (const file of phases.at(-1).buildPhase.files) {
+    objects.PBXFileReference[objects.PBXBuildFile[file.value].fileRef].lastKnownFileType = 'wrapper.xcframework';
+  }
   // CocoaPods resolves a file's path through its group; an ungrouped reference makes
   // React Native's privacy manifest aggregation fail during pod install.
   let groupKey = Object.keys(objects.PBXGroup).find(key => unquote(objects.PBXGroup[key]?.name) === targetName);
@@ -133,6 +147,12 @@ function configureWatchProject(project, projectRoot, config) {
     SystemCapabilities: { 'com.apple.HealthKit': { enabled: 1 } },
     ...(teamId ? { DevelopmentTeam: teamId } : {}),
   };
+  // Expo selects the first application entry rather than PBXProject target order.
+  objects.PBXNativeTarget = Object.fromEntries([
+    [phoneId, nativeTargets[phoneId]],
+    [`${phoneId}_comment`, nativeTargets[`${phoneId}_comment`]],
+    ...Object.entries(nativeTargets).filter(([key]) => key !== phoneId && key !== `${phoneId}_comment`),
+  ]);
   return project;
 }
 

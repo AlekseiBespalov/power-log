@@ -1,0 +1,479 @@
+{
+  "resume": {
+    "open": {
+      "distanceProfile": null,
+      "elapsedEnd": 3,
+      "metadata": {
+        "batteryConsumptionSource": "controller",
+        "componentResults": [],
+        "endedAt": "2026-05-28T20:26:43.250Z",
+        "example": false,
+        "health": {
+          "export": null,
+          "provider": "appleHealth",
+          "state": "notRequested",
+          "workoutUUID": null
+        },
+        "healthPublisher": "phone",
+        "indoor": true,
+        "interrupted": false,
+        "ownerTiming": {
+          "elapsedSeconds": 3,
+          "timerSeconds": 3,
+          "timestamp": "2026-05-28T20:26:43.250Z"
+        },
+        "recordGPS": false,
+        "recordingOwner": "phone",
+        "sampleHz": 4,
+        "saveToHealth": false,
+        "startedAt": "2026-05-28T20:26:40.250Z",
+        "watchEnabled": false
+      },
+      "producers": {
+        "gps": [],
+        "health": []
+      },
+      "session": "captured-native"
+    },
+    "pages": {
+      "distance": {
+        "columns": {
+          "endSpeed": {
+            "base64": ""
+          },
+          "endUs": [],
+          "meters": {
+            "base64": ""
+          },
+          "segment": {
+            "base64": ""
+          },
+          "startSpeed": {
+            "base64": ""
+          },
+          "startUs": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "gps": {
+        "columns": {
+          "altitudeMeters": {
+            "base64": ""
+          },
+          "clockEpoch": [],
+          "distanceBarrier": {
+            "base64": ""
+          },
+          "elapsedSeconds": {
+            "base64": ""
+          },
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "latitude": {
+            "base64": ""
+          },
+          "longitude": {
+            "base64": ""
+          },
+          "producer": [],
+          "producerSequence": {
+            "base64": ""
+          },
+          "speedAccuracyMps": {
+            "base64": ""
+          },
+          "speedMps": {
+            "base64": ""
+          },
+          "verticalAccuracyM": {
+            "base64": ""
+          }
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": ""
+          },
+          "basalEnergyKcal": {
+            "base64": ""
+          },
+          "channel": [],
+          "clockEpoch": [],
+          "connectionEpoch": [],
+          "dataOrigin": [],
+          "elapsedSeconds": {
+            "base64": ""
+          },
+          "endUs": [],
+          "heartRateBpm": {
+            "base64": ""
+          },
+          "identifier": [],
+          "observationRevision": [],
+          "originalEndTimestamp": [],
+          "originalEventId": [],
+          "originalStartTimestamp": [],
+          "producer": [],
+          "producerSequence": {
+            "base64": ""
+          },
+          "provider": [],
+          "providerParentId": [],
+          "representation": [],
+          "sampleCount": {
+            "base64": ""
+          },
+          "startUs": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "lifecycle": {
+        "columns": {
+          "action": ["start", "pause", "resume", "stop"],
+          "clockEpoch": [null, "old", null, null],
+          "controllerSequence": {
+            "base64": "AAAAAAAA+H8AAAAAAAAAQAAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAPA\/AAAAAAAACEA="
+          },
+          "interrupted": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAAAAAAAAAAAAAAA="
+          },
+          "producer": ["phone", "phone", "phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQAAAAAAAAAhAAAAAAAAAEEA="
+          }
+        },
+        "done": true,
+        "last": [3, 1, 4, 5855],
+        "rows": 4
+      },
+      "telemetry": {
+        "columns": {
+          "assistLevel": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "batteryCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "batteryVoltageV": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "cadenceRpm": {
+            "base64": "AAAAAAAAVEAAAAAAAABUQAAAAAAAAFRAAAAAAAAAVEA="
+          },
+          "clockEpoch": ["old", "old", "new", "new"],
+          "connection": ["old", "old", "new", "new"],
+          "consumedAh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "consumedWh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "controllerTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAPA\/AAAAAAAAAEA="
+          },
+          "humanPowerW": {
+            "base64": "AAAAAAAAWUAAAAAAAABZQAAAAAAAwHJAAAAAAADAckA="
+          },
+          "motorCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "motorInputPowerW": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "motorRpm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "motorTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "pedalTorqueNm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\/AAAAAAAA+H8="
+          },
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQAAAAAAAAAhAAAAAAAAAEEA="
+          }
+        },
+        "connections": [
+          {
+            "firmware": null,
+            "model": null,
+            "protocol": null,
+            "token": "old",
+            "vendor": "controller"
+          },
+          {
+            "firmware": null,
+            "model": null,
+            "protocol": null,
+            "token": "new",
+            "vendor": "controller"
+          }
+        ],
+        "done": true,
+        "last": [2, 0, 4, 5854],
+        "rows": 4
+      }
+    }
+  },
+  "stop": {
+    "open": {
+      "distanceProfile": null,
+      "elapsedEnd": 3,
+      "metadata": {
+        "batteryConsumptionSource": "controller",
+        "componentResults": [],
+        "endedAt": "2026-05-28T20:26:43.250Z",
+        "example": false,
+        "health": {
+          "export": null,
+          "provider": "appleHealth",
+          "state": "notRequested",
+          "workoutUUID": null
+        },
+        "healthPublisher": "phone",
+        "indoor": true,
+        "interrupted": false,
+        "ownerTiming": {
+          "elapsedSeconds": 3,
+          "timerSeconds": 3,
+          "timestamp": "2026-05-28T20:26:43.250Z"
+        },
+        "recordGPS": false,
+        "recordingOwner": "phone",
+        "sampleHz": 4,
+        "saveToHealth": false,
+        "startedAt": "2026-05-28T20:26:40.250Z",
+        "watchEnabled": false
+      },
+      "producers": {
+        "gps": [],
+        "health": []
+      },
+      "session": "captured-native"
+    },
+    "pages": {
+      "distance": {
+        "columns": {
+          "endSpeed": {
+            "base64": ""
+          },
+          "endUs": [],
+          "meters": {
+            "base64": ""
+          },
+          "segment": {
+            "base64": ""
+          },
+          "startSpeed": {
+            "base64": ""
+          },
+          "startUs": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "gps": {
+        "columns": {
+          "altitudeMeters": {
+            "base64": ""
+          },
+          "clockEpoch": [],
+          "distanceBarrier": {
+            "base64": ""
+          },
+          "elapsedSeconds": {
+            "base64": ""
+          },
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "latitude": {
+            "base64": ""
+          },
+          "longitude": {
+            "base64": ""
+          },
+          "producer": [],
+          "producerSequence": {
+            "base64": ""
+          },
+          "speedAccuracyMps": {
+            "base64": ""
+          },
+          "speedMps": {
+            "base64": ""
+          },
+          "verticalAccuracyM": {
+            "base64": ""
+          }
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": ""
+          },
+          "basalEnergyKcal": {
+            "base64": ""
+          },
+          "channel": [],
+          "clockEpoch": [],
+          "connectionEpoch": [],
+          "dataOrigin": [],
+          "elapsedSeconds": {
+            "base64": ""
+          },
+          "endUs": [],
+          "heartRateBpm": {
+            "base64": ""
+          },
+          "identifier": [],
+          "observationRevision": [],
+          "originalEndTimestamp": [],
+          "originalEventId": [],
+          "originalStartTimestamp": [],
+          "producer": [],
+          "producerSequence": {
+            "base64": ""
+          },
+          "provider": [],
+          "providerParentId": [],
+          "representation": [],
+          "sampleCount": {
+            "base64": ""
+          },
+          "startUs": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "lifecycle": {
+        "columns": {
+          "action": ["start", "pause", "stop"],
+          "clockEpoch": [null, "old", null],
+          "controllerSequence": {
+            "base64": "AAAAAAAA+H8AAAAAAAAAQAAAAAAAAPh\/"
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAAhA"
+          },
+          "interrupted": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAAAA"
+          },
+          "producer": ["phone", "phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQAAAAAAAAAhA"
+          }
+        },
+        "done": true,
+        "last": [3, 1, 3, 5847],
+        "rows": 3
+      },
+      "telemetry": {
+        "columns": {
+          "assistLevel": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "batteryCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "batteryVoltageV": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "cadenceRpm": {
+            "base64": "AAAAAAAAVEAAAAAAAABUQA=="
+          },
+          "clockEpoch": ["old", "old"],
+          "connection": ["old", "old"],
+          "consumedAh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "consumedWh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "controllerTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPw=="
+          },
+          "humanPowerW": {
+            "base64": "AAAAAAAAWUAAAAAAAABZQA=="
+          },
+          "motorCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "motorInputPowerW": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "motorRpm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "motorTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "pedalTorqueNm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQA=="
+          }
+        },
+        "connections": [
+          {
+            "firmware": null,
+            "model": null,
+            "protocol": null,
+            "token": "old",
+            "vendor": "controller"
+          }
+        ],
+        "done": true,
+        "last": [1, 0, 2, 5845],
+        "rows": 2
+      }
+    }
+  }
+}

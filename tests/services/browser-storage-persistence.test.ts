@@ -42,23 +42,28 @@ describe('browser storage persistence', () => {
       vi.stubGlobal('indexedDB', {});
       const { BrowserRideStore } = await import('../../src/services/browser-ride-store');
       const { BrowserWorkoutRecorder } = await import('../../src/services/browser-workout-recorder');
+      const { browserMemoryStore } = await import('../support/browser-memory-store');
       const store = new BrowserRideStore(),
         source = new TestTelemetryAdapter(),
         record = browserRide();
-      vi.spyOn(store, 'recoverOrphan').mockResolvedValue(null);
-      vi.spyOn(store, 'begin').mockResolvedValue(record);
-      vi.spyOn(store, 'remove').mockResolvedValue();
+      browserMemoryStore(store, record);
       const recorder = new BrowserWorkoutRecorder(store);
       recorder.setTelemetrySource(source);
       await source.connect();
       expect(persist).not.toHaveBeenCalled();
+      let activeID: string | null = null;
       try {
-        expect((await recorder.start({ indoor: true, useWatch: false })).phase).toBe('running');
-        await recorder.discard(record.id);
-        expect((await recorder.start({ indoor: true, useWatch: false })).phase).toBe('running');
+        const first = await recorder.start({ indoor: true, useWatch: false });
+        activeID = first.id;
+        expect(first.phase).toBe('running');
+        await recorder.discard(activeID!);
+        activeID = null;
+        const second = await recorder.start({ indoor: true, useWatch: false });
+        activeID = second.id;
+        expect(second.phase).toBe('running');
         expect(persist).toHaveBeenCalledTimes(result === 'missing' ? 0 : 1);
       } finally {
-        await recorder.discard(record.id);
+        if (activeID) await recorder.discard(activeID);
       }
     },
   );

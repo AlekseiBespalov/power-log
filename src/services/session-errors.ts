@@ -1,3 +1,5 @@
+import { presentFailure } from '../core/failures';
+
 export type SessionErrors = {
   operation: string | null;
   native: string | null;
@@ -5,9 +7,7 @@ export type SessionErrors = {
 };
 
 export type SessionErrorAction =
-  | { type: 'native'; error: string | null | undefined }
-  | { type: 'operation'; error: string | null }
-  | { type: 'dismiss' };
+  { type: 'native'; error: string | null | undefined } | { type: 'operation'; error: unknown } | { type: 'dismiss' };
 
 export const initialSessionErrors: SessionErrors = { operation: null, native: null, nativeDismissed: false };
 
@@ -20,7 +20,7 @@ export function sessionErrorReducer(current: SessionErrors, action: SessionError
       return error === current.native ? current : { ...current, native: error, nativeDismissed: false };
     }
     case 'operation':
-      return { ...current, operation: action.error };
+      return { ...current, operation: action.error == null ? null : presentFailure(action.error).text };
     case 'dismiss':
       return { ...current, operation: null, nativeDismissed: current.native !== null };
   }

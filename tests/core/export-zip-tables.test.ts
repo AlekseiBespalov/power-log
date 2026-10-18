@@ -20,9 +20,8 @@ const METADATA: ExportRideMetadata = {
   saveToHealth: false,
   recordGPS: false,
   health: { provider: null, state: 'notRequested', workoutUUID: null, export: null },
-  watchSyncState: 'notRequired',
-  finalizationState: 'complete',
   example: false,
+  batteryConsumptionSource: 'controller',
   sampleHz: null,
 };
 
@@ -35,7 +34,7 @@ function lifecycle(platform: ExportPlatform, actions: [number, string, number?][
     producer: PRODUCERS[platform],
     action,
     ...(platform === 'web' ? {} : { interrupted: interrupted ?? 0 }),
-    ...(platform === 'ios' ? { producerSequence: index + 1, cycSequence: 0 } : {}),
+    ...(platform === 'ios' ? { producerSequence: index + 1, controllerSequence: 0 } : {}),
   }));
 }
 
@@ -48,11 +47,11 @@ function ride(
     rideId: 'table-ride',
     context: { exportedAt: '2026-01-01T01:00:00.000Z', platform },
     open: { metadata: METADATA, elapsedEnd: 10, producers, distanceProfile: null },
-    identities: { c: { vendor: 'cyc', model: null, firmware: null, protocol: null } },
+    identities: { c: { vendor: 'controller', model: null, firmware: null, protocol: null } },
     rows: {
       lifecycle: lifecycle(platform, [
         [0, 'start'],
-        [10, platform === 'web' ? 'save' : 'stop'],
+        [10, 'stop'],
       ]),
       ...rows,
     },
@@ -120,21 +119,21 @@ describe('events.csv actions', () => {
     ]);
   });
 
-  it('maps web save and interrupted to stops', async () => {
+  it('retains web stop and interrupted pause meanings', async () => {
     const rows = lifecycle('web', [
       [0, 'start'],
       [2, 'pause'],
       [3, 'resume'],
       [4, 'lap'],
-      [9, 'interrupted'],
-      [10, 'save'],
+      [9, 'interruption'],
+      [10, 'stop'],
     ]);
     expect(await table(ride('web', { lifecycle: rows }), 'events.csv')).toEqual([
       't0,0,,start,false,browser',
       't1,2,,pause,false,browser',
       't2,3,,resume,false,browser',
       't3,4,,lap,false,browser',
-      't4,9,,stop,true,browser',
+      't4,9,,pause,true,browser',
       't5,10,,stop,false,browser',
     ]);
   });
@@ -145,19 +144,19 @@ describe('events.csv actions', () => {
     ['ios', 'discard'],
     ['android', 'interruption'],
     ['android', 'save'],
-    ['web', 'stop'],
-    ['web', 'interruption'],
+    ['web', 'save'],
+    ['web', 'interrupted'],
   ] as [ExportPlatform, string][])('fails a %s ride with the action %s', async (platform, action) => {
     const rows = lifecycle(platform, [
       [0, 'start'],
       [5, action],
-      [10, platform === 'web' ? 'save' : 'stop'],
+      [10, 'stop'],
     ]);
     expect(await failure(ride(platform, { lifecycle: rows }))).toBe('page');
   });
 
   it.each([
-    ['ios', 'cyc'],
+    ['ios', 'controller'],
     ['ios', 'browser'],
     ['android', 'watch'],
     ['android', 'browser'],
@@ -165,7 +164,7 @@ describe('events.csv actions', () => {
   ] as [ExportPlatform, string][])('fails a %s event recorded by %s', async (platform, producer) => {
     const rows = lifecycle(platform, [
       [0, 'start'],
-      [10, platform === 'web' ? 'save' : 'stop'],
+      [10, 'stop'],
     ]).map(row => ({ ...row, producer }));
     expect(await failure(ride(platform, { lifecycle: rows }))).toBe('page');
   });
@@ -183,6 +182,51 @@ describe('events.csv actions', () => {
 });
 
 describe('limits that apply only to FIT', () => {
+  it.each(['too many boundaries', 'missing interruption sequence'])(
+    'keeps raw ZIP when derived totals lack usable timeline evidence: %s',
+    async reason => {
+      const events =
+        reason === 'too many boundaries'
+          ? lifecycle(
+              'web',
+              Array.from({ length: 10001 }, (_, i) => [i / 1001, i % 2 ? 'pause' : 'resume']),
+            )
+          : lifecycle('web', [
+              [0, 'start'],
+              [9, 'interruption'],
+              [10, 'stop'],
+            ]);
+      const canonical = ride('web', {
+        lifecycle: events,
+        telemetry: [
+          {
+            elapsedSeconds: 0,
+            timestamp: '2026-01-01T00:00:00Z',
+            active: 1,
+            interval: 0,
+            connection: 'c',
+            consumedWh: 100,
+            consumedAh: 10,
+          },
+        ],
+      });
+      const { sink, outcome } = await run(canonical);
+      expect(outcome).toBeNull();
+      const entries = readZip(sink.file);
+      const derived = entryText(entries.find(entry => entry.name.endsWith('/battery-consumption.csv'))!);
+      expect(derived.trim().split('\n')).toHaveLength(1);
+      const raw = entryText(entries.find(entry => entry.name.endsWith('/telemetry.csv'))!);
+      expect(raw.trim().split('\n')).toHaveLength(2);
+      const metadata = JSON.parse(entryText(entries.find(entry => entry.name.endsWith('/datapackage.json'))!));
+      expect(metadata['powerLog:batteryConsumption']).toEqual({
+        status: 'unavailable',
+        reason:
+          reason === 'too many boundaries'
+            ? 'More than 10,000 activity-boundary events.'
+            : 'An interruption in this ride has no retained telemetry sequence.',
+      });
+    },
+  );
   it('exports a ride with 10,001 lifecycle events', async () => {
     const laps = Array.from({ length: 9_999 }, (_, index): [number, string] => [(index + 1) / 1000, 'lap']);
     const actions: [number, string][] = [[0, 'start'], ...laps, [10, 'stop']];
@@ -201,7 +245,7 @@ describe('limits that apply only to FIT', () => {
     const base = ride(platform, {
       lifecycle: lifecycle(platform, [
         [0, 'start'],
-        [end, platform === 'web' ? 'save' : 'stop'],
+        [end, 'stop'],
       ]),
       telemetry: [{ elapsedSeconds: 2_678_400.5, timestamp: 'r', connection: 'c', humanPowerW: 90, ...captured }],
     });
@@ -238,7 +282,7 @@ describe('health.csv values', () => {
   ])('gives a %s row with sampleCount %s the kind %s', async (representation, sampleCount, kind, count) => {
     const rows = [healthRow({ identifier: HEART_RATE, value: 80, representation, sampleCount })];
     expect(await table(healthRide(rows), 'health.csv')).toEqual([
-      `end,,1,1,watch,,heartRate,80,/min,${kind},${count},`,
+      `end,,1,1,watch,heartRate,80,/min,${kind},${count},,,,,,,,,,,`,
     ]);
   });
 
@@ -274,15 +318,15 @@ describe('health.csv values', () => {
       healthRow({ identifier: 'HKQuantityTypeIdentifierStepCount', value: 9, unit: 'count' }),
     ];
     expect(await table(healthRide(rows), 'health.csv')).toEqual([
-      'end,,1,1,watch,,heartRate,70,/min,latest,,',
-      'end,,1,1,watch,,activeEnergy,1,kcal,cumulative,,',
-      'end,,1,1,watch,,basalEnergy,2,kcal,cumulative,,',
-      'end,,1,1,watch,,distance,3,m,cumulative,,',
-      'end,,1,1,watch,,power,4,W,,,',
-      'end,,1,1,watch,,cadence,5,/min,,,',
-      'end,,1,1,watch,,speed,6,m/s,,,',
-      'end,,1,1,watch,,respiratoryRate,14,/min,,,',
-      'end,,1,1,watch,,HKQuantityTypeIdentifierStepCount,9,count,,,',
+      'end,,1,1,watch,heartRate,70,/min,latest,,,,,,,,,,,,',
+      'end,,1,1,watch,activeEnergy,1,kcal,cumulative,,,,,,,,,,,,',
+      'end,,1,1,watch,basalEnergy,2,kcal,cumulative,,,,,,,,,,,,',
+      'end,,1,1,watch,distance,3,m,cumulative,,,,,,,,,,,,',
+      'end,,1,1,watch,power,4,W,,,,,,,,,,,,,',
+      'end,,1,1,watch,cadence,5,/min,,,,,,,,,,,,,',
+      'end,,1,1,watch,speed,6,m/s,,,,,,,,,,,,,',
+      'end,,1,1,watch,respiratoryRate,14,/min,,,,,,,,,,,,,',
+      'end,,1,1,watch,HKQuantityTypeIdentifierStepCount,9,count,,,,,,,,,,,,,',
     ]);
   });
 
@@ -303,13 +347,15 @@ describe('health.csv values', () => {
   ])('maps %s %d to %s %s %s', async (identifier, value, metric, written, unit) => {
     const rows = [healthRow({ identifier, value, unit: 'stored', representation: 'rawQuantity', sampleCount: 1 })];
     expect(await table(healthRide(rows), 'health.csv')).toEqual([
-      `end,,1,1,watch,,${metric},${written},${unit},sample,,`,
+      `end,,1,1,watch,${metric},${written},${unit},sample,,,,,,,,,,,,`,
     ]);
   });
 
   it('writes the named value once when the generic value names the same quantity', async () => {
     const rows = [healthRow({ heartRateBpm: 81, identifier: HEART_RATE, value: 82, representation: 'rawSeries' })];
-    expect(await table(healthRide(rows), 'health.csv')).toEqual(['end,,1,1,watch,,heartRate,81,/min,sample,,']);
+    expect(await table(healthRide(rows), 'health.csv')).toEqual([
+      'end,,1,1,watch,heartRate,81,/min,sample,,,,,,,,,,,,',
+    ]);
   });
 
   it('writes nothing for a row without values', async () => {
@@ -366,7 +412,7 @@ describe('gps.csv and telemetry.csv rows', () => {
     expect(await failure(ride('ios', { gps: [fix('watch')] }, listed))).toBe('page');
     expect(await failure(ride('ios', { gps: [fix(null)] }, listed))).toBe('page');
     expect(await table(ride('ios', { gps: [fix('phone')] }, listed), 'gps.csv')).toEqual([
-      'f,1,1,1,phone,1,2,,,,,,,,,',
+      'f,1,1,1,phone,1,2,,,,,,,,,,',
     ]);
   });
 
@@ -388,7 +434,7 @@ describe('gps.csv and telemetry.csv rows', () => {
       [1.5, 'resume', 1],
       [10, 'pause', 1],
       [10, 'stop'],
-    ]).map((row, index) => ({ ...row, cycSequence: [0, 1, 3, 0][index]! }));
+    ]).map((row, index) => ({ ...row, controllerSequence: [0, 1, 3, 0][index]! }));
     const rows = [1, 2, 10, 10].map((elapsedSeconds, index) =>
       reading({ elapsedSeconds, producerSequence: index + 1, clockEpoch: 'e', humanPowerW: 100 }),
     );

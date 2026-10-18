@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { writeFileSync } from 'node:fs';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { getFileInfo } from 'prettier';
 import { exportZip } from '../../src/core/export/zip-export';
 import { ride as android } from '../fixtures/export/zip/gps-android/ride';
 import { ride as iphone } from '../fixtures/export/zip/gps-iphone/ride';
@@ -10,6 +12,7 @@ import {
   expectedEntries,
   readZip,
   verifyWithPython,
+  writeDescriptors,
   type CanonicalRide,
 } from '../fixtures/export/zip/harness';
 import { ride as health } from '../fixtures/export/zip/health-descriptor/ride';
@@ -31,10 +34,36 @@ async function exported(ride: CanonicalRide, pageSize = 4096) {
 
 const encoded = (text: string) => Buffer.from(text, 'utf8');
 
-describe.each(FAMILIES)('the %s family', (family, ride, dos) => {
-  const expected = expectedEntries(family);
+beforeAll(async () => {
+  if (process.env.POWER_LOG_UPDATE_ZIP_FIXTURES !== '1') return;
+  const descriptors = new Map<string, string>();
+  for (const [family, ride] of FAMILIES) {
+    const { sink } = await exported(ride);
+    for (const entry of readZip(sink.file)) {
+      const name = entry.name.slice('PowerLog-original/'.length) as (typeof ENTRY_NAMES)[number];
+      const content = entryText(entry);
+      const file = `tests/fixtures/export/zip/${family}/${name}`;
+      if (name === 'datapackage.json') descriptors.set(family, content);
+      else writeFileSync(`${file}.json`, JSON.stringify(content.trimEnd().split('\n'), null, 2) + '\n');
+    }
+  }
+  writeDescriptors(descriptors);
+});
 
-  it('extracts the hand-derived files byte for byte', async () => {
+describe.each(FAMILIES)('the %s family', (family, ride, dos) => {
+  let expected: ReturnType<typeof expectedEntries>;
+  beforeAll(() => {
+    expected = expectedEntries(family);
+  });
+
+  it('excludes the generated descriptor bytes from formatting', async () => {
+    const info = await getFileInfo('tests/fixtures/export/zip/gps-iphone/datapackage.json', {
+      ignorePath: '.prettierignore',
+    });
+    expect(info.ignored).toBe(true);
+  });
+
+  it('extracts the golden files byte for byte', async () => {
     const { sink, source, result } = await exported(ride);
     const entries = readZip(sink.file);
     expect(entries.map(entry => entry.name)).toEqual(ENTRY_NAMES.map(name => `PowerLog-original/${name}`));

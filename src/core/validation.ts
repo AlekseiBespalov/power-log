@@ -1,5 +1,6 @@
 import { REQUIRED_SAMPLE_COLUMNS, SAMPLE_IDENTITY_COLUMNS, type TelemetrySample } from './types';
-import { hasKnownControllerSpeedUnit } from './controller-speed';
+import { controllerRestoreIdentity, controllerRestoreReading, StoredMetric } from '../../shared/js';
+import type { ControllerIdentity } from '../../shared/js/power-log-core';
 
 export const MAX_CSV_BYTES = 256 * 1024 * 1024;
 export const MAX_RECORDING_SAMPLES = 700_000;
@@ -50,19 +51,20 @@ export function validateSample(value: unknown, previous?: TelemetrySample): Tele
     Math.abs(numeric.motorInputPowerW! - electricalWatts) > Math.max(0.001, Math.abs(electricalWatts) * 1e-7)
   )
     throw new Error('Motor input power must equal battery voltage multiplied by battery current');
-
   const provenance: Partial<Pick<TelemetrySample, (typeof SAMPLE_IDENTITY_COLUMNS)[number]>> = {};
+  let identity: ControllerIdentity | undefined;
   if (SAMPLE_IDENTITY_COLUMNS.some(key => value[key] !== undefined)) {
     if (
       typeof value.controllerModel !== 'string' ||
-      !/^X(?:6|12)(?:[A-Za-z_][A-Za-z0-9_]{0,29})?$/.test(value.controllerModel) ||
       typeof value.firmwareLabel !== 'string' ||
-      !/^[0-9]{6,8}[A-Z]{0,8}$/.test(value.firmwareLabel) ||
-      typeof value.controllerProtocol !== 'string' ||
-      !/^(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})$/.test(value.controllerProtocol) ||
-      value.controllerProtocol.split('.').some(part => Number(part) > 255)
+      typeof value.controllerProtocol !== 'string'
     )
       throw new Error('Invalid controller provenance');
+    try {
+      identity = controllerRestoreIdentity(value.controllerModel, value.firmwareLabel, value.controllerProtocol);
+    } catch {
+      throw new Error('Invalid controller provenance');
+    }
     Object.assign(provenance, {
       controllerModel: value.controllerModel,
       firmwareLabel: value.firmwareLabel,
@@ -70,13 +72,18 @@ export function validateSample(value: unknown, previous?: TelemetrySample): Tele
     });
   }
   if (value.controllerSpeedMps !== undefined) {
-    const speed = finiteNumber(value.controllerSpeedMps, 'controllerSpeedMps');
-    if (
-      !hasKnownControllerSpeedUnit(provenance.controllerModel ?? '', provenance.controllerProtocol ?? '') ||
-      Math.abs(speed - numeric.speedRaw! / 3.6) > Math.max(1e-9, Math.abs(speed) * 1e-12)
-    )
-      throw new Error('Controller speed does not match its unit provenance');
-    numeric.controllerSpeedMps = speed;
+    if (!identity) throw new Error('Controller speed requires unit provenance');
+    numeric.controllerSpeedMps = finiteNumber(value.controllerSpeedMps, 'controllerSpeedMps');
+  }
+  if (identity) {
+    const metrics = Object.entries(numeric)
+      .filter(([key]) => key !== 'elapsedSeconds' && key !== 'sequence' && key !== 'interruptionIndex')
+      .map(([key, number]) => new StoredMetric(key, number));
+    try {
+      controllerRestoreReading(metrics, identity);
+    } catch {
+      throw new Error('Invalid retained controller readings');
+    }
   }
   if (
     value.connectionEpoch !== undefined &&

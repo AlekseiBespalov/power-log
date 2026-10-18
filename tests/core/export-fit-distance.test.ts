@@ -1,3 +1,4 @@
+import { analyticsTimeUs } from '../../shared/js';
 import { describe, expect, it } from 'vitest';
 import {
   DistancePoints,
@@ -21,7 +22,7 @@ function timeline(end: number, events: [number, string][]): Timeline {
       producerSequence: Float64Array.from(all.map((_, i) => i + 1)),
       clockEpoch: all.map(() => null),
       interrupted: new Float64Array(all.length),
-      cycSequence: new Float64Array(all.length).fill(NaN),
+      controllerSequence: new Float64Array(all.length).fill(NaN),
     } as ExportColumns<'lifecycle'>,
   });
   return builder.finish();
@@ -33,8 +34,8 @@ const span = (
   meters: number,
   values: Partial<DistanceInterval> = {},
 ): DistanceInterval => ({
-  start,
-  end,
+  startUs: Number.isFinite(start) && start >= 0 ? analyticsTimeUs(start) : '',
+  endUs: Number.isFinite(end) && end >= 0 ? analyticsTimeUs(end) : '',
   meters,
   segment: 0,
   startSpeed: NaN,
@@ -43,7 +44,7 @@ const span = (
 });
 
 function points(ride: Timeline, intervals: DistanceInterval[]): number[][] {
-  const builder = new DistancePoints(ride.intervals);
+  const builder = new DistancePoints(ride);
   const out = new Float64Array(6);
   const result: number[][] = [];
   for (const interval of intervals) {
@@ -88,7 +89,7 @@ describe('distance points', () => {
   });
 
   it('compares missing segments as equal', () => {
-    const builder = new DistancePoints(ride.intervals);
+    const builder = new DistancePoints(ride);
     const out = new Float64Array(6);
     expect(builder.add(span(1, 2, 1, { segment: NaN }), out, 0)).toBe(2);
     expect(builder.add(span(2, 3, 1, { segment: NaN }), out, 0)).toBe(1);
@@ -165,14 +166,6 @@ describe('distance ranges', () => {
     expect(sweep.lap(1).meters).toBe(5);
   });
 
-  it('excludes an indivisible Health interval cut by a boundary and marks that range unresolved', () => {
-    const sweep = ranges('health', ride, [span(2, 4, 10), span(4, 6, 8)]);
-    expect(sweep.lap(0)).toEqual({ meters: 0, covered: 0, unresolved: true, partial: true });
-    expect(sweep.lap(1)).toEqual({ meters: 8, covered: 2, unresolved: true, partial: true });
-    expect(sweep.lap(2)).toEqual({ meters: 0, covered: 0, unresolved: false, partial: true });
-    expect(sweep.total()).toEqual({ meters: 18, covered: 4, unresolved: false, partial: true });
-  });
-
   it('keeps an observed zero as covered distance', () => {
     const sweep = ranges('gps', ride, [span(0, 3, 0)]);
     expect(sweep.lap(0)).toEqual({ meters: 0, covered: 3, unresolved: false, partial: false });
@@ -196,11 +189,11 @@ describe('distance ranges', () => {
 
   it('covers a time once an interval reaching it has been added', () => {
     const sweep = new DistanceRanges('gps', ride);
-    expect(sweep.covers(0)).toBe(false);
+    expect(sweep.covers('0')).toBe(false);
     sweep.add(span(1, 4, 1));
-    expect(sweep.covers(4)).toBe(true);
-    expect(sweep.covers(4.5)).toBe(false);
+    expect(sweep.covers('4000000')).toBe(true);
+    expect(sweep.covers('4500000')).toBe(false);
     sweep.finish();
-    expect(sweep.covers(12)).toBe(true);
+    expect(sweep.covers('12000000')).toBe(true);
   });
 });

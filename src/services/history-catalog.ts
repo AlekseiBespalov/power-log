@@ -6,7 +6,9 @@ import {
   type CatalogPage,
   type CatalogRequest,
 } from '../core/catalog';
+import { presentFailure } from '../core/failures';
 import { ReadCancelled, readConsumer, readPressure, reads } from './read-scheduler';
+import { RetryBackoff } from './retry-backoff';
 
 export type CatalogLoader<T extends CatalogEntry> = (request: CatalogRequest) => Promise<CatalogPage<T>>;
 export type HistoryCatalogState<T> = {
@@ -23,6 +25,7 @@ export class HistoryCatalog<T extends CatalogEntry> {
   private generation = 0;
   private readonly consumer = readConsumer('catalog');
   private retryTimer?: ReturnType<typeof setTimeout>;
+  private backoff = new RetryBackoff();
   private cursor?: CatalogCursor;
   private state: HistoryCatalogState<T> = {
     records: [],
@@ -49,6 +52,7 @@ export class HistoryCatalog<T extends CatalogEntry> {
     };
   }
   invalidate() {
+    this.backoff.reset();
     this.generation++;
     reads.cancel(this.consumer);
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -68,6 +72,7 @@ export class HistoryCatalog<T extends CatalogEntry> {
     } else if (this.dirty) void this.refresh().catch(() => {});
   };
   refresh = async () => {
+    this.backoff.reset();
     this.dirty = true;
     if (this.active) await this.load(true);
   };
@@ -94,6 +99,7 @@ export class HistoryCatalog<T extends CatalogEntry> {
         ? page
         : [...new Map([...this.state.records, ...page].map(record => [record.id, record])).values()].sort(catalogOrder);
       this.dirty = false;
+      this.backoff.reset();
       this.emit({
         records,
         initialized: true,
@@ -109,10 +115,10 @@ export class HistoryCatalog<T extends CatalogEntry> {
         this.retryTimer = setTimeout(() => {
           this.retryTimer = undefined;
           if (generation === this.generation) void this.load(reset).catch(() => {});
-        }, 1000);
+        }, this.backoff.next());
         return;
       }
-      this.emit({ error: cause instanceof Error ? cause.message : String(cause), loading: false });
+      this.emit({ error: presentFailure(cause).text, loading: false });
       throw cause;
     }
   }

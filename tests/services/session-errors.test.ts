@@ -6,6 +6,12 @@ import {
   type SessionErrorAction,
 } from '../../src/services/session-errors';
 import { telemetryDisplay } from '../../src/core/telemetry-display';
+import { presentationFailure } from '../../shared/js';
+import failures from '../fixtures/contract/presentation/failures.json';
+import { RideFailureError } from '../../src/core/failures';
+
+const coded = (code: string, message: string) => Object.assign(new Error(message), { code });
+const bikeUnavailable = presentationFailure('bikeUnavailable').text;
 
 function replay(...actions: SessionErrorAction[]) {
   return actions.reduce(sessionErrorReducer, initialSessionErrors);
@@ -33,9 +39,9 @@ describe('session error lifecycle', () => {
   it('keeps action failures visible even during a quiet reconnect', () => {
     const errors = replay(
       { type: 'native', error: 'Bike disconnected. Reconnecting…' },
-      { type: 'operation', error: 'Could not export FIT' },
+      { type: 'operation', error: new RideFailureError('bikeUnavailable') },
     );
-    expect(sessionErrorMessage(errors, { deferNative: true })).toBe('Could not export FIT');
+    expect(sessionErrorMessage(errors, { deferNative: true })).toBe(bikeUnavailable);
   });
 
   it('clears a disconnect banner when the native connection recovers', () => {
@@ -67,16 +73,19 @@ describe('session error lifecycle', () => {
   it('preserves an export failure through reconnect and subsequent native snapshots', () => {
     const state = replay(
       { type: 'native', error: 'Link lost' },
-      { type: 'operation', error: 'Could not export FIT' },
+      { type: 'operation', error: new RideFailureError('storageFull') },
       { type: 'native', error: undefined },
       { type: 'native', error: 'Cannot open recordings' },
     );
-    expect(sessionErrorMessage(state)).toBe('Could not export FIT');
+    expect(sessionErrorMessage(state)).toBe(presentationFailure('storageFull').text);
     expect(state.native).toBe('Cannot open recordings');
   });
 
   it('starting another operation does not hide an ongoing native error or undo dismissal', () => {
-    const native = replay({ type: 'native', error: 'Reconnecting' }, { type: 'operation', error: 'Export failed' });
+    const native = replay(
+      { type: 'native', error: 'Reconnecting' },
+      { type: 'operation', error: new RideFailureError('bikeUnavailable') },
+    );
     expect(sessionErrorMessage(sessionErrorReducer(native, { type: 'operation', error: null }))).toBe('Reconnecting');
     const dismissed = sessionErrorReducer(native, { type: 'dismiss' });
     expect(sessionErrorMessage(sessionErrorReducer(dismissed, { type: 'operation', error: null }))).toBeNull();
@@ -85,13 +94,28 @@ describe('session error lifecycle', () => {
   it('dismisses both current channels but permits the next operation failure', () => {
     const state = replay(
       { type: 'native', error: 'Link lost' },
-      { type: 'operation', error: 'Connection failed' },
+      { type: 'operation', error: new RideFailureError('bikeUnavailable') },
       { type: 'dismiss' },
       { type: 'native', error: 'Link lost' },
     );
     expect(sessionErrorMessage(state)).toBeNull();
-    expect(sessionErrorMessage(sessionErrorReducer(state, { type: 'operation', error: 'Connection failed' }))).toBe(
-      'Connection failed',
-    );
+    expect(
+      sessionErrorMessage(
+        sessionErrorReducer(state, { type: 'operation', error: new RideFailureError('bikeUnavailable') }),
+      ),
+    ).toBe(bikeUnavailable);
+  });
+
+  it.each([
+    coded('bikeUnavailable', 'UnexpectedException: … (at ExpoModulesCore/Promise.swift:56)'),
+    coded(
+      'E_BLUETOOTH',
+      'BridgeException: Invalid retained owner timing (at PowerLogBridge/PowerLogBridgeModule.swift:11)',
+    ),
+    new Error('java.lang.IllegalStateException: Check failed.'),
+  ])('shows a failed bike operation only as shared plain text: %s', error => {
+    const shown = sessionErrorMessage(replay({ type: 'operation', error }));
+    expect(shown).toBe(presentationFailure(error instanceof Error && 'code' in error ? String(error.code) : null).text);
+    for (const forbidden of failures.forbidden) expect(shown).not.toContain(forbidden);
   });
 });

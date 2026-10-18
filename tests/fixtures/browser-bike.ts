@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
-import { crc16Xmodem, UART_WRITE } from '../../src/core/protocol';
+import { UART_WRITE } from '../../src/services/controller-gatt';
+import { framePayload } from '../support/controller-frames';
 import fixture from './protocol.json';
 
 declare global {
@@ -9,8 +10,7 @@ declare global {
 }
 
 export async function syntheticBike(page: Page) {
-  const payload = Uint8Array.from(Buffer.from(fixture.identity.payloadHex, 'hex')),
-    crc = crc16Xmodem(payload);
+  const identity = framePayload(Uint8Array.from(Buffer.from(fixture.identity.payloadHex, 'hex')));
   await page.addInitScript(
     ({ identity, telemetry, writerID }) => {
       class Characteristic extends EventTarget {
@@ -45,7 +45,7 @@ export async function syntheticBike(page: Page) {
           },
           disconnect() {
             this.connected = false;
-            device.dispatchEvent(new Event('gattserverdisconnected'));
+            void Promise.resolve().then(() => device.dispatchEvent(new Event('gattserverdisconnected')));
           },
         },
       });
@@ -61,7 +61,7 @@ export async function syntheticBike(page: Page) {
       });
     },
     {
-      identity: [2, payload.length, ...payload, crc >> 8, crc & 255, 3],
+      identity: [...identity],
       telemetry: [...Buffer.from(fixture.telemetry[3]!.frameHex!, 'hex')],
       writerID: UART_WRITE,
     },

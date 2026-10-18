@@ -9,7 +9,7 @@ for index in 0..<137 {
   let id = String(format: "00000000-0000-4000-8000-%012x", index)
   expected.append(id)
   _ = try archive.create(
-    id: id, startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false)
+    id: id, startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 4)
 }
 expected.sort(by: >)
 let first = try archive.list(limit: 51)
@@ -17,7 +17,7 @@ precondition(first.map(\.id) == Array(expected.prefix(51)), "first page uses des
 let newest = "ffffffff-ffff-4fff-8fff-ffffffffffff"
 _ = try archive.create(
   id: newest, startedAt: start.addingTimeInterval(1), indoor: true, watchEnabled: false, saveToHealth: false,
-  recordGPS: false)
+  recordGPS: false, sampleHz: 4)
 var seen = first.map(\.id)
 var previous = first.last!
 while true {

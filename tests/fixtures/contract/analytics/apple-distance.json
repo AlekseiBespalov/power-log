@@ -1,0 +1,253 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "id": "controller-quantize-after-integrating-and-direct-clip",
+      "source": "controller",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 0
+        },
+        {
+          "time": 0.250002,
+          "speed": 3.7500024
+        }
+      ],
+      "ranges": [
+        {
+          "start": 0,
+          "end": 0.125001,
+          "distanceQ": "117189",
+          "coveredUs": "125001"
+        }
+      ],
+      "preserveEndpointSpeeds": true
+    },
+    {
+      "id": "gps-equal-time-epoch-reanchor",
+      "source": "phone",
+      "samples": [
+        {
+          "time": 0,
+          "longitude": 0,
+          "epoch": "old"
+        },
+        {
+          "time": 1,
+          "longitude": 1e-5,
+          "epoch": "old"
+        },
+        {
+          "time": 1,
+          "longitude": 2e-5,
+          "epoch": "new"
+        },
+        {
+          "time": 2,
+          "longitude": 3e-5,
+          "epoch": "new"
+        }
+      ],
+      "distanceQ": "2223902",
+      "coveredUs": "2000000"
+    },
+    {
+      "id": "controller-equal-time-continuity-reanchor",
+      "source": "controller",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 3,
+          "epoch": "old"
+        },
+        {
+          "time": 1,
+          "speed": 3,
+          "epoch": "old"
+        },
+        {
+          "time": 1,
+          "speed": 3,
+          "epoch": "new"
+        },
+        {
+          "time": 2,
+          "speed": 3,
+          "epoch": "new"
+        }
+      ],
+      "distanceQ": "6000000",
+      "coveredUs": "2000000"
+    },
+    {
+      "id": "gps-altitude-anchor-through-checkpoints-and-gap",
+      "source": "phone",
+      "samples": [
+        {
+          "time": 0,
+          "longitude": 0,
+          "altitude": 100,
+          "verticalAccuracy": 2
+        },
+        {
+          "time": 1,
+          "longitude": 1e-5,
+          "altitude": 102,
+          "verticalAccuracy": 2
+        },
+        {
+          "time": 2,
+          "longitude": 2e-5,
+          "altitude": 105,
+          "verticalAccuracy": 2
+        },
+        {
+          "time": 13,
+          "longitude": 3e-5,
+          "altitude": 110,
+          "verticalAccuracy": 2
+        },
+        {
+          "time": 14,
+          "longitude": 4e-5,
+          "altitude": 106,
+          "verticalAccuracy": 2
+        }
+      ],
+      "distanceQ": "3335853",
+      "coveredUs": "3000000",
+      "ascent": 5,
+      "descent": 4
+    },
+    {
+      "id": "gps-altitude-invalid-quality-clears-anchor",
+      "source": "phone",
+      "samples": [
+        {
+          "time": 0,
+          "longitude": 0,
+          "altitude": 100,
+          "verticalAccuracy": 0
+        },
+        {
+          "time": 1,
+          "longitude": 1e-5,
+          "altitude": 104,
+          "verticalAccuracy": 0
+        },
+        {
+          "time": 2,
+          "longitude": 2e-5,
+          "altitude": 130,
+          "verticalAccuracy": 21
+        },
+        {
+          "time": 3,
+          "longitude": 3e-5,
+          "altitude": 150,
+          "verticalAccuracy": 2
+        },
+        {
+          "time": 4,
+          "longitude": 4e-5,
+          "altitude": 160,
+          "verticalAccuracy": 2
+        },
+        {
+          "time": 5,
+          "longitude": 5e-5,
+          "altitude": 165,
+          "verticalAccuracy": 2
+        }
+      ],
+      "distanceQ": "5559755",
+      "coveredUs": "5000000",
+      "ascent": 9,
+      "descent": 0
+    },
+    {
+      "id": "controller-exact-counter-checkpoint",
+      "source": "controller",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 3,
+          "counter": "9007199254740993"
+        },
+        {
+          "time": 1,
+          "speed": 3,
+          "counter": "9007199254740992"
+        },
+        {
+          "time": 2,
+          "speed": 3,
+          "counter": "9007199254740994"
+        }
+      ],
+      "distanceQ": "3000000",
+      "coveredUs": "1000000"
+    },
+    {
+      "id": "controller-normalized-equal-time-orders-producer-sequence",
+      "source": "controller",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 3,
+          "epoch": "old"
+        },
+        {
+          "time": 1.0000009,
+          "speed": 3,
+          "epoch": "old"
+        },
+        {
+          "time": 1.0000001,
+          "speed": 3,
+          "epoch": "new"
+        },
+        {
+          "time": 2,
+          "speed": 3,
+          "epoch": "new"
+        }
+      ],
+      "distanceQ": "6000000",
+      "coveredUs": "2000000"
+    },
+    {
+      "id": "controller-query-brackets-use-normalized-time",
+      "source": "controller",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 3
+        },
+        {
+          "time": 0.5,
+          "speed": 3
+        },
+        {
+          "time": 1.0000013,
+          "speed": 3
+        },
+        {
+          "time": 2,
+          "speed": 3
+        }
+      ],
+      "distanceQ": "6000000",
+      "coveredUs": "2000000",
+      "ranges": [
+        {
+          "start": 0,
+          "end": 1.000001,
+          "distanceQ": "3000000",
+          "coveredUs": "1000000"
+        }
+      ]
+    }
+  ]
+}

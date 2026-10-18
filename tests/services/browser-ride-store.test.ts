@@ -1,8 +1,28 @@
+import { InspectionPlotBucket, InspectionPlotQuery, InspectionPlotCache } from '../../shared/js';
+import { browserInspectionItem } from '../../src/services/browser-analytics';
 import { describe, expect, it } from 'vitest';
-import { metadataOf, normalize, rowAggregate, rowPoint, mergeAggregate } from '../../src/services/browser-ride-store';
+import { workoutExportReady } from '../../src/core/workouts';
+import { metadataOf, normalize, rowPoint } from '../../src/services/browser-ride-store';
 import { browserRide, browserRow } from '../support/browser-ride';
 
 describe('required browser ride metadata', () => {
+  it('drops removed metric names while retaining strict structural validation', () => {
+    const record = browserRide();
+    expect(normalize({ ...record, availableMetrics: ['humanPowerW', 'removedMetric'] }).availableMetrics).toEqual([
+      'humanPowerW',
+    ]);
+    expect(() => normalize({ ...record, availableMetrics: ['humanPowerW', 42] })).toThrow();
+  });
+  it('exports a completed browser ride sealed at its final revision and nothing earlier', () => {
+    const active = browserRide({ elapsedSeconds: 75, timerSeconds: 60 });
+    expect(workoutExportReady(metadataOf(active))).toBe(false);
+    expect(
+      workoutExportReady(
+        metadataOf({ ...active, phase: 'completed', endedAt: '2026-01-01T01:00:00Z', writer: undefined }),
+      ),
+    ).toBe(true);
+    expect(workoutExportReady(metadataOf({ ...active, phase: 'interrupted', writer: undefined }))).toBe(false);
+  });
   it.each(['2025-12-31T23:00:00Z', '2026-01-01T01:00:00Z'])(
     'retains measured catalog elapsed with cutoff %s',
     endedAt => {
@@ -14,33 +34,27 @@ describe('required browser ride metadata', () => {
       ).toBe(75);
     },
   );
-  it('retains hard-boundary markers and integration evidence in persisted aggregates', () => {
+  it('retains hard-boundary markers and original geometry in persisted aggregates', () => {
     const a = { ...browserRow(1, 0), recordingId: 'interrupted' },
       b = { ...browserRow(2, 1), recordingId: 'interrupted', interruptionIndex: 1 };
-    expect(rowPoint(b, 'humanPowerW', a)).toMatchObject({ startsSegment: true });
-    const aggregate = structuredClone(
-      mergeAggregate(rowAggregate(a, 'humanPowerW'), rowAggregate(b, 'humanPowerW')!, 'humanPowerW'),
-    );
-    expect(aggregate).toMatchObject({
-      covered: 0,
-      integral: 0,
-      firstInterruptionIndex: 0,
-      lastInterruptionIndex: 1,
-      firstConnectionEpoch: a.connectionEpoch,
-      lastConnectionEpoch: b.connectionEpoch,
-    });
-    expect(aggregate.runs).toHaveLength(2);
-    expect(aggregate.runs[1]!.first.startsSegment).toBe(true);
-    const c = { ...b, elapsedSeconds: 3, sequence: 2 };
-    const extended = mergeAggregate(aggregate, rowAggregate(c, 'humanPowerW')!, 'humanPowerW');
-    expect(extended.covered).toBe(1);
-    expect(extended.runs).toHaveLength(2);
-    expect(extended.runs[1]!.first.startsSegment).toBe(true);
+    expect(rowPoint(b, 'humanPowerW')).toMatchObject({ elapsedSeconds: 2, timestamp: b.timestamp });
+    const bucket = new InspectionPlotBucket('humanPowerW', '0', '16000000');
+    [a, b].map(browserInspectionItem).forEach(item => bucket.append(item, true));
+    const aggregate = structuredClone({ plot: bucket.aggregate().payload });
+    const query = new InspectionPlotQuery('humanPowerW', '0', '16000000', 1, 16384);
+    query.merge(new InspectionPlotCache(aggregate.plot));
+    expect(query.result().map(point => point.segment)).toEqual([0, 1]);
+    expect(query.result().map(point => point.original.timestamp)).toEqual([a.timestamp, b.timestamp]);
   });
   it.each([
     'id',
     'startedAt',
-    'samples',
+    'telemetryCount',
+    'locationCount',
+    'lifecycleCount',
+    'originalMembershipCount',
+    'recordGPS',
+    'sampleHz',
     'interrupted',
     'phase',
     'indoor',
@@ -58,17 +72,19 @@ describe('required browser ride metadata', () => {
   it.each([
     { id: '../private' },
     { id: '' },
+    { id: 'not-a-uuid' },
+    { id: 'ABCDEF00-0000-0000-0000-000000000001' },
     { startedAt: '2026-02-30T00:00:00Z' },
     { checkpointAt: 'yesterday' },
-    { samples: -1 },
-    { samples: 1.5 },
+    { telemetryCount: -1 },
+    { telemetryCount: 1.5 },
     { revision: 0 },
     { lapCount: NaN },
     { elapsedSeconds: Infinity },
     { timerSeconds: 1 },
     { indoor: 'false' },
     { interrupted: 1 },
-    { availableMetrics: ['bogus'] },
+    { availableMetrics: [42] },
   ])('rejects malformed fields: %j', patch => {
     expect(() => normalize({ ...browserRide(), ...patch })).toThrow();
   });
@@ -76,9 +92,25 @@ describe('required browser ride metadata', () => {
     expect(() => normalize(browserRide({ writer: undefined }))).toThrow('owner');
     const saved = browserRide({ phase: 'completed', writer: undefined, endedAt: '2026-01-01T00:00:00Z' });
     expect(normalize(saved)).toEqual(saved);
-    expect(metadataOf(saved)).toMatchObject({ phase: 'completed', finalizationState: 'complete', storage: 'browser' });
+    expect(metadataOf(saved)).toMatchObject({ phase: 'completed', storage: 'browser' });
     expect(() => normalize({ ...saved, writer: 'owner' })).toThrow('completed');
     expect(() => normalize({ ...saved, endedAt: undefined })).toThrow('completed');
     expect(() => normalize(browserRide({ endedAt: saved.endedAt }))).toThrow('owner');
+  });
+});
+
+it.each([undefined, null, 3, NaN, '8'])('refuses an unadmitted frozen rate %s', sampleHz => {
+  expect(() => normalize({ ...browserRide(), sampleHz })).toThrow('sampleHz');
+});
+it('projects every original membership and frozen GPS/rate options', () => {
+  const ride = browserRide({ telemetryCount: 2, locationCount: 1, lifecycleCount: 3, sampleHz: 8, recordGPS: true });
+  expect(metadataOf(ride)).toMatchObject({ eventCount: '6', collectionRevision: '1', sampleHz: 8, recordGPS: true });
+});
+
+it('retains the largest revision and declares local-only Health results', () => {
+  const ride = browserRide({ revision: '9007199254740991' });
+  expect(metadataOf(ride)).toMatchObject({
+    collectionRevision: '9007199254740991',
+    healthKitState: 'notRequested',
   });
 });

@@ -1,0 +1,14 @@
+{
+  "fixture": "F01",
+  "reuse": "../../../protocol.json",
+  "unsupportedMasks": ["00405108", "00405109"],
+  "rejectedPayloadHex": ["", "04", "320040510800000000", "6f050358393920323032353037323500"],
+  "malformedFrameHex": ["020004408403", "03000104408403", "030401", "020104408404"],
+  "noiseHex": "ffff0042",
+  "payloadSizes": [0, 1, 53, 54, 55, 1025],
+  "maximumFragmentedFrame": {
+    "payloadSize": 1024,
+    "fillByte": 42,
+    "splitAt": 1029
+  }
+}

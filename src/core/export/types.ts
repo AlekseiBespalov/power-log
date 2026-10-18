@@ -1,13 +1,15 @@
+import type { ExportNumericKey, ExportStringKey } from '../../../shared/js';
+import type { BatteryConsumptionSource } from '../consumption';
 import type { DistanceSource } from '../distance';
-import type { PROJECTIONS } from './catalog';
 
 export type ExportPlatform = 'ios' | 'android' | 'web';
 export type ExportKind = 'fit' | 'zip';
+export type FitPowerSource = 'rider' | 'battery';
 export type ExportFileKind = ExportKind | 'csv';
 export type ExportConsumer = 'zip' | 'fit' | 'discovery';
 export type Producer = 'phone' | 'watch';
 export type ProducerSet = [] | ['phone'] | ['watch'] | ['phone', 'watch'];
-export type ExportVendor = 'cyc';
+export type ExportVendor = 'controller';
 
 export interface ExportContext {
   exportedAt: string;
@@ -50,6 +52,7 @@ export interface ExportHealthOutcome {
 }
 
 export interface ExportRideMetadata {
+  batteryConsumptionSource: BatteryConsumptionSource;
   startedAt: string;
   endedAt: string;
   ownerTiming: ExportOwnerTiming | null;
@@ -64,8 +67,6 @@ export interface ExportRideMetadata {
     workoutUUID: string | null;
     export: ExportHealthOutcome | null;
   };
-  watchSyncState: 'pending' | 'received' | 'notRequired';
-  finalizationState: 'complete' | 'partial';
   example: boolean;
   sampleHz: 2 | 4 | 8 | null;
 }
@@ -73,9 +74,7 @@ export interface ExportRideMetadata {
 export type ExportDistanceProfile =
   | { source: 'controller'; kind: 'controller' }
   | { source: 'gps:phone'; kind: 'gps'; producer: 'phone' }
-  | { source: 'gps:watch'; kind: 'gps'; producer: 'watch' }
-  | { source: 'health:phone'; kind: 'health'; producer?: 'phone' }
-  | { source: 'health:watch'; kind: 'health'; producer?: 'watch' };
+  | { source: 'gps:watch'; kind: 'gps'; producer: 'watch' };
 
 export interface ExportOpenRequest {
   rideId: string;
@@ -107,10 +106,17 @@ export interface ProjectionDefinition {
   columns: readonly ProjectionColumn[];
 }
 
-type ColumnOf<P extends ProjectionName> = (typeof PROJECTIONS)[P]['columns'][number];
-export type ProjectionColumnName<P extends ProjectionName> = ColumnOf<P>['name'];
-export type NumericColumnName<P extends ProjectionName> = Extract<ColumnOf<P>, { type: 'number' }>['name'];
-export type StringColumnName<P extends ProjectionName> = Extract<ColumnOf<P>, { type: 'string' }>['name'];
+type CoreEnumKeys<E, V> = { [K in Exclude<keyof E, 'prototype'>]: E[K] extends V ? K : never }[Exclude<
+  keyof E,
+  'prototype'
+>];
+export type NumericColumnName<P extends ProjectionName> = P extends ProjectionName
+  ? CoreEnumKeys<typeof ExportNumericKey, ExportNumericKey>
+  : never;
+export type StringColumnName<P extends ProjectionName> = P extends ProjectionName
+  ? CoreEnumKeys<typeof ExportStringKey, ExportStringKey>
+  : never;
+export type ProjectionColumnName<P extends ProjectionName> = NumericColumnName<P> | StringColumnName<P>;
 
 export type ExportCursor = number[];
 
@@ -196,9 +202,7 @@ export interface TableDefinition<P extends ProjectionName = ProjectionName> {
   fields: readonly TableField<P>[];
 }
 
-export type AnyTableDefinition = { [P in ProjectionName]: TableDefinition<P> }[ProjectionName];
-
-export type HealthKind = 'sample' | 'aggregate' | 'latest' | 'cumulative' | 'final';
+export type HealthKind = 'sample' | 'aggregate' | 'latest' | 'cumulative' | 'final' | 'intervalRecord';
 
 export interface HealthMetricDefinition {
   metric: string;

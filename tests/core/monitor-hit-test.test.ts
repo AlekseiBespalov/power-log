@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { admitMonitorHitScene, hitMonitorScene, monitorHitScene } from '../../src/core/monitor-hit-test';
+import {
+  admitMonitorHitScene,
+  hitMonitorScene,
+  monitorHitScene,
+  monitorHitTargets,
+} from '../../src/core/monitor-hit-test';
 import { groupMonitorMetrics } from '../../src/core/monitor-chart';
 import type { MonitorData, MonitorPoint } from '../../src/core/monitor';
 const point = (seconds: number, value: number, id = String(value)): MonitorPoint => ({
@@ -22,6 +27,51 @@ const data = (points: MonitorPoint[]): MonitorData => ({
 const scene = (points: MonitorPoint[], key = 'accepted:1') =>
   monitorHitScene(data(points), group, { min: 0, max: 100, decimals: 0 }, 134, key);
 describe('original vertex acquisition', () => {
+  it('moves every metric and every chart at the shared cursor while preserving a touched original peak', () => {
+    const input = data([point(10, 0), point(20, 0), point(30, 0)]);
+    input.series.motorInputPowerW = [point(10, 100), point(20, 200), point(20, 900), point(30, 300)];
+    const power = monitorHitScene(
+      input,
+      groupMonitorMetrics(['humanPowerW', 'motorInputPowerW'])[0]!,
+      { min: 0, max: 1000, decimals: 0 },
+      134,
+      'power',
+    );
+    const snap = hitMonitorScene(power, { start: 0, end: 40 }, 400, 208, 18, null)!;
+    expect(snap.point.value).toBe(900);
+    expect(monitorHitTargets(power, 20, snap).map(point => [point.id, point.seconds, point.value])).toEqual([
+      ['humanPowerW', 20, 0],
+      ['motorInputPowerW', 20, 900],
+    ]);
+    expect(monitorHitTargets(power, 29, snap).map(point => point.seconds)).toEqual([30, 30]);
+    const other = scene([point(10, 10), point(20, 20), point(30, 30)], 'another-chart');
+    expect(monitorHitTargets(other, 29, snap).map(point => [point.seconds, point.value])).toEqual([[30, 30]]);
+  });
+  it('clears only the missing metric across a gap and never extends an endpoint or a cleared cursor', () => {
+    const input = data([point(10, 0), { ...point(30, 0), startsSegment: true }]);
+    input.series.motorInputPowerW = [point(10, 100), point(20, 200), point(30, 300)];
+    const hits = monitorHitScene(
+      input,
+      groupMonitorMetrics(['humanPowerW', 'motorInputPowerW'])[0]!,
+      { min: 0, max: 1000, decimals: 0 },
+      134,
+      'power',
+    );
+    expect(monitorHitTargets(hits, 20, null).map(point => point.id)).toEqual(['motorInputPowerW']);
+    expect(monitorHitTargets(hits, 31, null)).toEqual([]);
+    expect(monitorHitTargets(hits, null, null)).toEqual([]);
+  });
+  it('inspects by time away from a line but never jumps across a segment gap or beyond its samples', () => {
+    const points = [point(10, 70), point(20, 75), { ...point(30, 80), startsSegment: true }, point(40, 85)];
+    const hits = scene(points);
+    const view = { start: 0, end: 50 };
+    const at = (seconds: number) => hitMonitorScene(hits, view, 300, 8 + seconds * 6, 130, null);
+    expect(at(16)?.point).toBe(points[1]);
+    expect(at(36)?.point).toBe(points[3]);
+    expect(at(25)).toBeNull();
+    expect(at(5)).toBeNull();
+    expect(at(45)).toBeNull();
+  });
   it('cannot snap to a clipped predecessor exposed only by preview pan before a new bitmap arrives', () => {
     const input = data([point(99, 90), point(110, 30), point(190, 40), point(201, 95)]);
     input.plotViewport = { start: 100, end: 200 };

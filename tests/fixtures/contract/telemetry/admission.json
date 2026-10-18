@@ -1,0 +1,135 @@
+{
+  "fixture": "F03",
+  "rideA": "10000000-0000-4000-8000-000000000001",
+  "rideB": "10000000-0000-4000-8000-000000000002",
+  "session": "20000000-0000-4000-8000-000000000001",
+  "epoch": "30000000-0000-4000-8000-000000000001",
+  "connection": "40000000-0000-4000-8000-000000000001",
+  "cases": [
+    {
+      "id": 1,
+      "sequence": "5",
+      "acquiredAt": 100,
+      "deliveredAt": 100,
+      "expected": "admitted",
+      "age": 0
+    },
+    {
+      "id": 1,
+      "sequence": "5",
+      "acquiredAt": 100,
+      "deliveredAt": 110,
+      "expected": "replay",
+      "age": 10
+    },
+    {
+      "id": 2,
+      "sequence": "4",
+      "acquiredAt": 99,
+      "deliveredAt": 110,
+      "expected": "older",
+      "age": 10
+    },
+    {
+      "id": 3,
+      "sequence": "6",
+      "acquiredAt": 101,
+      "deliveredAt": 110,
+      "expected": "admitted",
+      "age": 9
+    },
+    {
+      "id": 3,
+      "sequence": "6",
+      "acquiredAt": 110,
+      "deliveredAt": 110,
+      "expected": "conflict",
+      "age": 9
+    },
+    {
+      "id": 4,
+      "sequence": "1",
+      "acquiredAt": 120,
+      "deliveredAt": 120,
+      "adopt": "rideB",
+      "expected": "admitted",
+      "age": 0
+    }
+  ],
+  "retainedOriginal": {
+    "rideId": "10000000-0000-4000-8000-000000000001",
+    "observationId": "50000000-0000-4000-8000-000000000001",
+    "captureSessionId": "20000000-0000-4000-8000-000000000001",
+    "clockEpoch": "30000000-0000-4000-8000-000000000001",
+    "connectionEpoch": "40000000-0000-4000-8000-000000000001",
+    "sequence": "9007199254740993",
+    "timestamp": "2026-01-01T00:00:00.000Z",
+    "acquisitionMonotonic": 100,
+    "sourceElapsedSeconds": 10,
+    "clockDiscontinuitySeconds": null,
+    "identity": {
+      "controllerModel": "X6",
+      "firmwareLabel": "20250725",
+      "controllerProtocol": "5.3"
+    },
+    "metrics": {
+      "controllerTempC": 24.9,
+      "motorTempC": 21.7,
+      "motorCurrentA": 0.0,
+      "batteryCurrentA": 0.0,
+      "motorRpm": 0,
+      "batteryVoltageV": 54.2,
+      "consumedAh": 0.0,
+      "consumedWh": 0.0,
+      "cadenceRpm": 14.1823,
+      "throttleVoltageV": 0.82,
+      "pedalTorqueNm": 0.85,
+      "faultCode": 0,
+      "humanPowerW": 1,
+      "speedRaw": 3.77,
+      "raceMode": 1,
+      "assistLevel": 0,
+      "motorInputPowerW": 0.0,
+      "controllerSpeedMps": 1.0472222222222223
+    }
+  },
+  "clockCases": [
+    {
+      "firstWall": 788918400.0000999,
+      "lastWall": 788918401.2502,
+      "previousMonotonic": 100,
+      "monotonic": 101,
+      "expected": 0.25010013580322266,
+      "firstUnixSeconds": 1767225600.0001,
+      "lastUnixSeconds": 1767225601.2502
+    },
+    {
+      "firstWall": 788918400.0000999,
+      "lastWall": 788918401.25,
+      "previousMonotonic": 100,
+      "monotonic": 101,
+      "expected": null,
+      "firstUnixSeconds": 1767225600.0001,
+      "lastUnixSeconds": 1767225601.25
+    },
+    {
+      "firstWall": 788918400.0000999,
+      "lastWall": 788918400.75,
+      "previousMonotonic": 100,
+      "monotonic": 101,
+      "expected": -0.25009989738464355,
+      "firstUnixSeconds": 1767225600.0001,
+      "lastUnixSeconds": 1767225600.75
+    },
+    {
+      "firstWall": 788918400.0000999,
+      "lastWall": 788918400.7502,
+      "previousMonotonic": 100,
+      "monotonic": 101,
+      "expected": null,
+      "firstUnixSeconds": 1767225600.0001,
+      "lastUnixSeconds": 1767225600.7502
+    }
+  ],
+  "clockProvenance": "Foundation Date(timeIntervalSince1970:) inputs; raw timeIntervalSinceReferenceDate and timeIntervalSince differences from the unchanged iPhone clock calculation."
+}

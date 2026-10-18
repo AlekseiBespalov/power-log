@@ -17,7 +17,7 @@ if (!preview && !prepare)
   ]) {
     if (!env[key]) throw new Error(`Set ${key} for a signed release, or use --preview for a separate test app.`);
   }
-run(process.execPath, ['node_modules/expo/bin/cli', 'prebuild', '--platform', 'android', '--no-install']);
+run(process.execPath, ['scripts/prebuild.mjs', '--platform', 'android', '--no-install']);
 if (!prepare) {
   const arch = process.argv.find(arg => arg.startsWith('--arch='))?.slice(7);
   if (arch && !/^(arm64-v8a|x86_64|armeabi-v7a)(,(arm64-v8a|x86_64|armeabi-v7a))*$/.test(arch))
@@ -25,10 +25,11 @@ if (!prepare) {
   run(
     process.platform === 'win32' ? 'gradlew.bat' : './gradlew',
     [
-      ':cyc-bridge:testReleaseUnitTest',
+      ':power-log-bridge:testDebugUnitTest',
       ':app:assembleRelease',
       '--console=plain',
       ...(arch ? [`-PreactNativeArchitectures=${arch}`] : []),
+      ...(env.POWER_LOG_GRADLE_OFFLINE === '1' ? ['--offline'] : []),
     ],
     join(root, 'android'),
   );

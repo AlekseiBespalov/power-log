@@ -24,10 +24,13 @@
       "workoutUUID": "0f1e2d3c-4b5a-4697-8a7b-6c5d4e3f2a1b",
       "export": null
     },
-    "watchSyncState": "received",
-    "finalizationState": "partial",
     "example": false,
-    "sampleHz": null
+    "sampleHz": null,
+    "batteryConsumptionSource": "controller"
+  },
+  "powerLog:batteryConsumption": {
+    "status": "unavailable",
+    "reason": "No controller telemetry."
   },
   "powerLog:sources": {
     "connections": [],
@@ -173,16 +176,71 @@
             "powerLog:unit": "m/s"
           },
           {
-            "name": "cyc.raceMode",
+            "name": "controller.raceMode",
             "type": "integer",
-            "description": "CYC race mode",
-            "powerLog:vendor": "cyc"
+            "description": "Controller race mode",
+            "powerLog:vendor": "controller"
           },
           {
-            "name": "cyc.speedRaw",
+            "name": "controller.speedRaw",
             "type": "number",
-            "description": "CYC speed field divided by 100; its unit depends on the controller profile",
-            "powerLog:vendor": "cyc"
+            "description": "Controller speed field divided by 100; its unit depends on the controller profile",
+            "powerLog:vendor": "controller"
+          }
+        ],
+        "missingValues": [
+          ""
+        ]
+      }
+    },
+    {
+      "name": "battery_consumption",
+      "type": "table",
+      "path": "battery-consumption.csv",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "lineTerminator": "\n"
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "datetime",
+            "description": "Original controller timestamp."
+          },
+          {
+            "name": "elapsedSeconds",
+            "type": "number",
+            "description": "Time on the ride timeline.",
+            "powerLog:unit": "s"
+          },
+          {
+            "name": "controllerEnergyWh",
+            "type": "number",
+            "description": "Energy used (controller). Ride consumption from changes in the controller energy counter, starting at zero.",
+            "powerLog:unit": "Wh"
+          },
+          {
+            "name": "controllerChargeAh",
+            "type": "number",
+            "description": "Charge used (controller). Ride consumption from changes in the controller charge counter, starting at zero.",
+            "powerLog:unit": "Ah"
+          },
+          {
+            "name": "calculatedEnergyWh",
+            "type": "number",
+            "description": "Energy used (calc). Calculated by Power Log by integrating positive battery voltage × current during this ride.",
+            "powerLog:unit": "Wh"
+          },
+          {
+            "name": "calculatedChargeAh",
+            "type": "number",
+            "description": "Charge used (calc). Calculated by Power Log by integrating positive battery current during this ride.",
+            "powerLog:unit": "Ah"
           }
         ],
         "missingValues": [
@@ -255,16 +313,21 @@
             "powerLog:unit": "m"
           },
           {
-            "name": "ellipsoidalAltitudeMeters",
+            "name": "originalAltitudeMeters",
             "type": "number",
-            "description": "Height above the WGS84 ellipsoid (Android)",
+            "description": "Original provider altitude in originalAltitudeDatum",
             "powerLog:unit": "m"
           },
           {
-            "name": "ellipsoidalVerticalAccuracyM",
+            "name": "originalVerticalAccuracyM",
             "type": "number",
-            "description": "Vertical accuracy of ellipsoidalAltitudeMeters (Android)",
+            "description": "Original provider vertical accuracy",
             "powerLog:unit": "m"
+          },
+          {
+            "name": "originalAltitudeDatum",
+            "type": "string",
+            "description": "Datum of the original altitude: msl, wgs84Ellipsoid or unknown"
           },
           {
             "name": "horizontalAccuracyM",
@@ -343,11 +406,6 @@
             "description": "Health producer: phone or watch"
           },
           {
-            "name": "sourceApp",
-            "type": "string",
-            "description": "Bundle identifier of the app that recorded the sample, when known"
-          },
-          {
             "name": "metric",
             "type": "string",
             "description": "Measured quantity"
@@ -365,7 +423,7 @@
           {
             "name": "kind",
             "type": "string",
-            "description": "sample, aggregate, latest, cumulative or final"
+            "description": "sample, aggregate, latest, cumulative, final, intervalRecord or retained provenance"
           },
           {
             "name": "sampleCount",
@@ -373,9 +431,59 @@
             "description": "Number of values condensed into an aggregate"
           },
           {
-            "name": "sampleId",
+            "name": "provider",
             "type": "string",
-            "description": "HealthKit sample UUID; series values carry their parent's"
+            "description": "Health provider"
+          },
+          {
+            "name": "parentId",
+            "type": "string",
+            "description": "Original provider parent identity"
+          },
+          {
+            "name": "memberIndex",
+            "type": "string",
+            "description": "Canonical provider member index"
+          },
+          {
+            "name": "dataOrigin",
+            "type": "string",
+            "description": "Actual recording package or bundle"
+          },
+          {
+            "name": "originalEventId",
+            "type": "string",
+            "description": "Stable original event identity"
+          },
+          {
+            "name": "originalEndTimestamp",
+            "type": "string",
+            "description": "Retained original interval end"
+          },
+          {
+            "name": "logicalKey",
+            "type": "string",
+            "description": "Full canonical provider member identity"
+          },
+          {
+            "name": "targetEventId",
+            "type": "string",
+            "description": "Correction or deletion target original"
+          },
+          {
+            "name": "originRevision",
+            "type": "string",
+            "description": "Retained native revision evidence"
+          },
+          {
+            "name": "valueBits",
+            "type": "string",
+            "description": "Original binary64 value bits"
+          },
+          {
+            "name": "evidence",
+            "type": "string",
+            "description": "Original provenance and association evidence"
           }
         ],
         "missingValues": [

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { syntheticBike } from '../fixtures/browser-bike';
 import type { BrowserRide, RideRow } from '../../src/services/browser-ride-store';
 
@@ -9,7 +10,19 @@ for (const outcome of ['cancel', 'timeout'] as const) {
       const device = Object.assign(new EventTarget(), {
         id: 'synthetic-stalled-bike',
         name: 'CYC test bike',
-        gatt: { connected: false, connect: () => new Promise(() => {}), disconnect: () => {} },
+        gatt: {
+          connected: false,
+          rejectConnect: undefined as undefined | ((reason: Error) => void),
+          connect() {
+            return new Promise((_resolve, reject) => {
+              this.rejectConnect = reject;
+            });
+          },
+          disconnect() {
+            this.rejectConnect?.(new Error('Connection cancelled'));
+            void Promise.resolve().then(() => device.dispatchEvent(new Event('gattserverdisconnected')));
+          },
+        },
       });
       Object.defineProperty(navigator, 'bluetooth', {
         configurable: true,
@@ -18,30 +31,34 @@ for (const outcome of ['cancel', 'timeout'] as const) {
     });
     await page.goto('/');
     await page.getByTestId('ride-setup').click();
-    await page.getByRole('button', { name: 'Find bike', exact: true }).click();
+    await page.getByTestId('ride-setup-sheet').getByTestId('setup-find-bike').click();
     const connect = page.getByRole('button', { name: /^Connect CYC test bike/ });
     await expect(connect).toBeEnabled();
     await page.clock.install();
     await connect.click();
-    await expect(page.getByTestId('bike-connection-status')).toHaveText('Connecting…');
-    const disconnect = page.getByRole('button', { name: 'Disconnect', exact: true });
-    await expect(disconnect).toBeEnabled();
-    if (outcome === 'cancel') await disconnect.click();
+    await expect(page.getByTestId('ride-setup-sheet').getByTestId('bike-connection-status')).toHaveText('Connecting…');
+    const cancel = page.getByRole('button', { name: 'Cancel connection', exact: true });
+    await expect(cancel).toBeEnabled();
+    if (outcome === 'cancel') await cancel.click();
     else {
-      await page.clock.runFor(15001);
+      await page.clock.runFor(20001);
       await expect(page.getByTestId('ride-setup-sheet').getByRole('alert')).toContainText(
         'Bluetooth connection timed out',
       );
-      await expect(page.getByTestId('bike-connection-status')).toHaveText('Reconnecting…');
-      await expect(disconnect).toBeEnabled();
-      await disconnect.click();
+      await expect(page.getByTestId('ride-setup-sheet').getByTestId('bike-connection-status')).toHaveText(
+        'Reconnecting…',
+      );
+      await expect(cancel).toBeEnabled();
+      await cancel.click();
     }
-    await expect(page.getByTestId('bike-connection-status')).toHaveText('Not connected');
+    await expect(page.getByTestId('ride-setup-sheet').getByTestId('bike-connection-status')).toHaveText(
+      'Not connected',
+    );
     await expect(connect).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'Find bike', exact: true })).toBeEnabled();
+    await expect(page.getByTestId('ride-setup-sheet').getByTestId('setup-find-bike')).toBeEnabled();
     await connect.click();
-    await expect(disconnect).toBeEnabled();
-    await disconnect.click();
+    await expect(cancel).toBeEnabled();
+    await cancel.click();
     await expect(connect).toBeEnabled();
     await expect(page.getByRole('alert')).toHaveCount(0);
   });
@@ -73,15 +90,20 @@ async function storedRide(page: Page): Promise<{ rides: BrowserRide[]; rows: Rid
 test('a ride survives short and long bike outages, keeping actual gaps and resuming its charts', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await syntheticBike(page);
+  const preferences = defaultMonitorPreferences();
+  preferences.workoutOptions.recordGPS = false;
+  await page.addInitScript(
+    preferences => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences)),
+    JSON.parse(monitorPreferencesJson(preferences)),
+  );
   await page.goto('/');
   await page.getByTestId('ride-setup').click();
-  await page.getByRole('button', { name: 'Find bike', exact: true }).click();
+  await page.getByTestId('ride-setup-sheet').getByTestId('setup-find-bike').click();
   await page.clock.install();
   await page.getByRole('button', { name: /^Connect CYC test bike/ }).click();
-  const status = page.getByTestId('bike-connection-status');
+  const status = page.getByTestId('ride-setup-sheet').getByTestId('bike-connection-status');
   await expect(status).toHaveText('Connected');
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByTestId('start-ride').filter({ visible: true }).click();
+  await page.getByTestId('ride-setup-sheet').getByTestId('setup-start-ride').click();
   await page.clock.runFor(2000);
   await expect.poll(async () => (await storedRide(page)).rows.length).toBeGreaterThan(1);
   await expect(page.getByTestId('monitor-chart-power').locator('path').first()).toHaveAttribute('d', /L/);
@@ -94,7 +116,6 @@ test('a ride survives short and long bike outages, keeping actual gaps and resum
   await page.clock.runFor(1500);
   await expect(status).toHaveText('Connected');
   await expect(page.getByRole('alert')).toHaveCount(0);
-  // The first retry failed; the next one succeeds within the six-second display hold.
   await page.evaluate(() => {
     window.testBike.available = true;
   });

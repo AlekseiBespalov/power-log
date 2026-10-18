@@ -1,10 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { syntheticBike } from '../fixtures/browser-bike';
 
 async function openExample(page: Page) {
   await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   const samples = Array.from({ length: 240 }, (_, index) =>
     syntheticSample(index, index, new Date(Date.UTC(2026, 8, 8) + index * 1000).toISOString()),
@@ -108,9 +111,16 @@ test('chart handles support repeated drag, keyboard reorder, per-view persistenc
 test('one persistent header stays fixed during navigation and scrolling at phone and desktop widths', async ({
   page,
 }) => {
+  await syntheticBike(page);
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
+    await page.getByTestId('ride-setup').click();
+    const setup = page.getByTestId('ride-setup-sheet');
+    await setup.getByRole('button', { name: 'Find bike', exact: true }).click();
+    await setup.getByRole('button', { name: /^Connect CYC/ }).click();
+    await expect(setup.getByTestId('bike-connection-status')).toContainText('Connected');
+    await setup.getByRole('button', { name: 'Done', exact: true }).click();
     const header = page.getByTestId('app-header');
     await expect(header).toHaveCount(1);
     await header.evaluate(element => {

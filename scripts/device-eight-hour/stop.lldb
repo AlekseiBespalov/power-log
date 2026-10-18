@@ -1,0 +1,3 @@
+expression -l Swift -- $drTimer.cancel()
+expression -l Swift -- WorkoutAnalysis.pageObserverForTesting = nil
+expression -l Swift -- WorkoutDistanceStore.inputPageObserverForTesting = nil

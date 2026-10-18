@@ -4,6 +4,7 @@ import { writeEvents } from './tables/events';
 import { writeGps } from './tables/gps';
 import { writeHealth } from './tables/health';
 import { writeTelemetry } from './tables/telemetry';
+import { writeConsumption } from './tables/consumption';
 import { TextChunks, type TableInput } from './tables/text';
 import { readTimeline } from './timeline';
 import {
@@ -77,11 +78,16 @@ export async function exportZip(
     const out = new TextChunks(zip);
     const input: TableInput = { source, session, reads, timeline, out };
     await entry(zip, out, 'telemetry.csv', () => writeTelemetry(input));
+    let consumption: Awaited<ReturnType<typeof writeConsumption>> | undefined;
+    await entry(zip, out, 'battery-consumption.csv', async () => {
+      consumption = await writeConsumption(input);
+    });
     await entry(zip, out, 'gps.csv', () => writeGps(input, producers.gps));
     await entry(zip, out, 'health.csv', () => writeHealth(input, producers.health));
     await entry(zip, out, 'events.csv', () => writeEvents(input));
     ensureRunning();
     const descriptor = descriptorJson({
+      consumption,
       rideId,
       created: context.exportedAt,
       metadata: opened.metadata,

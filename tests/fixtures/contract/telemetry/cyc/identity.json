@@ -1,0 +1,126 @@
+{
+  "fixture": "F02",
+  "reuse": "../../../protocol.json#identity",
+  "provenance": "Only generated model labels and opaque bytes; no physical serial or device identifier.",
+  "cases": [
+    {
+      "payloadHex": "6f0503583620323032353037323500",
+      "valid": true,
+      "model": "X6",
+      "firmware": "20250725",
+      "knownSpeed": true,
+      "speedRaw": 3.6,
+      "speedMps": 1
+    },
+    {
+      "payloadHex": "6f050358313220323032353037323500",
+      "valid": true,
+      "model": "X12",
+      "firmware": "20250725",
+      "knownSpeed": true,
+      "speedRaw": 3.6,
+      "speedMps": 1
+    },
+    {
+      "payloadHex": "6f050358365f73756666697820323032353037323500",
+      "valid": true,
+      "model": "X6_suffix",
+      "firmware": "20250725",
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f0909583620323032353037323500",
+      "valid": true,
+      "model": "X6",
+      "firmware": "20250725",
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f0503583620323032353037323520ffabdead00",
+      "valid": true,
+      "model": "X6",
+      "firmware": "20250725",
+      "knownSpeed": true,
+      "speedRaw": 3.6,
+      "speedMps": 1,
+      "id": "opaque-tail-1"
+    },
+    {
+      "payloadHex": "6f050358362032303235303732352080818200",
+      "valid": true,
+      "model": "X6",
+      "firmware": "20250725",
+      "knownSpeed": true,
+      "speedRaw": 3.6,
+      "speedMps": 1,
+      "id": "opaque-tail-2"
+    },
+    {
+      "payloadHex": "6f050358363020323032353037323500",
+      "valid": false,
+      "model": null,
+      "firmware": null,
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f050358362032303235303732353000",
+      "valid": false,
+      "model": null,
+      "firmware": null,
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f050358362032303235303732356100",
+      "valid": false,
+      "model": null,
+      "firmware": null,
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f0503583620323032353037323541424344454647484900",
+      "valid": false,
+      "model": null,
+      "firmware": null,
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f050358362d666f6f20323032353037323500",
+      "valid": false,
+      "model": null,
+      "firmware": null,
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f05035836203230323530373235585f62616400",
+      "valid": false,
+      "model": null,
+      "firmware": null,
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    },
+    {
+      "payloadHex": "6f050343594320583620323032353037323500",
+      "valid": false,
+      "model": null,
+      "firmware": null,
+      "knownSpeed": false,
+      "speedRaw": 3.6,
+      "speedMps": null
+    }
+  ]
+}

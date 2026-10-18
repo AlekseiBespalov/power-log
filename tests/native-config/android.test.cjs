@@ -14,13 +14,29 @@ test('Android prebuild signing stays idempotent and release keys are not silentl
 });
 
 test('Android capture uses non-exported foreground services and private file sharing', () => {
-  const manifest = fs.readFileSync('modules/cyc-bridge/android/src/main/AndroidManifest.xml', 'utf8');
+  const manifest = fs.readFileSync('modules/power-log-bridge/android/src/main/AndroidManifest.xml', 'utf8');
   assert.match(manifest, /android:foregroundServiceType="connectedDevice\|location"/);
   assert.match(manifest, /<service[^>]*android:exported="false"/);
   assert.match(manifest, /<provider[^>]*android:exported="false"/);
   assert.match(manifest, /<activity android:name=".HealthPermissionsActivity" android:exported="false"/);
-  assert.doesNotMatch(manifest, /WRITE_EXTERNAL_STORAGE|ACCESS_BACKGROUND_LOCATION|health.READ_/);
-  const paths = fs.readFileSync('modules/cyc-bridge/android/src/main/res/xml/power_log_files.xml', 'utf8');
+  assert.doesNotMatch(manifest, /WRITE_EXTERNAL_STORAGE|ACCESS_BACKGROUND_LOCATION/);
+  assert.deepEqual(
+    [...manifest.matchAll(/android\.permission\.health\.(READ_[A-Z_]+)/g)].map(match => match[1]).sort(),
+    [
+      'READ_ACTIVE_CALORIES_BURNED',
+      'READ_DISTANCE',
+      'READ_EXERCISE',
+      'READ_HEALTH_DATA_HISTORY',
+      'READ_HEALTH_DATA_IN_BACKGROUND',
+      'READ_HEART_RATE',
+      'READ_HEART_RATE_VARIABILITY',
+      'READ_OXYGEN_SATURATION',
+      'READ_POWER',
+      'READ_RESPIRATORY_RATE',
+      'READ_SPEED',
+    ],
+  );
+  const paths = fs.readFileSync('modules/power-log-bridge/android/src/main/res/xml/power_log_files.xml', 'utf8');
   assert.match(paths, /path="exports\/"/);
   assert.doesNotMatch(paths, /root-path|external-path/);
 });

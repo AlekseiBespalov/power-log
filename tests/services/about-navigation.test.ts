@@ -28,7 +28,13 @@ vi.mock('react-native', () => ({
 }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 vi.mock('../../src/components/icon', () => ({ Icon: () => null }));
-vi.mock('../../src/components/ui', () => ({ colors: {}, type: {} }));
+vi.mock('../../src/components/ui', async () => ({
+  Pressable: (await import('react-native')).Pressable,
+  MIN_TOUCH_TARGET: 48,
+  lineHeight: { label: 14, body: 20 },
+  colors: {},
+  type: {},
+}));
 vi.mock('../../src/services/haptics', () => ({ haptics: { selection: vi.fn() } }));
 
 it('keeps Privacy under Settings while allowing the native Settings tab to return there', () => {

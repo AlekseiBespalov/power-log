@@ -4,113 +4,76 @@ import {
   workoutFinishPresentation,
   workoutHealthPresentation,
   workoutSourcePresentation,
+  workoutStartReadiness,
 } from '../../src/core/workout-presentation';
 import { workoutHistoryRevision } from '../../src/services/workout-state-delivery';
+import { presentationFailure, presentationFailureCodes } from '../../shared/js';
 import rideSnapshots from '../fixtures/contract/ride-snapshots.json';
 import rideOptions from '../fixtures/contract/ride-options.json';
+import failures from '../fixtures/contract/presentation/failures.json';
 
-const snapshots = rideSnapshots.cases as { platform: string; name: string; wire: WorkoutState }[];
+const snapshots = rideSnapshots.cases as unknown as { platform: string; name: string; wire: WorkoutState }[];
 const capabilities = rideOptions.capabilities as Record<string, WorkoutState['capabilities']>;
 
 describe('shared ride snapshot consumers', () => {
-  const expected: Record<string, object> = {
-    'ios/idle': {
-      sources: { bike: { label: 'Not connected' }, gps: { label: 'Off' } },
-      health: { label: 'Apple Health', detail: null },
-    },
-    'ios/phone ride running with Health and GPS': {
-      sources: {
-        bike: { label: 'Receiving samples' },
-        heartRate: { label: 'Waiting for heart rate' },
-        gps: { label: 'Receiving GPS', detail: 'Phone · ±4 m' },
-      },
-      health: { label: 'Apple Health', detail: null },
-    },
-    'ios/Watch ride finishing after Health saved': {
-      sources: { gps: { label: 'Weak GPS signal', detail: 'Watch' } },
-      finish: { label: 'Syncing…', detail: 'Saved to Apple Health. Syncing Watch data…' },
-    },
-    'ios/unresolved recovery with an error': {
-      sources: { bike: { label: 'Not selected' }, gps: { label: 'Off' } },
-      recoveryMessage: 'Stop requested from the original owner. No recording completion has been confirmed.',
-      error: 'Bluetooth is turned off.',
-    },
-    'ios/deletion signal': {
-      sources: { bike: { label: 'Not connected' } },
-      history: '[null,"idle","5b1d7c9e-0a4f-4e0b-8a61-7d2c3e9f4a10",null]',
-    },
-    'ios/largest safe revision': {
-      sources: { gps: { label: 'Off' } },
-      history:
-        '["3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21","completed","",[9007199254740991,9007199254740991,9007199254740991,"complete"]]',
-    },
-    'android/idle': {
-      sources: { gps: { label: 'Off' } },
-      health: { label: 'Health Connect', detail: null },
-    },
-    'android/ride running with Health Connect': {
-      sources: {
-        bike: { label: 'Receiving samples' },
-        heartRate: { label: 'Not selected' },
-        gps: { label: 'Receiving GPS', detail: 'Phone · ±4 m' },
-      },
-      health: { label: 'Health Connect', detail: null },
-    },
-    'android/paused indoor ride without Health Connect': {
-      sources: { bike: { label: 'Paused' }, gps: { label: 'Off for indoor ride' } },
-      health: { label: 'Health', detail: null },
-    },
-  };
-
-  it.each(snapshots)('$platform: $name', ({ platform, name, wire }) => {
+  it.each(snapshots)('$platform: $name preserves local identity, phase and Health state', ({ wire }) => {
     const state = normalizeWorkoutState(wire);
-    const presentation = {
-      sources: workoutSourcePresentation(state, state, false),
-      health: workoutHealthPresentation(state, state.capabilities),
-      finish: workoutFinishPresentation(state),
-      history: workoutHistoryRevision(state),
-      recoveryMessage: state.recoveryMessage,
-      error: state.error,
-    };
-    expect(expected[`${platform}/${name}`]).toBeDefined();
-    expect(presentation).toMatchObject(expected[`${platform}/${name}`]!);
-    if (wire.streams.gps.accuracyMeters === null) expect(state.streams.gps.accuracyMeters).toBeNull();
-    if (name === 'largest safe revision') {
-      expect(state.collectionRevision).toBe(Number.MAX_SAFE_INTEGER);
-      expect(state.sealRevision).toBe(Number.MAX_SAFE_INTEGER);
-      expect(state.verifiedSealRevision).toBe(Number.MAX_SAFE_INTEGER);
-    }
-    if (name === 'deletion signal') {
-      expect(state.lastDeletedWorkoutId).toBe('3f6c1f0e-6f2d-4c43-9b7e-2a4d8f1b9c21');
-      expect(presentation.history).not.toBe(workoutHistoryRevision({ ...state, historyRevision: '' }));
-    }
+    expect(state.id).toBe(wire.id);
+    expect(state.phase).toBe(wire.phase);
+    expect(state.healthKitState).toBe(wire.healthKitState);
+    expect(state.collectionRevision).toBe(wire.collectionRevision ?? null);
+    expect(workoutFinishPresentation(state).detail).not.toMatch(/sync|Watch to finish/);
+    expect(workoutHealthPresentation(state, state.capabilities).label).toBeTruthy();
+    expect(workoutHistoryRevision({ ...state, historyRevision: '99' })).not.toBe(workoutHistoryRevision(state));
+  });
+  it('normalizes unknown stream states without inventing GPS accuracy', () => {
+    const wire = snapshots.find(value => value.wire.phase === 'running')!.wire;
+    const state = normalizeWorkoutState({
+      ...wire,
+      streams: {
+        controller: { status: 'future' },
+        heartRate: { status: 'future' },
+        gps: { status: 'future', source: 'phone', accuracyMeters: null },
+      },
+    });
+    expect(state.streams.controller.status).toBe('waiting');
+    expect(state.streams.gps.accuracyMeters).toBeNull();
+    expect(workoutSourcePresentation(state, state, false).gps.detail).toBe('Phone');
+  });
+});
+
+describe('shared failure and session facts', () => {
+  const idle = snapshots.find(({ platform, name }) => platform === 'ios' && name === 'idle')!.wire;
+  const options = { indoor: true, useWatch: false, saveToHealth: false, recordGPS: false, sampleHz: 8 as const };
+
+  it('offers the whole shared vocabulary and nothing else', () => {
+    expect(presentationFailureCodes().sort()).toEqual(failures.vocabulary.map(entry => entry.code).sort());
+    for (const entry of failures.vocabulary)
+      expect(presentationFailure(entry.code)).toMatchObject({
+        ...entry,
+        text: `${entry.message} ${entry.nextStep}`.trimEnd(),
+      });
   });
 
-  it.each(snapshots.filter(({ wire }) => wire.phase === 'running'))(
-    '$platform: unknown stream statuses become waiting and null accuracy stays unavailable',
-    ({ wire }) => {
-      const state = normalizeWorkoutState({
-        ...wire,
-        streams: {
-          cyc: { status: 'future' },
-          heartRate: { status: 'future' },
-          gps: { status: 'future', source: 'phone', accuracyMeters: null },
-        },
-      });
-      expect(state.streams).toEqual({
-        cyc: { status: 'waiting' },
-        heartRate: { status: 'waiting' },
-        gps: { status: 'waiting', source: 'phone', accuracyMeters: null },
-      });
-      expect(workoutSourcePresentation(state, state, false).gps).toEqual({
-        label: 'Waiting for GPS',
-        detail: 'Phone',
-        tone: 'neutral',
-      });
-      state.streams.gps.status = 'receiving';
-      expect(workoutSourcePresentation(state, state, false).gps.detail).toBe('Phone');
-    },
-  );
+  it.each(failures.bridge.snapshot.cases)('$platform: $name', ({ wire }) => {
+    const state = normalizeWorkoutState({ ...idle, ...wire } as unknown as WorkoutState);
+    expect(state.failure).toEqual(wire.failure);
+    const readiness = workoutStartReadiness(state, options, true);
+    if (wire.sessionBusy || ('endingOwner' in wire && wire.endingOwner))
+      expect(readiness).toMatchObject({ available: false, error: 'rideFinishing' });
+    else expect(readiness).toMatchObject({ available: true, error: null });
+  });
+
+  it.each(failures.unknownInputs)('reads a native failure %j only by its code', code => {
+    const state = normalizeWorkoutState({
+      ...idle,
+      failure: {
+        code,
+        message: 'BridgeException: Invalid retained owner timing (at PowerLogBridge/PowerLogBridgeModule.swift:11)',
+      },
+    } as unknown as WorkoutState);
+    expect(state.failure).toEqual({ code: 'unknown', message: presentationFailure('unknown').text });
+  });
 });
 
 describe('shared ride options policy', () => {

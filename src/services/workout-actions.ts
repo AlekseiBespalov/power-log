@@ -1,10 +1,19 @@
-export type WorkoutActionKind = 'start' | 'control';
-type ActionState = { busy: boolean; recoveryAvailable: boolean; error: string | null };
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+import { ExportError } from '../core/export/types';
+import { MonitorPreferencesError } from '../core/monitor';
+import { failureCode, presentFailure } from '../core/failures';
+import { waitForRideAction } from './ride-action-deadline';
 
-/** A pending start may be checked or stopped, without releasing another active action. */
+export type WorkoutActionKind = 'start' | 'control';
+export type WorkoutActionFlight = { current: () => boolean; signal: AbortSignal };
+type ActionState = { busy: boolean; recoveryAvailable: boolean; error: string | null };
+const message = (error: unknown, fallback?: string) => {
+  if (error instanceof ExportError || error instanceof MonitorPreferencesError) return error.message;
+  return fallback && failureCode(error) === 'unknown' ? fallback : presentFailure(error).text;
+};
+
 export class WorkoutActions {
   private pending = new Map<symbol, WorkoutActionKind>();
+  private generation = 0;
   private state: ActionState = { busy: false, recoveryAvailable: false, error: null };
   constructor(private readonly publish: (state: ActionState) => void) {}
   snapshot = () => this.state;
@@ -18,21 +27,40 @@ export class WorkoutActions {
   }
   clearError = () => this.emit(null);
   reportError = (error: unknown) => this.emit(message(error));
-  async run(operation: () => Promise<unknown>, refresh: () => Promise<unknown>, kind: WorkoutActionKind = 'control') {
+  async run(
+    operation: (flight: WorkoutActionFlight) => Promise<unknown>,
+    refresh: (current: () => boolean) => Promise<unknown>,
+    kind: WorkoutActionKind = 'control',
+  ) {
     if (this.pending.size && (kind === 'start' || !this.state.recoveryAvailable)) return;
     const token = Symbol(kind);
+    const generation = ++this.generation;
+    const controller = new AbortController();
+    const current = () => this.pending.has(token) && !controller.signal.aborted;
     this.pending.set(token, kind);
     this.emit(null);
     try {
-      await operation();
+      await waitForRideAction(
+        async () => {
+          try {
+            await operation({ current, signal: controller.signal });
+          } catch (error) {
+            if (current() && generation === this.generation) this.emit(message(error));
+          }
+          if (current()) {
+            try {
+              await refresh(current);
+            } catch (error) {
+              if (current() && generation === this.generation) this.emit(this.state.error ?? message(error));
+            }
+          }
+        },
+        kind === 'start' ? 'start' : 'recovery',
+      );
     } catch (error) {
-      this.emit(message(error));
+      if (generation === this.generation) this.emit(this.state.error ?? message(error));
     } finally {
-      try {
-        await refresh();
-      } catch (error) {
-        this.emit(this.state.error ?? message(error));
-      }
+      controller.abort();
       this.pending.delete(token);
       this.emit();
     }
@@ -55,14 +83,14 @@ export class ArchiveActions {
     if (this.state.get(key)?.pending) this.emit(key, { pending: true, error: null });
     else this.emit(key);
   };
-  async run(key: string, operation: () => Promise<unknown>) {
+  async run(key: string, operation: () => Promise<unknown>, fallback?: string) {
     if (this.state.get(key)?.pending) return;
     this.emit(key, { pending: true, error: null });
     try {
       await operation();
       this.emit(key);
     } catch (error) {
-      this.emit(key, { pending: false, error: message(error) });
+      this.emit(key, { pending: false, error: message(error, fallback) });
     }
   }
 }

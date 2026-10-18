@@ -1,0 +1,94 @@
+{
+  "publications": [
+    {
+      "sequence": 5,
+      "now": 105.0601098537445,
+      "staleDate": 106.0,
+      "flag": false,
+      "bike": "200",
+      "heart": "150"
+    },
+    {
+      "sequence": 6,
+      "now": 106.00449991226196,
+      "staleDate": 115.0,
+      "flag": true,
+      "bike": "—",
+      "heart": "150"
+    },
+    {
+      "sequence": 7,
+      "now": 115.02513194084167,
+      "staleDate": -1,
+      "flag": true,
+      "bike": "—",
+      "heart": "—"
+    }
+  ],
+  "renders": [
+    {
+      "sequence": 5,
+      "now": 105.58912587165833,
+      "staleDate": 106.0,
+      "flag": false,
+      "bike": "200",
+      "heart": "150"
+    },
+    {
+      "sequence": 5,
+      "now": 105.60598683357239,
+      "staleDate": 106.0,
+      "flag": false,
+      "bike": "200",
+      "heart": "150"
+    },
+    {
+      "sequence": 6,
+      "now": 106.26094388961792,
+      "staleDate": 115.0,
+      "flag": false,
+      "bike": "—",
+      "heart": "150"
+    },
+    {
+      "sequence": 6,
+      "now": 106.26136803627014,
+      "staleDate": 115.0,
+      "flag": false,
+      "bike": "—",
+      "heart": "150"
+    },
+    {
+      "sequence": 6,
+      "now": 107.44983196258545,
+      "staleDate": 115.0,
+      "flag": false,
+      "bike": "—",
+      "heart": "150"
+    },
+    {
+      "sequence": 6,
+      "now": 107.45034289360046,
+      "staleDate": 115.0,
+      "flag": false,
+      "bike": "—",
+      "heart": "150"
+    },
+    {
+      "sequence": 7,
+      "now": 122.12402200698853,
+      "staleDate": -1,
+      "flag": false,
+      "bike": "—",
+      "heart": "—"
+    },
+    {
+      "sequence": 7,
+      "now": 122.12449789047241,
+      "staleDate": -1,
+      "flag": false,
+      "bike": "—",
+      "heart": "—"
+    }
+  ]
+}

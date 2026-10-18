@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { exportCsv } from '../helpers/export-csv';
-import { defaultMonitorPreferences } from '../../src/core/monitor';
+import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 
 const phase = process.env.POWER_LOG_POLISH_PHASE ?? 'after';
@@ -11,7 +11,7 @@ const fixture = (long = false, finalValue?: number) =>
   exportCsv(
     [0, 1, 2, 20, 21, 22].map((seconds, index) => {
       const elapsed = long && index > 0 ? seconds + 36000 : seconds;
-      const value = index === 5 && finalValue !== undefined ? finalValue : [8.9, 21.8, 100, 8.9, 21.8, 100][index]!;
+      const value = finalValue !== undefined ? finalValue : [8.9, 21.8, 100, 8.9, 21.8, 100][index]!;
       return {
         ...syntheticSample(elapsed, index, new Date(Date.UTC(2026, 8, 11) + elapsed * 1000).toISOString()),
         batteryCurrentA: value,
@@ -30,6 +30,8 @@ const fixture = (long = false, finalValue?: number) =>
   );
 async function importFixture(page: Page, long = false, finalValue?: number) {
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   await (
     await chooser
@@ -151,7 +153,7 @@ for (const width of [320, 390, 430, 440, 768, 1440, 1920])
     await page.setViewportSize({ width, height: 1000 });
     await page.addInitScript(
       value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-      preferences,
+      JSON.parse(monitorPreferencesJson(preferences)),
     );
     await page.goto('/sessions');
     await importFixture(page);
@@ -187,7 +189,6 @@ for (const width of [320, 390, 430, 440, 768, 1440, 1920])
     }
     if (width !== 430 && width !== 440)
       await expect(page.getByTestId('monitor-number-heartRateBpm')).toContainText('—');
-    // A real drag moves through narrow/wide values and a true acquisition gap.
     await chart.scrollIntoViewIfNeeded();
     const box = (await chart.boundingBox())!;
     const x = (seconds: number) => box.x + 8 + (seconds / 22) * (box.width - 16),
@@ -227,7 +228,7 @@ for (const width of [320, 390, 430, 440, 768, 1440, 1920])
     await importFixture(page, true);
     await chart.focus();
     await chart.press('End');
-    await expect(chart).toHaveAttribute('aria-valuetext', /10:00:22\.000 elapsed/);
+    await expect(chart).toHaveAttribute('aria-valuetext', /10:00:22 elapsed/);
     const longTimestamp = await measurements(page);
     await screenshot(page, `current-${width}-long-time.png`);
     const violations = {
@@ -260,7 +261,7 @@ test('intermediate widths keep Controller and GPS readouts stable through resize
   preferences.views.battery.charts = ['batteryCurrentA', 'controllerSpeedMps', 'speedMps'];
   await page.addInitScript(
     value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-    preferences,
+    JSON.parse(monitorPreferencesJson(preferences)),
   );
   await page.goto('/sessions');
   await importFixture(page);
@@ -271,12 +272,10 @@ test('intermediate widths keep Controller and GPS readouts stable through resize
     1536, 1919,
   ]) {
     await page.setViewportSize({ width, height: 1000 });
-    await chart.press('Escape');
-    // RN onLayout and the bounded plot query settle before measuring a new container.
     await expect.poll(() => page.evaluate(() => innerWidth)).toBe(width);
-    await chart.press('Home');
-    await expect(chart).toHaveAttribute('aria-valuetext', /Controller speed 8\.9 km\/h/);
-    // The chart grid's column count follows the container's onLayout asynchronously; measure only a settled layout.
+    // Crossing the desktop breakpoint replaces the chart nodes after the viewport itself has resized.
+    await expect(page.getByTestId('monitor-chart-grid')).toHaveCount(width >= 760 ? 1 : 0);
+    // Settle the RN onLayout-driven grid before sending keys to the resulting chart.
     await expect
       .poll(async () => {
         const first = await measurements(page);
@@ -285,6 +284,9 @@ test('intermediate widths keep Controller and GPS readouts stable through resize
         return JSON.stringify(first.charts) === JSON.stringify(second.charts);
       })
       .toBe(true);
+    await chart.press('Escape');
+    await chart.press('Home');
+    await expect(chart).toHaveAttribute('aria-valuetext', /Controller speed 8\.9 km\/h/);
     const states = [await measurements(page)];
     if (width === 448) {
       const gps = (await page.getByTestId('monitor-readout-speedMps').boundingBox())!;
@@ -320,7 +322,7 @@ test('summary readings fit and retain height as values grow or remain unavailabl
   preferences.views.battery.charts = ['batteryCurrentA'];
   await page.addInitScript(
     value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-    preferences,
+    JSON.parse(monitorPreferencesJson(preferences)),
   );
   await page.goto('/sessions');
   const results = [];
@@ -351,6 +353,8 @@ test('non-voltage charts have no comparison control or empty comparison row', as
   await page.setViewportSize({ width: 390, height: 1000 });
   await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   await (await chooser).setFiles({ name: 'Non-voltage.csv', mimeType: 'text/csv', buffer: Buffer.from(fixture()) });
   const chart = page.getByTestId('monitor-chart-power');

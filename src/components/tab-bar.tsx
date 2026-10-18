@@ -1,10 +1,10 @@
 import type { ComponentProps } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Tabs } from 'expo-router';
 import { APP_NAVIGATION, appNavigationIndex } from './app-navigation';
 import { Icon, type IconName } from './icon';
-import { colors, type } from './ui';
+import { colors, type, Pressable } from './ui';
 import { haptics } from '../services/haptics';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];

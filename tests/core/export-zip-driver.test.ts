@@ -123,7 +123,7 @@ const ENTRY = ['write', 'beginDeflate'];
 const END = ['write', 'endDeflate', 'writeAt'];
 
 describe('the ZIP export driver', () => {
-  it('opens, reads the timeline, streams four tables, writes the descriptor, closes and commits', async () => {
+  it('opens, reads the timeline, streams five tables, writes the descriptor, closes and commits', async () => {
     const test = harness();
     expect(await test.run()).toEqual({ uri: `memory://power-log-original-${ride.rideId}.zip` });
     expect(test.log).toEqual([
@@ -132,6 +132,10 @@ describe('the ZIP export driver', () => {
       'openSink zip',
       ...ENTRY,
       'page telemetry',
+      ...END,
+      ...ENTRY,
+      'page telemetry',
+      'page lifecycle',
       ...END,
       ...ENTRY,
       'page gps',

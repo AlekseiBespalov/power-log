@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   read: vi.fn(),
   close: vi.fn(),
+  deleted: vi.fn(),
   text: vi.fn(),
   reportedSize: null as number | null,
   chunkSizes: [] as number[],
@@ -27,6 +28,12 @@ vi.mock('react-native', () => ({
 vi.mock('expo-document-picker', () => ({ getDocumentAsync: mocks.pick }));
 vi.mock('expo-file-system', () => ({
   Paths: { cache: 'file:///cache' },
+  Directory: class {
+    uri: string;
+    constructor(parent: string, name: string) {
+      this.uri = `${parent}/${name}`;
+    }
+  },
   FileMode: { ReadOnly: 'r' },
   File: class {
     uri: string;
@@ -42,6 +49,10 @@ vi.mock('expo-file-system', () => ({
     bytes() {
       const value = mocks.files.get(this.uri)!;
       return typeof value === 'string' ? new TextEncoder().encode(value) : value;
+    }
+    delete() {
+      mocks.deleted(this.uri);
+      mocks.files.delete(this.uri);
     }
     async text() {
       mocks.text();
@@ -77,8 +88,11 @@ beforeEach(() => {
 describe('native CSV import', () => {
   const csv = '\uFEFF' + syntheticCsvHeader + '\r\n' + syntheticCsvRow(syntheticCsvSample()) + '\r\n';
   beforeEach(() => {
-    mocks.files.set('file:///selected.csv', csv);
-    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///selected.csv', name: 'ride.csv' }] });
+    mocks.files.set('file:///cache/DocumentPicker/selected.csv', csv);
+    mocks.pick.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///cache/DocumentPicker/selected.csv', name: 'ride.csv' }],
+    });
   });
 
   it('reads bounded slices through a read-only handle and decodes split BOM bytes', async () => {
@@ -89,6 +103,7 @@ describe('native CSV import', () => {
     expect(mocks.read.mock.calls.every(([length]) => length <= 64 * 1024)).toBe(true);
     expect(mocks.text).not.toHaveBeenCalled();
     expect(mocks.close).toHaveBeenCalledOnce();
+    expect(mocks.deleted).toHaveBeenCalledExactlyOnceWith('file:///cache/DocumentPicker/selected.csv');
   });
 
   it('accepts the 256 MiB chooser boundary and rejects larger metadata before reading', async () => {
@@ -96,10 +111,13 @@ describe('native CSV import', () => {
     expect(await importRecording()).toMatchObject({ name: 'ride.csv' });
     mocks.open.mockClear();
     mocks.text.mockClear();
+    mocks.files.set('file:///cache/DocumentPicker/selected.csv', csv);
+    mocks.deleted.mockClear();
     mocks.reportedSize += 1;
     await expect(importRecording()).rejects.toThrow('Choose a CSV no larger than 256 MiB.');
     expect(mocks.open).not.toHaveBeenCalled();
     expect(mocks.text).not.toHaveBeenCalled();
+    expect(mocks.deleted).toHaveBeenCalledExactlyOnceWith('file:///cache/DocumentPicker/selected.csv');
   });
 
   it('returns null after cancellation or an empty selection', async () => {
@@ -114,18 +132,62 @@ describe('native CSV import', () => {
   it.each([syntheticCsvHeader + '\nshort', csv + '\u0000', csv + '\uFEFF', csv + '"unfinished'])(
     'closes the handle after parsing fails: %#',
     async contents => {
-      mocks.files.set('file:///selected.csv', contents);
+      mocks.files.set('file:///cache/DocumentPicker/selected.csv', contents);
       await expect(importRecording()).rejects.toThrow();
       expect(mocks.close).toHaveBeenCalledOnce();
+      expect(mocks.deleted).toHaveBeenCalledExactlyOnceWith('file:///cache/DocumentPicker/selected.csv');
     },
   );
 
+  it('deletes the picker copy when opening fails', async () => {
+    mocks.open.mockImplementation(() => {
+      throw new Error('Open failed');
+    });
+    await expect(importRecording()).rejects.toThrow('Open failed');
+    expect(mocks.deleted).toHaveBeenCalledExactlyOnceWith('file:///cache/DocumentPicker/selected.csv');
+  });
+  it('deletes the picker copy even when closing fails', async () => {
+    mocks.close.mockImplementation(() => {
+      throw new Error('Close failed');
+    });
+    await expect(importRecording()).rejects.toThrow('Close failed');
+    expect(mocks.deleted).toHaveBeenCalledExactlyOnceWith('file:///cache/DocumentPicker/selected.csv');
+  });
+  it('keeps the parse failure when closing and deleting the picker copy also fail', async () => {
+    mocks.files.set('file:///cache/DocumentPicker/selected.csv', syntheticCsvHeader + '\nshort');
+    mocks.close.mockImplementation(() => {
+      throw new Error('Close failed');
+    });
+    mocks.deleted.mockImplementation(() => {
+      throw new Error('Delete failed');
+    });
+    const failure = importRecording();
+    await expect(failure).rejects.toThrow();
+    await expect(failure).rejects.not.toThrow(/Close failed|Delete failed/);
+    expect(mocks.close).toHaveBeenCalledOnce();
+    expect(mocks.deleted).toHaveBeenCalledExactlyOnceWith('file:///cache/DocumentPicker/selected.csv');
+  });
+  it('reports a delete failure after a successful parse', async () => {
+    mocks.deleted.mockImplementation(() => {
+      throw new Error('Delete failed');
+    });
+    await expect(importRecording()).rejects.toThrow('Delete failed');
+    expect(mocks.close).toHaveBeenCalledOnce();
+  });
+  it('never deletes an original URI outside the picker cache', async () => {
+    mocks.files.set('file:///original.csv', csv);
+    mocks.pick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///original.csv', name: 'ride.csv' }] });
+    await importRecording();
+    expect(mocks.deleted).not.toHaveBeenCalled();
+    expect(mocks.files.has('file:///original.csv')).toBe(true);
+  });
   it('closes the handle after a read fails', async () => {
     mocks.read.mockImplementation(() => {
       throw new Error('Read failed');
     });
     await expect(importRecording()).rejects.toThrow('Read failed');
     expect(mocks.close).toHaveBeenCalledOnce();
+    expect(mocks.deleted).toHaveBeenCalledExactlyOnceWith('file:///cache/DocumentPicker/selected.csv');
   });
 });
 
@@ -146,4 +208,4 @@ describe('native file export', () => {
     await expect(shareExport('file:///app/Exports/0f0e/ride.csv')).resolves.toBeUndefined();
   });
 });
-vi.mock('../../modules/cyc-bridge', () => ({ default: { shareFile: mocks.androidShare } }));
+vi.mock('../../modules/power-log-bridge', () => ({ default: { shareFile: mocks.androidShare } }));

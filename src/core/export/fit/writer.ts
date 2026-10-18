@@ -174,14 +174,21 @@ export class FitWriter {
     await this.sink.write(new Uint8Array(FIT_HEADER_SIZE));
   }
 
-  developerMetadata(): void {
+  developerMetadata(consumptionSource: 'controller' | 'calculated' = 'controller'): void {
     this.message('developerDataId', [uuidBytes(FIT_DEVELOPER_APPLICATION_ID), FIT_DEVELOPER_DATA_INDEX]);
     for (const field of FIT_DEVELOPER_FIELDS)
       this.message('fieldDescription', [
         FIT_DEVELOPER_DATA_INDEX,
         field.number,
         field.code,
-        fitString(field.name, 23),
+        fitString(
+          field.channel === 'consumedWh'
+            ? `energy_used_${consumptionSource === 'controller' ? 'controller' : 'calc'}`
+            : field.channel === 'consumedAh'
+              ? `charge_used_${consumptionSource === 'controller' ? 'controller' : 'calc'}`
+              : field.name,
+          23,
+        ),
         fitString(field.units, 4),
       ]);
   }

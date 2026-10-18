@@ -1,8 +1,20 @@
+import {
+  AnalyticsItem,
+  AnalyticsMetadata,
+  AnalyticsPin,
+  AnalyticsPreparation,
+  AnalyticsComposition,
+  AnalyticsSource,
+  AnalyticsMetricReducer,
+  analyticsTimeUs,
+} from '../../shared/js';
+import { appendStatistic } from './analytics';
 import { TABLES } from './export/catalog';
 import { createSlicer } from './export/pages';
 import { TELEMETRY_LAYOUT } from './export/tables/telemetry';
 import { TextChunks, csvHeader, layoutColumns, writeRows, type ByteOutput, type Texts } from './export/tables/text';
 import { MAX_SAMPLE_GAP_SECONDS, type TelemetryMeasurements, type TelemetrySample } from './types';
+import type { WorkoutSummary } from './workouts';
 import { MAX_CSV_BYTES, MAX_RECORDING_DURATION_SECONDS, MAX_RECORDING_SAMPLES, validateTimestamp } from './validation';
 
 type ChannelKey = keyof TelemetryMeasurements | 'controllerSpeedMps';
@@ -27,6 +39,10 @@ const CHANNELS = FIELDS.filter(field => !ENVELOPE.has(field.name)).map(field => 
   key: field.reads[0] as ChannelKey,
   integer: field.type === 'integer',
 }));
+const CSV_SAMPLE_SHAPE = Object.fromEntries(CHANNELS.map(channel => [channel.key, 0])) as Pick<
+  ImportedSample,
+  ChannelKey
+>;
 const FIELD = Object.fromEntries(FIELD_NAMES.map((name, index) => [name, index])) as Record<string, number>;
 const BATCH_ROWS = 4096;
 const HEADER_COLUMNS = 64;
@@ -127,29 +143,11 @@ function readSample(
   if (run === null) throw new Error(`${where} has no run`);
   if (previous && elapsedSeconds < previous.elapsedSeconds) throw new Error(`${where} is earlier than the row before`);
   if (previous && run < previous.run) throw new Error(`${where} goes back to an earlier run`);
-  // Every field exists from the start, so all rows share one compact object shape.
   const sample: ImportedSample = {
+    ...CSV_SAMPLE_SHAPE,
     timestamp,
     elapsedSeconds,
     sequence: index,
-    humanPowerW: 0,
-    cadenceRpm: 0,
-    motorInputPowerW: 0,
-    batteryVoltageV: 0,
-    batteryCurrentA: 0,
-    motorCurrentA: 0,
-    motorRpm: 0,
-    pedalTorqueNm: 0,
-    controllerTempC: 0,
-    motorTempC: 0,
-    consumedAh: 0,
-    consumedWh: 0,
-    throttleVoltageV: 0,
-    faultCode: 0,
-    assistLevel: 0,
-    raceMode: 0,
-    speedRaw: 0,
-    controllerSpeedMps: 0,
     interruptionIndex: run,
     activeInterval: parseCount(cell('activeInterval'), 'activeInterval'),
     run,
@@ -219,67 +217,148 @@ export interface RecordingSummary {
   peakHumanPowerW: number | null;
   averageCadenceRpm: number | null;
   peakCadenceRpm: number | null;
-  humanEnergyWh: number;
-  motorInputEnergyWh: number;
+  humanEnergyWh: number | null;
+  motorInputEnergyWh: number | null;
 }
 
-class Integral {
-  seconds = 0;
-  total = 0;
-  add(a: number, b: number, dt: number): void {
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return;
-    this.seconds += dt;
-    this.total += ((a + b) * dt) / 2;
-  }
-  get mean(): number | null {
-    return this.seconds > 0 ? this.total / this.seconds : null;
-  }
-}
-
-const peak = (current: number | null, value: number) =>
-  !Number.isFinite(value) ? current : current === null ? value : Math.max(current, value);
-
-export function summarizeRecording(samples: readonly ImportedSample[]): RecordingSummary {
-  let coveredSeconds = 0;
-  let gapCount = 0;
-  let clockDiscontinuities = 0;
-  let peakHumanPowerW: number | null = null;
-  let peakCadenceRpm: number | null = null;
-  const human = new Integral();
-  const motor = new Integral();
-  const cadence = new Integral();
-  for (let index = 0; index < samples.length; index++) {
-    const sample = samples[index]!;
-    if (sample.activeInterval !== null) {
-      peakHumanPowerW = peak(peakHumanPowerW, sample.humanPowerW);
-      peakCadenceRpm = peak(peakCadenceRpm, sample.cadenceRpm);
+function* importedAnalysis(
+  samples: readonly ImportedSample[],
+): Generator<{ item: AnalyticsItem; sample?: ImportedSample }> {
+  let lifecycleSequence = 0;
+  let previousInterval: number | null = null;
+  const event = (sample: ImportedSample, action: string) =>
+    new AnalyticsItem(
+      analyticsTimeUs(sample.elapsedSeconds),
+      sample.elapsedSeconds,
+      `import:lifecycle:${++lifecycleSequence}`,
+      `import:lifecycle:${lifecycleSequence}`,
+      'browser',
+      String(lifecycleSequence),
+      'lifecycle',
+      'phone',
+      sample.timestamp,
+      [],
+      [],
+      [],
+      null,
+      null,
+      null,
+      null,
+      0,
+      action,
+      false,
+      false,
+      null,
+      true,
+    );
+  for (const [index, sample] of samples.entries()) {
+    if (index === 0 && sample.activeInterval === null) yield { item: event(sample, 'pause') };
+    if (sample.activeInterval !== previousInterval) {
+      if (previousInterval !== null) yield { item: event(sample, 'pause') };
+      if (sample.activeInterval !== null) yield { item: event(sample, 'resume') };
+      previousInterval = sample.activeInterval;
     }
-    const previous = samples[index - 1];
-    if (!previous) continue;
+    const keys = ['humanPowerW', 'cadenceRpm', 'motorInputPowerW'] as const;
+    const values = keys.filter(key => sample.activeInterval !== null && Number.isFinite(sample[key]));
+    yield {
+      sample,
+      item: new AnalyticsItem(
+        analyticsTimeUs(sample.elapsedSeconds),
+        sample.elapsedSeconds,
+        `import:${index}`,
+        `import:${index}`,
+        'controller',
+        String(index + 1),
+        'telemetry',
+        'controller',
+        sample.timestamp,
+        values,
+        values.map(() => 'real64'),
+        values.map(key => (Object.is(sample[key], -0) ? '-0.0' : String(sample[key]))),
+        sample.elapsedSeconds,
+        null,
+        null,
+        JSON.stringify([sample.connection, sample.activeInterval]),
+        sample.run,
+        null,
+        false,
+        false,
+        String(index + 1),
+        true,
+      ),
+    };
+  }
+}
+export function summarizeRecording(samples: readonly ImportedSample[]): RecordingSummary {
+  const first = samples[0],
+    last = samples.at(-1);
+  const end = last?.elapsedSeconds ?? 0;
+  const metadata = new AnalyticsMetadata(
+    'import',
+    first?.timestamp ?? '1970-01-01T00:00:00Z',
+    end,
+    true,
+    false,
+    false,
+    false,
+    8,
+    last?.timestamp ?? '1970-01-01T00:00:00Z',
+    end,
+    [new AnalyticsSource('controller', 'controller', null, null)],
+    '{}',
+  );
+  const preparation = new AnalyticsPreparation(new AnalyticsPin(metadata, '1', 'auto'));
+  for (const { item } of importedAnalysis(samples)) preparation.append(item);
+  const prepared = preparation.finish('auto', []);
+  const composer = new AnalyticsComposition(prepared, 'auto', [], []);
+  const motor = new AnalyticsMetricReducer('motorInputPowerW', '0', analyticsTimeUs(end));
+  for (const { item, sample } of importedAnalysis(samples)) {
+    composer.append(item);
+    if (sample)
+      appendStatistic(motor, {
+        timeUs: item.collectionUs,
+        observationId: item.observationId,
+        eventId: item.eventId,
+        timestamp: item.timestamp,
+        elapsedSeconds: item.collectionElapsedSeconds,
+        value: Number.isFinite(sample.motorInputPowerW) ? sample.motorInputPowerW : undefined,
+        activeInterval: sample.activeInterval === null ? null : (prepared.activeInterval(item) ?? null),
+        connectionEpoch: JSON.stringify([sample.connection, sample.activeInterval]),
+        interruptionIndex: sample.run,
+      });
+  }
+  const summaryJson = composer.summaryJson('0'),
+    battery = motor.result();
+  if (summaryJson == null) throw new Error(composer.outcome());
+  const summary = JSON.parse(summaryJson) as WorkoutSummary;
+  if (!battery) throw new Error(motor.outcome());
+  let gapCount = 0,
+    clockDiscontinuities = 0;
+  for (let index = 1; index < samples.length; index++) {
+    const sample = samples[index]!,
+      previous = samples[index - 1]!;
     const dt = sample.elapsedSeconds - previous.elapsedSeconds;
     const utcDt = (Date.parse(sample.timestamp) - Date.parse(previous.timestamp)) / 1000;
-    if (utcDt <= 0 || Math.abs(utcDt - dt) > 2.5) clockDiscontinuities += 1;
-    if (sample.activeInterval === null || sample.activeInterval !== previous.activeInterval || dt === 0) continue;
-    if (dt > MAX_SAMPLE_GAP_SECONDS || sample.run !== previous.run) {
-      gapCount += 1;
-      continue;
-    }
-    coveredSeconds += dt;
-    human.add(previous.humanPowerW, sample.humanPowerW, dt);
-    motor.add(previous.motorInputPowerW, sample.motorInputPowerW, dt);
-    cadence.add(previous.cadenceRpm, sample.cadenceRpm, dt);
+    if (utcDt <= 0 || Math.abs(utcDt - dt) > 2.5) clockDiscontinuities++;
+    if (
+      sample.activeInterval !== null &&
+      sample.activeInterval === previous.activeInterval &&
+      dt > 0 &&
+      (dt > MAX_SAMPLE_GAP_SECONDS || sample.run !== previous.run)
+    )
+      gapCount++;
   }
   return {
     sampleCount: samples.length,
-    durationSeconds: samples.length > 1 ? samples[samples.length - 1]!.elapsedSeconds - samples[0]!.elapsedSeconds : 0,
-    coveredSeconds,
+    durationSeconds: first && last ? last.elapsedSeconds - first.elapsedSeconds : 0,
+    coveredSeconds: summary.telemetryCoveredSeconds,
     gapCount,
     clockDiscontinuities,
-    peakHumanPowerW,
-    peakCadenceRpm,
-    averageHumanPowerW: human.mean,
-    averageCadenceRpm: cadence.mean,
-    humanEnergyWh: human.total / 3600,
-    motorInputEnergyWh: motor.total / 3600,
+    peakHumanPowerW: summary.maximumRiderPowerW ?? null,
+    peakCadenceRpm: summary.maximumCadenceRpm ?? null,
+    averageHumanPowerW: summary.averageRiderPowerW ?? null,
+    averageCadenceRpm: summary.averageCadenceRpm ?? null,
+    humanEnergyWh: summary.riderWorkJoules == null ? null : summary.riderWorkJoules / 3600,
+    motorInputEnergyWh: battery.coveredUs === '0' ? null : (battery.integral ?? 0) / 3600,
   };
 }

@@ -10,31 +10,7 @@ import { workoutPermissionAction } from '../../src/core/workout-permissions';
 
 const profiles: { name: string; capabilities: WorkoutState['capabilities'] }[] = [
   {
-    name: 'iOS 16',
-    capabilities: {
-      phoneWorkout: true,
-      watchWorkout: false,
-      phoneHealth: false,
-      watchHealth: false,
-      healthProvider: 'appleHealth',
-      gps: true,
-      foregroundOnly: false,
-    },
-  },
-  {
-    name: 'iOS 17–25',
-    capabilities: {
-      phoneWorkout: true,
-      watchWorkout: true,
-      phoneHealth: false,
-      watchHealth: true,
-      healthProvider: 'appleHealth',
-      gps: true,
-      foregroundOnly: false,
-    },
-  },
-  {
-    name: 'iOS 26',
+    name: 'iPhone',
     capabilities: {
       phoneWorkout: true,
       watchWorkout: true,
@@ -108,10 +84,23 @@ describe.each(profiles)('$name effective options', ({ capabilities }) => {
           useWatch: watchOwner,
           saveToHealth: saveToHealth !== false && (watchOwner ? capabilities.watchHealth : capabilities.phoneHealth),
           recordGPS: capabilities.gps,
+          distanceSource: capabilities.gps ? 'gps:phone' : 'controller',
+          batteryConsumptionSource: 'controller',
           sampleHz: 8,
         });
         expect(requested.saveToHealth).toBe(saveToHealth);
       }
+    },
+  );
+
+  it.each(['controller', 'calculated'] as const)(
+    'freezes %s battery consumption independently of Watch and GPS',
+    batteryConsumptionSource => {
+      const requested = { indoor: false, useWatch: true, recordGPS: true, batteryConsumptionSource };
+      const frozen = effectiveWorkoutOptions(requested, capabilities);
+      requested.batteryConsumptionSource = batteryConsumptionSource === 'controller' ? 'calculated' : 'controller';
+      expect(frozen.batteryConsumptionSource).toBe(batteryConsumptionSource);
+      expect(frozen.distanceSource).toBe(capabilities.gps ? 'gps:phone' : 'controller');
     },
   );
 
@@ -143,7 +132,7 @@ it('uses each owner’s Health capability independently', () => {
 });
 
 it('defaults GPS from indoor mode, honors explicit choices and disables unavailable GPS', () => {
-  const capabilities = profiles[1]!.capabilities;
+  const capabilities = profiles[0]!.capabilities;
   for (const useWatch of [true, false]) {
     for (const indoor of [true, false]) {
       expect(effectiveWorkoutOptions({ indoor, useWatch }, capabilities).recordGPS).toBe(!indoor);
@@ -183,21 +172,17 @@ it('does not treat malformed capability values as grants or providers', () => {
   });
 });
 
-it('explains unavailable phone Health saving while keeping the preference usable by the Watch', () => {
+it('explains unavailable Health saving and keeps the ride local', () => {
   const capabilities = profiles[1]!.capabilities;
   const requested = { indoor: true, useWatch: false, saveToHealth: true };
-  expect(workoutHealthPresentation(requested, capabilities)).toEqual({
-    label: 'Apple Health',
-    detail: 'Phone-recorded rides cannot be saved to Apple Health on this device. This ride will stay in Power Log.',
-  });
+  expect(workoutHealthPresentation(requested, capabilities).detail).toContain('This ride will stay in Power Log.');
   expect(workoutPermissionAction(null, effectiveWorkoutOptions(requested, capabilities)).action).toBe('none');
-  expect(workoutHealthPresentation({ ...requested, useWatch: true }, capabilities).detail).toBeNull();
   expect(workoutHealthPresentation({ ...requested, saveToHealth: false }, capabilities).detail).toBeNull();
-  expect(workoutHealthPresentation(requested, profiles[4]!.capabilities).label).toBe('Health Connect');
+  expect(workoutHealthPresentation(requested, profiles[2]!.capabilities).label).toBe('Health Connect');
 });
 
 it('presents only available sources before Start and retains the frozen owner during a ride', () => {
-  const state = { ...unavailableWorkoutState, capabilities: profiles[0]!.capabilities };
+  const state = { ...unavailableWorkoutState, capabilities: profiles[1]!.capabilities };
   const requested = { indoor: false, useWatch: true };
   expect(workoutSourcePresentation(state, requested, true)).toMatchObject({
     heartRate: { label: 'Not selected' },

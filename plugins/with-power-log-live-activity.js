@@ -4,7 +4,7 @@ const targetName = 'PowerLogActivity';
 const unquote = value => String(value ?? '').replace(/^"|"$/g, '');
 const intentPath = '../apple/LiveActivity/PowerLogRideIntent.swift';
 const sources = [
-  '../modules/cyc-bridge/ios/PowerLogRideAttributes.swift',
+  '../modules/power-log-bridge/ios/PowerLogRideAttributes.swift',
   intentPath,
   '../apple/LiveActivity/PowerLogRideWidget.swift',
 ];
@@ -34,6 +34,7 @@ function configureActivityProject(project, config) {
     const configuration = configurations[reference.value];
     Object.assign(configuration.buildSettings, {
       PRODUCT_BUNDLE_IDENTIFIER: `"${bundleIdentifier}.activity"`,
+      POWER_LOG_URL_SCHEME: `"${config.scheme}"`,
       INFOPLIST_FILE: '"../apple/LiveActivity/Info.plist"',
       CODE_SIGN_STYLE: 'Automatic',
       GENERATE_INFOPLIST_FILE: 'NO',
@@ -96,6 +97,7 @@ function configureActivityProject(project, config) {
 module.exports = config => {
   config = withInfoPlist(config, config => {
     config.modResults.NSSupportsLiveActivities = true;
+    config.modResults.PowerLogURLScheme = config.scheme;
     return config;
   });
   return withXcodeProject(config, config => {

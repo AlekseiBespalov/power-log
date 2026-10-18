@@ -1,9 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
-import { defaultMonitorPreferences } from '../../src/core/monitor';
+import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 
-// Synthetic controller observations only: absent HealthKit/GPS data must remain absent.
 const epoch = Date.UTC(2026, 8, 8);
 const samples = Array.from({ length: 2401 }, (_, index) => {
   const seconds = index / 2;
@@ -16,6 +15,8 @@ const csv = exportCsv(samples);
 async function importRecording(page: Page, navigate = true, contents = csv) {
   if (navigate) await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   await (
     await chooser
@@ -59,10 +60,13 @@ async function waitForAncestorAnimations(handle: Locator) {
 async function seedRideNumbers(page: Page) {
   const preferences = defaultMonitorPreferences();
   preferences.views.ride.numbers = ['humanPowerW', 'cadenceRpm', 'heartRateBpm', 'speedMps'];
-  await page.addInitScript(value => {
-    if (!localStorage.getItem('power-log.monitor-preferences.v1'))
-      localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value));
-  }, preferences);
+  await page.addInitScript(
+    value => {
+      if (!localStorage.getItem('power-log.monitor-preferences.v1'))
+        localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value));
+    },
+    JSON.parse(monitorPreferencesJson(preferences)),
+  );
 }
 
 async function numberOrder(page: Page) {
@@ -89,13 +93,12 @@ async function dragMetric(page: Page, id: string, distance: number) {
 }
 
 async function rangeOf(chart: Locator) {
-  const text = (await chart.getAttribute('aria-valuetext')) ?? '';
-  const match = /Visible ((?:\d+:)?\d{2}:\d{2}\.\d{3}) to ((?:\d+:)?\d{2}:\d{2}\.\d{3})/.exec(text);
-  expect(match, text).not.toBeNull();
-  const seconds = (value: string) => value.split(':').reduce((total, part) => total * 60 + Number(part), 0);
-  return { start: seconds(match![1]!), end: seconds(match![2]!) };
+  const start = await chart.getAttribute('data-visible-start');
+  const end = await chart.getAttribute('data-visible-end');
+  expect(start).not.toBeNull();
+  expect(end).not.toBeNull();
+  return { start: Number(start), end: Number(end) };
 }
-
 async function expectRange(chart: Locator, start: number, end: number) {
   await expect
     .poll(async () => {
@@ -117,7 +120,6 @@ async function inspectCentered(chart: Locator, seconds: number) {
   const box = (await chart.boundingBox())!;
   const x = box.x + 8 + (box.width - 16) / 2,
     y = box.y + 70;
-  // Pan the real chart to a narrow window, so half-second observations are distinguishable.
   await chart.evaluate(
     (element, event) =>
       element.dispatchEvent(
@@ -205,7 +207,7 @@ test('reordered and removed numbers and graphs survive reload independently per 
   await chooseView(page, 'Battery');
   await expect.poll(() => numberOrder(page)).toEqual(['batteryVoltageV', 'batteryCurrentA', 'motorInputPowerW']);
   await page.getByTestId('monitor-edit').click();
-  await page.getByRole('button', { name: 'Remove Motor input power from numbers', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove Battery input power from numbers', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.reload();
   await importRecording(page, false);
@@ -256,8 +258,6 @@ test.describe('touch editor', () => {
   test.use({ hasTouch: true });
   test('the lifted row follows the finger on repeated drags of the same and different metrics', async ({ page }) => {
     await seedRideNumbers(page);
-    // This isolates row tracking from edge scrolling, which the other tests cover
-    // at phone height. All four rows fit without an out-of-band DOM scroll reset.
     await page.setViewportSize({ width: 390, height: 1200 });
     await importRecording(page);
     await page.getByTestId('monitor-edit').click();
@@ -325,7 +325,6 @@ test.describe('touch editor', () => {
     await expect(handle).toHaveAttribute('aria-valuenow', '1');
     await touch.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
     await expect(handle).toHaveAttribute('aria-valuenow', '3');
-    // Cancellation restores order while retaining the scroll position reached during the drag.
     await waitForAncestorAnimations(handle);
     await handle.click({ trial: true });
     await waitForAncestorAnimations(handle);
@@ -362,15 +361,15 @@ test('ten-minute and whole-ride ranges retain older samples and use interval-spe
   const chart = page.getByTestId('monitor-chart-batteryVoltageV');
   const readout = page.getByTestId('monitor-readout-batteryVoltageV');
   await expectRange(chart, 0, 1200);
-  await expect(readout).toContainText('Min 44.12 V · 02:17.500');
+  await expect(readout).toContainText('Min 44.12 V · 02:17');
   await chooseRange(page, '10 min');
   await expectRange(chart, 600, 1200);
-  await expect(readout).toContainText('Min 45.62 V · 13:33.500');
+  await expect(readout).toContainText('Min 45.62 V · 13:33');
   await chart.scrollIntoViewIfNeeded();
   await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('monitor-battery-390.png') });
   await chooseRange(page, 'Whole ride');
   await expectRange(chart, 0, 1200);
-  await expect(readout).toContainText('Min 44.12 V · 02:17.500');
+  await expect(readout).toContainText('Min 44.12 V · 02:17');
 });
 
 test('battery comparison resolves original observations outside the current window', async ({ page }) => {
@@ -379,24 +378,23 @@ test('battery comparison resolves original observations outside the current wind
   await chooseView(page, 'Battery');
   const chart = page.getByTestId('monitor-chart-batteryVoltageV');
   await expectRange(chart, 0, 1200);
-  // Narrow from twenty minutes to 75 seconds; these interior samples are absent from the overview vertices.
   for (let step = 0; step < 4; step++) await page.getByTestId('monitor-zoom-in').click();
   await expectRange(chart, 562.5, 637.5);
   await inspectCentered(chart, 123.5);
   await expect(chart).toHaveAttribute(
     'aria-valuetext',
-    /Battery voltage 51\.88 V, 02:03\.500 elapsed, 2026-09-08T00:02:03\.500Z/,
+    /Battery voltage 51\.88 V, 02:03 elapsed, 2026-09-08T00:02:03\.500Z/,
   );
   await page.getByTestId('monitor-reference-set').click();
   await inspectCentered(chart, 876.5);
   await expect(chart).toHaveAttribute(
     'aria-valuetext',
-    /Battery voltage 51\.12 V, 14:36\.500 elapsed, 2026-09-08T00:14:36\.500Z/,
+    /Battery voltage 51\.12 V, 14:36 elapsed, 2026-09-08T00:14:36\.500Z/,
   );
   const comparison = page.getByTestId('monitor-compare-batteryVoltageV');
   await expect(comparison).toContainText('Δ -0.75 V');
-  await expect(comparison).toContainText('A 51.88 V · 02:03.500');
-  await expect(comparison).toContainText('B 51.12 V · 14:36.500');
+  await expect(comparison).toContainText('A 51.88 V · 02:03');
+  await expect(comparison).toContainText('B 51.12 V · 14:36');
   await page.getByTestId('monitor-reference-clear').click();
   await expect(comparison).toHaveCount(0);
 });
@@ -421,7 +419,7 @@ test('chart navigation preserves layout while exact viewport statistics catch up
   await expect(readout).toContainText(/Min \d/);
   await expect(readout).not.toContainText('Previous range');
   expect((await chart.boundingBox())!.y).toBeCloseTo(before.y, 1);
-  await expect(chart).not.toHaveAttribute('aria-valuetext', /Visible 00:00\.000 to 20:00\.000/);
+  await expect(chart).not.toHaveAttribute('aria-valuetext', /Visible 00:00 to 20:00/);
 });
 
 test('re-importing a changed CSV with the same filename replaces the monitor source', async ({ page }) => {

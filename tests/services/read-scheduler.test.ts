@@ -83,8 +83,22 @@ describe('global native read admission', () => {
     expect(order).toEqual(['describe', 'changes', 'latest', 'cursor', 'reference']);
   });
   it('recognizes distinct native read-pressure codes without masking unrelated failures', () => {
-    for (const message of ['MONITOR_ADMISSION_PLOT', 'MONITOR_CACHE_STATISTICS', 'STORAGE_ADMISSION'])
-      expect(readPressure(new Error(message))).toBe(true);
+    expect(readPressure(new ReadDeferred())).toBe(true);
+    for (const code of ['ERR_READ_DEFERRED', 'ERR_READ_CONTENTION', 'ERR_STORAGE_BUSY']) {
+      expect(readPressure(Object.assign(new Error('Localized native failure'), { code }))).toBe(true);
+      expect(readPressure({ code })).toBe(true);
+    }
+    for (const message of [
+      'MONITOR_ADMISSION_PLOT',
+      'MONITOR_CACHE_STATISTICS',
+      'STORAGE_ADMISSION',
+      '[monitor-contention]',
+      'Storage work queue is full',
+    ])
+      expect(readPressure(new Error(message))).toBe(false);
+    expect(readPressure({ code: 'E_POWER_LOG', message: 'MONITOR_ADMISSION_PLOT' })).toBe(false);
+    expect(readPressure({ code: 'ERR_RIDE_DELETED' })).toBe(false);
+    expect(readPressure(null)).toBe(false);
     expect(readPressure(new Error('Malformed source metadata'))).toBe(false);
   });
 });

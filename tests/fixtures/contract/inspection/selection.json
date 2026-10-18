@@ -1,0 +1,472 @@
+{
+  "fixtures": ["F26", "F24"],
+  "cases": [
+    {
+      "id": "anchor-10000000",
+      "metric": "humanPowerW",
+      "timeUs": "10000000",
+      "anchor": "a",
+      "anchorTimeUs": "10000000",
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "8000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "10000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "12000000",
+          "value": 300,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "anchor-10000001",
+      "metric": "humanPowerW",
+      "timeUs": "10000001",
+      "anchor": "a",
+      "anchorTimeUs": "10000001",
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "8000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "10000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "12000000",
+          "value": 300,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "mismatched-anchor-falls-back",
+      "metric": "humanPowerW",
+      "timeUs": "10010000",
+      "anchor": "wrong",
+      "anchorTimeUs": "10010000",
+      "points": [
+        {
+          "id": "wrong",
+          "timeUs": "8000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "10000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "12000000",
+          "value": 300,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "nearest-earlier-tie",
+      "metric": "humanPowerW",
+      "timeUs": "10000000",
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "8000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "12000000",
+          "value": 300,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "left"
+    },
+    {
+      "id": "identity-tie",
+      "metric": "humanPowerW",
+      "timeUs": "10000000",
+      "points": [
+        {
+          "id": "z",
+          "timeUs": "10000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "a",
+          "timeUs": "10000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "exact-before-gap",
+      "metric": "humanPowerW",
+      "timeUs": "8000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "8000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "14000000",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "six-second-gap",
+      "metric": "humanPowerW",
+      "timeUs": "10000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "8000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "14000000",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": null
+    },
+    {
+      "id": "course-wrap",
+      "metric": "courseDegrees",
+      "timeUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 350,
+          "kind": "location"
+        },
+        {
+          "id": "b",
+          "timeUs": "2000000",
+          "value": 10,
+          "kind": "location"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "no-extrapolation",
+      "metric": "humanPowerW",
+      "timeUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": null
+    },
+    {
+      "id": "live-trailing-original",
+      "metric": "humanPowerW",
+      "timeUs": "1000000",
+      "allowTrailing": true,
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "plot-admits-negative-power",
+      "metric": "humanPowerW",
+      "timeUs": "0",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": -1,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "anchor-identity-with-nearby-original",
+      "metric": "humanPowerW",
+      "timeUs": "10000000",
+      "anchor": "a",
+      "anchorTimeUs": "10000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "10000000",
+          "value": 200,
+          "kind": "telemetry"
+        },
+        {
+          "id": "nearby",
+          "timeUs": "10000001",
+          "value": 300,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "resumed-equal-time-neighbour",
+      "metric": "humanPowerW",
+      "timeUs": "1250000",
+      "lifecycle": [
+        {
+          "timeUs": "1000000",
+          "action": "pause",
+          "interrupted": true,
+          "controllerSequence": "2"
+        },
+        {
+          "timeUs": "1000000",
+          "action": "resume"
+        }
+      ],
+      "points": [
+        {
+          "id": "closing",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "telemetry",
+          "sequence": "2"
+        },
+        {
+          "id": "resumed",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry",
+          "sequence": "3"
+        },
+        {
+          "id": "next",
+          "timeUs": "2000000",
+          "value": 300,
+          "kind": "telemetry",
+          "sequence": "4"
+        }
+      ],
+      "expected": "resumed"
+    },
+    {
+      "id": "exact-interruption-cutoff-identity",
+      "metric": "humanPowerW",
+      "timeUs": "1000000",
+      "lifecycle": [
+        {
+          "timeUs": "1000000",
+          "action": "pause",
+          "interrupted": true,
+          "controllerSequence": "2"
+        },
+        {
+          "timeUs": "1000000",
+          "action": "resume"
+        }
+      ],
+      "points": [
+        {
+          "id": "z-closing",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "telemetry",
+          "sequence": "2"
+        },
+        {
+          "id": "a-resumed",
+          "timeUs": "1000000",
+          "value": 200,
+          "kind": "telemetry",
+          "sequence": "3"
+        },
+        {
+          "id": "next",
+          "timeUs": "2000000",
+          "value": 300,
+          "kind": "telemetry",
+          "sequence": "4"
+        }
+      ],
+      "expected": "a-resumed"
+    },
+    {
+      "id": "n1-gap-5999999",
+      "metric": "humanPowerW",
+      "timeUs": "3000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "5999999",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": "b"
+    },
+    {
+      "id": "n1-gap-6000000",
+      "metric": "humanPowerW",
+      "timeUs": "3000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "6000000",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": null
+    },
+    {
+      "id": "n1-gap-6000001",
+      "metric": "humanPowerW",
+      "timeUs": "3000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "6000001",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": null
+    },
+    {
+      "id": "n1-anchor-1us",
+      "metric": "humanPowerW",
+      "timeUs": "1000000",
+      "anchor": "b",
+      "anchorTimeUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": 100
+        },
+        {
+          "id": "b",
+          "timeUs": "1000001",
+          "value": 200,
+          "elapsedSeconds": 1.0000012
+        }
+      ],
+      "expected": "b"
+    },
+    {
+      "id": "n1-anchor-2us",
+      "metric": "humanPowerW",
+      "timeUs": "1000000",
+      "anchor": "b",
+      "anchorTimeUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": 100
+        },
+        {
+          "id": "b",
+          "timeUs": "1000002",
+          "value": 200,
+          "elapsedSeconds": 1.0000022
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "n1-collapsed-originals",
+      "metric": "humanPowerW",
+      "timeUs": "1000000",
+      "points": [
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000002,
+          "value": 100
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.0000008,
+          "value": 200
+        }
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "n1-binary64-bin-edge",
+      "metric": "humanPowerW",
+      "timeUs": "1000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "elapsedSeconds": 1.000001,
+          "value": 100
+        }
+      ],
+      "expected": "a"
+    }
+  ]
+}

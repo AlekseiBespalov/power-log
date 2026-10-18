@@ -1,4 +1,5 @@
 import { PROJECTIONS } from './catalog';
+import { analyticsTimeUs, type AnalyticsTimeline } from '../../../shared/js';
 import { readProjection, type ExportReads, type ProjectionPage } from './pages';
 import {
   ExportError,
@@ -27,6 +28,12 @@ export interface TimelineLap {
   readonly timerSeconds: number;
 }
 
+export interface TimelineLapTime {
+  readonly startUs: string;
+  readonly endUs: string;
+  readonly timerUs: string;
+}
+
 export type TimelineTransition =
   | { readonly kind: 'open' | 'close'; readonly elapsed: number; readonly interval: number }
   | { readonly kind: 'lap'; readonly elapsed: number; readonly lap: number };
@@ -50,7 +57,7 @@ interface InterruptionBoundary {
   readonly producer: string;
   readonly sequence: number;
   readonly clockEpoch: string | null;
-  readonly cycSequence: number;
+  readonly controllerSequence: number;
 }
 
 interface RunState {
@@ -70,7 +77,7 @@ const malformed = (projection: ProjectionName, problem: string) =>
 
 const listed = (projection: ProjectionName, platform: ExportPlatform, name: string) =>
   (PROJECTIONS[projection].columns as readonly ProjectionColumn[]).some(
-    column => column.name === name && column.platforms.includes(platform),
+    column => column.name === name && column.platforms.includes(platform) && column.consumers.includes('zip'),
   );
 
 function column<T extends Float64Array | Texts>(
@@ -94,13 +101,16 @@ function precedes(
 ): boolean {
   if (boundary.time !== time) return boundary.time < time;
   if (boundary.producer === producer && sequence !== null) return boundary.sequence < sequence;
-  if (producer === 'cyc' && sequence !== null) return boundary.cycSequence < sequence;
+  if (producer === 'controller' && sequence !== null) return boundary.controllerSequence < sequence;
   return boundary.clockEpoch !== null && clockEpoch !== null && boundary.clockEpoch !== clockEpoch;
 }
 
 export class Timeline {
   readonly timerSeconds: number;
   readonly laps: readonly TimelineLap[];
+  readonly lapTimes: readonly TimelineLapTime[];
+  readonly endUs: string;
+  readonly timerUs: string;
 
   constructor(
     readonly platform: ExportPlatform,
@@ -109,15 +119,29 @@ export class Timeline {
     lapEnds: readonly number[],
     readonly transitions: readonly TimelineTransition[],
     private readonly boundaries: readonly InterruptionBoundary[],
+    readonly analytics?: AnalyticsTimeline,
   ) {
-    this.timerSeconds = this.timer(0, end);
+    this.endUs = analytics?.endUs ?? analyticsTimeUs(end);
+    this.timerUs = analytics?.timerUs ?? analyticsTimeUs(this.timer(0, end));
+    this.timerSeconds = analytics ? Number(this.timerUs) / 1e6 : this.timer(0, end);
     const marks = [0, ...lapEnds, end];
-    this.laps = marks
-      .slice(1)
-      .map((lapEnd, index) => ({ start: marks[index]!, end: lapEnd, timerSeconds: this.timer(marks[index]!, lapEnd) }));
+    const marksUs = ['0', ...(analytics?.lapEndsUs ?? marks.slice(1).map(analyticsTimeUs))];
+    this.lapTimes = marks.slice(1).map((lapEnd, index) => {
+      const startUs = marksUs[index]!;
+      const endUs = marksUs[index + 1]!;
+      const timerUs = analytics?.rangeTimerUs(startUs, endUs) ?? analyticsTimeUs(this.timer(marks[index]!, lapEnd));
+      return { startUs, endUs, timerUs };
+    });
+    this.laps = marks.slice(1).map((lapEnd, index) => ({
+      start: marks[index]!,
+      end: lapEnd,
+      timerSeconds: analytics ? Number(this.lapTimes[index]!.timerUs) / 1e6 : this.timer(marks[index]!, lapEnd),
+    }));
   }
 
   timer(start: number, end: number): number {
+    if (this.analytics)
+      return Number(this.analytics.rangeTimerUs(String(Math.floor(start * 1e6)), String(Math.floor(end * 1e6)))) / 1e6;
     let total = 0;
     for (const interval of this.intervals)
       total += Math.max(0, Math.min(end, interval.close) - Math.max(start, interval.open));
@@ -197,12 +221,12 @@ export class TimelineBuilder {
     const producer = column<Texts>(page, 'lifecycle', 'ios', 'producer')![index];
     const sequence = column<Float64Array>(page, 'lifecycle', 'ios', 'producerSequence')![index]!;
     const clockEpoch = column<Texts>(page, 'lifecycle', 'ios', 'clockEpoch')![index] ?? null;
-    const cycSequence = column<Float64Array>(page, 'lifecycle', 'ios', 'cycSequence')![index]!;
+    const controllerSequence = column<Float64Array>(page, 'lifecycle', 'ios', 'controllerSequence')![index]!;
     if (typeof producer !== 'string' || !Number.isSafeInteger(sequence))
       throw malformed('lifecycle', 'has an interruption without its producer sequence');
-    if (!Number.isSafeInteger(cycSequence) || cycSequence < 0)
+    if (!Number.isSafeInteger(controllerSequence) || controllerSequence < 0)
       throw new ExportError('page', 'An interruption in this ride has no retained telemetry sequence.');
-    this.boundaries.push({ time, producer, sequence, clockEpoch, cycSequence });
+    this.boundaries.push({ time, producer, sequence, clockEpoch, controllerSequence });
   }
 
   finish(): Timeline {
@@ -240,13 +264,32 @@ export class TimelineCursor<P extends ObservationProjection> {
     const projection = this.projection;
     const elapsed = column<Float64Array>(page, projection, platform, 'elapsedSeconds');
     if (!elapsed) throw malformed(projection, 'has no elapsedSeconds column');
+    if (this.timeline.analytics) {
+      const c = page.columns as ColumnMap;
+      for (let i = 0; i < rows; i++) {
+        const t = elapsed[i]!;
+        if (!Number.isFinite(t)) continue;
+        if (t < this.previous)
+          throw new ExportError('cursor', `The ${projection} observations are out of elapsed order.`);
+        this.previous = t;
+      }
+      const assignment = this.timeline.analytics.assign(
+        elapsed,
+        projection === 'gps' ? 'location' : projection === 'telemetry' ? 'telemetry' : 'health',
+        (c.producer as Texts | undefined)?.slice() ?? null,
+        (c.producerSequence as Float64Array | undefined) ?? null,
+        (c.clockEpoch as Texts | undefined)?.slice() ?? null,
+      );
+      return { interval: assignment.interval, interruption: assignment.interruption };
+    }
     const ios = platform === 'ios';
     const boundaries = this.boundaries;
     const producers =
       ios && projection !== 'telemetry' ? column<Texts>(page, projection, platform, 'producer') : undefined;
     const sequences = ios ? column<Float64Array>(page, projection, platform, 'producerSequence') : undefined;
     const epochs = ios ? column<Texts>(page, projection, platform, 'clockEpoch') : undefined;
-    const active = ios ? undefined : column<Float64Array>(page, projection, platform, 'active');
+    const capturedActivity = !ios && projection !== 'healthFit' && projection !== 'healthZip';
+    const active = capturedActivity ? column<Float64Array>(page, projection, platform, 'active') : undefined;
     const stored = platform === 'web' ? column<Float64Array>(page, projection, platform, 'interval') : undefined;
     for (let i = 0; i < rows; i++) {
       const t = elapsed[i]!;
@@ -264,7 +307,7 @@ export class TimelineCursor<P extends ObservationProjection> {
           interruption[i] = this.passed;
           continue;
         }
-        const producer = projection === 'telemetry' ? 'cyc' : (producers?.[i] ?? null);
+        const producer = projection === 'telemetry' ? 'controller' : (producers?.[i] ?? null);
         const value = sequences ? sequences[i]! : NaN;
         const sequence = Number.isNaN(value) ? null : value;
         const clockEpoch = epochs?.[i] ?? null;
@@ -280,7 +323,8 @@ export class TimelineCursor<P extends ObservationProjection> {
         if (t < close || ((t === end || cutoff) && t === close)) interval[i] = low;
       } else {
         const opened = this.opened;
-        if (!ordered || !active || active[i] !== 1 || opened === 0 || intervals[opened - 1]!.close < t) continue;
+        if (!ordered || (capturedActivity && active?.[i] !== 1) || opened === 0 || intervals[opened - 1]!.close < t)
+          continue;
         const choice = stored ? stored[i]! : NaN;
         interval[i] =
           Number.isInteger(choice) && choice >= 0 && choice < opened && intervals[choice]!.close >= t
@@ -346,7 +390,6 @@ export class RunTracker<P extends RunProjection> {
       for (let i = 0; i < rows; i++) {
         const connection = connections ? connections[i]! : 0;
         const clockEpoch = epochs?.[i] ?? null;
-        // A row equal to the one before it continues that row's run.
         if (
           i > 0 &&
           interval[i] === interval[i - 1] &&

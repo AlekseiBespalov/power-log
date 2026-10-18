@@ -1,4 +1,4 @@
-import bridge from '../../modules/cyc-bridge';
+import bridge from '../../modules/power-log-bridge';
 import { subscribeAppVisibility } from './app-visibility';
 import { MonotonicClock } from './monotonic-clock';
 

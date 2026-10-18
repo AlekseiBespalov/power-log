@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Animated, Platform, Pressable, View } from 'react-native';
+import { Animated, Platform, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { haptics } from '../services/haptics';
-import { colors } from './ui';
+import { colors, Pressable } from './ui';
 
 export function Toggle({
   label,

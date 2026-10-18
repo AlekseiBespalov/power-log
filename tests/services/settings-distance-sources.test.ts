@@ -15,16 +15,20 @@ vi.mock('../../src/services/workout-context', () => ({}));
 vi.mock('../../src/services/workouts', () => ({}));
 
 describe('settings distance sources', () => {
-  it('offers only Auto and controller distance in the browser', () => {
+  it('offers browser GPS alongside Auto and controller distance', () => {
     expect(distanceSourceChoices('web')).toEqual([
       { value: 'auto', label: 'Auto' },
+      { value: 'gps:phone', label: 'GPS · Browser' },
       { value: 'controller', label: 'Controller estimate' },
     ]);
   });
-  it('retains phone GPS on Android and all recorded producers on iOS', () => {
+  it('uses phone GPS on both Android and iOS', () => {
     expect(distanceSourceChoices('android').map(choice => choice.value)).toEqual(['auto', 'gps:phone', 'controller']);
     expect(distanceSourceChoices('ios')).toEqual(
-      Object.entries(DISTANCE_SOURCE_LABELS).map(([value, label]) => ({ value, label })),
+      ['auto', 'gps:phone', 'controller'].map(value => ({
+        value,
+        label: DISTANCE_SOURCE_LABELS[value as keyof typeof DISTANCE_SOURCE_LABELS],
+      })),
     );
   });
 });

@@ -14,7 +14,7 @@
   <key>WKRunsIndependentlyOfCompanionApp</key><false/>
   <key>WKBackgroundModes</key><array><string>workout-processing</string></array>
   <key>NSHealthShareUsageDescription</key><string>Power Log reads your workout heart rate, energy, distance and available cycling measurements to record and display your ride.</string>
-  <key>NSHealthUpdateUsageDescription</key><string>Power Log saves your cycling workout, CYC rider power and cadence, and outdoor route to Health.</string>
+  <key>NSHealthUpdateUsageDescription</key><string>Power Log saves your cycling workout, Controller rider power and cadence, and outdoor route to Health.</string>
   <key>NSLocationWhenInUseUsageDescription</key><string>Power Log records the GPS route, speed and altitude of outdoor rides while a workout is active.</string>
 </dict>
 </plist>

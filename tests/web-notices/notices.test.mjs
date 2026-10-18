@@ -9,15 +9,26 @@ function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'power-log-notices-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const output = join(root, 'export');
-  const sources = [], contents = [];
+  const sources = [],
+    contents = [];
   const write = (file, value) => {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), typeof value === 'string' ? value : JSON.stringify(value));
   };
-  const add = (path, { version = '1.0.0', license = 'MIT', licenseFile = 'Copyright Example author\nExample licence terms', header = '', file = 'index.js' } = {}) => {
+  const add = (
+    path,
+    {
+      version = '1.0.0',
+      license = 'MIT',
+      licenseFile = 'Copyright Example author\nExample licence terms',
+      header = '',
+      file = 'index.js',
+    } = {},
+  ) => {
     write(`${path}/package.json`, { name: path.split('node_modules/').at(-1), version, license });
     if (licenseFile) write(`${path}/LICENSE`, licenseFile);
-    sources.push(`/${path}/${file}`); contents.push(`${header}\nexport default 1;`);
+    sources.push(`/${path}/${file}`);
+    contents.push(`${header}\nexport default 1;`);
   };
   const finish = () => write('export/bundle.js.map', { sources, sourcesContent: contents });
   write('LICENSE', 'Power Log Apache-2.0 licence');
@@ -36,7 +47,14 @@ test('inventory covers nested versions, assets and embedded notices, and omits p
   const { notices, packageCount, missingLicenseFile } = generateWebNotices(root, output);
   assert.equal(packageCount, 3);
   assert.deepEqual(missingLicenseFile, []);
-  for (const text of ['lib@1.0.0 — MIT', 'lib@2.0.0 — BSD-3-Clause', 'icons@1.0.0', 'Copyright Embedded Author <example>', 'Copyright Icon Author']) assert.ok(notices.includes(text), text);
+  for (const text of [
+    'lib@1.0.0 — MIT',
+    'lib@2.0.0 — BSD-3-Clause',
+    'icons@1.0.0',
+    'Copyright Embedded Author <example>',
+    'Copyright Icon Author',
+  ])
+    assert.ok(notices.includes(text), text);
   assert.ok(!notices.includes('build-only'));
   assert.equal(readFileSync(join(output, 'LICENSE.txt'), 'utf8'), 'Power Log Apache-2.0 licence');
   assert.equal(readFileSync(join(output, 'THIRD_PARTY_NOTICES.txt'), 'utf8'), notices);
@@ -51,10 +69,16 @@ test('packages without a licence file are reported rather than rejected, and the
   const { notices, missingLicenseFile, missingCopyright } = generateWebNotices(root, output);
   assert.deepEqual(missingLicenseFile, ['bare@1.0.0', 'headed@1.0.0', 'undeclared@1.0.0']);
   assert.deepEqual(missingCopyright, ['bare@1.0.0', 'undeclared@1.0.0']);
-  assert.ok(notices.includes('Packages that publish no licence file of their own: bare@1.0.0, headed@1.0.0, undeclared@1.0.0.'));
+  assert.ok(
+    notices.includes('Packages that publish no licence file of their own: bare@1.0.0, headed@1.0.0, undeclared@1.0.0.'),
+  );
   assert.ok(notices.includes('Packages where no copyright notice was found either: bare@1.0.0, undeclared@1.0.0.'));
   assert.ok(notices.includes('Copyright (c) Header Owner.'));
-  assert.ok(notices.includes('bare@1.0.0 — MIT\n\nThis package publishes no licence file of its own. Its declared licence is MIT.\n\nNo copyright notice was found in its bundled source.'));
+  assert.ok(
+    notices.includes(
+      'bare@1.0.0 — MIT\n\nThis package publishes no licence file of its own. Its declared licence is MIT.\n\nNo copyright notice was found in its bundled source.',
+    ),
+  );
   assert.ok(notices.includes('undeclared@1.0.0 — no licence declared in package.json'));
 });
 
@@ -70,7 +94,11 @@ test('licence files beside vendored code inside a package are attributed to that
   assert.ok(notices.includes('--- LICENSE ---\nCopyright Example author'));
   assert.deepEqual(missingLicenseFile, ['shell@1.0.0']);
   assert.deepEqual(missingCopyright, ['shell@1.0.0']);
-  assert.ok(notices.includes('shell@1.0.0 — MIT\n\nThis package publishes no licence file of its own. Its declared licence is MIT.\n\nNo copyright notice was found in its bundled source.\n\n--- vendor/lib/LICENSE ---\nVendored MIT, copyright Lib Author.'));
+  assert.ok(
+    notices.includes(
+      'shell@1.0.0 — MIT\n\nThis package publishes no licence file of its own. Its declared licence is MIT.\n\nNo copyright notice was found in its bundled source.\n\n--- vendor/lib/LICENSE ---\nVendored MIT, copyright Lib Author.',
+    ),
+  );
 });
 
 test('public files exclude maps and drop map references from scripts and styles', t => {
@@ -85,4 +113,16 @@ test('public files exclude maps and drop map references from scripts and styles'
     assert.ok(!file.endsWith('.map'));
     assert.ok(!readFileSync(file, 'utf8').includes('sourceMappingURL'));
   }
+});
+
+test('the unbundled shared core includes the Kotlin stdlib licence', t => {
+  const { root, output, write, finish } = fixture(t);
+  write('shared/js/package.json', { name: '@power-log/core', version: '0.3.0', license: 'Apache-2.0' });
+  write('shared/js/LICENSE', 'Power Log Apache-2.0');
+  write('shared/js/KOTLIN_LICENSE', 'Copyright 2010-2026 JetBrains s.r.o.\nApache License, Version 2.0');
+  finish();
+  write('export/bundle.js.map', { sources: ['/shared/js/power-log-core.mjs', '/shared/js/kotlin-kotlin-stdlib.mjs'] });
+  const { notices } = generateWebNotices(root, output);
+  assert.match(notices, /kotlin-stdlib@2\.4\.20/);
+  assert.match(notices, /JetBrains s\.r\.o\./);
 });

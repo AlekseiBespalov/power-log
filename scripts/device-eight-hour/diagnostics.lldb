@@ -1,0 +1,13 @@
+expression -l Swift -- import Foundation
+expression -l Swift -- import Darwin
+expression -l Swift -- @testable import PowerLogBridge
+expression -l Swift -- let $drLock = NSLock()
+expression -l Swift -- var $drPages = [String: Int]()
+expression -l Swift -- var $drFootprints = [UInt64]()
+expression -l Swift -- let $drFootprint = { () -> UInt64 in var info = task_vm_info_data_t(); var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size); let status = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) } }; precondition(status == KERN_SUCCESS); return info.phys_footprint }
+expression -l Swift -- WorkoutAnalysis.pageObserverForTesting = { rows, bytes in $drLock.lock(); defer { $drLock.unlock() }; $drPages["summaryPages", default: 0] += 1; $drPages["summaryRows", default: 0] += rows; $drPages["summaryBytes", default: 0] += bytes; $drPages["summaryMaxRows"] = max($drPages["summaryMaxRows", default: 0], rows) }
+expression -l Swift -- WorkoutDistanceStore.inputPageObserverForTesting = { rows in $drLock.lock(); defer { $drLock.unlock() }; $drPages["distancePages", default: 0] += 1; $drPages["distanceRows", default: 0] += rows; $drPages["distanceMaxRows"] = max($drPages["distanceMaxRows", default: 0], rows) }
+expression -l Swift -- let $drTimer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "device.measurement"))
+expression -l Swift -- $drTimer.schedule(deadline: .now(), repeating: .milliseconds(100))
+expression -l Swift -- $drTimer.setEventHandler { let value = $drFootprint(); $drLock.lock(); $drFootprints.append(value); $drLock.unlock() }
+expression -l Swift -- $drTimer.resume()

@@ -1,0 +1,107 @@
+{
+  "cases": [
+    {
+      "id": "equal-time-clock-output-order",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "3000000",
+      "points": [
+        {
+          "id": "z",
+          "timeUs": "1000000",
+          "value": 100,
+          "clock": "A",
+          "reference": "1"
+        },
+        {
+          "id": "a",
+          "timeUs": "1000000",
+          "value": 200,
+          "clock": "B",
+          "reference": "2"
+        }
+      ],
+      "expected": ["a", "z"],
+      "segments": [1, 0],
+      "aggregate": true,
+      "following": {
+        "id": "following",
+        "timeUs": "4000000",
+        "value": 300,
+        "clock": "B",
+        "reference": "3"
+      }
+    },
+    {
+      "id": "equal-cutoff-producer-output-order",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "3000000",
+      "points": [
+        {
+          "id": "z-resumed",
+          "timeUs": "1000000",
+          "value": 200,
+          "producer": "controller",
+          "interruptionIndex": "1",
+          "sequence": "3",
+          "reference": "1",
+          "boundary": true
+        },
+        {
+          "id": "a-closing",
+          "timeUs": "1000000",
+          "value": 100,
+          "producer": "phone",
+          "interruptionIndex": "0",
+          "sequence": "2",
+          "reference": "2",
+          "boundary": true
+        }
+      ],
+      "expected": ["a-closing", "z-resumed"],
+      "segments": [1, 0],
+      "aggregate": true,
+      "following": {
+        "id": "following",
+        "timeUs": "4000000",
+        "value": 300,
+        "producer": "phone",
+        "interruptionIndex": "0",
+        "reference": "3"
+      }
+    },
+    {
+      "id": "chosen-neighbour-clock-continuity",
+      "metric": "humanPowerW",
+      "startUs": "500000",
+      "endUs": "1500000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "clock": "A",
+          "reference": "1"
+        },
+        {
+          "id": "z",
+          "timeUs": "0",
+          "value": 200,
+          "clock": "B",
+          "reference": "2"
+        },
+        {
+          "id": "right",
+          "timeUs": "2000000",
+          "value": 300,
+          "clock": "A",
+          "reference": "3"
+        }
+      ],
+      "expected": ["a", "right"],
+      "segments": [0, 0],
+      "aggregate": false
+    }
+  ]
+}

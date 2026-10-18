@@ -14,6 +14,7 @@ export function CsvRideDetails({ ride }: { ride: CsvRide }) {
     <View style={{ gap: 14 }}>
       <Heading>{ride.title}</Heading>
       <Chip tone="warning">Imported · source unverified</Chip>
+      <Heading level={2}>Ride summary</Heading>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>
         <Metric label="Duration" value={formatDuration(summary.durationSeconds)} unit="" />
         <Metric
@@ -29,8 +30,9 @@ export function CsvRideDetails({ ride }: { ride: CsvRide }) {
           unit="rpm"
           color={colors.cadence}
         />
-        <Metric label="Rider work" value={summary.humanEnergyWh.toFixed(1)} unit="Wh" />
+        <Metric label="Rider work" value={summary.humanEnergyWh?.toFixed(1) ?? '—'} unit="Wh" />
       </View>
+      <Heading level={2}>Chart inspection</Heading>
       <MonitorPanel source={source} embedded />
       <Body muted>
         {summary.sampleCount.toLocaleString()} original samples

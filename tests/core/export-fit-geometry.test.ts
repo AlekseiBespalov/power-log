@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { analyticsGPSDistance } from '../../shared/js';
 import {
   FitGeometry,
   GpsDistanceAccumulator,
   emptyFix,
-  gpsMeters,
   validAltitude,
-  validFix,
   validSpeed,
   type GpsFix,
 } from '../../src/core/export/fit/geometry';
@@ -41,7 +40,7 @@ describe('GPS fix validity (WorkoutGPSFix.valid)', () => {
     ['longitude above 180', { longitude: 180.0001 }, false],
     ['missing longitude', { longitude: NaN }, false],
   ] as [string, Partial<GpsFix>, boolean][])('%s', (_, values, valid) => {
-    expect(validFix(fix(3, values))).toBe(valid);
+    expect(new FitGeometry().accept(fix(3, values))).toBe(valid);
   });
 
   it('validates speed with its accuracy (WorkoutDistancePolicy.validSpeed)', () => {
@@ -54,8 +53,8 @@ describe('GPS fix validity (WorkoutGPSFix.valid)', () => {
     expect(validSpeed(NaN, 1)).toBeNaN();
   });
 
-  it('treats Apple altitude as valid only with vertical accuracy in (0, 20]', () => {
-    expect(validAltitude(100, 0)).toBe(false);
+  it('treats Apple altitude as valid only with vertical accuracy in [0, 20]', () => {
+    expect(validAltitude(100, 0)).toBe(true);
     expect(validAltitude(100, -1)).toBe(false);
     expect(validAltitude(100, 0.01)).toBe(true);
     expect(validAltitude(100, 20)).toBe(true);
@@ -68,8 +67,8 @@ describe('GPS fix validity (WorkoutGPSFix.valid)', () => {
   });
 
   it('measures great-circle distance like the Swift accumulator', () => {
-    expect(gpsMeters(fix(0), fix(1, { longitude: 0.000045 }))).toBeCloseTo(0.000045 * METERS_PER_DEGREE, 9);
-    expect(gpsMeters(fix(0, { latitude: 45 }), fix(1, { latitude: 45 }))).toBe(0);
+    expect(analyticsGPSDistance(0, 0, 0, 0.000045)).toBeCloseTo(0.000045 * METERS_PER_DEGREE, 9);
+    expect(analyticsGPSDistance(45, 0, 45, 0)).toBe(0);
   });
 });
 
@@ -78,8 +77,8 @@ describe('GPS distance accumulator (WorkoutGPSDistanceAccumulator.append)', () =
   it('connects consecutive fixes within 10 s, 40 m/s, one interval and one clock epoch', () => {
     const accumulator = new GpsDistanceAccumulator();
     expect(accumulator.append(fix(0))).toBeNaN();
-    expect(accumulator.append(fix(1, { longitude: step }))).toBeCloseTo(step * METERS_PER_DEGREE, 9);
-    expect(accumulator.append(fix(11, { longitude: 2 * step }))).toBeCloseTo(step * METERS_PER_DEGREE, 9);
+    expect(accumulator.append(fix(1, { longitude: step }))).toBeCloseTo(1.111951, 12);
+    expect(accumulator.append(fix(11, { longitude: 2 * step }))).toBeCloseTo(1.111951, 12);
     expect(accumulator.append(fix(21.0001, { longitude: 3 * step }))).toBeNaN();
     expect(accumulator.append(fix(22, { longitude: 3 * step }))).toBe(0);
   });
@@ -89,15 +88,17 @@ describe('GPS distance accumulator (WorkoutGPSDistanceAccumulator.append)', () =
     const fast = 40.0001 / METERS_PER_DEGREE;
     accumulator.append(fix(0));
     expect(accumulator.append(fix(1, { longitude: fast }))).toBeNaN();
-    expect(accumulator.append(fix(2, { longitude: fast + step }))).toBeCloseTo(step * METERS_PER_DEGREE, 9);
+    expect(accumulator.append(fix(2, { longitude: fast + step }))).toBeCloseTo(1.111951, 12);
     const below = new GpsDistanceAccumulator();
     below.append(fix(0));
     expect(below.append(fix(1, { longitude: 39.9999 / METERS_PER_DEGREE }))).toBeCloseTo(39.9999, 6);
-    const chord = gpsMeters(fix(0), fix(1, { longitude: 0.0004 }));
+    const chord = analyticsGPSDistance(0, 0, 0, 0.0004);
     const exact = new GpsDistanceAccumulator();
     exact.append(fix(0));
     expect(chord / (chord / 40)).toBe(40);
-    expect(exact.append(fix(chord / 40, { longitude: 0.0004 }))).toBe(chord);
+    expect(exact.append(fix(Math.ceil((chord / 40) * 1e6) / 1e6, { longitude: 0.0004 }))).toBe(
+      Math.round(chord * 1e6) / 1e6,
+    );
   });
 
   it('never connects across activity intervals or clock epochs', () => {
@@ -175,7 +176,7 @@ describe('FIT geometry (WorkoutAnalysis.Geometry.accept)', () => {
   it('resets the anchor on an invalid altitude and re-seeds it from the next valid pair', () => {
     const geometry = new FitGeometry();
     geometry.accept(altitude(0, 100));
-    geometry.accept(altitude(1, 150, 0));
+    geometry.accept(altitude(1, 150, 21));
     geometry.accept(altitude(2, 200, -1));
     geometry.accept(altitude(3, 300, 2));
     expect(geometry.altitudeSegments).toBe(0);

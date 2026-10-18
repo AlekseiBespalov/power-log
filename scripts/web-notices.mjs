@@ -24,6 +24,20 @@ export function generateWebNotices(root, exportDirectory) {
   const exportFiles = filesIn(exportDirectory);
 
   function record(source, content = '') {
+    if (source.includes('shared/js/')) {
+      const kotlin = source.includes('kotlin-kotlin-stdlib.mjs');
+      const name = kotlin ? 'kotlin-stdlib' : '@power-log/core';
+      const license = join(root, 'shared/js', kotlin ? 'KOTLIN_LICENSE' : 'LICENSE');
+      packages.set(name, {
+        name,
+        version: kotlin ? '2.4.20' : '0.3.0',
+        license: 'Apache-2.0',
+        ownLicense: true,
+        documents: new Map([['LICENSE', readFileSync(license, 'utf8')]]),
+        headers: new Set(),
+      });
+      return;
+    }
     const index = source.indexOf('node_modules/');
     if (index < 0) return;
     const local = source.slice(index);

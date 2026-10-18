@@ -1,4 +1,4 @@
 export * from './types';
-export * from './protocol';
+export * from './telemetry';
 export * from './validation';
 export * from './recordings';

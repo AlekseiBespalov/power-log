@@ -1,7 +1,7 @@
 import type { DistanceSource } from '../core/distance';
 import { exportFit } from '../core/export/fit-export';
 import { exportCancelled } from '../core/export/pages';
-import { ExportError, type ExportCommitResult, type ExportKind } from '../core/export/types';
+import { ExportError, type ExportCommitResult, type ExportKind, type FitPowerSource } from '../core/export/types';
 import { exportZip } from '../core/export/zip-export';
 import { writeRecordingCsv, type ImportedSample } from '../core/recordings';
 import { subscribeAppBackground } from './app-visibility';
@@ -24,11 +24,16 @@ async function inForeground(work: (signal: AbortSignal) => Promise<ExportCommitR
   }
 }
 
-export async function exportRide(kind: ExportKind, rideId: string, distanceSource: DistanceSource = 'auto') {
+export async function exportRide(
+  kind: ExportKind,
+  rideId: string,
+  distanceSource: DistanceSource = 'auto',
+  powerSource: FitPowerSource = 'rider',
+) {
   const uri = await inForeground(signal => {
     const request = { rideId, context: context(), signal };
     return kind === 'fit'
-      ? exportFit(exportSource(), openExportSink, { ...request, distanceSource })
+      ? exportFit(exportSource(), openExportSink, { ...request, distanceSource, powerSource })
       : exportZip(exportSource(), openExportSink, request);
   });
   await shareExport(uri);

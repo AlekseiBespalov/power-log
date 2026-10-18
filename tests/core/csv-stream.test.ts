@@ -64,7 +64,7 @@ describe('incremental CSV import', () => {
       header.replace('cadenceRpm', 'other'),
       'Unrecognized CSV column set; open telemetry.csv from a Power Log ride-data ZIP',
     ],
-    [header.replace(',cyc.speedRaw', ''), 'Unrecognized CSV column set'],
+    [header.replace(',controller.speedRaw', ''), 'Unrecognized CSV column set'],
     [
       'timestamp,elapsedSeconds,sequence,humanPowerW,cadenceRpm,motorInputPowerW,batteryVoltageV,batteryCurrentA,' +
         'motorCurrentA,motorRpm,pedalTorqueNm,controllerTempC,motorTempC,consumedAh,consumedWh,throttleVoltageV,' +
@@ -88,7 +88,7 @@ describe('incremental CSV import', () => {
     [withCell('cadenceRpm', '0x10'), 'Invalid CSV numeric field cadenceRpm'],
     [withCell('cadenceRpm', '1e999'), 'Non-finite CSV numeric field cadenceRpm'],
     [withCell('faultCode', '1.5'), 'Invalid CSV integer field faultCode'],
-    [withCell('cyc.raceMode', '0.5'), 'Invalid CSV integer field cyc.raceMode'],
+    [withCell('controller.raceMode', '0.5'), 'Invalid CSV integer field controller.raceMode'],
     [withCell('run', ''), 'CSV row 2 has no run'],
     [withCell('run', '0'), 'Invalid CSV run number'],
     [withCell('activeInterval', '1.5'), 'Invalid CSV activeInterval number'],

@@ -14,32 +14,24 @@ const record: WorkoutMetadata = {
   phase: 'completed',
   indoor: true,
   watchEnabled: true,
-  sport: 'cycling',
-  subSport: 'eBike',
-  eventCount: 12,
+  eventCount: '12',
   interrupted: false,
   healthKitState: 'saved',
-  watchSyncState: 'received',
 };
 
 describe('ride deletion eligibility', () => {
   it('allows finished rides and resolved failed attempts even before sync verification', () => {
     for (const phase of ['completed', 'failed']) {
-      expect(
-        workoutCanDelete(
-          { ...record, phase, watchSyncState: 'pending', finalizationState: 'partial' },
-          unavailableWorkoutState,
-        ),
-      ).toBe(true);
+      expect(workoutCanDelete({ ...record, phase }, unavailableWorkoutState)).toBe(true);
     }
   });
   it('never offers deletion in place of finishing an active or unresolved ride', () => {
-    for (const phase of ['preparing', 'running', 'paused', 'finishing', 'recoverable']) {
+    for (const phase of ['preparing', 'running', 'paused', 'finishing', 'interrupted']) {
       expect(workoutCanDelete({ ...record, phase }, unavailableWorkoutState)).toBe(false);
     }
   });
   it('uses current owner state to reject an outdated terminal catalog row', () => {
-    for (const phase of ['preparing', 'running', 'paused', 'finishing', 'recoverable'] as WorkoutPhase[]) {
+    for (const phase of ['preparing', 'running', 'paused', 'finishing', 'interrupted'] as WorkoutPhase[]) {
       expect(workoutCanDelete(record, { ...unavailableWorkoutState, id: record.id, phase })).toBe(false);
     }
     expect(

@@ -39,10 +39,17 @@ describe('browser catalog partial pages', () => {
         await h.browserTransaction(['recordings'], 'readwrite', async tx => {
           for (let i = 0; i < 123; i++)
             await h.idbRequest(
-              tx.objectStore('recordings').put(h.browserRide({ id: `ride-${String(i).padStart(4, '0')}` })),
+              tx
+                .objectStore('recordings')
+                .put(h.browserRide({ id: `00000000-0000-0000-0000-${String(i).padStart(12, '0')}` })),
             );
-          for (const id of ['zzz-corrupt', 'ride-0098z', 'ride-0072z', 'ride-0020z'])
-            await h.idbRequest(tx.objectStore('recordings').put({ ...h.browserRide({ id }), samples: -1 }));
+          for (const id of [
+            'ffffffff-ffff-ffff-ffff-ffffffffffff',
+            '00000000-0000-0000-0000-000000000098z',
+            '00000000-0000-0000-0000-000000000072z',
+            '00000000-0000-0000-0000-000000000020z',
+          ])
+            await h.idbRequest(tx.objectStore('recordings').put({ ...h.browserRide({ id }), telemetryCount: -1 }));
         });
         const requests: unknown[] = [],
           catalog = new h.HistoryCatalog(request => {
@@ -56,10 +63,10 @@ describe('browser catalog partial pages', () => {
       });
       expect(result.first.records).toHaveLength(50);
       expect(result.first.unreadableCount).toBe(3);
-      expect(result.first.records.at(-1)?.id).toBe('ride-0073');
-      expect(result.requests[1]).toMatchObject({ beforeID: 'ride-0073', limit: 51 });
+      expect(result.first.records.at(-1)?.id).toBe('00000000-0000-0000-0000-000000000073');
+      expect(result.requests[1]).toMatchObject({ beforeID: '00000000-0000-0000-0000-000000000073', limit: 51 });
       expect(result.final.records.map(row => row.id)).toEqual(
-        Array.from({ length: 123 }, (_, i) => `ride-${String(122 - i).padStart(4, '0')}`),
+        Array.from({ length: 123 }, (_, i) => `00000000-0000-0000-0000-${String(122 - i).padStart(12, '0')}`),
       );
       expect(result.final.hasMore).toBe(false);
       expect(result.final.error).toBeNull();
@@ -90,7 +97,7 @@ describe('browser catalog partial pages', () => {
     run(async page => {
       const result = await page.evaluate(async () => {
         const h = window.catalogTests,
-          ride = await h.store.begin('owner', true, '2026-01-01T00:00:00Z');
+          ride = await h.store.begin('owner', { indoor: true, recordGPS: false, sampleHz: 2 }, '2026-01-01T00:00:00Z');
         const row = { ...h.browserRow(0, 0), recordingId: ride.id };
         delete (row as Partial<typeof row>).connectionEpoch;
         const error = await h.store.append(ride.id, 'owner', [row], 0, 0, row.timestamp).then(
@@ -100,7 +107,7 @@ describe('browser catalog partial pages', () => {
         return { error, record: await h.store.get(ride.id), rows: await h.store.page(ride.id, 0, 1) };
       });
       expect(result.error).toMatch(/observation/);
-      expect(result.record.samples).toBe(0);
+      expect(result.record.telemetryCount).toBe(0);
       expect(result.rows).toEqual([]);
     }));
 });

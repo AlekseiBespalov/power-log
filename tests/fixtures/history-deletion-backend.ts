@@ -45,21 +45,8 @@ export async function exportRide(kind: 'fit' | 'zip', id: string, selection: Dis
 const distances = new Map<string, WorkoutDistanceInfo>();
 export function setDistanceFixture(id: string, value: WorkoutDistanceInfo) {
   distances.set(id, value);
-}
-const healthReports = new Map<
-  string,
-  Pick<
-    WorkoutDetail['summary'],
-    'healthDistanceMeters' | 'healthDistanceProvisional' | 'healthDistanceSource' | 'healthDistanceReportedAt'
-  >
->();
-export function setHealthReportFixture(id: string, provisional: boolean) {
-  healthReports.set(id, {
-    healthDistanceMeters: 1234,
-    healthDistanceProvisional: provisional,
-    healthDistanceSource: 'watch',
-    healthDistanceReportedAt: '2026-01-01T00:00:40.000Z',
-  });
+  const record = records.get(id);
+  if (record && value.selected) records.set(id, { ...record, distanceSource: value.selected.source });
 }
 export function metadata(id: string, index: number, phase = 'completed'): WorkoutMetadata {
   return {
@@ -71,21 +58,17 @@ export function metadata(id: string, index: number, phase = 'completed'): Workou
     phase,
     indoor: true,
     watchEnabled: true,
-    sport: 'cycling',
-    subSport: 'indoorCycling',
-    eventCount: 3,
+    distanceSource: 'controller',
+    eventCount: '3',
     interrupted: false,
     saveToHealth: false,
     recordGPS: false,
     healthKitState: 'notRequested',
-    watchSyncState: phase === 'finishing' ? 'pending' : 'received',
-    collectionRevision: 1,
-    finalizationState: phase === 'finishing' ? 'pending' : 'complete',
-    sealRevision: 1,
-    verifiedSealRevision: phase === 'finishing' ? undefined : 1,
+    collectionRevision: '1',
   };
 }
-function detail(record: WorkoutMetadata, selection: DistanceSource = 'auto'): WorkoutDetail {
+function detail(record: WorkoutMetadata, _selection: DistanceSource = 'auto'): WorkoutDetail {
+  const selection = record.distanceSource ?? 'auto';
   const available = distances.get(record.id)?.available;
   const distance = available
     ? {
@@ -106,16 +89,16 @@ function detail(record: WorkoutMetadata, selection: DistanceSource = 'auto'): Wo
       timerSeconds: 48,
       telemetryCoveredSeconds: 3,
       heartRateCoveredSeconds: 0,
-      eventCount: 3,
-      telemetryCount: 3,
-      locationCount: 0,
-      healthCount: 0,
+      eventCount: '3',
+      telemetryCount: '3',
+      locationCount: '0',
+      healthCount: '0',
+      lifecycleCount: '0',
       lapCount: 0,
       routePreview: [],
       provenance: {},
       distance,
       distanceMeters: distance?.selected?.distanceMeters,
-      ...healthReports.get(record.id),
     },
   };
 }
@@ -128,7 +111,6 @@ export function seed(rows: WorkoutMetadata[], current: Partial<WorkoutState> = {
   failures.clear();
   holds.clear();
   distances.clear();
-  healthReports.clear();
   counts.list = 0;
   counts.read = [];
   counts.exports = [];
@@ -210,7 +192,11 @@ export const workouts = {
     const held = holds.get(id);
     if (held) return held.promise;
     if (deleted.has(id)) throw deletionError();
-    if (failures.has(id)) throw new Error(failures.get(id));
+    if (failures.has(id))
+      throw Object.assign(
+        new Error(`BridgeException: ${failures.get(id)} (at PowerLogBridge/PowerLogBridgeModule.swift:11)`),
+        { code: failures.get(id) },
+      );
     const record = records.get(id);
     if (!record) throw new Error('Unknown fixture ride');
     return detail(record, selection);

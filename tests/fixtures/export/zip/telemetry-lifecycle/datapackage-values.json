@@ -1,0 +1,55 @@
+{
+  "name": "power-log-ride-5d0c8a4e-2f6b-4c1d-9e3a-7b8f0a1c2d3e",
+  "id": "5d0c8a4e-2f6b-4c1d-9e3a-7b8f0a1c2d3e",
+  "created": "2026-03-14T09:27:31.250Z",
+  "powerLog:ride": {
+    "startedAt": "2026-03-14T08:00:00.000Z",
+    "endedAt": "2026-03-14T08:00:09.250Z",
+    "elapsedSeconds": 8,
+    "timerSeconds": 6,
+    "ownerTiming": {
+      "timestamp": "2026-03-14T08:00:09.250Z",
+      "elapsedSeconds": 8,
+      "timerSeconds": 6
+    },
+    "indoor": false,
+    "interrupted": true,
+    "watchEnabled": false,
+    "saveToHealth": false,
+    "recordGPS": false,
+    "sport": "cycling",
+    "subSport": "e_biking",
+    "health": {
+      "provider": "appleHealth",
+      "state": "notRequested",
+      "workoutUUID": null,
+      "export": null
+    },
+    "example": false,
+    "sampleHz": null,
+    "batteryConsumptionSource": "controller"
+  },
+  "powerLog:sources": {
+    "connections": [
+      {
+        "connection": 1,
+        "vendor": "controller",
+        "model": "X12",
+        "firmware": "20250604",
+        "protocol": "5.3"
+      },
+      {
+        "connection": 2,
+        "vendor": "controller",
+        "model": "X12",
+        "firmware": "20250911",
+        "protocol": "5.4"
+      }
+    ],
+    "gps": [],
+    "health": []
+  },
+  "powerLog:batteryConsumption": {
+    "status": "available"
+  }
+}

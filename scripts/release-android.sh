@@ -39,7 +39,7 @@ finish() {
 }
 trap finish EXIT
 
-sh scripts/verify.sh "$work"
+sh scripts/verify.sh "$work" --full
 
 cd "$work"
 code=$(echo "$version" | awk -F. '{ print $1 * 10000 + $2 * 100 + $3 }')

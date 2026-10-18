@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { defaultMonitorPreferences } from '../../src/core/monitor';
+import { defaultMonitorPreferences, monitorPreferencesJson, type MonitorPreferences } from '../../src/core/monitor';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { syntheticBike } from '../fixtures/browser-bike';
 
 async function settingsLayout(page: Page) {
   return page.evaluate(() => {
@@ -41,7 +42,8 @@ for (const width of [320, 390, 900, 1440])
     await expect(dialog).toBeVisible();
     expect(await settingsLayout(page)).toEqual(before);
     await expect(dialog.getByRole('radio', { name: 'Auto', exact: true })).toHaveAttribute('aria-checked', 'true');
-    await expect(dialog.getByRole('radio')).toHaveCount(2);
+    await expect(dialog.getByRole('radio')).toHaveCount(3);
+    await expect(dialog.getByRole('radio', { name: 'GPS · Browser', exact: true })).toBeVisible();
     const labels = await dialog
       .getByRole('radio')
       .evaluateAll(nodes => nodes.map(node => node.firstElementChild!.getBoundingClientRect().x));
@@ -91,6 +93,8 @@ test('Settings choices persist and keyboard dismissal returns focus without remo
   await expect(page.getByTestId('settings-options')).toBeHidden();
   await expect(speed).toBeFocused();
   await expect(speed).toHaveAccessibleName('Speed units, m/s');
+  await page.getByTestId('settings-fitPower').click();
+  await page.getByRole('radio', { name: 'Battery input power', exact: true }).click();
   await page.getByTestId('settings-environment').click();
   await page.getByRole('radio', { name: 'Indoor', exact: true }).click();
   await page.getByTestId('settings-sampleHz').click();
@@ -106,28 +110,38 @@ test('Settings choices persist and keyboard dismissal returns focus without remo
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.reload();
   await expect(page.getByTestId('settings-speed')).toHaveAccessibleName('Speed units, m/s');
+  await expect(page.getByTestId('settings-fitPower')).toHaveAccessibleName('FIT power source, Battery input power');
   await expect(page.getByTestId('settings-environment')).toHaveAccessibleName('Ride type, Indoor');
   await expect(page.getByTestId('settings-sampleHz')).toHaveAccessibleName('Bike sample rate, 8 Hz');
 });
 
 test('Settings hydrate retained choices and expose a failed write without hiding controls', async ({ page }) => {
-  const preferences = { ...defaultMonitorPreferences(), speedUnit: 'mph', distanceSource: 'health:watch', sampleHz: 4 };
-  await page.addInitScript(preferences => {
-    localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences));
-    const set = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key === 'power-log.monitor-preferences.v1') throw new Error('Test settings write failed');
-      set.call(this, key, value);
-    };
-  }, preferences);
+  const preferences: MonitorPreferences = {
+    ...defaultMonitorPreferences(),
+    speedUnit: 'mph',
+    distanceSource: 'gps:watch',
+    sampleHz: 4,
+  };
+  await page.addInitScript(
+    preferences => {
+      localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences));
+      const set = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'power-log.monitor-preferences.v1') throw new Error('Test settings write failed');
+        set.call(this, key, value);
+      };
+    },
+    JSON.parse(monitorPreferencesJson(preferences)),
+  );
   await page.goto('/settings');
   await expect(page.getByTestId('settings-speed')).toHaveAccessibleName('Speed units, mph');
-  await expect(page.getByTestId('settings-distance')).toHaveAccessibleName('Distance source, Health · Watch');
+  await expect(page.getByTestId('settings-distance')).toHaveAccessibleName('Distance source, GPS · Watch');
   await expect(page.getByTestId('settings-sampleHz')).toHaveAccessibleName('Bike sample rate, 4 Hz');
   const before = await settingsLayout(page);
   await page.getByTestId('settings-speed').click();
   await page.getByRole('radio', { name: 'km/h', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Test settings write failed');
+  await expect(page.getByRole('alert')).toContainText('Could not save monitor settings. Something went wrong.');
+  await expect(page.getByRole('alert')).not.toContainText('Test settings write failed');
   expect(await settingsLayout(page)).toEqual(before);
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   await expect(page.getByTestId('settings-error')).toBeHidden();
@@ -140,6 +154,8 @@ test('Settings hydrate retained choices and expose a failed write without hiding
 test('History keeps the same open CSV after Settings, Ride and repeated settled returns', async ({ page }) => {
   await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   await (
     await chooser
@@ -184,7 +200,6 @@ test('browser Back closes a Settings selector before showing Ride controls', asy
   await expect(page.getByTestId('settings-options')).toBeVisible();
   await page.goBack();
   await expect(page.getByTestId('settings-options')).toBeHidden();
-  // Expo may recreate the initial root scene; unified-rides checks ongoing capture across this path.
   await expect(page.getByTestId('ride-setup').filter({ visible: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await expect(page.getByTestId('settings-distance')).toBeVisible();
@@ -199,15 +214,25 @@ for (const [opener, modal] of [
 ] as const)
   test(`${opener} closes on retained-route Back and stays closed on return`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
+    if (opener === 'monitor-expand') await syntheticBike(page);
     await page.goto('/');
+    if (opener === 'monitor-expand') {
+      await page.getByTestId('ride-setup').click();
+      const setup = page.getByTestId('ride-setup-sheet');
+      await setup.getByTestId('setup-find-bike').click();
+      await setup.getByRole('button', { name: /^Connect CYC/ }).click();
+      await expect(setup.getByTestId('bike-connection-status')).toHaveText('Connected');
+      await setup.getByRole('button', { name: 'Done', exact: true }).click();
+      await expect(page.getByTestId('monitor-expand')).toBeVisible();
+    }
     await page.getByRole('link', { name: 'History', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'History actions', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Ride', exact: true }).click();
     await page.getByTestId(opener).filter({ visible: true }).click();
     await expect(page.getByTestId(modal)).toBeVisible();
     await page.goBack();
     await expect(page.getByTestId(modal)).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'History actions', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Ride', exact: true }).click();
     await expect(page.getByTestId(opener).filter({ visible: true })).toBeVisible();
     await expect(page.getByTestId(modal)).toBeHidden();

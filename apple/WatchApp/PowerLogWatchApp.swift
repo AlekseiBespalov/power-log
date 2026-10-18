@@ -8,14 +8,30 @@ struct PowerLogWatchApp: App {
   @StateObject private var engine = WatchWorkoutEngine.shared
   @Environment(\.scenePhase) private var scenePhase
 
+  init() {
+    #if POWER_LOG_LAB
+      PowerLogWatchLab.observeRestart()
+    #endif
+  }
+
   var body: some Scene {
     WindowGroup {
       WatchWorkoutView(engine: engine)
-        .task { await engine.activate() }
+        .task {
+          #if POWER_LOG_LAB
+            if PowerLogWatchLab.isRequested {
+              await PowerLogWatchLab.run()
+              return
+            }
+          #endif
+          await engine.activate()
+        }
         .onChange(of: scenePhase) { _, phase in
           if phase == .active {
-            engine.retrySync()
-            Task { await engine.retryHealthSave(automatic: true) }
+            #if POWER_LOG_LAB
+              if PowerLogWatchLab.isRequested { return }
+            #endif
+            Task { await engine.foreground() }
           }
         }
     }
@@ -40,6 +56,6 @@ final class PowerLogWatchDelegate: NSObject, WKApplicationDelegate {
   }
 
   func handleActiveWorkoutRecovery() {
-    Task { @MainActor in await WatchWorkoutEngine.shared.recover() }
+    Task { @MainActor in await WatchWorkoutEngine.shared.handleActiveWorkoutRecovery() }
   }
 }

@@ -1,0 +1,331 @@
+{
+  "fixtures": ["F22", "F24", "F26", "F38"],
+  "cases": [
+    {
+      "id": "first-min-max-last",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 0,
+          "kind": "telemetry"
+        },
+        {
+          "id": "omitted",
+          "timeUs": "2000000",
+          "value": 90,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "3000000",
+          "value": 300,
+          "kind": "telemetry"
+        },
+        {
+          "id": "d",
+          "timeUs": "4000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b", "c", "d"],
+      "segments": [0, 0, 0, 0]
+    },
+    {
+      "id": "course-wrap",
+      "metric": "courseDegrees",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 350,
+          "kind": "location"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 10,
+          "kind": "location"
+        },
+        {
+          "id": "c",
+          "timeUs": "2000000",
+          "value": 190,
+          "kind": "location"
+        }
+      ],
+      "expected": ["a", "b", "c"],
+      "segments": [0, 1, 1]
+    },
+    {
+      "id": "gap-5999999",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "5999999",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 0]
+    },
+    {
+      "id": "gap-6000000",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "6000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 1]
+    },
+    {
+      "id": "gap-6000001",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "6000001",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 1]
+    },
+    {
+      "id": "missing-plot-barrier",
+      "metric": "heartRateBpm",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "missing",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 1]
+    },
+    {
+      "id": "clock-segment",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "clock": "a",
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "clock": "b",
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 1]
+    },
+    {
+      "id": "connection-display-continuity",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "connection": "a",
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "connection": "b",
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 0]
+    },
+    {
+      "id": "viewport-neighbours-supported",
+      "metric": "humanPowerW",
+      "startUs": "500000",
+      "endUs": "1500000",
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "2000000",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["left", "right"],
+      "segments": [0, 0]
+    },
+    {
+      "id": "viewport-neighbours-gap",
+      "metric": "humanPowerW",
+      "startUs": "500000",
+      "endUs": "1500000",
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "6000000",
+          "value": 200,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["left", "right"],
+      "segments": [0, 1]
+    },
+    {
+      "id": "viewport-equal-time-identity-neighbour",
+      "metric": "humanPowerW",
+      "startUs": "500000",
+      "endUs": "1500000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        },
+        {
+          "id": "z",
+          "timeUs": "0",
+          "value": 200
+        },
+        {
+          "id": "right",
+          "timeUs": "2000000",
+          "value": 300
+        }
+      ],
+      "expected": ["a", "right"],
+      "segments": [0, 0]
+    },
+    {
+      "id": "viewport-nonexact-interruption-predecessor",
+      "metric": "humanPowerW",
+      "startUs": "1250000",
+      "endUs": "1500000",
+      "points": [
+        {
+          "id": "a-closing",
+          "timeUs": "1000000",
+          "value": 100,
+          "sequence": "2",
+          "boundary": true
+        },
+        {
+          "id": "z-resumed",
+          "timeUs": "1000000",
+          "value": 200,
+          "sequence": "3",
+          "boundary": true,
+          "interruptionIndex": "1"
+        },
+        {
+          "id": "right",
+          "timeUs": "2000000",
+          "value": 300,
+          "sequence": "4",
+          "interruptionIndex": "1"
+        }
+      ],
+      "expected": ["z-resumed", "right"],
+      "segments": [0, 0]
+    },
+    {
+      "id": "viewport-nonexact-interruption-successor",
+      "metric": "humanPowerW",
+      "startUs": "500000",
+      "endUs": "750000",
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "0",
+          "value": 100,
+          "sequence": "1"
+        },
+        {
+          "id": "z-closing",
+          "timeUs": "1000000",
+          "value": 200,
+          "sequence": "2",
+          "boundary": true
+        },
+        {
+          "id": "a-resumed",
+          "timeUs": "1000000",
+          "value": 300,
+          "sequence": "3",
+          "boundary": true,
+          "interruptionIndex": "1"
+        }
+      ],
+      "expected": ["left", "z-closing"],
+      "segments": [0, 0]
+    }
+  ]
+}

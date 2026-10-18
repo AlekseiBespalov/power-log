@@ -45,17 +45,23 @@ beforeEach(() => {
 
 describe('History ride export', () => {
   it('exports FIT with the chosen distance source and shares the committed file', async () => {
-    await exportRide('fit', 'ride', 'gps:watch');
+    await exportRide('fit', 'ride', 'gps:watch', 'battery');
     const [source, openSink, request] = mocks.exportFit.mock.calls[0]!;
     expect([source, openSink]).toEqual(['source', mocks.openSink]);
-    expect(request).toMatchObject({ rideId: 'ride', distanceSource: 'gps:watch', context: { platform: 'ios' } });
+    expect(request).toMatchObject({
+      rideId: 'ride',
+      distanceSource: 'gps:watch',
+      powerSource: 'battery',
+      context: { platform: 'ios' },
+    });
     expect(new Date(request.context.exportedAt).toISOString()).toBe(request.context.exportedAt);
     expect(mocks.share).toHaveBeenCalledExactlyOnceWith('file:///exports/a/ride.fit');
     expect(mocks.removed).toBe(1);
   });
 
   it('exports the ride-data ZIP without a distance source', async () => {
-    await exportRide('zip', 'ride', 'controller');
+    await exportRide('zip', 'ride', 'controller', 'battery');
+    expect(mocks.exportZip.mock.calls[0]![2]).not.toHaveProperty('powerSource');
     expect(mocks.exportZip.mock.calls[0]![2]).not.toHaveProperty('distanceSource');
     expect(mocks.share).toHaveBeenCalledExactlyOnceWith('file:///exports/b/ride.zip');
   });

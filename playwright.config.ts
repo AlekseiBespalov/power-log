@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 const port = process.env.POWER_LOG_WEB_PORT ?? '8081';
 export default defineConfig({
   testDir: './tests/e2e',
+  outputDir: './test-results/playwright',
   fullyParallel: false,
   retries: 0,
   use: {

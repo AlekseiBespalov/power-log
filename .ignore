@@ -1,0 +1,3 @@
+shared/js/*.mjs
+package-lock.json
+artifacts/app-store/screenshots/

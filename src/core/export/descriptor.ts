@@ -1,4 +1,5 @@
 import { TABLES } from './catalog';
+import { CONSUMPTION_TABLE, type ConsumptionTableStatus } from './tables/consumption';
 import type { ExportConnectionEntry } from './pages';
 import { ExportError, type ExportRideMetadata, type ProducerSet } from './types';
 
@@ -8,6 +9,7 @@ const DESCRIPTION =
 const DIALECT = { header: true, delimiter: ',', lineTerminator: '\n' } as const;
 
 export interface DescriptorInput {
+  readonly consumption?: ConsumptionTableStatus;
   readonly rideId: string;
   readonly created: string;
   readonly metadata: ExportRideMetadata;
@@ -100,14 +102,17 @@ function ride(input: DescriptorInput) {
     sport: 'cycling',
     subSport: 'e_biking',
     health: health(metadata.health),
-    watchSyncState: choice(metadata.watchSyncState, ['pending', 'received', 'notRequired'], 'watchSyncState'),
-    finalizationState: choice(metadata.finalizationState, ['complete', 'partial'], 'finalizationState'),
     example: flag(metadata.example, 'example'),
     sampleHz: choice(metadata.sampleHz, [2, 4, 8, null], 'sampleHz'),
+    batteryConsumptionSource: choice(
+      metadata.batteryConsumptionSource,
+      ['controller', 'calculated'],
+      'batteryConsumptionSource',
+    ),
   };
 }
 
-function resource(table: (typeof TABLES)[number]) {
+function resource(table: (typeof TABLES)[number] | typeof CONSUMPTION_TABLE) {
   return {
     name: table.name,
     type: 'table',
@@ -139,6 +144,7 @@ export function descriptorJson(input: DescriptorInput): string {
       created: input.created,
       description: DESCRIPTION,
       'powerLog:ride': ride(input),
+      'powerLog:batteryConsumption': input.consumption,
       'powerLog:sources': {
         connections: input.connections.map(entry => ({
           connection: entry.connection,
@@ -150,7 +156,7 @@ export function descriptorJson(input: DescriptorInput): string {
         gps: [...input.producers.gps],
         health: [...input.producers.health],
       },
-      resources: TABLES.map(resource),
+      resources: [TABLES[0]!, CONSUMPTION_TABLE, ...TABLES.slice(1)].map(resource),
     },
     null,
     2,

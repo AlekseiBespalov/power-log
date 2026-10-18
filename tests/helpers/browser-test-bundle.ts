@@ -3,7 +3,6 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 
-/** Bundle only local test dependencies; no browser test hook enters the app. */
 export function browserTestBundle(
   entry: string,
   globalName: string,
@@ -12,9 +11,19 @@ export function browserTestBundle(
 ): string {
   const modules = new Map<string, string>();
   function resolve(file: string) {
-    const candidate = [file, `${file}.ts`, `${file}.tsx`, `${file}.js`, path.join(file, 'index.js')].find(
-      value => fs.existsSync(value) && fs.statSync(value).isFile(),
-    );
+    const manifest = path.join(file, 'package.json');
+    const main = fs.existsSync(manifest)
+      ? path.join(file, JSON.parse(fs.readFileSync(manifest, 'utf8')).main)
+      : undefined;
+    const candidate = [
+      file,
+      `${file}.ts`,
+      `${file}.tsx`,
+      `${file}.js`,
+      `${file}.mjs`,
+      path.join(file, 'index.js'),
+      ...(main ? [main] : []),
+    ].find(value => fs.existsSync(value) && fs.statSync(value).isFile());
     if (!candidate) throw new Error(`Browser test module not found: ${file}`);
     return path.resolve(candidate);
   }
@@ -26,7 +35,7 @@ export function browserTestBundle(
     const compiled = file.endsWith('.json')
       ? `module.exports=${contents};`
       : ts.transpileModule(contents, {
-          fileName: file,
+          fileName: file.replace(/\.mjs$/, '.ts'),
           compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
         }).outputText;
     const source = compiled.replace(/require\((["'])([^"'\n]+)\1\)/g, (_match, _quote: string, name: string) => {

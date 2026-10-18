@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { analyticsTimeUs } from '../../../../shared/js';
 import { exportFit, type FitExportResult, type FitExportTuning } from '../../../../src/core/export/fit-export';
 import { projectionColumns } from '../../../../src/core/export/pages';
 import {
@@ -29,7 +30,7 @@ export type LifecycleRow = {
   sequence?: number;
   epoch?: string | null;
   interrupted?: boolean;
-  cyc?: number;
+  controller?: number;
 };
 
 export type TelemetryRow = {
@@ -79,11 +80,25 @@ export type HealthRow = {
   connectionEpoch?: string | null;
   representation?: string | null;
   sampleCount?: number;
+  channel?: string;
+  identifier?: string;
   heartRateBpm?: number;
   activeEnergyKcal?: number;
+  basalEnergyKcal?: number;
+  startUs?: string;
+  endUs?: string;
+  provider?: string;
+  dataOrigin?: string;
+  providerParentId?: string;
+  originalEventId?: string;
+  observationRevision?: string;
+  originalStartTimestamp?: string;
+  originalEndTimestamp?: string;
 };
 
 export type DistanceRow = {
+  startUs?: string;
+  endUs?: string;
   start: number;
   end: number;
   meters: number;
@@ -107,6 +122,8 @@ export interface RideSpec {
   distance?: DistanceRow[];
   producers?: { gps: ProducerSet; health: ProducerSet };
   pageSize?: number;
+  sampleHz?: 2 | 4 | 8;
+  batteryConsumptionSource?: 'controller' | 'calculated';
 }
 
 export const START = '2026-01-01T00:00:00.000Z';
@@ -115,7 +132,7 @@ export const CONTEXT_TIME = '2026-01-02T03:04:05.000Z';
 
 type Row = Readonly<Record<string, unknown>> & { t?: number; start?: number; end?: number };
 
-const IDENTITY = { vendor: 'cyc', model: 'X6', firmware: '20250604', protocol: '5.3' } as const;
+const IDENTITY = { vendor: 'controller', model: 'X6', firmware: '20250604', protocol: '5.3' } as const;
 
 function metadata(ride: RideSpec): ExportRideMetadata {
   const started = Date.parse(ride.startedAt ?? START);
@@ -129,10 +146,9 @@ function metadata(ride: RideSpec): ExportRideMetadata {
     saveToHealth: false,
     recordGPS: true,
     health: { provider: 'appleHealth', state: 'notRequested', workoutUUID: null, export: null },
-    watchSyncState: 'notRequired',
-    finalizationState: 'complete',
     example: false,
-    sampleHz: null,
+    batteryConsumptionSource: ride.batteryConsumptionSource ?? 'controller',
+    sampleHz: ride.sampleHz ?? 8,
   };
 }
 
@@ -160,7 +176,19 @@ function value(projection: ProjectionName, platform: ExportPlatform, name: strin
       return row.sequence ?? index + 1;
     case 'clockEpoch':
       return row.epoch ?? null;
+    case 'startUs':
+    case 'endUs':
+      return field ?? (projection === 'distance' ? analyticsTimeUs(row[name === 'startUs' ? 'start' : 'end']!) : null);
+    case 'channel':
+    case 'identifier':
     case 'connectionEpoch':
+    case 'provider':
+    case 'dataOrigin':
+    case 'providerParentId':
+    case 'originalEventId':
+    case 'observationRevision':
+    case 'originalStartTimestamp':
+    case 'originalEndTimestamp':
       return field ?? null;
     case 'connection':
       return field === undefined ? 'connection-a' : field;
@@ -170,8 +198,8 @@ function value(projection: ProjectionName, platform: ExportPlatform, name: strin
       return field ?? 0;
     case 'interrupted':
       return row.interrupted ? 1 : 0;
-    case 'cycSequence':
-      return row.cyc ?? NaN;
+    case 'controllerSequence':
+      return row.controller ?? NaN;
     case 'distanceBarrier':
       return row.distanceBarrier ? 1 : 0;
     case 'representation':

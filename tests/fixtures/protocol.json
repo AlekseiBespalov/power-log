@@ -23,7 +23,7 @@
   "telemetry": [
     {
       "name": "synthetic-slots",
-      "origin": "synthetic from Python test_cyc_specific_slots_and_electrical_power",
+      "origin": "synthetic from Python test_controller_specific_slots_and_electrical_power",
       "payloadHex": "3200405108000000fa0209000b71b0000007e90000009f",
       "mask": 4215048,
       "expected": {

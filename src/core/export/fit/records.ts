@@ -1,11 +1,19 @@
+import { ConsumptionProjection } from '../consumption';
+import type { BatteryConsumptionSource } from '../../consumption';
 import { FIT_DEVELOPER_FIELDS } from '../catalog';
 import { roundHalfAway, type FitClock } from '../clock';
 import type { ExportSlicer, ProjectionPage } from '../pages';
 import type { ActivityInterval, RunTracker, Timeline, TimelineCursor } from '../timeline';
-import { ExportError, type Producer } from '../types';
-import { DistancePoints, distanceEncodable, type DistanceInterval, type DistanceRanges } from './distance';
+import { ExportError, type FitPowerSource, type Producer } from '../types';
+import {
+  DistancePoints,
+  distanceEncodable,
+  type DistanceInterval,
+  type DistanceKind,
+  type DistanceRanges,
+} from './distance';
 import { FitGeometry, emptyFix, validAltitude, validSpeed } from './geometry';
-import { healthProducer, heartRateKind, validHeartRate, type HeartRatePlan } from './health';
+import { healthProducer, heartRateKind, heartRateMember, validHeartRate, type HeartRatePlan } from './health';
 import type { RideStatistics } from './summaries';
 import { FLOAT32_OVERFLOW, finiteAsFloat32, type FitWriter } from './writer';
 
@@ -271,7 +279,6 @@ class FieldSums {
     }
   }
 
-  // Adds telemetry rows from..to-1, all of them witnesses.
   protected addTelemetry(rows: TelemetryRows, from: number, to: number): void {
     this.power.addRows(rows.power, from, to, 0, POWER_MAX);
     this.cadence.addRows(rows.cadence, from, to, 0, CADENCE_MAX);
@@ -678,12 +685,15 @@ abstract class PageStream<P extends 'telemetry' | 'gps' | 'healthFit', R extends
 }
 
 export class TelemetryStream extends PageStream<'telemetry', TelemetryRows> {
+  private readonly consumption = new ConsumptionProjection();
   constructor(
     pages: AsyncIterator<ProjectionPage<'telemetry'>>,
     clock: FitClock,
     private readonly cursor: TimelineCursor<'telemetry'>,
     private readonly runs: RunTracker<'telemetry'>,
     private readonly statistics: RideStatistics | null,
+    private readonly consumptionSource: BatteryConsumptionSource = 'controller',
+    private readonly powerSource: FitPowerSource = 'rider',
   ) {
     super(2, 'telemetry', pages, clock);
   }
@@ -693,11 +703,18 @@ export class TelemetryStream extends PageStream<'telemetry', TelemetryRows> {
     const assignment = this.cursor.map(page);
     const interval = assignment.interval;
     const run = this.runs.map(page, assignment);
-    const power = filled(columns.humanPowerW, rows);
+    const power = filled(this.powerSource === 'battery' ? columns.motorInputPowerW : columns.humanPowerW, rows);
     const cadence = filled(columns.cadenceRpm, rows);
     const assist = filled(columns.assistLevel, rows);
     const motor = filled(columns.motorInputPowerW, rows);
-    const channels = FIT_DEVELOPER_FIELDS.map(field => columns[field.channel]);
+    const consumed = this.consumption.append(page, assignment, run);
+    const channels = FIT_DEVELOPER_FIELDS.map(field =>
+      field.channel === 'consumedWh'
+        ? consumed[`${this.consumptionSource}EnergyWh`]
+        : field.channel === 'consumedAh'
+          ? consumed[`${this.consumptionSource}ChargeAh`]
+          : columns[field.channel],
+    );
     const float32 = channels.filter(
       (column, j): column is Float64Array => column !== undefined && FLOAT32_CHANNELS[j]!,
     );
@@ -777,7 +794,7 @@ export class GpsStream extends PageStream<'gps', GpsRows> {
       fix.barrier = barriers !== undefined && barriers[i] === 1;
       if (!this.geometry.accept(fix)) continue;
       const valid = validSpeed(fix.speed, fix.speedAccuracy);
-      this.statistics?.speed(valid);
+      this.statistics?.speed(fix.time, valid, fix.interval);
       witness[i] = 1;
       altitude[i] = validAltitude(fix.altitude, fix.verticalAccuracy) ? fix.altitude : NaN;
       speed[i] = valid;
@@ -787,14 +804,6 @@ export class GpsStream extends PageStream<'gps', GpsRows> {
 }
 
 export class HeartRateStream extends PageStream<'healthFit', HeartRateRows> {
-  private key = 0;
-  private previous: { interval: number; clock: string | null; connection: string | null; interruption: number } = {
-    interval: -1,
-    clock: null,
-    connection: null,
-    interruption: -1,
-  };
-
   constructor(
     pages: AsyncIterator<ProjectionPage<'healthFit'>>,
     clock: FitClock,
@@ -811,33 +820,28 @@ export class HeartRateStream extends PageStream<'healthFit', HeartRateRows> {
     const { producer, representation, sampleCount, heartRateBpm, clockEpoch, connectionEpoch } = columns;
     const heartRate = filled(heartRateBpm, rows);
     const witness = new Uint8Array(rows);
-    const statistics = this.statistics?.heartRate;
+    const statistics = this.statistics;
     for (let i = 0; i < rows; i++) {
       const source = healthProducer(producer?.[i]);
       const kind = heartRateKind(representation?.[i] ?? null, sampleCount ? sampleCount[i]! : NaN);
       const value = heartRate[i]!;
       const id = interval[i]!;
-      if (source !== this.plan.source || kind !== this.plan.kind || Number.isNaN(value) || id === 0) continue;
-      if (!validHeartRate(value)) {
-        statistics?.reset();
+      if (
+        source !== this.plan.source ||
+        kind !== this.plan.kind ||
+        !heartRateMember(page, i) ||
+        (columns.dataOrigin?.[i] ?? null) !== this.plan.dataOrigin
+      )
         continue;
-      }
-      if (statistics) {
-        const clock = clockEpoch?.[i] ?? null;
-        const connection = connectionEpoch?.[i] ?? null;
-        const cut = interruption[i]!;
-        const previous = this.previous;
-        if (
-          previous.interval !== id ||
-          previous.clock !== clock ||
-          previous.connection !== connection ||
-          previous.interruption !== cut
-        ) {
-          this.key++;
-          this.previous = { interval: id, clock, connection, interruption: cut };
-        }
-        statistics.add(elapsed[i]!, value, this.key);
-      }
+      statistics?.heart(
+        elapsed[i]!,
+        value,
+        id,
+        interruption[i]!,
+        clockEpoch?.[i] ?? null,
+        connectionEpoch?.[i] ?? null,
+      );
+      if (!validHeartRate(value) || id === 0) continue;
       witness[i] = 1;
     }
     return { stream: HEART_RATE, rows, elapsed, second, interval, run: new Int32Array(rows), witness, heartRate };
@@ -858,8 +862,9 @@ export class DistanceStream implements WitnessStream {
     private readonly clock: FitClock,
     timeline: Timeline,
     private readonly ranges: DistanceRanges | null,
+    kind: DistanceKind = ranges?.kind ?? 'gps',
   ) {
-    this.builder = new DistancePoints(timeline.intervals);
+    this.builder = new DistancePoints(timeline, kind);
   }
 
   async load(): Promise<void> {
@@ -886,8 +891,8 @@ export class DistanceStream implements WitnessStream {
     let count = 0;
     for (let i = 0; i < rows; i++) {
       const interval: DistanceInterval = {
-        start: value(columns.start, i),
-        end: value(columns.end, i),
+        startUs: columns.startUs![i]!,
+        endUs: columns.endUs![i]!,
         meters: value(columns.meters, i),
         segment: value(columns.segment, i),
         startSpeed: value(columns.startSpeed, i),

@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { inspectionFixtures, fixtureSample, fixtureEvidence } from '../support/inspection-fixtures';
+import { describe, expect, it, vi } from 'vitest';
+import { InspectionMetricQuery, InspectionOriginalInput } from '../../shared/js';
 import { MonotonicClock } from '../../src/services/monotonic-clock';
 import { TelemetryMonitor } from '../../src/core/monitor-data';
 import {
@@ -7,8 +9,10 @@ import {
   formatMetricPoint,
   formatMetricDifference,
   metricById,
+  metricAllowsMean,
   MONITOR_METRICS,
-  validateMonitorPreferences,
+  parseMonitorPreferences,
+  monitorPreferencesJson,
 } from '../../src/core/monitor';
 import { REQUIRED_SAMPLE_COLUMNS } from '../../src/core/types';
 import type { MonitorData, MonitorPlotRequest } from '../../src/core/monitor';
@@ -57,6 +61,19 @@ async function query(
   };
 }
 describe('monitor original observations', () => {
+  it('keeps raw telemetry usable when a layout also selects ride-derived totals', async () => {
+    const monitor = new TelemetryMonitor('raw-preview', false, [sample(0, 120), sample(1, 140)]);
+    const data = await query(monitor, {
+      metrics: MONITOR_METRICS.map(metric => metric.id),
+      cursorSeconds: 1,
+    });
+    expect(data.series.humanPowerW?.map(point => point.value)).toEqual([120, 140]);
+    expect(data.selection?.humanPowerW?.value).toBe(140);
+    expect(data.statistics.humanPowerW?.max?.value).toBe(140);
+    expect(data.series.calculatedEnergyWh ?? []).toEqual([]);
+    expect(data.selection?.calculatedEnergyWh ?? null).toBeNull();
+    expect(data.statistics.calculatedEnergyWh).toBeUndefined();
+  });
   it('starts the empty live clock at Connect and keeps the setup delay in every observation', async () => {
     let now = 100;
     const monitor = new TelemetryMonitor('connect-origin', true, [], () => now);
@@ -256,7 +273,7 @@ describe('monitor original observations', () => {
   });
 });
 describe.each([
-  { interruptionIndex: 0, selectedIndex: 1, selectedWatts: 100, integral: 200 },
+  { interruptionIndex: 0, selectedIndex: 1, selectedWatts: 100, integral: 250 },
   { interruptionIndex: 1, selectedIndex: 2, selectedWatts: 200, integral: 250 },
 ])(
   'equal-time boundary with interruption index $interruptionIndex',
@@ -330,13 +347,14 @@ describe.each([
       for (let repeat = 0; repeat < 2; repeat++) {
         const result = await monitor.readPlot({ ...common, startSeconds: 0, endSeconds: 2, buckets: 1 });
         if (result.status !== 'ok') throw new Error('unexpected retry');
+        const selected = interruptionIndex ? originals.map((_, index) => index) : [0, 3];
         expect(result.series.humanPowerW).toEqual(
-          originals.map((value, index) => ({
-            elapsedSeconds: value.elapsedSeconds,
-            timestamp: value.timestamp,
-            value: value.humanPowerW,
+          selected.map(index => ({
+            elapsedSeconds: originals[index]!.elapsedSeconds,
+            timestamp: originals[index]!.timestamp,
+            value: originals[index]!.humanPowerW,
             observationId: `boundary:${String(index).padStart(16, '0')}`,
-            startsSegment: index === 0 || index === 2,
+            startsSegment: index === 0 || (interruptionIndex === 1 && index === 2),
           })),
         );
       }
@@ -344,16 +362,18 @@ describe.each([
   },
 );
 describe('monitor snapshot contract', () => {
-  it('looks up anchored equal-time originals without falling back when an identity or time is missing', async () => {
+  it('looks up anchored equal-time originals and falls back to eligible originals for a mismatch', async () => {
     const source = new TelemetryMonitor('identity', false, [sample(0), sample(1, 50), sample(1, 900), sample(2)]);
     const common = { generation: 1, expectedRevision: '4', metrics: ['humanPowerW', 'batteryVoltageV'], seconds: 1 };
     const anchor = { metric: 'humanPowerW', observationId: 'identity:0000000000000002' };
     const result = await source.inspectAt({ ...common, anchor });
     expect(result).toMatchObject({ points: { humanPowerW: { value: 900 }, batteryVoltageV: { value: 49.95 } } });
     expect(await source.inspectAt({ ...common, anchor: { ...anchor, observationId: 'missing' } })).toMatchObject({
-      points: { humanPowerW: null },
+      points: { humanPowerW: { value: 50 } },
     });
-    expect(await source.inspectAt({ ...common, seconds: 2, anchor })).toMatchObject({ points: { humanPowerW: null } });
+    expect(await source.inspectAt({ ...common, seconds: 2, anchor })).toMatchObject({
+      points: { humanPowerW: { value: 2 } },
+    });
     expect(
       await source.rangeStats({
         ...common,
@@ -472,16 +492,20 @@ describe('monitor snapshot contract', () => {
     const plot = await monitor.readPlot(common);
     if (result.status !== 'ok' || empty.status !== 'ok' || plot.status !== 'ok') throw new Error('unexpected retry');
     for (const id of metrics) {
-      expect(result.statistics[id]?.coveredSeconds, id).toBe(2.5);
-      expect(empty.statistics[id], id).toBeUndefined();
+      if (metricAllowsMean(metricById(id)!)) expect(result.statistics[id]?.coveredSeconds, id).toBe(2.5);
+      else {
+        expect(result.statistics[id]).not.toHaveProperty('coveredSeconds');
+        expect(result.statistics[id]).not.toHaveProperty('integral');
+      }
+      expect(empty.statistics[id], id).toMatchObject({ count: 0 });
       expect(
         plot.series[id]?.filter(point => point.startsSegment),
         id,
       ).toHaveLength(1);
     }
   });
-  it.each(['heartRateBpm', 'speedMps', 'healthSpeedMps', 'activeEnergyKcal', 'basalEnergyKcal'])(
-    'keeps the catalog integration gap for %s',
+  it.each(['heartRateBpm', 'speedMps', 'activeEnergyKcal', 'basalEnergyKcal'])(
+    'uses the shared integration policy for %s',
     async id => {
       const gap = metricById(id)!.gapSeconds;
       const monitor = new TelemetryMonitor(
@@ -497,7 +521,11 @@ describe('monitor snapshot contract', () => {
         endSeconds: gap * 2 + 0.01,
       });
       if (result.status !== 'ok') throw new Error('unexpected retry');
-      expect(result.statistics[id]?.coveredSeconds).toBe(gap);
+      if (id === 'heartRateBpm') expect(result.statistics[id]?.coveredSeconds).toBe(0);
+      else if (id === 'activeEnergyKcal' || id === 'basalEnergyKcal') {
+        expect(result.statistics[id]).not.toHaveProperty('coveredSeconds');
+        expect(result.statistics[id]).not.toHaveProperty('integral');
+      } else expect(result.statistics[id]?.coveredSeconds).toBe(gap);
     },
   );
   it('returns resetRequired when the bounded change journal cannot prove history', async () => {
@@ -523,9 +551,9 @@ describe('monitor snapshot contract', () => {
 describe('monitor metric boundaries', () => {
   it('validates persisted view selections without coupling independent views', () => {
     const input = defaultMonitorPreferences();
-    input.views.ride.charts.push('motorTempC', 'unknown', 'motorTempC');
+    input.views.ride.charts.push('motorTempC');
     input.views.battery.numbers = [];
-    const result = validateMonitorPreferences(input);
+    const result = parseMonitorPreferences(monitorPreferencesJson(input));
     expect(result.views.ride.charts).toEqual(['humanPowerW', 'motorInputPowerW', 'cadenceRpm', 'motorTempC']);
     expect(result.views.battery.charts).toEqual(['batteryVoltageV', 'batteryCurrentA', 'motorInputPowerW']);
     expect(result.views.battery.numbers).toEqual([]);
@@ -603,4 +631,180 @@ describe('imported CSV statistics', () => {
     const tied = await stats([row(0, 100), row(1, 100), row(1, NaN), row(1, 900), row(2, 900)], 0, 2);
     expect(tied).toMatchObject({ coveredSeconds: 2, integral: 1000 });
   });
+});
+
+for (const row of inspectionFixtures('selection').filter(row => !row.lifecycle && !row.allowTrailing)) {
+  it(`runs production exact inspection fixture ${row.id}`, async () => {
+    const monitor = new TelemetryMonitor(
+      row.id,
+      false,
+      row.points.map((p, i) => fixtureSample(p, row.metric, i)),
+    );
+    const description = await monitor.describeSource({ generation: 1 });
+    const result = await monitor.inspectAt({
+      generation: 1,
+      expectedRevision: description.revision,
+      metrics: [row.metric],
+      seconds: Number(row.timeUs) / 1e6,
+      ...(row.anchor ? { anchor: { metric: row.metric, observationId: row.anchor } } : {}),
+    });
+    if (result.status !== 'ok') throw new Error('Unexpected retry');
+    expect(result.points[row.metric]?.observationId ?? null).toBe(row.expected);
+    if (row.expected) expect(result.points[row.metric]?.timestamp).toBe('2026-01-01T00:00:00.123456789Z');
+  });
+}
+for (const row of inspectionFixtures('plot')) {
+  it(`runs production reduction fixture ${row.id}`, async () => {
+    const monitor = new TelemetryMonitor(
+      row.id,
+      false,
+      row.points.map((p, i) => fixtureSample(p, row.metric, i)),
+    );
+    const description = await monitor.describeSource({ generation: 1 });
+    const result = await monitor.readPlot({
+      generation: 1,
+      expectedRevision: description.revision,
+      metrics: [row.metric],
+      buckets: 1,
+      startSeconds: Number(row.startUs ?? 0) / 1e6,
+      endSeconds: Number(row.endUs ?? Math.max(...row.points.map(p => Number(p.timeUs)))) / 1e6,
+    });
+    if (result.status !== 'ok') throw new Error('Unexpected retry');
+    expect(result.series[row.metric]?.map(p => p.observationId)).toEqual(row.expected);
+    expect(result.series[row.metric]?.map(p => p.elapsedSeconds)).toEqual(
+      (row.expected as string[]).map(id => Number(row.points.find(p => p.id === id)!.timeUs) / 1e6),
+    );
+    expect(result.series[row.metric]?.map(p => p.timestamp)).toEqual(
+      (row.expected as string[]).map(() => '2026-01-01T00:00:00.123456789Z'),
+    );
+  });
+}
+
+for (const row of inspectionFixtures('statistics')) {
+  it(`runs semantic statistics fixture ${row.id} through the monitor source`, async () => {
+    const monitor = new TelemetryMonitor(
+      row.id,
+      false,
+      row.points.map((p, i) => fixtureSample(p, row.metric, i)),
+      undefined,
+      fixtureEvidence(row),
+    );
+    const description = await monitor.describeSource({ generation: 1 });
+    const result = await monitor.rangeStats({
+      generation: 1,
+      expectedRevision: description.revision,
+      metrics: [row.metric],
+      startSeconds: Number(row.startUs) / 1e6,
+      endSeconds: Number(row.endUs) / 1e6,
+    });
+    if (result.status !== 'ok') throw new Error('Unexpected retry');
+    const statistics = result.statistics[row.metric]!;
+    if (row.absent) {
+      expect(statistics).toBeUndefined();
+      return;
+    }
+    expect(statistics.count).toBe(Number(row.count));
+    if (row.suppressed) expect(statistics.coveredSeconds).toBeUndefined();
+    else expect(statistics.coveredSeconds).toBeCloseTo(Number(row.coveredUs) / 1e6, 6);
+    expect(statistics.integral ?? null).toBe(row.integral);
+    expect(statistics.min?.observationId ?? null).toBe(row.minimum ?? null);
+    expect(statistics.max?.observationId ?? null).toBe(row.maximum ?? null);
+    if (row.mean == null) expect(statistics.sampleMean).toBeUndefined();
+    else expect(statistics.sampleMean).toBeCloseTo(row.mean, 8);
+  });
+}
+
+it('loads the live-trailing inspection fixture with actual acquisition evidence', async () => {
+  const row = inspectionFixtures('selection').find(row => row.allowTrailing)!;
+  const monitor = new TelemetryMonitor(row.id, true, [], () => 101);
+  row.points.forEach((point, index) =>
+    monitor.append(fixtureSample(point, row.metric, index), { receivedAtSeconds: 100 }),
+  );
+  const description = await monitor.describeSource({ generation: 1 });
+  const result = await monitor.inspectAt({
+    generation: 1,
+    expectedRevision: description.revision,
+    metrics: [row.metric],
+    seconds: Number(row.timeUs) / 1e6,
+  });
+  expect(result).toMatchObject({
+    status: 'ok',
+    points: {
+      [row.metric]: { observationId: row.expected, elapsedSeconds: 0, timestamp: '2026-01-01T00:00:00.123456789Z' },
+    },
+  });
+});
+
+it('retains distinct equal-time live originals and rejects physical retries', async () => {
+  const monitor = new TelemetryMonitor('equal-live', true);
+  monitor.append({ ...syntheticSample(0, 1), humanPowerW: 50, observationId: 'first' });
+  const second = { ...syntheticSample(0, 2), humanPowerW: 900, observationId: 'second' };
+  monitor.append(second);
+  monitor.append(second);
+  const description = await monitor.describeSource({ generation: 1 });
+  expect(description.revision).toBe('2');
+  expect(
+    await monitor.inspectAt({
+      generation: 1,
+      expectedRevision: '2',
+      metrics: ['humanPowerW'],
+      seconds: 0,
+      anchor: { metric: 'humanPowerW', observationId: 'second' },
+    }),
+  ).toMatchObject({ status: 'ok', points: { humanPowerW: { value: 900 } } });
+});
+
+it('returns an absent outcome for a channel absent from the retained originals', async () => {
+  const monitor = new TelemetryMonitor('absent', false, [syntheticSample(0, 1)]);
+  expect(
+    await monitor.rangeStats({
+      generation: 1,
+      expectedRevision: '1',
+      metrics: ['speedMps'],
+      startSeconds: 0,
+      endSeconds: 1,
+    }),
+  ).toEqual({ generation: 1, sourceId: 'absent', revision: '1', status: 'ok', statistics: {} });
+});
+
+it('passes the whole indexed equal-time group, including invalid originals, to the core', async () => {
+  const monitor = new TelemetryMonitor('complete-group', true);
+  monitor.append({ ...syntheticSample(0, 1), humanPowerW: 50, observationId: 'first' });
+  monitor.append({ ...syntheticSample(0, 2), humanPowerW: NaN, observationId: 'invalid' });
+  const append = vi.spyOn(InspectionMetricQuery.prototype, 'appendPreparedInspection');
+  try {
+    const result = await monitor.inspectAt({
+      generation: 1,
+      expectedRevision: '2',
+      metrics: ['humanPowerW'],
+      seconds: 0,
+    });
+    expect(result).toMatchObject({ status: 'ok', points: { humanPowerW: { observationId: 'first', value: 50 } } });
+    expect(append.mock.calls).toHaveLength(2);
+  } finally {
+    append.mockRestore();
+  }
+});
+
+it('prepares only appended originals after a warm inspection', async () => {
+  const sample = syntheticCsvSample();
+  const monitor = new TelemetryMonitor('appended', false);
+  const append = (first: number, end: number) => {
+    for (let index = first; index < end; index++)
+      monitor.append({ ...sample, sequence: index, elapsedSeconds: index / 8, humanPowerW: index % 300 });
+  };
+  append(0, 4096);
+  const query = { generation: 1, expectedRevision: '4096', metrics: ['humanPowerW'], seconds: 256.03 };
+  await monitor.inspectAt(query);
+  append(4096, 4456);
+  const preparation = vi.spyOn(InspectionOriginalInput.prototype, 'plotValid');
+  try {
+    expect(await monitor.inspectAt({ ...query, expectedRevision: '4456' })).toMatchObject({
+      status: 'ok',
+      points: { humanPowerW: { elapsedSeconds: 256 } },
+    });
+    expect(preparation.mock.calls).toHaveLength(360);
+  } finally {
+    preparation.mockRestore();
+  }
 });

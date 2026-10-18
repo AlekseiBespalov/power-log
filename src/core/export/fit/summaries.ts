@@ -1,12 +1,10 @@
+import { AnalyticsFitStatistics, type AnalyticsStatistics } from '../../../../shared/js';
 import type { FitClock } from '../clock';
 import type { Timeline } from '../timeline';
 import type { DistanceRange, DistanceRanges } from './distance';
 import type { FitGeometry } from './geometry';
-import { CADENCE_MAX, POWER_MAX, type LifecycleItem, type TelemetryRows } from './records';
+import { type LifecycleItem, type TelemetryRows } from './records';
 import type { FitWriter } from './writer';
-
-export const TELEMETRY_GAP_S = 2.5;
-export const HEART_RATE_GAP_S = 10;
 
 const FILE_ACTIVITY = 4;
 const MANUFACTURER_DEVELOPMENT = 255;
@@ -25,79 +23,53 @@ const LAP_TRIGGER_MANUAL = 0;
 const LAP_TRIGGER_SESSION_END = 7;
 const ACTIVITY_MANUAL = 0;
 
-export class Weighted {
-  covered = 0;
-  integral = 0;
-  maximum = NaN;
-  private time = NaN;
-  private value = NaN;
-  private key = 0;
-
-  constructor(private readonly gap: number) {}
-
-  reset(): void {
-    this.time = NaN;
-  }
-
-  add(time: number, value: number, key: number): void {
-    if (!(this.maximum >= value)) this.maximum = value;
-    if (!Number.isNaN(this.time) && key === this.key) {
-      const duration = time - this.time;
-      if (duration > 0 && duration <= this.gap) {
-        this.covered += duration;
-        this.integral += (this.value + value) * 0.5 * duration;
-      }
-    }
-    this.time = time;
-    this.value = value;
-    this.key = key;
-  }
-
-  addRows(rows: TelemetryRows, values: Float64Array, low: number, high: number): void {
-    const { elapsed, interval, run } = rows;
-    const count = rows.rows;
-    const gap = this.gap;
-    for (let i = 0; i < count; i++) {
-      const value = values[i]!;
-      if (interval[i] === 0 || !(value >= low && value <= high)) {
-        this.time = NaN;
-        continue;
-      }
-      if (!(this.maximum >= value)) this.maximum = value;
-      const time = elapsed[i]!;
-      const key = run[i]!;
-      // After reset() the time is NaN, so is the duration, and the pair is skipped.
-      const duration = time - this.time;
-      if (key === this.key && duration > 0 && duration <= gap) {
-        this.covered += duration;
-        this.integral += (this.value + value) * 0.5 * duration;
-      }
-      this.time = time;
-      this.value = value;
-      this.key = key;
-    }
-  }
-
-  get average(): number {
-    return this.covered > 0 ? this.integral / this.covered : NaN;
-  }
-}
+const metric = (result: AnalyticsStatistics) => ({
+  covered: result.coveredSeconds ?? 0,
+  integral: result.integral ?? NaN,
+  maximum: result.max?.value ?? NaN,
+  average: result.average ?? NaN,
+});
 
 export class RideStatistics {
-  readonly power = new Weighted(TELEMETRY_GAP_S);
-  readonly cadence = new Weighted(TELEMETRY_GAP_S);
-  readonly motor = new Weighted(TELEMETRY_GAP_S);
-  readonly heartRate = new Weighted(HEART_RATE_GAP_S);
-  maxSpeed = NaN;
-
-  telemetry(rows: TelemetryRows): void {
-    this.power.addRows(rows, rows.power, 0, POWER_MAX);
-    this.cadence.addRows(rows, rows.cadence, 0, CADENCE_MAX);
-    this.motor.addRows(rows, rows.motor, -Number.MAX_VALUE, Number.MAX_VALUE);
+  private readonly core: AnalyticsFitStatistics;
+  get maxSpeed(): number {
+    return this.core.maximumSpeed() ?? NaN;
   }
 
-  speed(value: number): void {
-    if (!Number.isNaN(value) && !(this.maxSpeed >= value)) this.maxSpeed = value;
+  constructor(endUs: string) {
+    this.core = new AnalyticsFitStatistics(endUs);
+  }
+
+  get power() {
+    return metric(this.core.powerResult());
+  }
+  get cadence() {
+    return metric(this.core.cadenceResult());
+  }
+  get motor() {
+    return metric(this.core.motorResult());
+  }
+  get heartRate() {
+    return metric(this.core.heartRateResult());
+  }
+
+  telemetry(rows: TelemetryRows): void {
+    this.core.telemetry(rows.elapsed, rows.power, rows.cadence, rows.motor, rows.interval, rows.run);
+  }
+
+  heart(
+    time: number,
+    value: number,
+    interval: number,
+    interruption: number,
+    clock: string | null,
+    connection: string | null,
+  ): void {
+    this.core.heartRate(time, value, interval, interruption, clock, connection);
+  }
+
+  speed(time: number, value: number, interval: number): void {
+    this.core.gpsSpeed(time, value, interval);
   }
 }
 
@@ -122,7 +94,8 @@ export function writeTimer({ writer, clock }: SummaryInput, elapsed: number, sta
 
 export function writeLap({ writer, clock, timeline, ranges }: SummaryInput, index: number): void {
   const lap = timeline.laps[index]!;
-  if (ranges && !ranges.covers(lap.end)) throw new Error('Lap distance was written before its distance intervals');
+  const time = timeline.lapTimes[index]!;
+  if (ranges && !ranges.covers(time.endUs)) throw new Error('Lap distance was written before its distance intervals');
   const last = index === timeline.laps.length - 1;
   writer.message('lap', [
     clock.time(lap.end),
@@ -130,8 +103,8 @@ export function writeLap({ writer, clock, timeline, ranges }: SummaryInput, inde
     EVENT_LAP,
     EVENT_TYPE_STOP,
     clock.time(lap.start),
-    (lap.end - lap.start) * 1000,
-    lap.timerSeconds * 1000,
+    Number(BigInt(time.endUs) - BigInt(time.startUs)) / 1000,
+    Number(time.timerUs) / 1000,
     distanceOf(ranges ? ranges.lap(index) : null),
     last ? LAP_TRIGGER_SESSION_END : LAP_TRIGGER_MANUAL,
     SPORT_CYCLING,
@@ -156,7 +129,7 @@ export function writeSession(input: SessionInput): void {
   const { writer, clock, timeline, ranges, statistics, geometry } = input;
   const end = timeline.end;
   const total = ranges ? ranges.total() : null;
-  const averageSpeed = total !== null && !total.partial && total.covered > 0 ? total.meters / total.covered : NaN;
+  const averageSpeed = ranges?.averageSpeed() ?? NaN;
   const altitude = geometry !== null && geometry.altitudeSegments > 0;
   const { power, cadence, heartRate, motor } = statistics;
   writer.message('session', [
@@ -167,8 +140,8 @@ export function writeSession(input: SessionInput): void {
     clock.time(0),
     SPORT_CYCLING,
     input.indoor ? SUB_SPORT_INDOOR_CYCLING : SUB_SPORT_E_BIKE_FITNESS,
-    end * 1000,
-    timeline.timerSeconds * 1000,
+    Number(timeline.endUs) / 1000,
+    Number(timeline.timerUs) / 1000,
     distanceOf(total),
     input.calories,
     averageSpeed * 1000,
@@ -192,7 +165,7 @@ export function writeSession(input: SessionInput): void {
 export function writeActivity({ writer, clock, timeline }: SummaryInput): void {
   writer.message('activity', [
     clock.time(timeline.end),
-    timeline.timerSeconds * 1000,
+    Number(timeline.timerUs) / 1000,
     1,
     ACTIVITY_MANUAL,
     EVENT_ACTIVITY,

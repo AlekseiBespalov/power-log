@@ -1,38 +1,44 @@
-import { expect, test } from '@playwright/test';
-import { browserRow } from '../support/browser-ride';
+import { expect, test, type Page } from '@playwright/test';
+import { browserTestBundle } from '../helpers/browser-test-bundle';
+import type * as Harness from '../fixtures/browser-ride-harness';
+declare global {
+  interface Window {
+    catalogStorage: typeof Harness;
+  }
+}
+const bundle = browserTestBundle('tests/fixtures/browser-ride-harness.ts', 'catalogStorage');
+async function seed(page: Page, count: number, day = 1, withSamples = false): Promise<string[]> {
+  await page.addScriptTag({ content: bundle });
+  return page.evaluate(
+    async ({ count, day, withSamples }) => {
+      const h = window.catalogStorage,
+        ids: string[] = [];
+      const start = `2026-01-${String(day).padStart(2, '0')}T00:00:00.000Z`,
+        end = `2026-01-${String(day).padStart(2, '0')}T00:01:00.000Z`;
+      for (let n = 0; n < count; n++) {
+        const ride = await h.store.begin('catalog-owner', { indoor: true, sampleHz: 2, recordGPS: false }, start);
+        if (withSamples) {
+          const rows = [0, 1, 2].map(time => ({
+            ...h.browserRow(time, time, `2026-01-${String(day).padStart(2, '0')}T00:00:0${time}.000Z`),
+            recordingId: ride.id,
+          }));
+          await h.store.append(ride.id, 'catalog-owner', rows, 2, 2, rows[2]!.timestamp);
+        }
+        await h.store.transition(ride.id, 'catalog-owner', 'stop', 60, 60, end);
+        ids.push(ride.id);
+      }
+      return ids;
+    },
+    { count, day, withSamples },
+  );
+}
 
 test('ride history pages beyond 100 IndexedDB records and refresh resets to the newest page', async ({ page }) => {
   await page.goto('/sessions');
   await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('power-log');
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('recordings', 'readwrite');
-      for (let i = 0; i < 123; i++)
-        tx.objectStore('recordings').put({
-          id: `catalog-${String(i).padStart(4, '0')}`,
-          startedAt: '2026-01-01T00:00:00.000Z',
-          endedAt: '2026-01-01T00:01:00.000Z',
-          samples: 0,
-          phase: 'completed',
-          indoor: true,
-          interrupted: false,
-          revision: 1,
-          elapsedSeconds: 60,
-          timerSeconds: 60,
-          checkpointAt: '2026-01-01T00:01:00.000Z',
-          availableMetrics: [],
-          lapCount: 0,
-        });
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-  });
+  await seed(page, 123);
+  if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   const rows = page.getByRole('button', { name: /^Open ride,/ });
   await expect(rows).toHaveCount(50);
@@ -41,35 +47,12 @@ test('ride history pages beyond 100 IndexedDB records and refresh resets to the 
   await page.getByRole('button', { name: 'Load more rides', exact: true }).click();
   await expect(rows).toHaveCount(123);
   await expect(page.getByRole('button', { name: 'Load more rides', exact: true })).toHaveCount(0);
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>(resolve => {
-      const request = indexedDB.open('power-log');
-      request.onsuccess = () => resolve(request.result);
-    });
-    await new Promise<void>(resolve => {
-      const tx = db.transaction('recordings', 'readwrite');
-      tx.objectStore('recordings').put({
-        id: 'newest-catalog-ride',
-        startedAt: '2026-01-02T00:00:00.000Z',
-        endedAt: '2026-01-02T00:01:00.000Z',
-        samples: 0,
-        phase: 'completed',
-        indoor: true,
-        interrupted: false,
-        revision: 1,
-        elapsedSeconds: 60,
-        timerSeconds: 60,
-        checkpointAt: '2026-01-02T00:01:00.000Z',
-        availableMetrics: [],
-        lapCount: 0,
-      });
-      tx.oncomplete = () => resolve();
-    });
-    db.close();
-  });
+  await seed(page, 1, 2);
+  if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(rows).toHaveCount(50);
-  await expect(rows.first()).toContainText('Jan 2, 2026');
+  await expect(rows.first()).toContainText('Jan 2');
 });
 
 for (const width of [390, 1440])
@@ -77,36 +60,10 @@ for (const width of [390, 1440])
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/sessions');
     await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
-    await page.evaluate(async () => {
-      const db = await new Promise<IDBDatabase>(resolve => {
-        const request = indexedDB.open('power-log');
-        request.onsuccess = () => resolve(request.result);
-      });
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(['recordings', 'samples'], 'readwrite');
-        for (const id of ['delete-me', 'keep-me']) {
-          tx.objectStore('recordings').put({
-            id,
-            startedAt: id === 'delete-me' ? '2026-01-02T00:00:00.000Z' : '2026-01-01T00:00:00.000Z',
-            endedAt: '2026-01-02T00:01:00.000Z',
-            samples: 1,
-            phase: 'completed',
-            indoor: true,
-            interrupted: false,
-            revision: 1,
-            elapsedSeconds: 60,
-            timerSeconds: 60,
-            checkpointAt: '2026-01-02T00:01:00.000Z',
-            availableMetrics: [],
-            lapCount: 0,
-          });
-          tx.objectStore('samples').put({ recordingId: id, sequence: 1, marker: id });
-        }
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
-    });
+    await seed(page, 1, 2, true);
+    const keep = (await seed(page, 1, 1, true))[0]!;
+    if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
+      await page.getByRole('button', { name: 'History actions', exact: true }).click();
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     const rows = page.getByRole('button', { name: /^Open ride,/ });
     await expect(rows).toHaveCount(2);
@@ -135,47 +92,21 @@ for (const width of [390, 1440])
           request.onsuccess = () => resolve(request.result);
         });
         db.close();
-        return values;
+        return values.map(value => (value as { recordingId: string }).recordingId);
       }),
-    ).toEqual([{ recordingId: 'keep-me', sequence: 1, marker: 'keep-me' }]);
+    ).toEqual([keep, keep, keep]);
     await page.reload();
     await expect(rows).toHaveCount(1);
-    await expect(rows).toContainText('Jan 1, 2026');
+    await expect(rows).toContainText('Jan 1');
   });
 
 test('deleting the open ride closes its charts', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/sessions');
   await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
-  const samples = [0, 1, 2].map(time => browserRow(time, time, `2026-01-01T00:00:0${time}.000Z`));
-  await page.evaluate(async rows => {
-    const db = await new Promise<IDBDatabase>(resolve => {
-      const request = indexedDB.open('power-log');
-      request.onsuccess = () => resolve(request.result);
-    });
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['recordings', 'samples'], 'readwrite');
-      tx.objectStore('recordings').put({
-        id: 'open-record',
-        startedAt: rows[0]!.timestamp,
-        endedAt: rows[2]!.timestamp,
-        samples: rows.length,
-        phase: 'completed',
-        indoor: true,
-        interrupted: false,
-        revision: 1,
-        elapsedSeconds: 2,
-        timerSeconds: 2,
-        checkpointAt: rows[2]!.timestamp,
-        availableMetrics: ['humanPowerW', 'cadenceRpm'],
-        lapCount: 0,
-      });
-      for (const sample of rows) tx.objectStore('samples').put({ ...sample, recordingId: 'open-record' });
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-  }, samples);
+  await seed(page, 1, 1, true);
+  if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await page.getByRole('button', { name: /^Open ride,/ }).click();
   await expect(page.getByTestId('monitor-chart-power')).toBeVisible();

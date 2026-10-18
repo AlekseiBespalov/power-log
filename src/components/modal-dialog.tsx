@@ -1,10 +1,10 @@
+import { Pressable } from './ui';
 import { useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useFocusEffect, useIsFocused } from 'expo-router';
 import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalAccessibility } from '../services/modal-accessibility';
 
 type Props = {
   visible: boolean;
@@ -45,10 +46,11 @@ export function ModalDialog({ visible, onClose, closeLabel, testID, style, place
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const presented = useFocusedModal(visible, onClose);
+  const modalRef = useModalAccessibility(presented);
   const centered = placement === 'center' || (Platform.OS === 'web' && width >= 760);
   return (
     <Modal visible={presented} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1 }}>
+      <View ref={modalRef} aria-hidden={!presented} style={{ flex: 1 }}>
         <Pressable
           testID={`${testID}-backdrop`}
           accessibilityRole="button"

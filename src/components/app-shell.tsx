@@ -1,19 +1,29 @@
 import { Link, useIsFocused, useRoute } from 'expo-router';
-import { Platform, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Text, View, useWindowDimensions, type RefreshControlProps } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useSession } from '../services/session-context';
 import { useWorkout } from '../services/workout-context';
 import { workoutInProgress } from '../core/workouts';
-import { Button, colors, formatDuration } from './ui';
+import { Button, colors, MIN_TOUCH_TARGET, formatDuration, lineHeight } from './ui';
 import { TabTransition } from './tab-transition';
 import { appNavigationIndex } from './app-navigation';
 
-export function AppShell({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+export function AppShell({
+  children,
+  footer,
+  navigationRoute,
+  refreshControl,
+}: {
+  children: ReactNode;
+  footer?: ReactNode;
+  navigationRoute?: string;
+  refreshControl?: ReactElement<RefreshControlProps>;
+}) {
   const route = useRoute();
   const { width } = useWindowDimensions();
-  const navigationIndex = appNavigationIndex(route.name);
+  const navigationIndex = appNavigationIndex(navigationRoute ?? route.name);
   const focused = useIsFocused();
   const desktop = Platform.OS === 'web' && width >= 1100;
   return (
@@ -24,6 +34,7 @@ export function AppShell({ children, footer }: { children: ReactNode; footer?: R
           style={{ flex: 1, backgroundColor: colors.bg }}
         >
           <ScrollView
+            refreshControl={refreshControl}
             showsVerticalScrollIndicator={Platform.OS === 'web'}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: width > 700 ? 24 : 12, paddingBottom: 24, flexGrow: 1 }}
@@ -68,7 +79,7 @@ function ActiveRideLink() {
         borderRadius: 10,
         padding: 14,
         fontWeight: '600',
-        minHeight: 44,
+        minHeight: MIN_TOUCH_TARGET,
       }}
     >
       ● {state.phase === 'paused' ? 'Ride paused' : 'Ride in progress'} · {formatDuration(state.timerSeconds)} →
@@ -89,7 +100,7 @@ function SessionError() {
         alignItems: 'center',
       }}
     >
-      <Text style={{ color: colors.red, flex: 1, lineHeight: 20 }}>{session.error}</Text>
+      <Text style={{ color: colors.red, flex: 1, lineHeight: lineHeight.body }}>{session.error}</Text>
       <Button secondary onPress={session.clearError}>
         Dismiss
       </Button>

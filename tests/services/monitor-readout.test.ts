@@ -3,7 +3,15 @@ import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import { MonitorCharts, type MonitorChartsProps } from '../../src/components/monitor-charts';
 import { Heading } from '../../src/components/ui';
-import { currentMonitorPoint, type MonitorData, type MonitorPoint } from '../../src/core/monitor';
+import {
+  currentMonitorPoint,
+  formatMetricPoint,
+  metricById,
+  MONITOR_METRICS,
+  type MonitorData,
+  type MonitorPoint,
+} from '../../src/core/monitor';
+import freshness from '../fixtures/contract/presentation/freshness.json';
 const { renderToStaticMarkup } = createRequire(import.meta.url)('react-dom/server') as {
   renderToStaticMarkup: (node: ReactNode) => string;
 };
@@ -14,6 +22,7 @@ vi.mock('react-native', () => {
     testID?: string;
     accessibilityRole?: string;
     accessibilityLabel?: string;
+    accessibilityValue?: { text: string };
   }) =>
     createElement(
       'div',
@@ -21,6 +30,7 @@ vi.mock('react-native', () => {
         'data-testid': props.testID,
         role: props.accessibilityRole,
         'aria-label': props.accessibilityLabel,
+        'aria-valuetext': props.accessibilityValue?.text,
       },
       props.children,
     );
@@ -61,8 +71,9 @@ vi.mock('react-native-svg', () => {
     Line: shape,
     Path: ({ d, transform, strokeWidth }: { d?: string; transform?: string; strokeWidth?: number }) =>
       createElement('span', { 'data-held-tail': strokeWidth === 1.8 && !transform ? d : undefined }),
-    Rect: shape,
-    Text: shape,
+    Rect: ({ fill }: { fill?: string }) => createElement('span', { 'data-axis-backing': fill }),
+    Text: ({ children, fontFamily }: { children?: ReactNode; fontFamily?: string }) =>
+      createElement('span', { 'data-axis-font': fontFamily }, children),
   };
 });
 vi.mock('../../src/components/use-chart-interaction', () => ({
@@ -90,6 +101,39 @@ const data: MonitorData = {
   latest: { humanPowerW: point },
   statistics: {},
 };
+
+it.each(freshness.heart)('expires the real phone heart reading at $age seconds in $phase', row => {
+  const metric = metricById('heartRateBpm')!;
+  const original = { ...point, value: 150 };
+  const shown = currentMonitorPoint(original, true, 100 + row.age, metric.gapSeconds, 1100, seconds => seconds - 1000);
+  expect(formatMetricPoint(metric, shown)).toBe(row.text);
+  const markup = render({
+    data: {
+      ...data,
+      monotonicAt: 100 + row.age,
+      liveAcquiredAt: { heartRateBpm: 1100 },
+      mapMonotonicSeconds: seconds => seconds - 1000,
+      latest: { heartRateBpm: original },
+      series: { heartRateBpm: [original] },
+    },
+    metricIds: ['heartRateBpm'],
+    live: true,
+    following: true,
+    viewport: data.domain,
+  });
+  expect(markup).toContain('>150<');
+  expect(markup).not.toContain('Last sample');
+});
+
+it.each(freshness.gps.filter(row => row.status === 'receiving' || row.status === 'stale'))(
+  'expires the real phone GPS reading at $age seconds',
+  row => {
+    const metric = metricById('speedMps')!;
+    const shown = currentMonitorPoint(point, true, 100 + row.age!, metric.gapSeconds, 1100, seconds => seconds - 1000);
+    expect(shown).toBe(row.status === 'stale' ? null : point);
+    if (shown) expect(shown.timestamp).toBe(point.timestamp);
+  },
+);
 function render(props: Partial<MonitorChartsProps> = {}) {
   return renderToStaticMarkup(
     createElement(MonitorCharts, {
@@ -108,6 +152,77 @@ function render(props: Partial<MonitorChartsProps> = {}) {
 }
 
 describe('chart no-cursor readouts', () => {
+  it('keeps metric names and values without repeating source, quality, or idle sample-time captions', () => {
+    const ids = ['gpsDistanceMeters', 'controllerEnergyWh', 'calculatedEnergyWh'];
+    const html = render({
+      metricIds: ids,
+      data: {
+        ...data,
+        series: Object.fromEntries(ids.map(id => [id, [point]])),
+        latest: Object.fromEntries(ids.map(id => [id, point])),
+        metricSources: Object.fromEntries(
+          ids.map(id => [
+            id,
+            {
+              source: id,
+              label: 'Controller counters',
+              partial: true,
+              estimated: true,
+            },
+          ]),
+        ),
+      },
+    });
+    expect(html).toContain('Energy used (controller)');
+    expect(html).toContain('Energy used (calc)');
+    expect(html).not.toMatch(/Controller counters|Partial|Estimated|Last sample|Last in range/);
+    expect(html).not.toContain('monitor-source-');
+    expect(html).not.toContain('>00:10.000<');
+    expect(render({ cursorSeconds: 10 })).toContain('>00:10.000<');
+  });
+  it('renders a complete dashboard during cursor inspection and viewport changes before exact readouts arrive', () => {
+    const metricIds = MONITOR_METRICS.map(metric => metric.id);
+    const input: MonitorData = {
+      ...data,
+      series: Object.fromEntries(
+        metricIds.map(id => [
+          id,
+          [
+            { ...point, value: 1, startsSegment: true },
+            { ...point, elapsedSeconds: 11, value: 2, observationId: 'next', startsSegment: false },
+          ],
+        ]),
+      ),
+    };
+    for (const viewport of [data.domain, { start: 9, end: 12 }]) {
+      const html = render({
+        data: input,
+        metricIds,
+        viewport,
+        cursorSeconds: 10.25,
+        referenceSeconds: 10,
+        following: false,
+      });
+      expect(html).toContain('Distance (GPS)');
+      expect(html).toContain('Energy used (controller)');
+      expect(html).toContain('Charge used (calc)');
+    }
+  });
+  it('keeps an empty live chart free of axis numbers and a growing accessible range', () => {
+    const empty = { ...data, series: {}, latest: {}, domain: { start: 0, end: 10 } };
+    for (const nowSeconds of [10, 30, 120]) {
+      const html = render({ data: empty, viewport: { start: 0, end: nowSeconds }, displayTimeSeconds: nowSeconds });
+      expect(html).toContain('No samples');
+      expect(html).not.toContain('data-axis-font');
+      expect(html).not.toContain('Visible ');
+    }
+  });
+  it('backs all six web axis labels with the opaque chart colour and the app font stack', () => {
+    const html = render();
+    expect(html.match(/data-axis-backing="#0b0d10"/g)).toHaveLength(6);
+    expect(html).toContain('data-axis-font="-apple-system, BlinkMacSystemFont,');
+    expect(html).not.toContain('data-axis-font="Arial"');
+  });
   it('omits an SVG tail when a current Health reading precedes the plotted tail after a UTC rollback', () => {
     const old = { ...point, elapsedSeconds: 100, value: 120, observationId: 'pre-rollback' };
     const current = { ...point, elapsedSeconds: 40, value: 140, observationId: 'post-rollback' };
@@ -131,7 +246,7 @@ describe('chart no-cursor readouts', () => {
     ['humanPowerW', 6],
     ['speedMps', 10],
     ['heartRateBpm', 15],
-  ] as const)('expires %s at its catalog boundary of %s seconds while tails never exceed six', (metric, expiry) => {
+  ] as const)('keeps the last %s sample after %s seconds while tails never exceed six', (metric, expiry) => {
     const input: MonitorData = {
       ...data,
       domain: { start: 0, end: 11 },
@@ -143,7 +258,8 @@ describe('chart no-cursor readouts', () => {
     const props = { viewport: input.domain, metricIds: [metric], following: true };
     for (const age of [5.999, 6, expiry - 0.001, expiry]) {
       const html = render({ ...props, data: { ...input, monotonicAt: 1000 + age } });
-      expect(html.includes('Unavailable')).toBe(age >= expiry);
+      expect(html).not.toContain('Unavailable');
+      expect(html).not.toContain('Last sample');
       expect(html.includes('data-held-tail=')).toBe(age < 6);
     }
   });
@@ -159,9 +275,9 @@ describe('chart no-cursor readouts', () => {
     };
     expect(render({ data: input })).toContain('237');
     offset = null;
-    expect(render({ data: input })).not.toContain('237');
+    expect(render({ data: input })).toContain('00:10.000 elapsed');
     offset = 4600;
-    expect(render({ data: input })).not.toContain('237');
+    expect(render({ data: input })).toContain('00:10.000 elapsed');
   });
 
   it.each([false, true])('shows current GPS and heart rate with no fresh bike stream: bike=%s', bike => {
@@ -180,16 +296,16 @@ describe('chart no-cursor readouts', () => {
     const html = render({ data: input, following: true, metricIds: ['humanPowerW', 'speedMps', 'heartRateBpm'] });
     expect(html).toContain('25.2');
     expect(html).toContain('123');
-    expect(html).not.toContain('237');
+    expect(html.includes('237')).toBe(bike);
     expect(
       render({
         data: { ...input, liveAcquiredAt: { speedMps: 1018, heartRateBpm: null } },
         metricIds: ['heartRateBpm'],
         following: true,
       }),
-    ).not.toContain('123');
+    ).toContain('1:00:18.000 elapsed');
   });
-  it('expires number and chart readings together using live age even when replay changes the point time', () => {
+  it('expires current-value tiles but retains labeled chart samples when replay changes point time', () => {
     for (const age of [5.999, 6]) {
       const replayed = { ...point, elapsedSeconds: 15 };
       const input = {
@@ -201,27 +317,30 @@ describe('chart no-cursor readouts', () => {
       };
       const numeric = currentMonitorPoint(replayed, true, 16, 6, 16 - age);
       expect(numeric !== null).toBe(age < 6);
-      expect(render({ data: input }).includes('237')).toBe(age < 6);
+      expect(render({ data: input })).toContain('237');
+      expect(render({ data: input })).not.toContain('Last sample');
     }
     for (const acquiredAt of [undefined, null, 12, NaN, Infinity]) {
       expect(
         render({
           data: { ...data, nowSeconds: 11, monotonicAt: 11, liveAcquiredAt: { humanPowerW: acquiredAt ?? null } },
         }),
-      ).not.toContain('237');
+      ).toContain('00:10.000 elapsed');
     }
-    expect(render({ data: { ...data, nowSeconds: 9, monotonicAt: 9 } })).not.toContain('237');
+    expect(render({ data: { ...data, nowSeconds: 9, monotonicAt: 9 } })).toContain('00:10.000 elapsed');
   });
-  it('expires a live point seven seconds old without changing the original series', () => {
+  it('retains a stale value without adding a visible explanation or extending the series', () => {
     const before = structuredClone(data);
     const html = render();
-    expect(html).toContain('Unavailable');
-    expect(html).not.toContain('237');
+    expect(html).toContain('237');
+    expect(html).toContain('00:10.000 elapsed');
+    expect(html).toContain('00:10.000 elapsed');
+    expect(html).not.toContain('data-held-tail=');
     expect(data).toEqual(before);
   });
-  it('holds a live point only until the exact six-second boundary', () => {
+  it('keeps an expired live point at the exact six-second boundary', () => {
     expect(render({ data: { ...data, monotonicAt: 15.999 }, displayTimeSeconds: 15.999 })).toContain('237');
-    expect(render({ data: { ...data, monotonicAt: 16 }, displayTimeSeconds: 16 })).not.toContain('237');
+    expect(render({ data: { ...data, monotonicAt: 16 }, displayTimeSeconds: 16 })).not.toContain('Last sample');
   });
   it('uses latest observations independently of retained plotting geometry', () => {
     expect(
@@ -235,27 +354,116 @@ describe('chart no-cursor readouts', () => {
     ).toContain('251');
     expect(render({ data: { ...data, latest: { humanPowerW: null } }, displayTimeSeconds: 11 })).not.toContain('237');
   });
-  it('labels the last historical value and preserves its original observation time', () => {
-    const html = render({ live: false });
-    expect(html).toContain('237');
-    expect(html).toContain('Last in range · 00:10.000');
-    expect(html).toContain(point.timestamp);
+  it('retains a recorded Health sample without live evidence or visible plot geometry', () => {
+    const html = render({
+      metricIds: ['heartRateBpm'],
+      following: true,
+      viewport: { start: 900, end: 1000 },
+      data: {
+        ...data,
+        domain: { start: 0, end: 1000 },
+        series: {},
+        latest: { heartRateBpm: { ...point, value: 123 } },
+        liveAcquiredAt: { heartRateBpm: null },
+      },
+    });
+    expect(html).toContain('123');
+    expect(html).toContain('00:10.000 elapsed');
+    expect(html).not.toContain('data-held-tail=');
   });
-  it('limits historical readouts to the visible range, excluding query padding', () => {
+  it('labels historical range statistics instead of the last plotted value when there is no cursor', () => {
     const html = render({
       live: false,
-      viewport: { start: 0, end: 12 },
-      data: { ...data, series: { humanPowerW: [point, { ...point, elapsedSeconds: 14, value: 999 }] } },
+      data: {
+        ...data,
+        statistics: {
+          humanPowerW: {
+            count: 3,
+            sampleMean: 123,
+            min: { ...point, elapsedSeconds: 8, value: 50 },
+            max: { ...point, elapsedSeconds: 9, value: 604 },
+          },
+        },
+        statisticsViewport: data.domain,
+      },
     });
-    expect(html).toContain('Last in range · 00:10.000');
-    expect(html).toContain('237');
+    expect(html).toContain('avg 123');
+    expect(html).toContain('max 604 W');
+    expect(html).not.toContain('237');
+    expect(html).not.toContain('Last in range');
+    expect(html).not.toContain(point.timestamp);
+  });
+  it('shows a consumption amount without extra source or coverage descriptions', () => {
+    const html = render({
+      live: false,
+      metricIds: ['controllerEnergyWh'],
+      data: {
+        ...data,
+        series: { controllerEnergyWh: [{ ...point, value: 100 }] },
+        statistics: {
+          controllerEnergyWh: { amount: 1.25, coveredSeconds: 12, partial: true, unresolvedBoundary: true },
+        },
+        statisticsViewport: data.domain,
+      },
+    });
+    expect(html).toContain('>1.25<');
+    expect(html).not.toContain('Boundary amount');
+    expect(html).not.toContain('Partial');
+    expect(html).not.toContain(metricById('controllerEnergyWh')!.description!);
+    expect(html).not.toContain('avg ');
+  });
+  it('limits historical range statistics to the visible range, excluding query padding', () => {
+    const viewport = { start: 0, end: 12 };
+    const input: MonitorData = {
+      ...data,
+      series: { humanPowerW: [point, { ...point, elapsedSeconds: 14, value: 999 }] },
+      statistics: { humanPowerW: { count: 1, sampleMean: 237, min: point, max: point } },
+      statisticsViewport: viewport,
+    };
+    const html = render({
+      live: false,
+      viewport,
+      data: input,
+    });
+    expect(html).toContain('avg 237');
+    expect(html).toContain('max 237 W');
     expect(html).not.toContain('999');
-    expect(render({ live: false, viewport: { start: 11, end: 17 } })).toContain('Unavailable');
+    expect(html).not.toContain('Last in range');
+    expect(html).not.toContain(point.timestamp);
+  });
+  it.each(['pending', 'other range'] as const)('shows a pending historical readout for %s statistics', reason => {
+    const html = render({
+      live: false,
+      viewport: { start: 11, end: 17 },
+      data: {
+        ...data,
+        statistics: { humanPowerW: { count: 1, sampleMean: 237, min: point, max: point } },
+        statisticsViewport: reason === 'pending' ? { start: 11, end: 17 } : { start: 0, end: 12 },
+        statisticsPending: reason === 'pending',
+      },
+    });
+    expect(html).toContain('min —');
+    expect(html).not.toContain('Updating range…');
+    expect(html).not.toContain('avg 237');
+    expect(html).not.toContain('max 237');
+    expect(html).not.toContain('Last in range');
+  });
+  it('shows an explicit historical cursor value at its original observation time', () => {
+    const html = render({
+      live: false,
+      cursorSeconds: 10.75,
+      data: { ...data, selectionSeconds: 10.75, selection: { humanPowerW: point } },
+    });
+    expect(html).toContain('237');
+    expect(html).toContain(`00:10 elapsed, ${point.timestamp}`);
+    expect(html).not.toContain('00:10.000');
+    expect(html).not.toContain('Last in range');
+    expect(html).not.toContain('avg');
   });
   it('labels a manually held live window as historical even at the live edge', () => {
-    expect(render({ following: false })).toContain('Last in range · 00:10.000');
-    expect(render({ viewport: { start: 0, end: 12 } })).toContain('Last in range · 00:10.000');
-    expect(render({ following: true, viewport: { start: 0, end: 12 } })).toContain('Unavailable');
+    expect(render({ following: false })).toContain('00:10.000 elapsed');
+    expect(render({ viewport: { start: 0, end: 12 } })).toContain('00:10.000 elapsed');
+    expect(render({ following: true, viewport: { start: 0, end: 12 } })).toContain('00:10.000 elapsed');
   });
   it('retains metric-specific freshness and cumulative distance semantics', () => {
     expect(

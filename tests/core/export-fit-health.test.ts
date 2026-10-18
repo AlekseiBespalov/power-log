@@ -27,7 +27,9 @@ function discover(owner: Producer, end: number, rows: Row[]) {
     },
   } as ProjectionPage<'healthFit'>;
   const discovery = new HealthDiscovery(owner, end);
-  discovery.add(page, Int32Array.from(rows.map(row => (row.active === false ? 0 : 1))));
+  discovery.add(page);
+  discovery.prepareConsumption();
+  discovery.addConsumption(page);
   return discovery.plan();
 }
 
@@ -67,7 +69,7 @@ describe('Health source qualification', () => {
         { t: 1, producer: 'phone', hr: 100 },
         { t: 2, producer: 'watch', hr: 120, representation: 'builderMostRecent' },
       ]).heartRate,
-    ).toEqual({ source: 'watch', kind: 'latest' });
+    ).toEqual({ source: 'watch', kind: 'latest', dataOrigin: null });
   });
 
   it('falls back when the owner has only aggregate heart rate', () => {
@@ -76,7 +78,7 @@ describe('Health source qualification', () => {
         { t: 1, producer: 'watch', hr: 120, representation: 'rawQuantity', sampleCount: 5 },
         { t: 2, producer: 'phone', hr: 100 },
       ]).heartRate,
-    ).toEqual({ source: 'phone', kind: 'latest' });
+    ).toEqual({ source: 'phone', kind: 'latest', dataOrigin: null });
   });
 
   it('does not qualify a source with only invalid heart-rate values', () => {
@@ -86,21 +88,22 @@ describe('Health source qualification', () => {
         { t: 2, producer: 'phone', hr: 255 },
         { t: 3, producer: 'watch', hr: 254 },
       ]).heartRate,
-    ).toEqual({ source: 'watch', kind: 'latest' });
+    ).toEqual({ source: 'watch', kind: 'latest', dataOrigin: null });
     expect(discover('phone', 10, [{ t: 1, producer: 'phone', hr: 0.5 }]).heartRate).toBeNull();
   });
 
-  it('prefers raw samples only when the chosen source has one inside an activity interval', () => {
+  it('prefers valid raw evidence even outside an activity interval', () => {
     const outside = [
       { t: 1, hr: 100, representation: 'rawSeries', active: false },
       { t: 2, hr: 110, representation: 'builderMostRecent' },
     ];
-    expect(discover('watch', 10, outside).heartRate).toEqual({ source: 'watch', kind: 'latest' });
+    expect(discover('watch', 10, outside).heartRate).toEqual({ source: 'watch', kind: 'sample', dataOrigin: null });
     expect(
       discover('watch', 10, [...outside, { t: 3, hr: 120, representation: 'rawQuantity', sampleCount: 1 }]).heartRate,
     ).toEqual({
       source: 'watch',
       kind: 'sample',
+      dataOrigin: null,
     });
   });
 });

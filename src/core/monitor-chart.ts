@@ -1,6 +1,13 @@
+import {
+  analyticsTimeUs,
+  inspectionHeldTail,
+  inspectionRenderedSegment,
+  inspectionRenderedOriginal,
+  InspectionOriginalInput,
+} from '../../shared/js';
+import { monitorInspectionItem } from './monitor-inspection';
 import type { ChartViewport } from './chart-viewport';
 import {
-  currentMonitorPoint,
   metricById,
   metricValue,
   type MonitorData,
@@ -22,7 +29,6 @@ export interface MonitorScale {
 }
 const timeRoundoffSeconds = 0.000001;
 
-/** Move a retained path into the current viewport without rebuilding its vertices. */
 export function monitorViewportTransform(geometry: ChartViewport, view: ChartViewport, left: number, width: number) {
   const duration = Math.max(1e-9, view.end - view.start);
   const scale = Math.max(1e-9, geometry.end - geometry.start) / duration;
@@ -38,8 +44,13 @@ const overlays: Record<string, readonly [string, string]> = {
   batteryCurrentA: ['current', 'Current'],
   motorCurrentA: ['current', 'Current'],
   speedMps: ['speed', 'Speed'],
+  gpsDistanceMeters: ['distance-comparison', 'Distance'],
+  controllerDistanceMeters: ['distance-comparison', 'Distance'],
+  controllerEnergyWh: ['battery-energy', 'Energy used'],
+  calculatedEnergyWh: ['battery-energy', 'Energy used'],
+  controllerChargeAh: ['battery-charge', 'Charge used'],
+  calculatedChargeAh: ['battery-charge', 'Charge used'],
   controllerSpeedMps: ['speed', 'Speed'],
-  healthSpeedMps: ['speed', 'Speed'],
   activeEnergyKcal: ['energy', 'Energy'],
   basalEnergyKcal: ['energy', 'Energy'],
   horizontalAccuracyM: ['accuracy', 'GPS accuracy'],
@@ -111,11 +122,17 @@ export function monitorScale(
 }
 
 /** Explicit native segment markers describe original samples, not coarse vertex spacing. */
-function beginsSegment(point: MonitorPoint, previous: MonitorPoint | null, gapSeconds: number): boolean {
+function beginsSegment(point: MonitorPoint, previous: MonitorPoint | null, metric: string): boolean {
   return (
     !previous ||
-    point.elapsedSeconds <= previous.elapsedSeconds ||
-    (point.startsSegment ?? point.elapsedSeconds - previous.elapsedSeconds >= gapSeconds)
+    inspectionRenderedSegment(
+      metric,
+      previous.elapsedSeconds,
+      previous.value,
+      point.elapsedSeconds,
+      point.value,
+      point.startsSegment ?? null,
+    )
   );
 }
 
@@ -143,9 +160,7 @@ export function monitorLineGeometry(
       previous = null;
       continue;
     }
-    const starts =
-      beginsSegment(point, previous, metric.gapSeconds) ||
-      (metric.semantics === 'circular' && previous !== null && Math.abs(point.value - previous.value) > 180);
+    const starts = beginsSegment(point, previous, metric.id);
     if (starts) {
       endRun();
       runStart = point;
@@ -162,31 +177,87 @@ export function monitorLineGeometry(
   return { path: path.trim(), isolated };
 }
 
-function lowerBound(points: readonly MonitorPoint[], seconds: number): number {
-  let lo = 0;
-  let hi = points.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (points[mid]!.elapsedSeconds < seconds) lo = mid + 1;
-    else hi = mid;
+type RenderedVertex = { input: InspectionOriginalInput; segment: number };
+type RenderedGroup = { time: bigint; points: MonitorPoint[]; prepared?: RenderedVertex[]; eligible?: boolean };
+type RenderedIndex = { groups: RenderedGroup[]; originals: Map<string, MonitorPoint>; length: number };
+const renderedIndexes = new WeakMap<readonly MonitorPoint[], Map<string, RenderedIndex>>();
+function renderedIndex(points: readonly MonitorPoint[], metric: string): RenderedIndex {
+  let metrics = renderedIndexes.get(points);
+  if (!metrics) {
+    metrics = new Map();
+    renderedIndexes.set(points, metrics);
   }
-  return lo;
+  const cached = metrics.get(metric);
+  if (cached?.length === points.length) return cached;
+  const groupsByTime = new Map<bigint, RenderedGroup>();
+  const originals = new Map<string, MonitorPoint>();
+  for (const point of points) {
+    if (!Number.isFinite(point.elapsedSeconds)) continue;
+    const time = BigInt(analyticsTimeUs(point.elapsedSeconds));
+    let group = groupsByTime.get(time);
+    if (!group) {
+      group = { time, points: [] };
+      groupsByTime.set(time, group);
+    }
+    group.points.push(point);
+    const identity = point.observationId ?? point.timestamp;
+    if (!originals.has(identity)) originals.set(identity, point);
+  }
+  const groups = [...groupsByTime.values()].sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+  const index = { groups, originals, length: points.length };
+  metrics.set(metric, index);
+  return index;
+}
+function preparedRenderedGroup(group: RenderedGroup, metric: string): RenderedVertex[] {
+  if (!group.prepared) {
+    group.eligible = false;
+    group.prepared = group.points.map(point => {
+      const input = new InspectionOriginalInput(monitorInspectionItem(metric, point));
+      if (input.plotValid(metric)) group.eligible = true;
+      return { input, segment: point.startsSegment == null ? -1 : Number(point.startsSegment) };
+    });
+  }
+  return group.prepared;
 }
 
-/** Immediate fallback is a real vertex. It never interpolates, extends a tail, or crosses a break. */
 export function nearestMonitorPoint(
   points: readonly MonitorPoint[],
   seconds: number,
-  gapSeconds: number,
+  metric: MonitorMetric,
 ): MonitorPoint | null {
   if (!Number.isFinite(seconds) || !points.length) return null;
-  const index = lowerBound(points, seconds);
-  const after = points[index];
-  const before = points[index - 1];
-  if (validMonitorPoint(after) && Math.abs(after.elapsedSeconds - seconds) <= timeRoundoffSeconds) return after;
-  if (validMonitorPoint(before) && Math.abs(before.elapsedSeconds - seconds) <= timeRoundoffSeconds) return before;
-  if (!validMonitorPoint(before) || !validMonitorPoint(after) || beginsSegment(after, before, gapSeconds)) return null;
-  return seconds - before.elapsedSeconds <= after.elapsedSeconds - seconds ? before : after;
+  const index = renderedIndex(points, metric.id);
+  const timeUs = analyticsTimeUs(seconds),
+    time = BigInt(timeUs);
+  let low = 0,
+    high = index.groups.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (index.groups[middle]!.time < time) low = middle + 1;
+    else high = middle;
+  }
+  const candidates: RenderedVertex[] = [];
+  for (const direction of [-1, 1]) {
+    for (
+      let position = direction === -1 ? low - 1 : low;
+      position >= 0 && position < index.groups.length;
+      position += direction
+    ) {
+      const group = index.groups[position]!;
+      const prepared = preparedRenderedGroup(group, metric.id);
+      if (group.eligible) {
+        candidates.push(...prepared);
+        break;
+      }
+    }
+  }
+  const result = inspectionRenderedOriginal(
+    metric.id,
+    candidates.map(vertex => vertex.input),
+    Int32Array.from(candidates.map(vertex => vertex.segment)),
+    timeUs,
+  );
+  return result ? (index.originals.get(result.observationId) ?? null) : null;
 }
 
 export function monitorSelection(
@@ -206,15 +277,11 @@ export function monitorSelection(
     validMonitorPoint(point) && point.elapsedSeconds >= data.domain.start && point.elapsedSeconds <= data.domain.end;
   const tag = kind === 'selection' ? data.selectionSeconds : data.referenceSeconds;
   const exact = data[kind];
-  if (
-    (tag === seconds || (kind === 'selection' && data.selectionPending)) &&
-    exact &&
-    Object.prototype.hasOwnProperty.call(exact, metric.id)
-  ) {
+  if (tag === seconds && exact && Object.prototype.hasOwnProperty.call(exact, metric.id)) {
     const point = exact[metric.id];
     return inDomain(point) ? point : null;
   }
-  const point = nearestMonitorPoint(data.series[metric.id] ?? [], seconds, metric.gapSeconds);
+  const point = nearestMonitorPoint(data.series[metric.id] ?? [], seconds, metric);
   return inDomain(point) ? point : null;
 }
 
@@ -222,24 +289,32 @@ export function monitorSelection(
 export function monitorTailSeconds(
   point: MonitorPoint | null | undefined,
   nowSeconds: number | undefined,
-  gapSeconds: number,
+  metric: MonitorMetric,
   acquiredAt: number | null | undefined,
   monotonicAt: number | undefined,
   evidencePoint: MonitorPoint | null | undefined,
   mapMonotonicSeconds?: (seconds: number) => number | null,
 ): number | null {
-  if (!validMonitorPoint(point) || nowSeconds === undefined || !Number.isFinite(nowSeconds)) return null;
-  if (!point.observationId || point.observationId !== evidencePoint?.observationId) return null;
-  const age = nowSeconds - point.elapsedSeconds;
-  return currentMonitorPoint(point, true, monotonicAt, Math.min(6, gapSeconds), acquiredAt, mapMonotonicSeconds) &&
-    age > 0 &&
-    age < Math.min(6, gapSeconds)
-    ? nowSeconds
-    : null;
+  if (!validMonitorPoint(point) || !point.observationId || nowSeconds === undefined || monotonicAt === undefined)
+    return null;
+  const mapped = acquiredAt == null ? null : mapMonotonicSeconds ? mapMonotonicSeconds(acquiredAt) : acquiredAt;
+  return (
+    inspectionHeldTail(
+      metric.id,
+      point.observationId,
+      point.elapsedSeconds,
+      point.value,
+      evidencePoint?.observationId ?? '',
+      mapped,
+      monotonicAt,
+      nowSeconds,
+    ) ?? null
+  );
 }
 
 /** Live time may advance through a gap; this changes only the axis, not the sampled domain. */
 export function monitorDisplayDomain(data: MonitorData, live = false, displayTimeSeconds?: number): ChartViewport {
+  if (!Object.values(data.series).some(points => points?.some(validMonitorPoint))) return data.domain;
   const now = displayTimeSeconds ?? data.nowSeconds;
   return live && now !== undefined && Number.isFinite(now)
     ? { start: data.domain.start, end: Math.max(data.domain.end, now) }

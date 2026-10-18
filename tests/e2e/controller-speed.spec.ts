@@ -5,6 +5,8 @@ import { syntheticSample } from '../fixtures/synthetic-sample';
 async function openSpeedExample(page: Page, known: boolean) {
   await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   const samples = Array.from({ length: 40 }, (_, index) => ({
     ...syntheticSample(index, index, new Date(Date.UTC(2026, 8, 8) + index * 1000).toISOString()),
@@ -61,7 +63,7 @@ for (const width of [390, 1440])
     await page.reload();
     await openSpeedExample(page, false);
     await expect(page.getByTestId('monitor-number-speedRaw')).toContainText('36.00');
-    await expect(page.getByTestId('monitor-number-speedRaw')).toContainText('unit unknown');
+    await expect(page.getByTestId('monitor-number-speedRaw')).toContainText('Controller speed signal (uncalibrated)');
     await expect(page.getByTestId('monitor-number-speedRaw')).not.toContainText('mph');
     await expect(page.getByTestId('monitor-chart-speed')).toHaveCount(1);
     await expect(page.getByTestId('monitor-chart-speedRaw')).toHaveCount(1);

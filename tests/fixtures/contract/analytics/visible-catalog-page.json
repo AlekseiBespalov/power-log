@@ -1,0 +1,240 @@
+{
+  "format": "power-log-analytics-catalog-reference",
+  "input": {
+    "request": {"limit":51},
+    "visibleLimit": 50,
+    "rides": {
+      "$repeat": {
+        "count": 51,
+        "template": {
+          "name": {"$linear":{"start":0,"step":1,"prefix":"catalog-"}},
+          "input": {
+            "create": {"id":{"$values":{"$ref":"catalog-ids"}},"startedAt":{"$time":{"date":"2026-01-01","startMs":0,"stepMs":60000}},"indoor":true,"watchEnabled":false,"saveToHealth":true,"recordGPS":false},
+            "events": {
+              "$cycle": [
+                [],
+                [
+                  {"schemaVersion":1,"eventId":{"$values":[null,"1e43802e-de43-5bd9-a4a2-0c2cbae3a1a4","d9a1cfa2-77d6-5b62-a89e-e6591a1f3161",null,"615f2813-cf6d-54b9-a6c8-ce9e041dd0e1","ec5b1a98-804e-5404-ac3e-74f98a1c0119",null,"2499f593-0104-5a2a-8b45-8d2d09b6ff5a","112a653f-a6b4-58dd-a0da-5727850eaeb2",null,"cd49141a-8f88-5e8e-80b6-de1bbf341a7c","40fd9ccd-4fb7-59fb-885f-157347304a8c",null,"3375c516-97f2-5079-a6e2-005e5adc4c19","c59c86c8-0da3-5d2e-a4d9-e4b2f8c143b4",null,"73861b41-9085-513f-94dc-e0da18278160","68a688c4-7c88-5bf5-957c-f1da56ac833b",null,"484b0719-a6c0-53b9-bae8-f79d47efa4dd","3eb58bec-89d2-5b55-8b2b-d20626ba82ad",null,"ccf50277-6b7d-5f1b-8c23-eda045930f23","43d7d018-c505-551f-8bb2-a8f8deac3231",null,"05811887-cb86-5087-89d7-a42102ec4035","c6d573a8-1015-58fd-8f6c-7521591dcf89",null,"facdd77f-16ea-5311-9520-84ea9b8bfb7b","5dd14926-007c-571f-a7ae-5dbe7aab77e4",null,"50338c25-84e3-5888-b9f4-6546fbfb7c18","842547e1-b550-5233-a3c1-943278aa91c0",null,"d9abb94c-6337-5f17-9130-93c57fa2f168","65a3ea85-6d3b-5d29-b0f9-f32f2b21451c",null,"cfc9c69c-2b27-5be1-93de-c854ece6c77b","3ca94f11-bf4f-5c05-b8cd-60c811a99fc3",null,"b57c2ff1-2e47-5b1c-ad98-694515df62b3","a9b27ad3-0ce6-587b-bdaa-ec07bfe17b53",null,"43d6051f-a2be-5b18-b518-f97a0d0a84c6","9cb69c7e-3c05-5390-aeae-d7411ce2142d",null,"ecd52d51-21d6-57d5-973b-fb57879f30d3","d386be8d-505f-50f5-9024-8d5f38c5835e",null,"f382e254-070e-57a8-82f7-52338760df24","9f8aab4f-4a6e-5d9d-9ec7-622487df1c37"]},"workoutId":{"$values":{"$ref":"catalog-ids"}},"kind":"telemetry","source":"controller","timestamp":{"$time":{"date":"2026-01-01","startMs":0,"stepMs":60000}},"elapsedSeconds":0,"payload":{"humanPowerW":0,"cadenceRpm":80}},
+                  {"schemaVersion":1,"eventId":{"$values":[null,"6afc46d9-3bc4-5677-aec3-991f02a07ff0","47bffb78-c5e2-59c9-a176-4e9498f90727",null,"9f87a993-f6d2-5cfd-84da-bed9121ad453","dd586649-9bf4-51dd-9b49-eac6e8f644ce",null,"5788e447-1020-59ab-a4b4-7f654fdb8562","3f9c7969-3bd2-50e9-a767-b69ad0f71600",null,"6f4bcfec-93a8-5130-8456-ac64428e9dcb","04e559e1-6f58-5d19-b0c5-059a022b8208",null,"c6906eaf-8431-56f1-ac13-e8ff131372c7","65ab92e5-4ea8-5ba7-9e44-2f811a8d2c61",null,"5a24175b-64b8-5461-933a-0e2525a2f4c0","2343d000-3331-585e-9694-a26ea5ea30b1",null,"da61f229-ffdf-5818-acf2-d46c8827159b","118f918b-7848-5903-904d-42296ab96abf",null,"f6403a3e-73d1-584c-8045-b5b47371315e","0aa0c3f3-34d3-5b8c-8f1f-97803d96581d",null,"e8cc490a-1756-5d06-b806-f7bf186ec191","3d6a937e-c3fd-5db3-b258-35231ebeda80",null,"554f1488-f99d-58ef-aeb6-68b03871973d","8e47218a-6ad1-57a6-821d-df5d72220013",null,"f156f1c1-824f-5058-a031-a91b3f631d76","35478935-8dcf-5c0b-8316-02408462328f",null,"980441fe-649c-5fa7-98ae-a8498f7fc050","b4fbfcd1-ff79-51f3-992c-17fbaf320fbb",null,"69bd6d56-d674-5c23-9664-ebeca7b9a2a5","12015a71-013c-542c-901c-6491b08b5044",null,"ac84ee23-2729-591f-a2ea-6bb5b2b03cd7","9076c224-eee1-5e0f-b6ea-5dbe242e6b83",null,"544ef51e-7915-5654-8067-cca3e42d0e38","ec9b88bb-a03c-5915-8e9b-21cdf2460d21",null,"a3d9493e-b540-59e0-a226-aac1f647bf67","35724c7c-8b06-54dc-9cdf-35dea0c7bd2c",null,"fcf295ea-e9d6-58b3-aa0c-9a6880b779b4","49651a0c-09e6-51c9-a15f-3ad822b7d3f7"]},"workoutId":{"$values":{"$ref":"catalog-ids"}},"kind":"telemetry","source":"controller","timestamp":{"$time":{"date":"2026-01-01","startMs":1000,"stepMs":60000}},"elapsedSeconds":1,"payload":{"humanPowerW":0,"cadenceRpm":80}}
+                ],
+                [
+                  {"schemaVersion":1,"eventId":{"$values":[null,"1e43802e-de43-5bd9-a4a2-0c2cbae3a1a4","d9a1cfa2-77d6-5b62-a89e-e6591a1f3161",null,"615f2813-cf6d-54b9-a6c8-ce9e041dd0e1","ec5b1a98-804e-5404-ac3e-74f98a1c0119",null,"2499f593-0104-5a2a-8b45-8d2d09b6ff5a","112a653f-a6b4-58dd-a0da-5727850eaeb2",null,"cd49141a-8f88-5e8e-80b6-de1bbf341a7c","40fd9ccd-4fb7-59fb-885f-157347304a8c",null,"3375c516-97f2-5079-a6e2-005e5adc4c19","c59c86c8-0da3-5d2e-a4d9-e4b2f8c143b4",null,"73861b41-9085-513f-94dc-e0da18278160","68a688c4-7c88-5bf5-957c-f1da56ac833b",null,"484b0719-a6c0-53b9-bae8-f79d47efa4dd","3eb58bec-89d2-5b55-8b2b-d20626ba82ad",null,"ccf50277-6b7d-5f1b-8c23-eda045930f23","43d7d018-c505-551f-8bb2-a8f8deac3231",null,"05811887-cb86-5087-89d7-a42102ec4035","c6d573a8-1015-58fd-8f6c-7521591dcf89",null,"facdd77f-16ea-5311-9520-84ea9b8bfb7b","5dd14926-007c-571f-a7ae-5dbe7aab77e4",null,"50338c25-84e3-5888-b9f4-6546fbfb7c18","842547e1-b550-5233-a3c1-943278aa91c0",null,"d9abb94c-6337-5f17-9130-93c57fa2f168","65a3ea85-6d3b-5d29-b0f9-f32f2b21451c",null,"cfc9c69c-2b27-5be1-93de-c854ece6c77b","3ca94f11-bf4f-5c05-b8cd-60c811a99fc3",null,"b57c2ff1-2e47-5b1c-ad98-694515df62b3","a9b27ad3-0ce6-587b-bdaa-ec07bfe17b53",null,"43d6051f-a2be-5b18-b518-f97a0d0a84c6","9cb69c7e-3c05-5390-aeae-d7411ce2142d",null,"ecd52d51-21d6-57d5-973b-fb57879f30d3","d386be8d-505f-50f5-9024-8d5f38c5835e",null,"f382e254-070e-57a8-82f7-52338760df24","9f8aab4f-4a6e-5d9d-9ec7-622487df1c37"]},"workoutId":{"$values":{"$ref":"catalog-ids"}},"kind":"telemetry","source":"controller","timestamp":{"$time":{"date":"2026-01-01","startMs":0,"stepMs":60000}},"elapsedSeconds":0,"payload":{"humanPowerW":100,"cadenceRpm":80}},
+                  {"schemaVersion":1,"eventId":{"$values":[null,"6afc46d9-3bc4-5677-aec3-991f02a07ff0","47bffb78-c5e2-59c9-a176-4e9498f90727",null,"9f87a993-f6d2-5cfd-84da-bed9121ad453","dd586649-9bf4-51dd-9b49-eac6e8f644ce",null,"5788e447-1020-59ab-a4b4-7f654fdb8562","3f9c7969-3bd2-50e9-a767-b69ad0f71600",null,"6f4bcfec-93a8-5130-8456-ac64428e9dcb","04e559e1-6f58-5d19-b0c5-059a022b8208",null,"c6906eaf-8431-56f1-ac13-e8ff131372c7","65ab92e5-4ea8-5ba7-9e44-2f811a8d2c61",null,"5a24175b-64b8-5461-933a-0e2525a2f4c0","2343d000-3331-585e-9694-a26ea5ea30b1",null,"da61f229-ffdf-5818-acf2-d46c8827159b","118f918b-7848-5903-904d-42296ab96abf",null,"f6403a3e-73d1-584c-8045-b5b47371315e","0aa0c3f3-34d3-5b8c-8f1f-97803d96581d",null,"e8cc490a-1756-5d06-b806-f7bf186ec191","3d6a937e-c3fd-5db3-b258-35231ebeda80",null,"554f1488-f99d-58ef-aeb6-68b03871973d","8e47218a-6ad1-57a6-821d-df5d72220013",null,"f156f1c1-824f-5058-a031-a91b3f631d76","35478935-8dcf-5c0b-8316-02408462328f",null,"980441fe-649c-5fa7-98ae-a8498f7fc050","b4fbfcd1-ff79-51f3-992c-17fbaf320fbb",null,"69bd6d56-d674-5c23-9664-ebeca7b9a2a5","12015a71-013c-542c-901c-6491b08b5044",null,"ac84ee23-2729-591f-a2ea-6bb5b2b03cd7","9076c224-eee1-5e0f-b6ea-5dbe242e6b83",null,"544ef51e-7915-5654-8067-cca3e42d0e38","ec9b88bb-a03c-5915-8e9b-21cdf2460d21",null,"a3d9493e-b540-59e0-a226-aac1f647bf67","35724c7c-8b06-54dc-9cdf-35dea0c7bd2c",null,"fcf295ea-e9d6-58b3-aa0c-9a6880b779b4","49651a0c-09e6-51c9-a15f-3ad822b7d3f7"]},"workoutId":{"$values":{"$ref":"catalog-ids"}},"kind":"telemetry","source":"controller","timestamp":{"$time":{"date":"2026-01-01","startMs":1000,"stepMs":60000}},"elapsedSeconds":1,"payload":{"humanPowerW":100,"cadenceRpm":80}}
+                ]
+              ]
+            },
+            "stopElapsedSeconds": 2,
+            "endedAt": {"$time":{"date":"2026-01-01","startMs":2000,"stepMs":60000}},
+            "metadataUpdate": {},
+            "distanceSource": "auto",
+            "queries": []
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "returnedIDs": [
+      "e424d4ce-a78e-59cd-8e22-08971db379f5",
+      "57b79d77-e484-5610-a062-311c00801bf4",
+      "28cc397c-8f61-52f8-8fe7-95540dbefe01",
+      "c856a1ce-4d1e-50a9-b22a-4976f17ac8bb",
+      "0bf2a60c-6f0b-5d67-a497-ea143d0e9a69",
+      "927b57d4-c8f2-5c6c-8567-13f6eb439fd2",
+      "74922f31-a3a5-5dbf-b1b5-27cbd3830a07",
+      "4858597f-c277-53de-9d48-3b2e0bd23ab7",
+      "a8d1b587-9149-5167-a10d-8216b3f650b6",
+      "b43cc783-c81d-511f-bef5-6981d0d19540",
+      "efce92d7-4f35-5282-b65d-9dcd86007229",
+      "b1461a47-8b78-53dd-8486-e0904d46f4b7",
+      "3d3057f3-4d7c-5137-bc93-d924f40c733e",
+      "43faef44-5869-5ba5-b2db-97a234eaafda",
+      "543594cb-da41-5512-bdbb-1860b6ac56cd",
+      "90bef3a8-0658-5312-8815-b4af15df3227",
+      "90c213ca-a422-5101-9b58-4bdb56c5f39b",
+      "d5bcc6f0-5824-5bbf-be6d-0a476002d675",
+      "474366ef-f953-5cd3-958a-16e7b6062fcd",
+      "60892df5-1e50-5130-810d-a3fc411a6aa3",
+      "ae976326-6f1c-591d-b685-82811397e872",
+      "daf2c426-77a5-52be-ad3d-739550eb9f0f",
+      "686bad63-9c81-5545-a442-86bc3e2afbdd",
+      "1bfab2dd-7222-5292-ab0f-44785b692c17",
+      "d6629400-e59a-5233-ac69-56ad559bb99d",
+      "762504bb-9f40-5fae-b973-e4907062f0c4",
+      "783e9d1c-352e-5936-8cb6-461ee4c0f6e5",
+      "72ceef72-68ed-5351-9c4d-c771697c860a",
+      "1bdcb102-2b6a-5bab-994b-07aee5efb84a",
+      "c6dae2f1-bd5d-5973-a3ed-a5976a309958",
+      "33b45d73-d62b-52b3-9fd1-d85386d25790",
+      "8093e623-c009-536c-a107-81c242175dfd",
+      "52ec7344-81fd-5c0e-9ffd-7bd9294342f6",
+      "d749f941-9ad1-5d8a-9b42-e511d17dddb2",
+      "386aa17b-2a1c-590f-81a2-68972c13a734",
+      "0559c108-2905-5b5c-99eb-1a7469dec8d0",
+      "a9495764-9698-50a3-b5fa-7b5d78c939da",
+      "66955501-4f2c-5a48-8097-970dac518247",
+      "88fabdcf-3227-50ca-bd3c-4c08d287a744",
+      "1bcf73a9-690b-594d-86c9-229959662188",
+      "d53f9845-6f1b-59b2-964a-615156f024fb",
+      "e7a595bf-2336-5da7-9c3c-5433431d5020",
+      "ff026d8f-a6f2-5d54-a0d3-044c245f2eb2",
+      "7eb008f3-5315-5b01-ad83-3b1d4d9406ca",
+      "dfd046e8-c7bf-5059-8f14-6d7fcaa33a7c",
+      "8b778b69-a1e5-530a-84ee-44e36662c238",
+      "72e63e73-57a2-54fe-938e-f538d2b4cd08",
+      "1aca7ae7-8132-5da5-82bd-029e5b517bb7",
+      "d64ae540-4fe4-53d9-a41b-3b5b667a3c24",
+      "fc1d5679-5cc6-5954-a79e-6ffb6df2aaa9",
+      "d662c10c-0b4c-5466-8bce-1ebaa576132f"
+    ],
+    "visible": {
+      "$repeat": {
+        "count": 50,
+        "template": {
+          "id": {"$values":["e424d4ce-a78e-59cd-8e22-08971db379f5","57b79d77-e484-5610-a062-311c00801bf4","28cc397c-8f61-52f8-8fe7-95540dbefe01","c856a1ce-4d1e-50a9-b22a-4976f17ac8bb","0bf2a60c-6f0b-5d67-a497-ea143d0e9a69","927b57d4-c8f2-5c6c-8567-13f6eb439fd2","74922f31-a3a5-5dbf-b1b5-27cbd3830a07","4858597f-c277-53de-9d48-3b2e0bd23ab7","a8d1b587-9149-5167-a10d-8216b3f650b6","b43cc783-c81d-511f-bef5-6981d0d19540","efce92d7-4f35-5282-b65d-9dcd86007229","b1461a47-8b78-53dd-8486-e0904d46f4b7","3d3057f3-4d7c-5137-bc93-d924f40c733e","43faef44-5869-5ba5-b2db-97a234eaafda","543594cb-da41-5512-bdbb-1860b6ac56cd","90bef3a8-0658-5312-8815-b4af15df3227","90c213ca-a422-5101-9b58-4bdb56c5f39b","d5bcc6f0-5824-5bbf-be6d-0a476002d675","474366ef-f953-5cd3-958a-16e7b6062fcd","60892df5-1e50-5130-810d-a3fc411a6aa3","ae976326-6f1c-591d-b685-82811397e872","daf2c426-77a5-52be-ad3d-739550eb9f0f","686bad63-9c81-5545-a442-86bc3e2afbdd","1bfab2dd-7222-5292-ab0f-44785b692c17","d6629400-e59a-5233-ac69-56ad559bb99d","762504bb-9f40-5fae-b973-e4907062f0c4","783e9d1c-352e-5936-8cb6-461ee4c0f6e5","72ceef72-68ed-5351-9c4d-c771697c860a","1bdcb102-2b6a-5bab-994b-07aee5efb84a","c6dae2f1-bd5d-5973-a3ed-a5976a309958","33b45d73-d62b-52b3-9fd1-d85386d25790","8093e623-c009-536c-a107-81c242175dfd","52ec7344-81fd-5c0e-9ffd-7bd9294342f6","d749f941-9ad1-5d8a-9b42-e511d17dddb2","386aa17b-2a1c-590f-81a2-68972c13a734","0559c108-2905-5b5c-99eb-1a7469dec8d0","a9495764-9698-50a3-b5fa-7b5d78c939da","66955501-4f2c-5a48-8097-970dac518247","88fabdcf-3227-50ca-bd3c-4c08d287a744","1bcf73a9-690b-594d-86c9-229959662188","d53f9845-6f1b-59b2-964a-615156f024fb","e7a595bf-2336-5da7-9c3c-5433431d5020","ff026d8f-a6f2-5d54-a0d3-044c245f2eb2","7eb008f3-5315-5b01-ad83-3b1d4d9406ca","dfd046e8-c7bf-5059-8f14-6d7fcaa33a7c","8b778b69-a1e5-530a-84ee-44e36662c238","72e63e73-57a2-54fe-938e-f538d2b4cd08","1aca7ae7-8132-5da5-82bd-029e5b517bb7","d64ae540-4fe4-53d9-a41b-3b5b667a3c24","fc1d5679-5cc6-5954-a79e-6ffb6df2aaa9"]},
+          "summary": {
+            "$cycle": [
+              {
+                "averageCadenceRpm": 80,
+                "averageRiderPowerW": 100,
+                "completeness": {"distance":"unavailable","heartRate":"unavailable","riderPower":"observed","route":"notRequested"},
+                "distance": {"available":[],"selected":null,"selection":"auto"},
+                "elapsedSeconds": 2,
+                "endedAt": {"$time":{"date":"2026-01-01","startMs":3002000,"stepMs":-60000}},
+                "eventCount": 2,
+                "healthCount": 0,
+                "heartRateCoveredSeconds": 0,
+                "id": {"$values":["e424d4ce-a78e-59cd-8e22-08971db379f5","57b79d77-e484-5610-a062-311c00801bf4","28cc397c-8f61-52f8-8fe7-95540dbefe01","c856a1ce-4d1e-50a9-b22a-4976f17ac8bb","0bf2a60c-6f0b-5d67-a497-ea143d0e9a69","927b57d4-c8f2-5c6c-8567-13f6eb439fd2","74922f31-a3a5-5dbf-b1b5-27cbd3830a07","4858597f-c277-53de-9d48-3b2e0bd23ab7","a8d1b587-9149-5167-a10d-8216b3f650b6","b43cc783-c81d-511f-bef5-6981d0d19540","efce92d7-4f35-5282-b65d-9dcd86007229","b1461a47-8b78-53dd-8486-e0904d46f4b7","3d3057f3-4d7c-5137-bc93-d924f40c733e","43faef44-5869-5ba5-b2db-97a234eaafda","543594cb-da41-5512-bdbb-1860b6ac56cd","90bef3a8-0658-5312-8815-b4af15df3227","90c213ca-a422-5101-9b58-4bdb56c5f39b","d5bcc6f0-5824-5bbf-be6d-0a476002d675","474366ef-f953-5cd3-958a-16e7b6062fcd","60892df5-1e50-5130-810d-a3fc411a6aa3","ae976326-6f1c-591d-b685-82811397e872","daf2c426-77a5-52be-ad3d-739550eb9f0f","686bad63-9c81-5545-a442-86bc3e2afbdd","1bfab2dd-7222-5292-ab0f-44785b692c17","d6629400-e59a-5233-ac69-56ad559bb99d","762504bb-9f40-5fae-b973-e4907062f0c4","783e9d1c-352e-5936-8cb6-461ee4c0f6e5","72ceef72-68ed-5351-9c4d-c771697c860a","1bdcb102-2b6a-5bab-994b-07aee5efb84a","c6dae2f1-bd5d-5973-a3ed-a5976a309958","33b45d73-d62b-52b3-9fd1-d85386d25790","8093e623-c009-536c-a107-81c242175dfd","52ec7344-81fd-5c0e-9ffd-7bd9294342f6","d749f941-9ad1-5d8a-9b42-e511d17dddb2","386aa17b-2a1c-590f-81a2-68972c13a734","0559c108-2905-5b5c-99eb-1a7469dec8d0","a9495764-9698-50a3-b5fa-7b5d78c939da","66955501-4f2c-5a48-8097-970dac518247","88fabdcf-3227-50ca-bd3c-4c08d287a744","1bcf73a9-690b-594d-86c9-229959662188","d53f9845-6f1b-59b2-964a-615156f024fb","e7a595bf-2336-5da7-9c3c-5433431d5020","ff026d8f-a6f2-5d54-a0d3-044c245f2eb2","7eb008f3-5315-5b01-ad83-3b1d4d9406ca","dfd046e8-c7bf-5059-8f14-6d7fcaa33a7c","8b778b69-a1e5-530a-84ee-44e36662c238","72e63e73-57a2-54fe-938e-f538d2b4cd08","1aca7ae7-8132-5da5-82bd-029e5b517bb7","d64ae540-4fe4-53d9-a41b-3b5b667a3c24","fc1d5679-5cc6-5954-a79e-6ffb6df2aaa9"]},
+                "lapCount": 1,
+                "locationCount": 0,
+                "maximumCadenceRpm": 80,
+                "maximumRiderPowerW": 100,
+                "provenance": {"$ref":"expected-visible-$repeat-template-summary-$cycle-0-provenance"},
+                "riderWorkJoules": 100,
+                "routePreview": [],
+                "schemaVersion": 1,
+                "startedAt": {"$time":{"date":"2026-01-01","startMs":3000000,"stepMs":-60000}},
+                "telemetryCount": 2,
+                "telemetryCoveredSeconds": 1,
+                "timerSeconds": 2
+              },
+              {
+                "averageCadenceRpm": 80,
+                "averageRiderPowerW": 0,
+                "completeness": {"distance":"unavailable","heartRate":"unavailable","riderPower":"observed","route":"notRequested"},
+                "distance": {"available":[],"selected":null,"selection":"auto"},
+                "elapsedSeconds": 2,
+                "endedAt": {"$time":{"date":"2026-01-01","startMs":3002000,"stepMs":-60000}},
+                "eventCount": 2,
+                "healthCount": 0,
+                "heartRateCoveredSeconds": 0,
+                "id": {"$values":["e424d4ce-a78e-59cd-8e22-08971db379f5","57b79d77-e484-5610-a062-311c00801bf4","28cc397c-8f61-52f8-8fe7-95540dbefe01","c856a1ce-4d1e-50a9-b22a-4976f17ac8bb","0bf2a60c-6f0b-5d67-a497-ea143d0e9a69","927b57d4-c8f2-5c6c-8567-13f6eb439fd2","74922f31-a3a5-5dbf-b1b5-27cbd3830a07","4858597f-c277-53de-9d48-3b2e0bd23ab7","a8d1b587-9149-5167-a10d-8216b3f650b6","b43cc783-c81d-511f-bef5-6981d0d19540","efce92d7-4f35-5282-b65d-9dcd86007229","b1461a47-8b78-53dd-8486-e0904d46f4b7","3d3057f3-4d7c-5137-bc93-d924f40c733e","43faef44-5869-5ba5-b2db-97a234eaafda","543594cb-da41-5512-bdbb-1860b6ac56cd","90bef3a8-0658-5312-8815-b4af15df3227","90c213ca-a422-5101-9b58-4bdb56c5f39b","d5bcc6f0-5824-5bbf-be6d-0a476002d675","474366ef-f953-5cd3-958a-16e7b6062fcd","60892df5-1e50-5130-810d-a3fc411a6aa3","ae976326-6f1c-591d-b685-82811397e872","daf2c426-77a5-52be-ad3d-739550eb9f0f","686bad63-9c81-5545-a442-86bc3e2afbdd","1bfab2dd-7222-5292-ab0f-44785b692c17","d6629400-e59a-5233-ac69-56ad559bb99d","762504bb-9f40-5fae-b973-e4907062f0c4","783e9d1c-352e-5936-8cb6-461ee4c0f6e5","72ceef72-68ed-5351-9c4d-c771697c860a","1bdcb102-2b6a-5bab-994b-07aee5efb84a","c6dae2f1-bd5d-5973-a3ed-a5976a309958","33b45d73-d62b-52b3-9fd1-d85386d25790","8093e623-c009-536c-a107-81c242175dfd","52ec7344-81fd-5c0e-9ffd-7bd9294342f6","d749f941-9ad1-5d8a-9b42-e511d17dddb2","386aa17b-2a1c-590f-81a2-68972c13a734","0559c108-2905-5b5c-99eb-1a7469dec8d0","a9495764-9698-50a3-b5fa-7b5d78c939da","66955501-4f2c-5a48-8097-970dac518247","88fabdcf-3227-50ca-bd3c-4c08d287a744","1bcf73a9-690b-594d-86c9-229959662188","d53f9845-6f1b-59b2-964a-615156f024fb","e7a595bf-2336-5da7-9c3c-5433431d5020","ff026d8f-a6f2-5d54-a0d3-044c245f2eb2","7eb008f3-5315-5b01-ad83-3b1d4d9406ca","dfd046e8-c7bf-5059-8f14-6d7fcaa33a7c","8b778b69-a1e5-530a-84ee-44e36662c238","72e63e73-57a2-54fe-938e-f538d2b4cd08","1aca7ae7-8132-5da5-82bd-029e5b517bb7","d64ae540-4fe4-53d9-a41b-3b5b667a3c24","fc1d5679-5cc6-5954-a79e-6ffb6df2aaa9"]},
+                "lapCount": 1,
+                "locationCount": 0,
+                "maximumCadenceRpm": 80,
+                "maximumRiderPowerW": 0,
+                "provenance": {"$ref":"expected-visible-$repeat-template-summary-$cycle-0-provenance"},
+                "riderWorkJoules": 0,
+                "routePreview": [],
+                "schemaVersion": 1,
+                "startedAt": {"$time":{"date":"2026-01-01","startMs":3000000,"stepMs":-60000}},
+                "telemetryCount": 2,
+                "telemetryCoveredSeconds": 1,
+                "timerSeconds": 2
+              },
+              {
+                "completeness": {"distance":"unavailable","heartRate":"unavailable","riderPower":"unavailable","route":"notRequested"},
+                "distance": {"available":[],"selected":null,"selection":"auto"},
+                "elapsedSeconds": 2,
+                "endedAt": {"$time":{"date":"2026-01-01","startMs":3002000,"stepMs":-60000}},
+                "eventCount": 0,
+                "healthCount": 0,
+                "heartRateCoveredSeconds": 0,
+                "id": {"$values":["e424d4ce-a78e-59cd-8e22-08971db379f5","57b79d77-e484-5610-a062-311c00801bf4","28cc397c-8f61-52f8-8fe7-95540dbefe01","c856a1ce-4d1e-50a9-b22a-4976f17ac8bb","0bf2a60c-6f0b-5d67-a497-ea143d0e9a69","927b57d4-c8f2-5c6c-8567-13f6eb439fd2","74922f31-a3a5-5dbf-b1b5-27cbd3830a07","4858597f-c277-53de-9d48-3b2e0bd23ab7","a8d1b587-9149-5167-a10d-8216b3f650b6","b43cc783-c81d-511f-bef5-6981d0d19540","efce92d7-4f35-5282-b65d-9dcd86007229","b1461a47-8b78-53dd-8486-e0904d46f4b7","3d3057f3-4d7c-5137-bc93-d924f40c733e","43faef44-5869-5ba5-b2db-97a234eaafda","543594cb-da41-5512-bdbb-1860b6ac56cd","90bef3a8-0658-5312-8815-b4af15df3227","90c213ca-a422-5101-9b58-4bdb56c5f39b","d5bcc6f0-5824-5bbf-be6d-0a476002d675","474366ef-f953-5cd3-958a-16e7b6062fcd","60892df5-1e50-5130-810d-a3fc411a6aa3","ae976326-6f1c-591d-b685-82811397e872","daf2c426-77a5-52be-ad3d-739550eb9f0f","686bad63-9c81-5545-a442-86bc3e2afbdd","1bfab2dd-7222-5292-ab0f-44785b692c17","d6629400-e59a-5233-ac69-56ad559bb99d","762504bb-9f40-5fae-b973-e4907062f0c4","783e9d1c-352e-5936-8cb6-461ee4c0f6e5","72ceef72-68ed-5351-9c4d-c771697c860a","1bdcb102-2b6a-5bab-994b-07aee5efb84a","c6dae2f1-bd5d-5973-a3ed-a5976a309958","33b45d73-d62b-52b3-9fd1-d85386d25790","8093e623-c009-536c-a107-81c242175dfd","52ec7344-81fd-5c0e-9ffd-7bd9294342f6","d749f941-9ad1-5d8a-9b42-e511d17dddb2","386aa17b-2a1c-590f-81a2-68972c13a734","0559c108-2905-5b5c-99eb-1a7469dec8d0","a9495764-9698-50a3-b5fa-7b5d78c939da","66955501-4f2c-5a48-8097-970dac518247","88fabdcf-3227-50ca-bd3c-4c08d287a744","1bcf73a9-690b-594d-86c9-229959662188","d53f9845-6f1b-59b2-964a-615156f024fb","e7a595bf-2336-5da7-9c3c-5433431d5020","ff026d8f-a6f2-5d54-a0d3-044c245f2eb2","7eb008f3-5315-5b01-ad83-3b1d4d9406ca","dfd046e8-c7bf-5059-8f14-6d7fcaa33a7c","8b778b69-a1e5-530a-84ee-44e36662c238","72e63e73-57a2-54fe-938e-f538d2b4cd08","1aca7ae7-8132-5da5-82bd-029e5b517bb7","d64ae540-4fe4-53d9-a41b-3b5b667a3c24","fc1d5679-5cc6-5954-a79e-6ffb6df2aaa9"]},
+                "lapCount": 1,
+                "locationCount": 0,
+                "provenance": {"$ref":"expected-visible-$repeat-template-summary-$cycle-0-provenance"},
+                "routePreview": [],
+                "schemaVersion": 1,
+                "startedAt": {"$time":{"date":"2026-01-01","startMs":3000000,"stepMs":-60000}},
+                "telemetryCount": 0,
+                "telemetryCoveredSeconds": 0,
+                "timerSeconds": 2
+              }
+            ]
+          },
+          "projection": {"$cycle":[{"averageRiderPowerW":100,"riderWorkJoules":100},{"averageRiderPowerW":0,"riderWorkJoules":0},{}]},
+          "absentSummaryFields": {"$cycle":[["distanceMeters","gpsDistanceMeters","averageSpeedMps","maximumSpeedMps","ascentMeters","descentMeters","averageHeartRateBpm","maximumHeartRateBpm","activeEnergyKcal","basalEnergyKcal"],["distanceMeters","gpsDistanceMeters","averageSpeedMps","maximumSpeedMps","ascentMeters","descentMeters","averageHeartRateBpm","maximumHeartRateBpm","activeEnergyKcal","basalEnergyKcal"],["distanceMeters","gpsDistanceMeters","averageSpeedMps","maximumSpeedMps","ascentMeters","descentMeters","averageHeartRateBpm","maximumHeartRateBpm","averageRiderPowerW","maximumRiderPowerW","averageCadenceRpm","maximumCadenceRpm","activeEnergyKcal","basalEnergyKcal","riderWorkJoules"]]}
+        }
+      }
+    },
+    "hasMore": true,
+    "nextCursor": {"beforeStartedAt":"2026-01-01T00:01:00.000Z","beforeID":"fc1d5679-5cc6-5954-a79e-6ffb6df2aaa9"}
+  },
+  "schedulingRequirements": {
+    "cases": [
+      {"input":{"rowId":"e424d4ce-a78e-59cd-8e22-08971db379f5","generation":1,"selection":"auto","events":["visible","summaryCompleted"]},"expected":["calculating","ready"]},
+      {"input":{"rowId":"e424d4ce-a78e-59cd-8e22-08971db379f5","generation":1,"selection":"auto","events":["visible","storageFailure"]},"expected":["calculating","error"],"otherRow":{"rowId":"57b79d77-e484-5610-a062-311c00801bf4","events":["visible","summaryCompleted"],"expected":["calculating","ready"]}},
+      {"input":{"rowId":"e424d4ce-a78e-59cd-8e22-08971db379f5","generation":1,"selection":"auto","events":["visible","offscreen","summaryCompleted"]},"expected":["calculating","cancelRequested","completionDiscarded"]},
+      {"input":{"rowId":"e424d4ce-a78e-59cd-8e22-08971db379f5","events":[{"visible":{"generation":1,"selection":"auto"}},{"selectionChanged":{"generation":2,"selection":"controller"}},{"summaryCompleted":{"generation":1,"selection":"auto"}}]},"expected":["calculating","calculating","completionDiscarded"]}
+    ],
+    "applicationSummaryConcurrency": 2,
+    "lookaheadSummaryJobs": 0
+  },
+  "shared": {
+    "catalog-ids": [
+      "d662c10c-0b4c-5466-8bce-1ebaa576132f",
+      "fc1d5679-5cc6-5954-a79e-6ffb6df2aaa9",
+      "d64ae540-4fe4-53d9-a41b-3b5b667a3c24",
+      "1aca7ae7-8132-5da5-82bd-029e5b517bb7",
+      "72e63e73-57a2-54fe-938e-f538d2b4cd08",
+      "8b778b69-a1e5-530a-84ee-44e36662c238",
+      "dfd046e8-c7bf-5059-8f14-6d7fcaa33a7c",
+      "7eb008f3-5315-5b01-ad83-3b1d4d9406ca",
+      "ff026d8f-a6f2-5d54-a0d3-044c245f2eb2",
+      "e7a595bf-2336-5da7-9c3c-5433431d5020",
+      "d53f9845-6f1b-59b2-964a-615156f024fb",
+      "1bcf73a9-690b-594d-86c9-229959662188",
+      "88fabdcf-3227-50ca-bd3c-4c08d287a744",
+      "66955501-4f2c-5a48-8097-970dac518247",
+      "a9495764-9698-50a3-b5fa-7b5d78c939da",
+      "0559c108-2905-5b5c-99eb-1a7469dec8d0",
+      "386aa17b-2a1c-590f-81a2-68972c13a734",
+      "d749f941-9ad1-5d8a-9b42-e511d17dddb2",
+      "52ec7344-81fd-5c0e-9ffd-7bd9294342f6",
+      "8093e623-c009-536c-a107-81c242175dfd",
+      "33b45d73-d62b-52b3-9fd1-d85386d25790",
+      "c6dae2f1-bd5d-5973-a3ed-a5976a309958",
+      "1bdcb102-2b6a-5bab-994b-07aee5efb84a",
+      "72ceef72-68ed-5351-9c4d-c771697c860a",
+      "783e9d1c-352e-5936-8cb6-461ee4c0f6e5",
+      "762504bb-9f40-5fae-b973-e4907062f0c4",
+      "d6629400-e59a-5233-ac69-56ad559bb99d",
+      "1bfab2dd-7222-5292-ab0f-44785b692c17",
+      "686bad63-9c81-5545-a442-86bc3e2afbdd",
+      "daf2c426-77a5-52be-ad3d-739550eb9f0f",
+      "ae976326-6f1c-591d-b685-82811397e872",
+      "60892df5-1e50-5130-810d-a3fc411a6aa3",
+      "474366ef-f953-5cd3-958a-16e7b6062fcd",
+      "d5bcc6f0-5824-5bbf-be6d-0a476002d675",
+      "90c213ca-a422-5101-9b58-4bdb56c5f39b",
+      "90bef3a8-0658-5312-8815-b4af15df3227",
+      "543594cb-da41-5512-bdbb-1860b6ac56cd",
+      "43faef44-5869-5ba5-b2db-97a234eaafda",
+      "3d3057f3-4d7c-5137-bc93-d924f40c733e",
+      "b1461a47-8b78-53dd-8486-e0904d46f4b7",
+      "efce92d7-4f35-5282-b65d-9dcd86007229",
+      "b43cc783-c81d-511f-bef5-6981d0d19540",
+      "a8d1b587-9149-5167-a10d-8216b3f650b6",
+      "4858597f-c277-53de-9d48-3b2e0bd23ab7",
+      "74922f31-a3a5-5dbf-b1b5-27cbd3830a07",
+      "927b57d4-c8f2-5c6c-8567-13f6eb439fd2",
+      "0bf2a60c-6f0b-5d67-a497-ea143d0e9a69",
+      "c856a1ce-4d1e-50a9-b22a-4976f17ac8bb",
+      "28cc397c-8f61-52f8-8fe7-95540dbefe01",
+      "57b79d77-e484-5610-a062-311c00801bf4",
+      "e424d4ce-a78e-59cd-8e22-08971db379f5"
+    ],
+    "expected-visible-$repeat-template-summary-$cycle-0-provenance": {"cadence":"controller.cadenceRpm; smoothed controller RPM","distance":"unavailable","gps":"unavailable","heartRate":"unavailable","rawData":"Canonical SQLite preserves every accepted source event; original ZIP exports that evidence and FIT contains a derived subset","riderPower":"controller.humanPowerW; trapezoidal integral over adjacent active observations <=2.5 s","speed":"CoreLocation m/s; controller speed is not used for FIT"}
+  }
+}

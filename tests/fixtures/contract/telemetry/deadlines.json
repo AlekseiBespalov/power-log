@@ -1,0 +1,40 @@
+{
+  "fixture": "F51",
+  "attemptStart": 0,
+  "attemptDeadline": 20,
+  "stages": [
+    {
+      "at": 10,
+      "from": "connecting",
+      "to": "services"
+    },
+    {
+      "at": 19,
+      "from": "services",
+      "to": "characteristics"
+    }
+  ],
+  "lateCompletions": [20, 30],
+  "beforeDeadline": 19.999999,
+  "scanTimes": [
+    {
+      "at": 19.999999,
+      "accept": true
+    },
+    {
+      "at": 20,
+      "accept": false
+    },
+    {
+      "at": 21,
+      "accept": false
+    }
+  ],
+  "retryErrorAt": 20,
+  "reconnectDue": 21,
+  "cancellationDeadline": 26,
+  "cancellationCompletedAt": 22,
+  "missingCancellationAt": 26,
+  "lateCallbackAt": 25,
+  "unexpectedReconnectAt": 20.5
+}

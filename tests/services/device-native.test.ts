@@ -12,7 +12,7 @@ const native = vi.hoisted(() => ({
   getMonotonicSeconds: vi.fn(),
   describeMonitorSource: vi.fn(),
 }));
-vi.mock('../../modules/cyc-bridge', () => ({
+vi.mock('../../modules/power-log-bridge', () => ({
   default: {
     getMonotonicSeconds: native.getMonotonicSeconds,
     describeMonitorSource: native.describeMonitorSource,

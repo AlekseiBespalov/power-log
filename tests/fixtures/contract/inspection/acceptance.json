@@ -1,0 +1,78 @@
+{
+  "fixtures": ["F27"],
+  "context": {
+    "source": "A",
+    "revision": "5",
+    "selection": "auto",
+    "epoch": "3",
+    "sequence": "4"
+  },
+  "cases": [
+    {
+      "id": "current",
+      "accepted": true
+    },
+    {
+      "id": "old-source",
+      "source": "B",
+      "accepted": false
+    },
+    {
+      "id": "old-revision",
+      "revision": "4",
+      "accepted": false
+    },
+    {
+      "id": "old-generation",
+      "generation": "0",
+      "accepted": false
+    },
+    {
+      "id": "selection-only",
+      "selection": "controller",
+      "accepted": false
+    },
+    {
+      "id": "epoch-only",
+      "epoch": "2",
+      "accepted": false
+    },
+    {
+      "id": "sequence-only",
+      "sequence": "3",
+      "accepted": false
+    }
+  ],
+  "requests": [
+    {
+      "source": "A",
+      "selection": "auto",
+      "epoch": "3"
+    },
+    {
+      "source": "B",
+      "selection": "auto",
+      "epoch": "3"
+    },
+    {
+      "source": "A",
+      "selection": "auto",
+      "epoch": "3"
+    },
+    {
+      "source": "A",
+      "selection": "controller",
+      "epoch": "3"
+    },
+    {
+      "source": "A",
+      "selection": "auto",
+      "epoch": "3"
+    },
+    {
+      "source": "A",
+      "selection": "auto",
+      "epoch": "4"
+    }
+  ]
+}

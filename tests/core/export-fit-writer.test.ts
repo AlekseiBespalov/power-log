@@ -193,8 +193,8 @@ describe('FIT byte trace', () => {
       [5, 0x83, 'motor_temperature', 'C'],
       [6, 0x83, 'controller_temperature', 'C'],
       [7, 0x88, 'pedal_torque', 'Nm'],
-      [8, 0x88, 'consumed_energy', 'Wh'],
-      [9, 0x88, 'consumed_charge', 'Ah'],
+      [8, 0x88, 'energy_used_controller', 'Wh'],
+      [9, 0x88, 'charge_used_controller', 'Ah'],
     ];
     const expected = [
       [0x40, 0, 0, 0, 0, 4, 0, 1, 0x00, 1, 2, 0x84, 2, 2, 0x84, 4, 4, 0x86],

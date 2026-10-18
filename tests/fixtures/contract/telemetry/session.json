@@ -1,0 +1,8 @@
+{
+  "identityRequest": "{\"request\":\"identity\"}\n",
+  "telemetryRequest": "{\"request\":\"telemetry\"}\n",
+  "identityNotification": "{\"kind\":\"identity\",\"model\":\"Example controller\",\"firmware\":\"release-1\",\"protocol\":\"test-v2\"}\n",
+  "telemetryNotification": "{\"kind\":\"telemetry\",\"controllerSpeedMps\":2.6}\n",
+  "model": "Example controller",
+  "speedMps": 2.6
+}

@@ -48,7 +48,7 @@ type ColumnMap = Readonly<Record<string, Column>>;
 type Envelope = Pick<ExportPage, 'rows' | 'last' | 'done' | 'connections'>;
 
 const ready = Promise.resolve();
-const VENDORS: readonly string[] = ['cyc'];
+const VENDORS: readonly string[] = ['controller'];
 const CONSUMERS: Record<ExportKind, readonly ExportConsumer[]> = { zip: ['zip'], fit: ['fit', 'discovery'] };
 const STREAMS: Record<ProjectionName, string> = {
   telemetry: 'telemetry',
@@ -140,7 +140,7 @@ function checkColumns(
     const value = columns[name];
     if (value === undefined) continue;
     const column = definition(projection, name);
-    if (expected && !expected.includes(column))
+    if (expected && !expected.some(item => item.name === name))
       throw malformed(projection, `has column ${name}, which this export does not read`);
     if (column.type === 'number') {
       if (!(value instanceof Float64Array)) throw malformed(projection, `has a non-numeric ${name} column`);

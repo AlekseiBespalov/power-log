@@ -1,0 +1,299 @@
+{
+  "fixtures": ["F05", "F33", "F41"],
+  "metrics": [
+    {
+      "id": "controllerSpeedMps",
+      "unit": "km/h",
+      "value": 10,
+      "text": "36.0"
+    },
+    {
+      "id": "controllerSpeedMps",
+      "unit": "mph",
+      "value": 10,
+      "text": "22.4"
+    },
+    {
+      "id": "controllerSpeedMps",
+      "unit": "m/s",
+      "value": 10,
+      "text": "10.0"
+    },
+    {
+      "id": "humanPowerW",
+      "unit": "km/h",
+      "value": 1.5,
+      "text": "2"
+    },
+    {
+      "id": "humanPowerW",
+      "unit": "mph",
+      "value": null,
+      "text": "\u2014"
+    },
+    {
+      "id": "humanPowerW",
+      "unit": "m/s",
+      "value": "NaN",
+      "text": "\u2014"
+    },
+    {
+      "id": "batteryVoltageV",
+      "unit": "km/h",
+      "value": 1.005,
+      "text": "1.00"
+    },
+    {
+      "id": "distanceMeters",
+      "unit": "mph",
+      "value": 1234.56,
+      "text": "1.23"
+    },
+    {
+      "id": "humanPowerW",
+      "unit": "km/h",
+      "value": -1.5,
+      "text": "-2"
+    }
+  ],
+  "exact": [
+    {
+      "id": "humanPowerW",
+      "original": "9007199254740993",
+      "text": "9007199254740993"
+    },
+    {
+      "id": "humanPowerW",
+      "original": "18446744073709551615",
+      "text": "18446744073709551615"
+    },
+    {
+      "id": "distanceMeters",
+      "original": "5",
+      "text": "0.01"
+    },
+    {
+      "id": "distanceMeters",
+      "original": "-5",
+      "text": "-0.01"
+    },
+    {
+      "id": "batteryVoltageV",
+      "original": "1",
+      "text": "1.00"
+    }
+  ],
+  "duration": [
+    {
+      "seconds": 0,
+      "text": "00:00"
+    },
+    {
+      "seconds": -1,
+      "text": "00:00"
+    },
+    {
+      "seconds": 59.999999,
+      "text": "00:59"
+    },
+    {
+      "seconds": 3599.999999,
+      "text": "59:59"
+    },
+    {
+      "seconds": 3600,
+      "text": "1:00:00"
+    },
+    {
+      "seconds": 3661,
+      "text": "1:01:01"
+    },
+    {
+      "seconds": null,
+      "text": "\u2014"
+    }
+  ],
+  "distance": [
+    {
+      "source": "gps:watch",
+      "partial": true,
+      "estimated": false,
+      "caption": "GPS \u00b7 Apple Watch \u00b7 Partial",
+      "descriptors": [
+        {
+          "source": "watch",
+          "device": "appleWatch",
+          "provider": null
+        }
+      ]
+    },
+    {
+      "source": "controller",
+      "partial": true,
+      "estimated": true,
+      "caption": "Controller estimate \u00b7 Partial",
+      "descriptors": []
+    },
+    {
+      "source": "gps:phone",
+      "partial": false,
+      "estimated": false,
+      "caption": "GPS \u00b7 Browser",
+      "descriptors": [
+        {
+          "source": "phone",
+          "device": "browser",
+          "provider": null
+        }
+      ]
+    },
+    {
+      "source": "gps:phone",
+      "partial": false,
+      "estimated": true,
+      "caption": "GPS \u00b7 iPhone \u00b7 Estimated",
+      "descriptors": [
+        {
+          "source": "phone",
+          "device": "iphone",
+          "provider": null
+        }
+      ]
+    },
+    {
+      "source": "gps:phone",
+      "partial": true,
+      "estimated": false,
+      "descriptors": [
+        {
+          "source": "phone",
+          "device": "androidPhone",
+          "provider": null
+        }
+      ],
+      "caption": "GPS \u00b7 Android phone \u00b7 Partial"
+    }
+  ],
+  "differences": [
+    {
+      "id": "humanPowerW",
+      "a": 9007199254740992,
+      "b": 9007199254740992,
+      "aExact": "9007199254740992",
+      "bExact": "9007199254740993",
+      "text": "+1"
+    },
+    {
+      "id": "humanPowerW",
+      "a": -9223372036854775808,
+      "b": 18446744073709551615,
+      "aExact": "-9223372036854775808",
+      "bExact": "18446744073709551615",
+      "text": "+27670116110564327423"
+    },
+    {
+      "id": "humanPowerW",
+      "a": 18446744073709551615,
+      "b": -9223372036854775808,
+      "aExact": "18446744073709551615",
+      "bExact": "-9223372036854775808",
+      "text": "-27670116110564327423"
+    },
+    {
+      "id": "consumedAh",
+      "a": 1,
+      "b": 2,
+      "aExact": "1",
+      "bExact": "2",
+      "text": "\u2014"
+    },
+    {
+      "id": "humanPowerW",
+      "a": null,
+      "b": 2,
+      "aExact": null,
+      "bExact": null,
+      "text": "\u2014"
+    },
+    {
+      "id": "speedMps",
+      "a": 1,
+      "b": 2,
+      "aExact": null,
+      "bExact": null,
+      "text": "+3.6"
+    }
+  ],
+  "distanceOptions": [
+    {
+      "source": "auto",
+      "foreground": false,
+      "label": "Auto"
+    },
+    {
+      "source": "gps:watch",
+      "foreground": false,
+      "label": "GPS \u00b7 Watch"
+    },
+    {
+      "source": "gps:phone",
+      "foreground": false,
+      "label": "GPS \u00b7 Phone"
+    },
+    {
+      "source": "gps:phone",
+      "foreground": true,
+      "label": "GPS \u00b7 Browser"
+    },
+    {
+      "source": "controller",
+      "foreground": false,
+      "label": "Controller estimate"
+    }
+  ],
+  "providers": [
+    {
+      "provider": "appleHealth",
+      "label": "Apple Health"
+    },
+    {
+      "provider": "healthConnect",
+      "label": "Health Connect"
+    },
+    {
+      "provider": null,
+      "label": "Health"
+    },
+    {
+      "provider": "unknown",
+      "label": "Health"
+    }
+  ],
+  "speedUnits": [
+    {
+      "unit": "km/h",
+      "accepted": true
+    },
+    {
+      "unit": "mph",
+      "accepted": true
+    },
+    {
+      "unit": "m/s",
+      "accepted": true
+    },
+    {
+      "unit": "km",
+      "accepted": false
+    },
+    {
+      "unit": "knots",
+      "accepted": false
+    },
+    {
+      "unit": "",
+      "accepted": false
+    }
+  ],
+  "distanceUnit": "km"
+}

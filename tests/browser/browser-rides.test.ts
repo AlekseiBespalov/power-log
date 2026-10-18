@@ -1,11 +1,12 @@
+import { currentMonitorPoint, metricAllowsMean, metricById } from '../../src/core/monitor';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { browserTestBundle } from '../helpers/browser-test-bundle';
 import type * as Harness from '../fixtures/browser-ride-harness';
-import { currentMonitorPoint } from '../../src/core/monitor';
 import { TILE_SECONDS } from '../../src/services/browser-ride-store';
 import { parseCsv } from '../support/csv';
+import { presentationFailure } from '../../shared/js';
 
 declare global {
   interface Window {
@@ -41,9 +42,176 @@ async function run<T>(work: (page: Page, context: BrowserContext) => Promise<T>)
 const options = { indoor: true, useWatch: true, saveToHealth: true, recordGPS: true };
 
 describe('browser rides with real IndexedDB and Web Locks', () => {
+  it('returns empty plots and statistics for absent metrics without reading originals or tiles', async () =>
+    run(async page => {
+      const result = await page.evaluate(async () => {
+        const api = window.rideTests;
+        const ride = await api.store.begin(
+          'owner',
+          { indoor: true, recordGPS: false, sampleHz: 2 },
+          '2026-01-01T00:00:00Z',
+        );
+        const rows = [0, 1].map((time, index) => ({
+          ...api.browserRow(time, index),
+          recordingId: ride.id,
+        }));
+        const record = await api.store.append(ride.id, 'owner', rows, 1, 1, rows[1]!.timestamp);
+        const source = api.monitor(ride.id);
+        const request = {
+          generation: 1,
+          expectedRevision: (await source.describeSource({ generation: 1 })).revision,
+          metrics: ['controllerSpeedMps', 'heartRateBpm', 'speedMps'],
+          startSeconds: 0,
+          endSeconds: 1,
+        };
+        let originalReads = 0;
+        let tileReads = 0;
+        const open = IDBIndex.prototype.openCursor;
+        IDBIndex.prototype.openCursor = function (...args) {
+          if (this.objectStore.name === 'samples' || this.objectStore.name === 'ride-locations') originalReads++;
+          return open.apply(this, args);
+        };
+        const tiles = api.store.tiles.bind(api.store);
+        api.store.tiles = async (...args) => {
+          tileReads++;
+          return tiles(...args);
+        };
+        const plot = await source.readPlot(request);
+        const stats = await source.rangeStats({ ...request, includeEndpoints: true });
+        const directStats = await api.browserStatistics(record, api.store, 0, 1, request.metrics);
+        return { available: record.availableMetrics, plot, stats, directStats, originalReads, tileReads };
+      });
+      for (const metric of ['controllerSpeedMps', 'heartRateBpm', 'speedMps'])
+        expect(result.available).not.toContain(metric);
+      expect(result.plot.status).toBe('ok');
+      if (result.plot.status !== 'ok' || result.stats.status !== 'ok') throw new Error('Unexpected retry');
+      expect(result.plot.series).toEqual({ controllerSpeedMps: [], heartRateBpm: [], speedMps: [] });
+      const statistics = { controllerSpeedMps: { count: 0, coveredSeconds: 0, integral: 0 } };
+      expect(result.stats.statistics).toEqual(statistics);
+      expect(result.directStats).toEqual(statistics);
+      const points = { controllerSpeedMps: null, heartRateBpm: null, speedMps: null };
+      expect(result.stats.endpoints).toEqual({ start: points, end: points });
+      expect(result.originalReads).toBe(0);
+      expect(result.tileReads).toBe(0);
+    }));
+
+  it('keeps capture and streams originals when a chart cache reaches core capacity', async () =>
+    run(async page => {
+      const result = await page.evaluate(async () => {
+        const api = window.rideTests;
+        const query = new api.InspectionPlotQuery('humanPowerW', '0', '100000000', 1, 4);
+        let capacity: unknown;
+        try {
+          for (let i = 0; i < 8; i++)
+            query.append(
+              api.browserInspectionItem({ ...api.browserRow(i * 10, i), recordingId: 'capacity' }),
+              true,
+              false,
+            );
+          query.result();
+        } catch (error) {
+          capacity = error;
+        }
+        if (!(capacity instanceof Error) || capacity.name !== 'InspectionCapacityException')
+          throw new Error('Missing capacity error');
+        const aggregate = api.InspectionPlotBucket.prototype.aggregate;
+        api.InspectionPlotBucket.prototype.aggregate = () => {
+          throw capacity;
+        };
+        const ride = await api.store.begin(
+          'owner',
+          { indoor: true, recordGPS: false, sampleHz: 2 },
+          '2026-01-01T00:00:00Z',
+        );
+        const rows = [0, 1].map((time, index) => ({
+          ...api.browserRow(time, index),
+          recordingId: ride.id,
+          humanPowerW: 100 + 100 * index,
+        }));
+        await api.store.append(ride.id, 'owner', rows, 1, 1, rows[1]!.timestamp);
+        api.InspectionPlotBucket.prototype.aggregate = aggregate;
+        const source = api.monitor(ride.id);
+        const request = {
+          generation: 1,
+          expectedRevision: (await source.describeSource({ generation: 1 })).revision,
+          metrics: ['humanPowerW'],
+          startSeconds: 0,
+          endSeconds: 2,
+          pixelWidth: 32,
+        };
+        return {
+          record: await api.store.get(ride.id),
+          plot: await source.readPlot(request),
+          stats: await source.rangeStats(request),
+        };
+      });
+      expect(result.record.telemetryCount).toBe(2);
+      expect(result.plot).toMatchObject({ status: 'ok' });
+      if (result.plot.status === 'ok')
+        expect(result.plot.series.humanPowerW?.map(point => point.value)).toEqual([100, 200]);
+      expect(result.stats).toMatchObject({ statistics: { humanPowerW: { count: 2 } } });
+    }));
+
+  it('bounds inspection by the metric gap while preserving invalid barriers', async () =>
+    run(async page => {
+      const result = await page.evaluate(async () => {
+        const api = window.rideTests;
+        const ride = await api.store.begin(
+          'owner',
+          { indoor: true, recordGPS: false, sampleHz: 2 },
+          '2026-01-01T00:00:00Z',
+        );
+        const rows = Array.from({ length: 301 }, (_, sequence) => ({
+          ...api.browserRow(sequence, sequence),
+          recordingId: ride.id,
+          ...(sequence === 0
+            ? {
+                controllerSpeedMps: 10,
+                speedRaw: 36,
+                controllerModel: 'X6',
+                controllerProtocol: '5.3',
+                firmwareLabel: '20260101',
+              }
+            : {}),
+        }));
+        const validity = rows.map(row =>
+          new api.InspectionOriginalInput(api.browserInspectionItem(row)).plotValid('controllerSpeedMps'),
+        );
+        if (!validity[0] || validity.slice(1).some(Boolean)) throw new Error('Invalid barrier fixture');
+        for (let offset = 0; offset < rows.length; offset += api.BROWSER_BATCH) {
+          const batch = rows.slice(offset, offset + api.BROWSER_BATCH);
+          const tail = batch.at(-1)!;
+          await api.store.append(ride.id, 'owner', batch, tail.elapsedSeconds, tail.elapsedSeconds, tail.timestamp);
+        }
+        const source = api.monitor(ride.id);
+        const expectedRevision = (await source.describeSource({ generation: 1 })).revision;
+        const open = IDBIndex.prototype.openCursor;
+        const inspected: number[] = [];
+        IDBIndex.prototype.openCursor = function (...args) {
+          const request = open.apply(this, args);
+          if (this.objectStore.name === 'samples')
+            request.addEventListener('success', () => {
+              if (request.result) inspected.push(request.result.value.elapsedSeconds);
+            });
+          return request;
+        };
+        const point = await source.inspectAt({
+          generation: 1,
+          expectedRevision,
+          seconds: 150,
+          metrics: ['controllerSpeedMps'],
+        });
+        IDBIndex.prototype.openCursor = open;
+        return { point, inspected };
+      });
+      expect(result.point).toMatchObject({ status: 'ok', points: { controllerSpeedMps: null } });
+      expect(result.inspected.length).toBeLessThanOrEqual(25);
+      expect(result.inspected.every(time => Math.abs(time - 150) <= 6)).toBe(true);
+    }));
+
   it.each([
-    [4, "Power Log can't open rides saved by an earlier version. Clear this site's data to start over."],
-    [6, 'Update Power Log to open your rides'],
+    [7, "Power Log can't open rides saved by an earlier version. Clear this site's data to start over."],
+    [10, 'Update Power Log to open your rides'],
   ])('refuses a version %i database and leaves it unchanged', async (version, message) =>
     run(async page => {
       const result = await page.evaluate(async version => {
@@ -71,54 +239,16 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(result).toEqual({ error: message, version, kept: { id: 'kept' } });
     }),
   );
-  it.each(['2025-12-31T23:00:00.000Z', '2026-01-01T01:00:00.000Z'])(
-    'retains the last capture checkpoint across reopen independently of UTC: %s',
-    async cutoff =>
-      run(async (page, context) => {
-        const id = await page.evaluate(async cutoff => {
-          const { store, browserRow } = window.rideTests;
-          const record = await store.begin('checkpoint-token', true, '2026-01-01T00:00:00.000Z');
-          await store.transition(record.id, 'checkpoint-token', 'pause', 1, 1, '2026-01-01T00:00:01.000Z');
-          await store.transition(record.id, 'checkpoint-token', 'resume', 3, 1, '2026-01-01T00:00:03.000Z');
-          await store.append(
-            record.id,
-            'checkpoint-token',
-            [{ ...browserRow(4, 0), recordingId: record.id, timestamp: cutoff }],
-            4,
-            2,
-            cutoff,
-          );
-          return record.id;
-        }, cutoff);
-        await page.close();
-        const reopened = await pageIn(context);
-        const result = await reopened.evaluate(async id => {
-          const { recorder } = window.rideTests.createRecorder();
-          const state = await recorder.getState();
-          const record = await window.rideTests.store.get(id);
-          const csv = await window.rideTests.telemetryCsv(id);
-          return { state, record, csv, repeated: await window.rideTests.store.recoverOrphan() };
-        }, id);
-        expect(result.record).toMatchObject({
-          interrupted: true,
-          phase: 'completed',
-          elapsedSeconds: 4,
-          timerSeconds: 2,
-          checkpointAt: cutoff,
-          endedAt: cutoff,
-          samples: 1,
-        });
-        expect(result.state.phase).toBe('completed');
-        expect(result.repeated).toBeNull();
-        expect(parseCsv(result.csv).samples).toMatchObject([{ elapsedSeconds: 4, timestamp: cutoff, run: 1 }]);
-      }),
-  );
 
   it('preserves committed-stop precedence on reopen', async () =>
     run(async (page, context) => {
       const id = await page.evaluate(async () => {
         const { store, browserRow } = window.rideTests;
-        const record = await store.begin('stop-token', true, '2026-01-01T00:00:00.000Z');
+        const record = await store.begin(
+          'stop-token',
+          { indoor: true, recordGPS: false, sampleHz: 2 },
+          '2026-01-01T00:00:00.000Z',
+        );
         await store.append(
           record.id,
           'stop-token',
@@ -127,7 +257,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
           1,
           '2026-01-01T00:00:01.000Z',
         );
-        await store.transition(record.id, 'stop-token', 'save', 2, 2, '2025-12-31T23:00:00.000Z');
+        await store.transition(record.id, 'stop-token', 'stop', 2, 2, '2025-12-31T23:00:00.000Z');
         return record.id;
       });
       await page.close();
@@ -135,7 +265,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(
         await reopened.evaluate(
           async id => ({
-            recovered: await window.rideTests.store.recoverOrphan(),
+            recovered: await window.rideTests.store.interruptCurrent(),
             record: await window.rideTests.store.get(id),
           }),
           id,
@@ -151,55 +281,40 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         },
       });
     }));
-
-  it('persists hard boundaries and connection evidence at every tile level', async () =>
+  it('removes a start that fails after the ride began and admits the next Start', async () =>
     run(async page => {
-      const result = await page.evaluate(
-        async sizes => {
-          const { store, browserRow, monitor } = window.rideTests;
-          const record = await store.begin('tile-token', true, '2026-01-01T00:00:00.000Z');
-          const rows = [30, 31, 32, 33].map((time, sequence) => ({
-            ...browserRow(time, sequence),
-            recordingId: record.id,
-            humanPowerW: 100,
-            interruptionIndex: sequence < 2 ? 0 : 1,
-          }));
-          await store.append(record.id, 'tile-token', rows, 33, 33, rows[3]!.timestamp);
-          const tiles = await Promise.all(sizes.map((_size, level) => store.tiles(record.id, level, 0, 3)));
-          const source = monitor(record.id);
-          const query = {
-            generation: 1,
-            expectedRevision: (await source.describeSource({ generation: 1 })).revision,
-            metrics: ['humanPowerW'],
-            startSeconds: 0,
-            pixelWidth: 4,
-          };
-          const plots = await Promise.all(
-            [34, ...sizes.map(size => size * 3)].map(endSeconds => source.readPlot({ ...query, endSeconds })),
-          );
-          return {
-            tiles,
-            plots,
-            inspection: await source.inspectAt({ ...query, seconds: 31.5 }),
-            stats: await source.rangeStats({ ...query, endSeconds: 65536 }),
-          };
+      const result = await page.evaluate(async () => {
+        const { recorder, source } = window.rideTests.createRecorder();
+        await source.connect();
+        const setSampleRate = source.setSampleRate.bind(source);
+        source.setSampleRate = async () => {
+          throw new DOMException('GATT operation failed for unknown reason.', 'NetworkError');
+        };
+        const failed = await recorder.start({ indoor: true, useWatch: false }).then(
+          () => null,
+          (error: { code?: string; message?: string }) => ({ code: error.code, message: error.message }),
+        );
+        const afterFailure = await recorder.getState();
+        const rides = (await window.rideTests.store.list()).records.length;
+        source.setSampleRate = setSampleRate;
+        const started = await recorder.start({ indoor: true, useWatch: false });
+        await recorder.discard(started.id!);
+        return {
+          failed,
+          rides,
+          state: { id: afterFailure.id, phase: afterFailure.phase, failure: afterFailure.failure },
+          started: started.phase,
+        };
+      });
+      expect(result).toEqual({
+        failed: {
+          code: 'bikeUnavailable',
+          message: "Your bike isn't connected. Turn on Bluetooth and the bike, keep it nearby, then try again.",
         },
-        [...TILE_SECONDS],
-      );
-      for (const tiles of result.tiles) {
-        const aggregates = tiles.map(tile => tile.stats.humanPowerW!);
-        expect(aggregates[0]!.firstInterruptionIndex).toBe(0);
-        expect(aggregates.at(-1)!.lastInterruptionIndex).toBe(1);
-        expect(aggregates.flatMap(aggregate => aggregate.runs)).toHaveLength(2);
-      }
-      for (const plot of result.plots) {
-        if (plot.status !== 'ok') throw new Error('Unexpected retry');
-        expect(
-          plot.series.humanPowerW!.filter(point => point.startsSegment).map(point => point.elapsedSeconds),
-        ).toEqual([30, 32]);
-      }
-      expect(result.inspection).toMatchObject({ points: { humanPowerW: null } });
-      expect(result.stats).toMatchObject({ statistics: { humanPowerW: { coveredSeconds: 2, integral: 200 } } });
+        rides: 0,
+        state: { id: null, phase: 'idle', failure: null },
+        started: 'running',
+      });
     }));
   it('keeps the live elapsed clock and latest observation fresh through a one-hour UTC correction', async () =>
     run(async page => {
@@ -339,14 +454,14 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         phase: 'running',
         useWatch: false,
         saveToHealth: false,
-        recordGPS: false,
+        recordGPS: true,
         capabilities: {
           phoneWorkout: false,
           watchWorkout: false,
           phoneHealth: false,
           watchHealth: false,
           healthProvider: null,
-          gps: false,
+          gps: true,
           foregroundOnly: true,
         },
       });
@@ -364,7 +479,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(result.detail.metadata).toMatchObject({
         storage: 'browser',
         phase: 'completed',
-        eventCount: 5,
+        eventCount: '9',
         healthKitState: 'notRequested',
       });
       expect(result.detail.summary).toMatchObject({
@@ -428,84 +543,15 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(result.rows.map(row => row.originalSequence)).toEqual([5, 0]);
     }));
 
-  it('rejects a foreign tab and recovers only after its owning document closes', async () =>
-    run(async (page, context) => {
-      const id = await page.evaluate(async options => {
-        window.fixture = window.rideTests.createRecorder();
-        await window.fixture.source.connect();
-        const ride = await window.fixture.recorder.start(options);
-        window.fixture.source.sample(1);
-        window.fixture.setTime(1);
-        await window.fixture.recorder.pause();
-        return ride.id!;
-      }, options);
-      const other = await pageIn(context);
-      const foreign = await other.evaluate(
-        async ({ id, options }) => {
-          window.fixture = window.rideTests.createRecorder();
-          await window.fixture.source.connect();
-          const state = await window.fixture.recorder.getState();
-          const errors = await Promise.all(
-            [
-              window.fixture.recorder.start(options),
-              window.fixture.recorder.pause(id),
-              window.fixture.recorder.stop(id),
-              window.fixture.recorder.remove(id),
-            ].map(p =>
-              p.then(
-                () => '',
-                e => e.message,
-              ),
-            ),
-          );
-          return { state, errors };
-        },
-        { id, options },
-      );
-      expect(foreign.state.pendingAction).toBe('anotherBrowserTab');
-      expect(foreign.errors.every(Boolean)).toBe(true);
-      await page.close();
-      // Page closure can precede Web Locks cleanup in the browser process.
-      await expect
-        .poll(
-          () =>
-            other.evaluate(async () => {
-              const { held } = await navigator.locks.query();
-              return held?.some(lock => lock.name === window.rideTests.BROWSER_RECORDING_LOCK);
-            }),
-          { timeout: 3000 },
-        )
-        .toBe(false);
-      const recovered = await other.evaluate(
-        async id => ({
-          state: await window.fixture.recorder.getState(),
-          record: await window.rideTests.store.get(id),
-          detail: await window.fixture.recorder.read(id),
-          list: await window.fixture.recorder.list(),
-        }),
-        id,
-      );
-      expect(recovered.record).toMatchObject({
-        id,
-        phase: 'completed',
-        interrupted: true,
-        elapsedSeconds: 1,
-        timerSeconds: 1,
-        samples: 1,
-        endedAt: '2026-01-01T00:00:01.000Z',
-      });
-      expect(recovered.state.pendingAction).toBeNull();
-      expect(recovered.record.writer).toBeUndefined();
-      expect(recovered.detail.metadata).toMatchObject({ id, interrupted: true, phase: 'completed', elapsedSeconds: 1 });
-      expect(recovered.list.records[0]!.elapsedSeconds).toBe(1);
-      expect(recovered.list.records.map(record => record.id)).toEqual([id]);
-    }));
-
   it('rolls back originals, projections and metadata together and fences stale tokens', async () =>
     run(async page => {
       const result = await page.evaluate(async () => {
         const { store, browserRow } = window.rideTests,
-          ride = await store.begin('owner-token', true, '2026-01-01T00:00:00.000Z');
+          ride = await store.begin(
+            'owner-token',
+            { indoor: true, recordGPS: false, sampleHz: 2 },
+            '2026-01-01T00:00:00.000Z',
+          );
         const row = { ...browserRow(0, 0), recordingId: ride.id };
         const originalPut = IDBObjectStore.prototype.put;
         IDBObjectStore.prototype.put = function (...args) {
@@ -517,7 +563,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
           e => e.name,
         );
         IDBObjectStore.prototype.put = originalPut;
-        const countAfterFailure = (await store.get(ride.id)).samples,
+        const countAfterFailure = (await store.get(ride.id)).telemetryCount,
           rowsAfterFailure = (await store.page(ride.id, 0, 10)).length,
           tilesAfterFailure = (await store.tiles(ride.id, 0, 0, 2)).length;
         const stale = await store.append(ride.id, 'foreign-token', [row], 0, 0, row.timestamp).then(
@@ -531,7 +577,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
           rowsAfterFailure,
           tilesAfterFailure,
           stale,
-          count: (await store.get(ride.id)).samples,
+          count: (await store.get(ride.id)).telemetryCount,
         };
       });
       expect(result).toMatchObject({
@@ -542,42 +588,6 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         count: 1,
       });
       expect(result.stale).toMatch(/owns/);
-    }));
-
-  it('halts on write failure, preserves the committed prefix, and recovers without counting unseen time', async () =>
-    run(async page => {
-      const result = await page.evaluate(async options => {
-        const { recorder, source, setTime } = window.rideTests.createRecorder();
-        await source.connect();
-        const ride = await recorder.start(options);
-        source.sample(0);
-        setTime(1);
-        await recorder.pause();
-        await recorder.resume();
-        const original = window.rideTests.store.append;
-        window.rideTests.store.append = async () => {
-          throw new DOMException('quota', 'QuotaExceededError');
-        };
-        setTime(2);
-        source.sample(1);
-        await new Promise(resolve => setTimeout(resolve, 350));
-        const failure = await recorder.getState();
-        setTime(900);
-        window.rideTests.store.append = original;
-        const recovered = await recorder.stop();
-        return { failure, recovered, record: await window.rideTests.store.get(ride.id!) };
-      }, options);
-      expect(result.failure.phase).toBe('recoverable');
-      expect(result.failure.error).toContain('quota');
-      expect(result.record).toMatchObject({
-        samples: 1,
-        interrupted: true,
-        elapsedSeconds: 1,
-        timerSeconds: 1,
-        endedAt: '2026-01-01T00:00:01.000Z',
-        checkpointAt: '2026-01-01T00:00:01.000Z',
-      });
-      expect(result.recovered.phase).toBe('completed');
     }));
 
   it('discards only the owned ride and leaves an earlier saved ride intact', async () =>
@@ -603,13 +613,214 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(records.tiles).toEqual([]);
     }));
 
+  it('exposes and discards a retained ride when reload cannot write its interruption', async () =>
+    run(async (page, context) => {
+      const ids = await page.evaluate(async () => {
+        const { recorder, source, setTime } = window.rideTests.createRecorder();
+        await source.connect();
+        const saved = await recorder.start({ indoor: true, useWatch: false });
+        setTime(1);
+        source.sample(0);
+        await recorder.stop();
+        const retained = await recorder.start({ indoor: true, useWatch: false });
+        setTime(2);
+        source.sample(1);
+        await recorder.lap();
+        return { saved: saved.id!, retained: retained.id! };
+      });
+      await page.close();
+      const reopened = await pageIn(context);
+      const result = await reopened.evaluate(async ids => {
+        const api = window.rideTests;
+        const { recorder, source } = api.createRecorder();
+        const before = await api.store.get(ids.retained);
+        const savedCsv = await api.telemetryCsv(ids.saved);
+        const put = IDBObjectStore.prototype.put;
+        let rejectedWrites = 0;
+        IDBObjectStore.prototype.put = function (...args) {
+          if (this.name === 'recordings' || this.name === 'ride-control') {
+            rejectedWrites++;
+            throw new DOMException('Injected quota failure', 'QuotaExceededError');
+          }
+          return put.apply(this, args);
+        };
+        try {
+          const state = await recorder.getState();
+          const retained = await api.store.get(ids.retained);
+          const writesBeforeDiscard = rejectedWrites;
+          const discarded = await recorder.discard(ids.retained);
+          const writesForDiscard = rejectedWrites - writesBeforeDiscard;
+          IDBObjectStore.prototype.put = put;
+          await source.connect();
+          const next = await recorder.start({ indoor: true, useWatch: false });
+          await recorder.discard(next.id!);
+          return {
+            state,
+            unchanged: JSON.stringify(before) === JSON.stringify(retained),
+            discarded,
+            writesForDiscard,
+            next: next.phase,
+            remaining: (await recorder.list()).records.map(record => record.id),
+            savedUnchanged: savedCsv === (await api.telemetryCsv(ids.saved)),
+            originals: await api.store.page(ids.retained, 0, 10),
+          };
+        } finally {
+          IDBObjectStore.prototype.put = put;
+        }
+      }, ids);
+      expect(result.state).toMatchObject({
+        id: ids.retained,
+        phase: 'interrupted',
+        foreignOwner: null,
+        failure: { code: 'storageFull' },
+      });
+      expect(result.unchanged).toBe(true);
+      expect(result.discarded).toMatchObject({ id: null, phase: 'idle', failure: null });
+      expect(result.writesForDiscard).toBe(0);
+      expect(result.next).toBe('running');
+      expect(result.remaining).toEqual([ids.saved]);
+      expect(result.savedUnchanged).toBe(true);
+      expect(result.originals).toEqual([]);
+    }));
+
+  it('rejects a stale retained-ride Discard after another tab takes control', async () =>
+    run(async (page, context) => {
+      const oldID = await page.evaluate(async () => {
+        const api = window.rideTests;
+        const old = await api.store.begin(
+          'abandoned',
+          { indoor: true, recordGPS: false, sampleHz: 2 },
+          '2026-01-01T00:00:00.000Z',
+        );
+        window.fixture = api.createRecorder();
+        await window.fixture.recorder.getState();
+        return old.id;
+      });
+      const owner = await pageIn(context);
+      const newID = await owner.evaluate(async oldID => {
+        window.fixture = window.rideTests.createRecorder();
+        const { recorder, source } = window.fixture;
+        await recorder.getState();
+        await recorder.stop(oldID);
+        await source.connect();
+        return (await recorder.start({ indoor: true, useWatch: false })).id!;
+      }, oldID);
+      const result = await page.evaluate(
+        async ({ oldID, newID }) => {
+          const { recorder } = window.fixture;
+          const rejected = await recorder.discard(oldID).then(
+            () => null,
+            (error: { code: string }) => error.code,
+          );
+          return {
+            rejected,
+            old: await window.rideTests.store.get(oldID),
+            current: await window.rideTests.store.get(newID),
+            state: await recorder.getState(),
+          };
+        },
+        { oldID, newID },
+      );
+      expect(result.rejected).toBe('ownerForeign');
+      expect(result.old.phase).toBe('completed');
+      expect(result.current.phase).toBe('running');
+      expect(result.state).toMatchObject({ id: newID, phase: 'running', foreignOwner: 'anotherBrowserTab' });
+      await owner.evaluate(async id => window.fixture.recorder.discard(id), newID);
+    }));
+
+  it('refuses an unreadable retained record without changing or deleting it', async () =>
+    run(async page => {
+      const result = await page.evaluate(async () => {
+        const api = window.rideTests;
+        const record = await api.store.begin(
+          'abandoned',
+          { indoor: true, recordGPS: false, sampleHz: 2 },
+          '2026-01-01T00:00:00.000Z',
+        );
+        const invalid = { ...record, sampleHz: 3 };
+        await api.browserTransaction(['recordings'], 'readwrite', tx =>
+          api.idbRequest(tx.objectStore('recordings').put(invalid)),
+        );
+        const rejected = await api
+          .createRecorder()
+          .recorder.getState()
+          .then(
+            () => null,
+            (error: Error) => error.message,
+          );
+        const retained = await api.browserTransaction(['recordings'], 'readonly', tx =>
+          api.idbRequest(tx.objectStore('recordings').get(record.id)),
+        );
+        return { rejected, unchanged: JSON.stringify(retained) === JSON.stringify(invalid) };
+      });
+      expect(result).toEqual({ rejected: 'Invalid recording sampleHz', unchanged: true });
+    }));
+
+  it('finishes on the first attempt after a controller write fails and records an interruption', async () =>
+    run(async page => {
+      const id = await page.evaluate(async () => {
+        window.fixture = window.rideTests.createRecorder();
+        const { recorder, source, setTime } = window.fixture;
+        await source.connect();
+        const ride = await recorder.start({ indoor: true, useWatch: false, sampleHz: 8 });
+        for (let sequence = 0; sequence < 8; sequence++) {
+          setTime((sequence + 1) / 8);
+          source.sample(sequence);
+        }
+        return ride.id!;
+      });
+      await expect
+        .poll(() => page.evaluate(async id => (await window.rideTests.store.get(id)).telemetryCount, id))
+        .toBe(8);
+      await page.evaluate(() => {
+        const add = IDBObjectStore.prototype.add;
+        IDBObjectStore.prototype.add = function (...args) {
+          if (this.name === 'samples') {
+            IDBObjectStore.prototype.add = add;
+            throw new DOMException('Injected sample write failure', 'QuotaExceededError');
+          }
+          return add.apply(this, args);
+        };
+        const { source, setTime } = window.fixture;
+        for (let sequence = 8; sequence < 16; sequence++) {
+          setTime((sequence + 1) / 8);
+          source.sample(sequence);
+        }
+      });
+      await expect
+        .poll(() => page.evaluate(async id => (await window.rideTests.store.get(id)).phase, id))
+        .toBe('interrupted');
+      const result = await page.evaluate(async id => {
+        const api = window.rideTests;
+        const { recorder, setTime } = window.fixture;
+        setTime(120);
+        const state = await recorder.stop(id);
+        const record = await api.store.get(id);
+        const events = (await api.store.lifecycleAfter(id, null, 10)).rows;
+        return { state, record, events, csv: await api.telemetryCsv(id) };
+      }, id);
+      expect(result.state).toMatchObject({ phase: 'completed', timerSeconds: 1, failure: null });
+      expect(result.record).toMatchObject({
+        telemetryCount: 8,
+        elapsedSeconds: 1,
+        endedAt: '2026-01-01T00:00:01.000Z',
+      });
+      expect(result.events.map(event => event.action)).toEqual(['start', 'pause', 'stop']);
+      expect(result.events.map(event => event.producerSequence)).toEqual(['1', '2', '3']);
+      expect(parseCsv(result.csv).samples).toHaveLength(8);
+    }));
+
   it('uses indexed chart reads with exact extrema, A/B identity, gaps, clipped integration and bounded geometry', async () =>
     run(async page => {
       const result = await page.evaluate(async () => {
         const { store, browserRow, monitor } = window.rideTests,
-          ride = await store.begin('token', true, '2026-01-01T00:00:00.000Z');
-        for (let offset = 0; offset < 1600; offset += 128) {
-          const rows = Array.from({ length: Math.min(128, 1600 - offset) }, (_, i) => {
+          ride = await store.begin(
+            'token',
+            { indoor: true, recordGPS: false, sampleHz: 2 },
+            '2026-01-01T00:00:00.000Z',
+          );
+        for (let offset = 0; offset < 1600; offset += 64) {
+          const rows = Array.from({ length: Math.min(64, 1600 - offset) }, (_, i) => {
             const seq = offset + i,
               seconds = seq / 8 + (seq >= 800 ? 20 : 0);
             return {
@@ -679,7 +890,11 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
     run(async page => {
       const result = await page.evaluate(async () => {
         const { store, browserRow, monitor } = window.rideTests,
-          ride = await store.begin('token', true, '2026-01-01T00:00:00.000Z');
+          ride = await store.begin(
+            'token',
+            { indoor: true, recordGPS: false, sampleHz: 2 },
+            '2026-01-01T00:00:00.000Z',
+          );
         const rows = [0, 1, 4, 6, 8.5, 11.1].map((time, sequence) => ({
           ...browserRow(time, sequence),
           recordingId: ride.id,
@@ -715,8 +930,14 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       ] as const) {
         const value = result[key];
         if (value.status !== 'ok') throw new Error('Unexpected retry');
-        for (const [metric, stats] of Object.entries(value.statistics))
-          expect(stats.coveredSeconds, `${key}: ${metric}`).toBeCloseTo(covered);
+        for (const [metric, stats] of Object.entries(value.statistics)) {
+          if (metricAllowsMean(metricById(metric)!))
+            expect(stats.coveredSeconds, `${key}: ${metric}`).toBeCloseTo(covered);
+          else {
+            expect(stats).not.toHaveProperty('coveredSeconds');
+            expect(stats).not.toHaveProperty('integral');
+          }
+        }
       }
       for (const [key, integral] of [
         ['ramp', 150],
@@ -732,7 +953,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         expect(stats.sampleMean).toBeUndefined();
       }
       if (result.gap.status !== 'ok') throw new Error('Unexpected retry');
-      expect(result.gap.statistics).toEqual({});
+      for (const stats of Object.values(result.gap.statistics)) expect(stats.count).toBe(0);
     }));
 
   it.each([
@@ -743,7 +964,11 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       const result = await page.evaluate(
         async ({ times, values, end }) => {
           const { store, browserRow, monitor } = window.rideTests,
-            ride = await store.begin('token', true, '2026-01-01T00:00:00.000Z');
+            ride = await store.begin(
+              'token',
+              { indoor: true, recordGPS: false, sampleHz: 2 },
+              '2026-01-01T00:00:00.000Z',
+            );
           const rows = times.map((time, sequence) => ({
             ...browserRow(time, sequence),
             humanPowerW: values[sequence]!,
@@ -773,51 +998,25 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
     }),
   );
 
-  it('bounds a stalled writer queue and clearly retains only its committed prefix', async () =>
-    run(async page => {
-      const result = await page.evaluate(async options => {
-        const { recorder, source, setTime } = window.rideTests.createRecorder(),
-          { store } = window.rideTests;
-        await source.connect();
-        const started = await recorder.start(options),
-          original = store.append.bind(store);
-        let release!: () => void;
-        const stalled = new Promise<void>(resolve => {
-          release = resolve;
-        });
-        store.append = async (...args) => {
-          await stalled;
-          return original(...args);
-        };
-        for (let seq = 0; seq < 700; seq++) {
-          setTime(seq / 8);
-          source.sample(seq);
-        }
-        const stopped = await recorder.getState();
-        release();
-        while ((await store.get(started.id!)).samples < 128) await new Promise(resolve => setTimeout(resolve, 1));
-        await new Promise(resolve => setTimeout(resolve, 5));
-        store.append = original;
-        const recovered = await recorder.stop();
-        return { stopped, recovered, record: await store.get(started.id!) };
-      }, options);
-      expect(result.stopped.phase).toBe('recoverable');
-      expect(result.stopped.error).toMatch(/could not keep up/);
-      expect(result.record).toMatchObject({ samples: 128, interrupted: true, elapsedSeconds: 127 / 8 });
-      expect(result.recovered.phase).toBe('completed');
-    }));
-
   it('keeps saved records and charts readable without capture capability', async () =>
     run(async page => {
       const result = await page.evaluate(async () => {
         const { store, browserRow, monitor, createRecorder } = window.rideTests;
-        const record = await store.begin('owner', true, '2026-01-01T00:00:00.000Z');
+        const record = await store.begin(
+          'owner',
+          { indoor: true, recordGPS: false, sampleHz: 2 },
+          '2026-01-01T00:00:00.000Z',
+        );
         const rows = Array.from({ length: 80 }, (_, sequence) => ({
           ...browserRow(sequence / 8, sequence),
           recordingId: record.id,
         }));
-        await store.append(record.id, 'owner', rows, 79 / 8, 79 / 8, rows.at(-1)!.timestamp);
-        await store.transition(record.id, 'owner', 'save', 20, 20, '2026-01-01T00:00:20.000Z');
+        for (let offset = 0; offset < rows.length; offset += 64) {
+          const batch = rows.slice(offset, offset + 64),
+            last = batch.at(-1)!;
+          await store.append(record.id, 'owner', batch, last.elapsedSeconds, last.elapsedSeconds, last.timestamp);
+        }
+        await store.transition(record.id, 'owner', 'stop', 20, 20, '2026-01-01T00:00:20.000Z');
         Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
         const { recorder, source } = createRecorder();
         await source.connect();
@@ -843,7 +1042,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         };
       });
       expect(result.state.supported).toBe(false);
-      expect(result.failure).toMatch(/Web Locks/);
+      expect(result.failure).toBe(presentationFailure('actionUnavailable').text);
       expect(result.records.records).toHaveLength(1);
       expect(result.records.records[0]).toMatchObject({ storage: 'browser', saveToHealth: false });
       if (result.stats.status !== 'ok') throw new Error('Unexpected retry');
@@ -851,7 +1050,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(result.unchanged?.originalSequence).toBe(0);
     }));
 
-  it.runIf(process.env.POWER_LOG_BROWSER_STRESS === '1')(
+  it(
     'retains all 57-minute and eight-hour 8 Hz originals with bounded chart work',
     async () =>
       run(async page => {
@@ -859,9 +1058,19 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         page.on('console', entry => {
           if (entry.type() === 'log') console.log(entry.text());
         });
-        for (const seconds of [57 * 60, 8 * 60 * 60]) {
+        const workloads = [
+          { seconds: 600, expectedDistance: 3324.307288 },
+          { seconds: 57 * 60, expectedDistance: 18885.557269 },
+          { seconds: 8 * 60 * 60, expectedDistance: 159599.3071 },
+        ];
+        for (const { seconds, expectedDistance } of process.env.POWER_LOG_BROWSER_STRESS_SIZE === 'full'
+          ? workloads.slice(1)
+          : workloads.slice(0, 1)) {
           const result = await page.evaluate(
-            async ({ seconds, options }) => {
+            async ({ seconds, expectedDistance, options }) => {
+              Object.defineProperty(navigator, 'geolocation', {
+                value: { watchPosition: () => 1, clearWatch: () => {} },
+              });
               const storageBefore = await navigator.storage.estimate();
               const { recorder, source, setTime } = window.rideTests.createRecorder(),
                 { store, monitor, syntheticSample } = window.rideTests;
@@ -869,22 +1078,22 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
               const ride = await recorder.start(options),
                 count = seconds * 8,
                 started = performance.now();
-              for (let offset = 0; offset < count; offset += 128) {
-                const end = Math.min(count, offset + 128);
+              for (let offset = 0; offset < count; offset += 64) {
+                const end = Math.min(count, offset + 64);
                 for (let seq = offset; seq < end; seq++) {
                   setTime(seq / 8);
                   source.sample(seq, Math.round(150 + 75 * Math.sin(seq / 100)), {
                     speedRaw: (seq % 400) / 10,
-                    controllerSpeedMps: (seq % 400) / 36,
+                    controllerSpeedMps: (seq % 400) / 10 / 3.6,
                     controllerModel: 'X6',
                     firmwareLabel: '20260101',
                     controllerProtocol: '5.3',
                   });
                 }
                 // The production recorder dispatches full batches immediately and partial ones at 250 ms.
-                while ((await store.get(ride.id!)).samples < end) {
+                while ((await store.get(ride.id!)).telemetryCount < end) {
                   const state = await recorder.getState();
-                  if (state.error) throw new Error(state.error);
+                  if (state.failure) throw new Error(state.failure.message);
                   await new Promise(resolve => setTimeout(resolve, 1));
                 }
                 if (end % 32768 === 0) console.log(`Browser stress ${seconds}s: ${end}/${count}`);
@@ -904,9 +1113,10 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
                   const seq = retained++,
                     expected = {
                       ...syntheticSample(seq / 8, seq, new Date(Date.UTC(2026, 0, 1) + seq * 125).toISOString()),
+                      connectionEpoch: source.connectionEpoch,
                       humanPowerW: Math.round(150 + 75 * Math.sin(seq / 100)),
                       speedRaw: (seq % 400) / 10,
-                      controllerSpeedMps: (seq % 400) / 36,
+                      controllerSpeedMps: (seq % 400) / 10 / 3.6,
                       controllerModel: 'X6',
                       firmwareLabel: '20260101',
                       controllerProtocol: '5.3',
@@ -946,8 +1156,6 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
               const distanceStarted = performance.now(),
                 detail = await recorder.read(ride.id!),
                 distanceReadyMs = performance.now() - distanceStarted;
-              let expectedDistance = 0;
-              for (let i = 1; i < count; i++) expectedDistance += (((i - 1) % 400) + (i % 400)) / 36 / 2 / 8;
               const distanceQueryStarted = performance.now();
               for (let i = 0; i < 30; i++) {
                 const base = { generation: 1, expectedRevision: description.revision, metrics: ['distanceMeters'] };
@@ -1040,10 +1248,11 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
                 csvBytes: new TextEncoder().encode(csv).length,
                 csvMs,
                 timerSeconds: detail.summary.timerSeconds,
-                sampleCount: detail.metadata.eventCount,
+                sampleCount: (await store.get(ride.id!)).telemetryCount,
+                originalCount: detail.metadata.eventCount,
               };
             },
-            { seconds, options },
+            { seconds, expectedDistance, options },
           );
           console.log(`BROWSER_RIDE_STRESS ${JSON.stringify(result)}`);
           reports.push(result);
@@ -1056,15 +1265,42 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
             maxRead: 256,
             timerSeconds: seconds,
             sampleCount: seconds * 8,
+            originalCount: String(seconds * 8 + 2),
           });
           expect(result.statsCount).toBe(seconds * 8 - 10);
-          expect(result.chartRows).toBeLessThanOrEqual(1024);
-          expect(result.pointCount).toBeLessThanOrEqual(4096);
-          expect(result.tileBytes).toBeLessThan(result.originalBytes);
-          expect(result.actualDistance).toBeCloseTo(result.expectedDistance, 7);
-          expect(result.coveredSeconds).toBe((seconds * 8 - 1) / 8);
+          expect.soft(result.chartRows).toBeLessThanOrEqual(1024);
+          expect.soft(result.pointCount).toBeLessThanOrEqual(4096);
+          expect.soft(result.tileBytes).toBeLessThan(result.originalBytes);
+          expect
+            .soft(result.tileCount)
+            .toBeLessThanOrEqual(TILE_SECONDS.reduce((count, size) => count + Math.ceil(seconds / size), 0));
+          expect.soft(result.actualDistance).toBeCloseTo(result.expectedDistance, 7);
+          expect.soft(result.coveredSeconds).toBe((seconds * 8 - 1) / 8);
         }
       }),
     600_000,
   );
 });
+
+it('rejects historical Delete of a interrupted target without a selection pointer', async () =>
+  run(async page => {
+    const result = await page.evaluate(async () => {
+      const { store, createRecorder } = window.rideTests;
+      const ride = await store.begin(
+        'orphan',
+        { indoor: true, recordGPS: false, sampleHz: 2 },
+        '2026-01-01T00:00:00.000Z',
+      );
+      await store.interruptCurrent();
+      await window.rideTests.browserTransaction(['ride-control'], 'readwrite', async tx => {
+        await window.rideTests.idbRequest(tx.objectStore('ride-control').delete('current'));
+      });
+      const deletion = await store.remove(ride.id).then(
+        () => 'deleted',
+        error => error.message,
+      );
+      return { deletion, retained: await store.find(ride.id), recorder: Boolean(createRecorder) };
+    });
+    expect(result.deletion).not.toBe('deleted');
+    expect(result.retained?.phase).toBe('interrupted');
+  }));

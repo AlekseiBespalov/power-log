@@ -11,7 +11,7 @@ export const telemetryLifecycle: RideSpec = {
     { t: 7.4, action: 'resume', sequence: 4 },
     { t: 9, action: 'lap', sequence: 5 },
     { t: 9, action: 'lap', sequence: 6 },
-    { t: 12, action: 'pause', sequence: 7, interrupted: true, epoch: 'phone-clock-1', cyc: 14 },
+    { t: 12, action: 'pause', sequence: 7, interrupted: true, epoch: 'phone-clock-1', controller: 14 },
     { t: 12, action: 'resume', sequence: 8, epoch: 'phone-clock-2' },
     { t: 20, action: 'stop', sequence: 9 },
   ],
@@ -302,7 +302,7 @@ export const healthLatest: RideSpec = {
   rideId: 'family-3a',
   end: 30,
   watchEnabled: true,
-  profile: { source: 'health:watch', kind: 'health', producer: 'watch' },
+  profile: { source: 'gps:watch', kind: 'gps', producer: 'watch' },
   lifecycle: [
     { t: 0, action: 'start', producer: 'watch' },
     { t: 10, action: 'lap', producer: 'watch' },

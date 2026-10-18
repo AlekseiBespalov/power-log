@@ -1,10 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
+import { presentationDefaultPreferences, presentationLoadPreferences } from '../../shared/js';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { expectTouchTargets } from '../helpers/ui-targets';
 
 async function importedMonitor(page: Page) {
   await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
   await (
     await chooser
@@ -48,23 +52,30 @@ for (const width of [320, 390, 900])
       };
     });
     await importedMonitor(page);
+    const settingsError = presentationLoadPreferences(
+      presentationDefaultPreferences(),
+      null,
+      'Saved monitor settings could not be read.',
+    ).error!;
     await expect(page.getByTestId('monitor-status')).toContainText('Settings error');
     const withStatus = await layout(page);
-    expect(withStatus.header.height).toBe(44);
+    expect(withStatus.header.height).toBe(width >= 760 ? 54 : 48);
+    await expectTouchTargets(page.getByTestId('monitor-header'));
     expect(withStatus.grid.y - withStatus.header.y - withStatus.header.height).toBeCloseTo(12, 0);
-    // Status opens its full explanation through the same accessible view control.
     await page.getByTestId('monitor-status').click();
-    await expect(page.getByTestId('monitor-status-details')).toContainText(
+    await expect(page.getByTestId('monitor-status-details')).toHaveText(settingsError);
+    await expect(page.getByTestId('monitor-status-details')).not.toContainText(
       'Settings unavailable for layout regression',
     );
     await page.getByRole('button', { name: /^Ride\s+✓$/ }).click();
-    await expect(page.getByTestId('monitor-status')).toHaveCount(0);
+    await expect(page.getByTestId('monitor-status')).toContainText('Settings error');
     const four = await layout(page);
     expect(four).toEqual(withStatus);
     expect(four.cells).toHaveLength(4);
     const columns = Math.max(1, Math.min(four.grid.width >= 600 ? 4 : 2, Math.floor((four.grid.width + 14) / 140)));
     for (const name of ['Battery', 'Temperature']) {
       await chooseView(page, name);
+      await expect(page.getByTestId('monitor-status')).toContainText('Settings error');
       const three = await layout(page);
       expect(three.cells).toHaveLength(3);
       expect(three.grid.height).toBeCloseTo(four.grid.height, 0);
@@ -77,6 +88,13 @@ for (const width of [320, 390, 900])
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
+    await chooseView(page, 'Ride');
+    await expect(page.getByTestId('monitor-numbers').locator(':scope > *')).toHaveCount(4);
+    await expect(page.getByTestId('monitor-status')).toContainText('Settings error');
+    await page.getByTestId('monitor-status').click();
+    await expect(page.getByTestId('monitor-status-details')).toHaveText(settingsError);
+    await page.getByRole('button', { name: /^Ride\s+✓$/ }).click();
+    await chooseView(page, 'Temperature');
     await expect(
       page.getByTestId('monitor-number-motorTempC').getByText('Motor temperature', { exact: true }),
     ).toHaveCSS('color', 'rgb(155, 166, 182)');

@@ -3,20 +3,20 @@ import { workouts } from '../../src/services/workouts.native';
 import { unavailableWorkoutState, type WorkoutState } from '../../src/core/workouts';
 
 const native = vi.hoisted(() => ({ getWorkoutState: vi.fn(), addListener: vi.fn(), startWorkout: vi.fn() }));
-vi.mock('../../modules/cyc-bridge', () => ({ default: native }));
+vi.mock('../../modules/power-log-bridge', () => ({ default: native }));
 beforeEach(() => {
   vi.clearAllMocks();
 });
 const payload = () => ({
   ...unavailableWorkoutState,
   streams: {
-    cyc: { status: 'future' },
+    controller: { status: 'future' },
     heartRate: { status: 'unavailable' },
     gps: { status: 'weak', source: 'phone', accuracyMeters: -Infinity },
   },
 });
 const expected = {
-  cyc: { status: 'waiting' },
+  controller: { status: 'waiting' },
   heartRate: { status: 'unavailable' },
   gps: { status: 'weak', source: 'phone', accuracyMeters: null },
 };

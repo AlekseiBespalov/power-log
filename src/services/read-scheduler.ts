@@ -1,4 +1,3 @@
-/** Admission belongs to the application, not to one mounted chart. */
 export type ReadExecutionLane = 'plot' | 'statistics' | 'fast' | 'summary' | 'catalog';
 export class ReadCancelled extends Error {
   constructor() {
@@ -15,17 +14,18 @@ export class ReadDeferred extends Error {
 export function readPressure(error: unknown): boolean {
   return (
     error instanceof ReadDeferred ||
-    (error instanceof Error &&
-      /\bMONITOR_(?:ADMISSION|CACHE)_[A-Z_]+\b|\bSTORAGE_ADMISSION\b|\[(?:monitor|storage|cache)[-_ ](?:busy|admission|contention)\]|Storage work queue is full/i.test(
-        error.message,
-      ))
+    (typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error.code === 'ERR_READ_DEFERRED' || error.code === 'ERR_READ_CONTENTION' || error.code === 'ERR_STORAGE_BUSY'))
   );
 }
 type Job = {
   key: string;
   consumer: string;
   lane: ReadExecutionLane;
-  execute: () => Promise<unknown>;
+  execute: (signal: AbortSignal) => Promise<unknown>;
+  controller: AbortController;
   resolve: (value: unknown) => void;
   reject: (error: unknown) => void;
   settled: boolean;
@@ -41,7 +41,12 @@ export class ReadScheduler {
   private readonly active = new Map<ReadExecutionLane, Job>();
   private readonly pending = new Map<string, Job>();
   constructor(private readonly maximumPending = 32) {}
-  schedule<T>(lane: ReadExecutionLane, consumer: string, operation: string, execute: () => Promise<T>): Promise<T> {
+  schedule<T>(
+    lane: ReadExecutionLane,
+    consumer: string,
+    operation: string,
+    execute: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
     const key = `${consumer}/${operation}`;
     this.cancel(consumer, operation);
     return new Promise<T>((resolve, reject) => {
@@ -49,7 +54,16 @@ export class ReadScheduler {
         reject(new ReadDeferred());
         return;
       }
-      const job: Job = { key, consumer, lane, execute, resolve: value => resolve(value as T), reject, settled: false };
+      const job: Job = {
+        key,
+        consumer,
+        lane,
+        execute,
+        controller: new AbortController(),
+        resolve: value => resolve(value as T),
+        reject,
+        settled: false,
+      };
       this.pending.set(key, job);
       this.drain(lane);
     });
@@ -62,7 +76,11 @@ export class ReadScheduler {
         this.pending.delete(key);
         this.settle(job, false, new ReadCancelled());
       }
-    for (const job of this.active.values()) if (matches(job)) this.settle(job, false, new ReadCancelled());
+    for (const job of this.active.values())
+      if (matches(job)) {
+        this.settle(job, false, new ReadCancelled());
+        job.controller.abort();
+      }
   }
   getSnapshot() {
     return { active: this.active.size, pending: this.pending.size, lanes: [...this.active.keys()] };
@@ -81,7 +99,7 @@ export class ReadScheduler {
     this.active.set(lane, job);
     void (async () => {
       try {
-        this.settle(job, true, await job.execute());
+        this.settle(job, true, await job.execute(job.controller.signal));
       } catch (error) {
         this.settle(job, false, error);
       } finally {

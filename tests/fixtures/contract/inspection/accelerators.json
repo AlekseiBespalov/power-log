@@ -1,0 +1,550 @@
+{
+  "fixtures": ["F24", "F26", "F38"],
+  "statistics": [
+    {
+      "id": "owned-edge-valid",
+      "metric": "humanPowerW",
+      "startUs": "15000000",
+      "endUs": "17000000",
+      "rideEndUs": "20000000",
+      "buckets": [
+        ["15000000", "16000000"],
+        ["16000000", "17000000"]
+      ],
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "15875000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "middle",
+          "timeUs": "16000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "16125000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "3",
+      "coveredUs": "250000",
+      "integral": 25,
+      "mean": 100,
+      "minimum": "left",
+      "maximum": "left"
+    },
+    {
+      "id": "owned-edge-missing",
+      "metric": "humanPowerW",
+      "startUs": "15000000",
+      "endUs": "17000000",
+      "rideEndUs": "20000000",
+      "buckets": [
+        ["15000000", "16000000"],
+        ["16000000", "17000000"]
+      ],
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "15875000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "middle",
+          "timeUs": "16000000",
+          "value": null,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "16125000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "coveredUs": "0",
+      "integral": 0,
+      "mean": 100,
+      "minimum": "left",
+      "maximum": "left"
+    },
+    {
+      "id": "owned-edge-epoch",
+      "metric": "humanPowerW",
+      "startUs": "15000000",
+      "endUs": "17000000",
+      "rideEndUs": "20000000",
+      "buckets": [
+        ["15000000", "16000000"],
+        ["16000000", "17000000"]
+      ],
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "15875000",
+          "value": 100,
+          "kind": "telemetry",
+          "clock": "a"
+        },
+        {
+          "id": "middle",
+          "timeUs": "16000000",
+          "value": 100,
+          "kind": "telemetry",
+          "clock": "b"
+        },
+        {
+          "id": "right",
+          "timeUs": "16125000",
+          "value": 100,
+          "kind": "telemetry",
+          "clock": "b"
+        }
+      ],
+      "count": "3",
+      "coveredUs": "125000",
+      "integral": 12.5,
+      "mean": 100,
+      "minimum": "left",
+      "maximum": "left"
+    },
+    {
+      "id": "owned-edge-paused",
+      "metric": "humanPowerW",
+      "startUs": "15000000",
+      "endUs": "17000000",
+      "rideEndUs": "20000000",
+      "buckets": [
+        ["15000000", "16000000"],
+        ["16000000", "17000000"]
+      ],
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "15875000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "middle",
+          "timeUs": "16000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "16125000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "coveredUs": "0",
+      "integral": 0,
+      "mean": 100,
+      "minimum": "left",
+      "maximum": "left",
+      "lifecycle": [
+        {
+          "timeUs": "16000000",
+          "action": "pause"
+        },
+        {
+          "timeUs": "16125000",
+          "action": "resume"
+        }
+      ]
+    },
+    {
+      "id": "changed-range-boundaries",
+      "metric": "humanPowerW",
+      "startUs": "15900000",
+      "endUs": "16100000",
+      "rideEndUs": "20000000",
+      "buckets": [
+        ["15000000", "16000000"],
+        ["16000000", "17000000"]
+      ],
+      "points": [
+        {
+          "id": "left",
+          "timeUs": "15875000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "middle",
+          "timeUs": "16000000",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "right",
+          "timeUs": "16125000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "count": "1",
+      "coveredUs": "200000",
+      "integral": 20,
+      "mean": 100,
+      "minimum": "middle",
+      "maximum": "middle"
+    },
+    {
+      "id": "exact-semantic-counter",
+      "metric": "crankRevolutions",
+      "startUs": "0",
+      "endUs": "2000000",
+      "rideEndUs": "3000000",
+      "buckets": [
+        ["0", "1000000"],
+        ["1000000", "2000000"]
+      ],
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": "9007199254740993",
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": "9007199254740994",
+          "kind": "telemetry"
+        }
+      ],
+      "count": "2",
+      "coveredUs": "0",
+      "integral": null,
+      "mean": null,
+      "minimum": "a",
+      "maximum": "b"
+    }
+  ],
+  "plot": [
+    {
+      "id": "first-min-max-last",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 0,
+          "kind": "telemetry"
+        },
+        {
+          "id": "omitted",
+          "timeUs": "2000000",
+          "value": 90,
+          "kind": "telemetry"
+        },
+        {
+          "id": "c",
+          "timeUs": "3000000",
+          "value": 300,
+          "kind": "telemetry"
+        },
+        {
+          "id": "d",
+          "timeUs": "4000000",
+          "value": 100,
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b", "c", "d"],
+      "segments": [0, 0, 0, 0],
+      "startUs": "0",
+      "endUs": "5000000",
+      "buckets": [
+        ["0", "2000000"],
+        ["2000000", "5000000"]
+      ]
+    },
+    {
+      "id": "course-wrap",
+      "metric": "courseDegrees",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 350,
+          "kind": "location"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 10,
+          "kind": "location"
+        },
+        {
+          "id": "c",
+          "timeUs": "2000000",
+          "value": 190,
+          "kind": "location"
+        }
+      ],
+      "expected": ["a", "b", "c"],
+      "segments": [0, 1, 1],
+      "startUs": "0",
+      "endUs": "5000000",
+      "buckets": [
+        ["0", "2000000"],
+        ["2000000", "5000000"]
+      ]
+    },
+    {
+      "id": "missing-plot-barrier",
+      "metric": "heartRateBpm",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "missing",
+          "timeUs": "500000",
+          "value": null,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 1],
+      "startUs": "0",
+      "endUs": "5000000",
+      "buckets": [
+        ["0", "2000000"],
+        ["2000000", "5000000"]
+      ]
+    },
+    {
+      "id": "clock-segment",
+      "metric": "humanPowerW",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "clock": "a",
+          "kind": "telemetry"
+        },
+        {
+          "id": "b",
+          "timeUs": "1000000",
+          "value": 100,
+          "clock": "b",
+          "kind": "telemetry"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 1],
+      "startUs": "0",
+      "endUs": "5000000",
+      "buckets": [
+        ["0", "2000000"],
+        ["2000000", "5000000"]
+      ]
+    },
+    {
+      "id": "invalid-only-middle-bucket",
+      "metric": "heartRateBpm",
+      "startUs": "0",
+      "endUs": "4000000",
+      "buckets": [
+        ["0", "1000000"],
+        ["1000000", "3000000"],
+        ["3000000", "4000000"]
+      ],
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100,
+          "kind": "health"
+        },
+        {
+          "id": "missing",
+          "timeUs": "1000000",
+          "value": null,
+          "kind": "health"
+        },
+        {
+          "id": "invalid",
+          "timeUs": "2000000",
+          "value": 0,
+          "kind": "health"
+        },
+        {
+          "id": "b",
+          "timeUs": "3000000",
+          "value": 100,
+          "kind": "health"
+        }
+      ],
+      "expected": ["a", "b"],
+      "segments": [0, 1]
+    },
+    {
+      "id": "equal-cutoff-cache-segment-order",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "3000000",
+      "buckets": [["0", "3000000"]],
+      "points": [
+        {
+          "id": "z-closing",
+          "timeUs": "1000000",
+          "value": 100,
+          "sequence": "2",
+          "interruptionIndex": "0"
+        },
+        {
+          "id": "a-resumed",
+          "timeUs": "1000000",
+          "value": 200,
+          "sequence": "3",
+          "interruptionIndex": "1"
+        },
+        {
+          "id": "next",
+          "timeUs": "2000000",
+          "value": 300,
+          "sequence": "4",
+          "interruptionIndex": "1"
+        }
+      ],
+      "expected": ["z-closing", "a-resumed", "next"],
+      "segments": [0, 1, 1]
+    }
+  ],
+  "invalidStatistics": [
+    {
+      "id": "shifted-range",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "shiftedStartUs": "1000000",
+      "shiftedEndUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "outside-firstRaw",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "field": "firstRaw",
+      "outsideUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "outside-lastRaw",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "field": "lastRaw",
+      "outsideUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "outside-minimum",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "field": "minimum",
+      "outsideUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "outside-maximum",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "field": "maximum",
+      "outsideUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "outside-previous",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "field": "previous",
+      "outsideUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "outside-originalElapsed",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "1000000",
+      "field": "originalElapsed",
+      "outsideUs": "2000000",
+      "points": [
+        {
+          "id": "a",
+          "timeUs": "0",
+          "value": 100
+        }
+      ]
+    }
+  ]
+}

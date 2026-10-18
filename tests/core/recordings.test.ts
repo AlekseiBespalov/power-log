@@ -104,7 +104,7 @@ describe('imported ride summaries', () => {
     'counts a break inside an activity interval as a gap: %j',
     patch => {
       const samples = [row({ elapsedSeconds: 0 }), row({ elapsedSeconds: 1, ...patch }, 1)];
-      expect(summarizeRecording(samples)).toMatchObject({ coveredSeconds: 0, gapCount: 1, humanEnergyWh: 0 });
+      expect(summarizeRecording(samples)).toMatchObject({ coveredSeconds: 0, gapCount: 1, humanEnergyWh: null });
     },
   );
 
@@ -115,7 +115,7 @@ describe('imported ride summaries', () => {
       row({ elapsedSeconds: 2, humanPowerW: NaN, cadenceRpm: 90 }, 2),
     ];
     expect(summarizeRecording(samples)).toMatchObject({
-      coveredSeconds: 2,
+      coveredSeconds: 1,
       averageHumanPowerW: 100,
       averageCadenceRpm: 90,
       peakHumanPowerW: 100,
@@ -136,8 +136,32 @@ describe('imported ride summaries', () => {
     expect(summarizeRecording([row({ humanPowerW: 100 })])).toMatchObject({
       averageHumanPowerW: null,
       peakHumanPowerW: 100,
-      humanEnergyWh: 0,
+      humanEnergyWh: null,
       coveredSeconds: 0,
     });
   });
+});
+
+it('keeps an invalid imported power reading as a summary barrier', () => {
+  const samples = [100, -1, 100].map((humanPowerW, index) =>
+    row(
+      {
+        elapsedSeconds: index / 2,
+        timestamp: new Date(Date.UTC(2026, 0, 1) + index * 500).toISOString(),
+        humanPowerW,
+      },
+      index,
+    ),
+  );
+  expect(summarizeRecording(samples)).toMatchObject({
+    coveredSeconds: 0,
+    averageHumanPowerW: null,
+    humanEnergyWh: null,
+  });
+});
+
+it('preserves signed-zero originals in imported summary extrema', () => {
+  const summary = summarizeRecording([row({ humanPowerW: -0, cadenceRpm: -0 })]);
+  expect(Object.is(summary.peakHumanPowerW, -0)).toBe(true);
+  expect(Object.is(summary.peakCadenceRpm, -0)).toBe(true);
 });

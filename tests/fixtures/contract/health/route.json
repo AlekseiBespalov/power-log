@@ -1,0 +1,16 @@
+{
+"recordFields":{"providerUUIDReserve":"00000000-0000-0000-0000-000000000000","packageName":"app.powerlog.mobile","appName":"Power Log","clientRecordId":"powerlog:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee:workout","manufacturer":null,"model":"Android phone","notes":null,"title":"Power Log ride","plannedExerciseSessionId":null},
+"stringBytes":{"providerUUIDReserve":80,"packageName":44,"appName":24,"clientRecordId":112,"manufacturer":4,"model":32,"notes":4,"title":36,"plannedExerciseSessionId":4},
+"baseBytes":440,
+"cases":[
+{"name":"nested-nine","input":{"pointCount":9,"baseBytes":440,"budgetBytes":584},"expected":{"priorityIndices":[0,8,4,2,6,1,3,5,7],"selectedIndices":[0,4,8],"encodedBytes":584}},
+{"name":"full-eight-hour","input":{"sessionEndOffsetUs":"28800000000","syntheticPoints":{"count":28800,"firstOffsetUs":"0","stepUs":"1000000","originProducer":"phone","firstOriginSequence":"1","latitude":0,"longitudeCycleCount":100,"longitudeStepDegrees":1e-06,"horizontalAccuracyM":2},"baseBytes":440,"budgetBytes":900000},"expected":{"originalCount":28800,"eligibleCount":28800,"selectedCount":18740,"fullEncodedBytes":1382840,"selectedEncodedBytes":899960,"nextEncodedBytes":900008,"sortedIndicesSha256DecimalLF":"d5c2e4f4faa0e4c79c7e0466496c16bf59d38e9227a52d535ff827c228ef04a4","firstTenSelectedIndices":[0,1,2,3,4,5,6,7,8,9],"lastTenSelectedIndices":[28782,28784,28785,28787,28789,28791,28793,28795,28797,28799]}},
+{"name":"extra-laps-pause","input":{"eligibleCount":28800,"baseBytes":512,"budgetBytes":900000},"expected":{"selectedCount":18739,"selectedEncodedBytes":899984,"nextEncodedBytes":900032}},
+{"name":"lab-encoding-golden","input":{"eligibleCount":28800,"baseBytes":372,"budgetBytes":900000},"expected":{"selectedCount":18742,"selectedEncodedBytes":899988,"nextEncodedBytes":900036,"fullEncodedBytes":1382772}},
+{"name":"duplicate-end-ms-collapse","input":{"sessionStartOffsetUs":"0","sessionEndOffsetUs":"2000000","points":[{"id":"seq:phone:1","offsetUs":"0"},{"id":"seq:phone:2","offsetUs":"1000000"},{"id":"seq:phone:3","offsetUs":"1000000"},{"id":"seq:phone:4","offsetUs":"1000001"},{"id":"seq:phone:5","offsetUs":"2000000"}],"baseBytes":440},"expected":{"selectedIds":["seq:phone:1","seq:phone:2"],"selectedEncodedBytes":536,"appleAdmittedOriginalCount":5}},
+{"name":"mandatory-too-large","input":{"eligibleCount":2,"baseBytes":899905,"budgetBytes":900000},"expected":{"outcome":"unavailable:minimumRecordTooLarge"}},
+{"name":"unknown-size","input":{"eligibleCount":28800},"expected":{"outcome":"unavailable:sizeUnknown"}},
+{"name":"singleton","input":{"eligibleCount":1,"baseBytes":440,"budgetBytes":900000},"expected":{"selectedIndices":[0],"encodedBytes":488}},
+{"name":"utf16-not-utf8","input":{"texts":[null,"","Power Log","🚲"]},"expected":{"stringBytes":[4,8,24,12]}}
+]
+}

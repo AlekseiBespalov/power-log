@@ -13,8 +13,11 @@ interface MonitorPreferencesValue {
   setWorkoutOptions: MonitorPreferencesController['setWorkoutOptions'];
   setSpeedUnit: MonitorPreferencesController['setSpeedUnit'];
   setDistanceSource: MonitorPreferencesController['setDistanceSource'];
+  setBatteryConsumptionSource: MonitorPreferencesController['setBatteryConsumptionSource'];
   setHistoryRange: MonitorPreferencesController['setHistoryRange'];
   setSampleHz: MonitorPreferencesController['setSampleHz'];
+  setFitPowerSource: MonitorPreferencesController['setFitPowerSource'];
+  prepareRecording: MonitorPreferencesController['prepareRecording'];
 }
 const Context = createContext<MonitorPreferencesValue | null>(null);
 export function MonitorPreferencesProvider({ children }: { children: ReactNode }) {
@@ -32,7 +35,10 @@ export function MonitorPreferencesProvider({ children }: { children: ReactNode }
       setWorkoutOptions: controller.setWorkoutOptions,
       setSpeedUnit: controller.setSpeedUnit,
       setDistanceSource: controller.setDistanceSource,
+      setBatteryConsumptionSource: controller.setBatteryConsumptionSource,
       setSampleHz: controller.setSampleHz,
+      setFitPowerSource: controller.setFitPowerSource,
+      prepareRecording: controller.prepareRecording,
       setHistoryRange: controller.setHistoryRange,
     }),
     [snapshot, controller],

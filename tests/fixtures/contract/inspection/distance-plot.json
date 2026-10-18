@@ -1,0 +1,102 @@
+{
+  "fixtures": ["F24", "F26"],
+  "cases": [
+    {
+      "id": "connected-health-interval-300s",
+      "startUs": "0",
+      "endUs": "300000000",
+      "points": [
+        {
+          "id": "distance:g:8",
+          "timeUs": "0",
+          "value": 0,
+          "segment": 1,
+          "plotSegment": 4,
+          "startUs": "0",
+          "endUs": "300000000",
+          "tieKey": "8"
+        },
+        {
+          "id": "distance:g:9",
+          "timeUs": "300000000",
+          "value": 1500,
+          "segment": 1,
+          "plotSegment": 4,
+          "startUs": "0",
+          "endUs": "300000000",
+          "tieKey": "9"
+        }
+      ],
+      "expected": ["distance:g:8", "distance:g:9"],
+      "segments": [4, 4]
+    },
+    {
+      "id": "equal-time-numeric-plot-order",
+      "startUs": "1000000",
+      "endUs": "1000000",
+      "points": [
+        {
+          "id": "distance:g:9",
+          "timeUs": "1000000",
+          "value": 100,
+          "segment": 1,
+          "plotSegment": 7,
+          "startUs": "0",
+          "endUs": "1000000",
+          "tieKey": "9"
+        },
+        {
+          "id": "distance:g:10",
+          "timeUs": "1000000",
+          "value": 100,
+          "segment": 1,
+          "plotSegment": 7,
+          "startUs": "0",
+          "endUs": "1000000",
+          "tieKey": "10"
+        }
+      ],
+      "expected": ["distance:g:9", "distance:g:10"],
+      "segments": [7, 7]
+    },
+    {
+      "id": "numeric-viewport-predecessor",
+      "startUs": "500000",
+      "endUs": "1500000",
+      "points": [
+        {
+          "id": "distance:g:9",
+          "timeUs": "0",
+          "value": 100,
+          "segment": 1,
+          "plotSegment": 7,
+          "startUs": "0",
+          "endUs": "2000000",
+          "tieKey": "9"
+        },
+        {
+          "id": "distance:g:10",
+          "timeUs": "0",
+          "value": 100,
+          "segment": 1,
+          "plotSegment": 7,
+          "startUs": "0",
+          "endUs": "2000000",
+          "tieKey": "10"
+        },
+        {
+          "id": "distance:g:11",
+          "timeUs": "2000000",
+          "value": 200,
+          "segment": 1,
+          "plotSegment": 7,
+          "startUs": "0",
+          "endUs": "2000000",
+          "tieKey": "11"
+        }
+      ],
+      "expected": ["distance:g:10", "distance:g:11"],
+      "segments": [7, 7]
+    }
+  ]
+}

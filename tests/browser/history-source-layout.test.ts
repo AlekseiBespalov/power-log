@@ -3,6 +3,7 @@ import path from 'node:path';
 import { chromium, expect as ui, type Browser, type Page } from '@playwright/test';
 import { browserTestBundle } from '../helpers/browser-test-bundle';
 import type * as Harness from '../fixtures/history-source-layout-harness';
+import { presentationFailure } from '../../shared/js';
 
 declare global {
   interface Window {
@@ -76,19 +77,15 @@ async function sampleLayout(page: Page) {
     window.sourceSampling = true;
     function sample() {
       const summary = document.querySelector('[data-testid="ride-summary"]')!,
-        source = document.querySelector('[data-testid="ride-distance-source"]')!,
         chart = document.querySelector('[data-testid="selected-ride-chart"]')!;
-      if (!window.sourceSampling || !summary || !source || !chart) return;
+      if (!window.sourceSampling || !summary || !chart) return;
       const buttons = [...document.querySelectorAll('[role="button"]')];
       const exportButton = buttons.find(node => node.textContent === 'Export FIT')!;
       const r = summary.getBoundingClientRect(),
-        s = source.getBoundingClientRect(),
         c = chart.getBoundingClientRect();
       window.sourceFrames.push([
         r.top + scrollY,
         r.height,
-        s.top + scrollY,
-        s.height,
         c.top + scrollY,
         Number(getComputedStyle(exportButton).opacity),
       ]);
@@ -100,60 +97,50 @@ async function sampleLayout(page: Page) {
 
 describe('production saved History source layout with real RN Web', () => {
   for (const width of [320, 390, 768, 1440])
-    it(`retains layout and matching values through delayed repeated source choices at ${width}px`, async () =>
+    it(`retains layout and frozen ride values through repeated settings changes at ${width}px`, async () =>
       run(width, async page => {
-        const source = page.getByTestId('ride-distance-source');
         await frames(page);
         await sampleLayout(page);
         if (width === 390) await page.screenshot({ path: '/tmp/power-log-source-layout-gps.png', fullPage: true });
-        for (const choice of ['controller', 'gps:watch', 'auto', 'controller'] as const) {
-          const oldCaption = await source.locator('[data-testid="distance-source-caption"]').textContent();
-          const oldSummary = await page.getByTestId('ride-summary').textContent();
-          await page.evaluate(() => window.historySourceTests.delayNext());
+        const before = await page.getByTestId('ride-summary').textContent();
+        for (const choice of ['controller', 'auto', 'gps:phone', 'controller'] as const) {
           await page.evaluate(choice => window.historySourceTests.setGlobalDistanceSource(choice), choice);
-          await page.waitForFunction(choice => window.historySourceTests.phases.includes('read:' + choice), choice);
+          await frames(page, 16);
+          await ui(page.getByTestId('distance-source-caption')).toHaveCount(0);
+          expect(await page.getByTestId('ride-summary').textContent()).toBe(before);
           await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
-          await frames(page);
-          expect(await page.getByTestId('ride-summary').textContent()).toBe(oldSummary);
-          expect(await source.locator('[data-testid="distance-source-caption"]').textContent()).toBe(oldCaption);
-          await page.evaluate(() => window.historySourceTests.finishRead());
-          await ui(source.locator('[data-testid="distance-source-caption"]')).toHaveText(
-            choice === 'controller' ? 'Controller estimate' : 'GPS · Watch · Partial',
-          );
-          await ui(page.getByTestId('ride-summary')).toContainText(choice === 'controller' ? '0.90' : '0.00');
-          await frames(page);
         }
         const captured = await page.evaluate(() => {
           window.sourceSampling = false;
           return window.sourceFrames;
         });
         expect(captured.length).toBeGreaterThan(50);
-        for (let column = 0; column < 5; column++)
+        for (let column = 0; column < 3; column++)
           expect(
             Math.max(...captured.map(frame => frame[column]!)) - Math.min(...captured.map(frame => frame[column]!)),
           ).toBeLessThanOrEqual(1);
-        expect(captured.every(frame => frame[5] === 1)).toBe(true);
+        expect(captured.every(frame => frame[3] === 1)).toBe(true);
         if (width === 390)
           await page.screenshot({ path: '/tmp/power-log-source-layout-controller.png', fullPage: true });
       }));
   it('keeps read failures visible and never publishes an obsolete source response into a new ride', async () =>
     run(390, async page => {
       await page.evaluate(() => {
-        window.historySourceTests.delayNext('Source read failed');
-        window.historySourceTests.setGlobalDistanceSource('controller');
+        window.historySourceTests.delayNext('storageFailed');
+        window.historySourceTests.refresh();
       });
-      await page.waitForFunction(() => window.historySourceTests.phases.includes('read:controller'));
+      await page.waitForFunction(() => window.historySourceTests.phases.includes('read:gps:phone'));
       await page.evaluate(() => window.historySourceTests.finishRead());
-      await ui(page.getByText('Source read failed', { exact: true })).toBeVisible();
+      await ui(page.getByText(presentationFailure('storageFailed').text, { exact: true })).toBeVisible();
       await ui(page.getByTestId('ride-summary')).toContainText('0.00');
-      await ui(page.getByTestId('distance-source-caption')).toHaveText('GPS · Watch · Partial');
+      await ui(page.getByTestId('distance-source-caption')).toHaveCount(0);
       await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
       await page.evaluate(() => {
-        window.historySourceTests.delayNext('Obsolete source read');
-        window.historySourceTests.setGlobalDistanceSource('gps:watch');
+        window.historySourceTests.delayNext('storageBusy');
+        window.historySourceTests.refresh();
       });
-      await page.waitForFunction(() => window.historySourceTests.phases.includes('read:gps:watch'));
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      await page.waitForFunction(() => window.historySourceTests.phases.includes('read:gps:phone'));
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await page.evaluate(() => window.historySourceTests.finishRead());
       await page
         .getByRole('button', { name: /^Open ride,/ })
@@ -161,6 +148,38 @@ describe('production saved History source layout with real RN Web', () => {
         .click();
       await ui(page.getByTestId('ride-summary')).toBeVisible();
       await frames(page);
-      await ui(page.getByText('Obsolete source read', { exact: true })).toHaveCount(0);
+      await ui(page.getByText(presentationFailure('storageBusy').text, { exact: true })).toHaveCount(0);
     }));
 });
+
+it.each(['appleHealth', 'healthConnect'] as const)(
+  'shows %s component results without blocking local export',
+  async provider =>
+    run(390, async page => {
+      await page.evaluate(provider => window.historySourceTests.setHealthResult(provider), provider);
+      const rows = page.getByTestId('ride-health-sync');
+      const providerName = provider === 'appleHealth' ? 'Apple Health' : 'Health Connect';
+      await ui(rows).toContainText(provider === 'appleHealth' ? 'Apple Health saved' : 'Health Connect saved');
+      await ui(rows).toContainText(
+        `Cycling cadence unavailable: Allow Power Log to save workouts in ${providerName} permissions.`,
+      );
+      await ui(rows).not.toContainText('syncing');
+      if (provider === 'healthConnect') {
+        await ui(page.getByTestId('ride-summary')).toContainText('Avg heart rate (backfilled)');
+        await ui(page.getByTestId('ride-summary')).toContainText('Active energy (backfilled)');
+      }
+      await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
+      await page.evaluate(provider => window.historySourceTests.setHealthResult(provider, true), provider);
+      await ui(rows).not.toContainText('Watch data synced');
+      await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
+      await ui(rows).toContainText(
+        `Cycling cadence unavailable: Allow Power Log to save workouts in ${providerName} permissions.`,
+      );
+    }),
+);
+
+it('shows where the Watch-owned ride keeps detailed Health results', async () =>
+  run(390, async page => {
+    await page.evaluate(() => window.historySourceTests.setWatchHealthResult());
+    await ui(page.getByTestId('ride-health-sync')).toContainText('Detailed Health results are on the Watch.');
+  }));

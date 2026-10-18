@@ -2,7 +2,7 @@ import { Link } from 'expo-router';
 import { Text, View } from 'react-native';
 import { AppShell } from '../../components/app-shell';
 import { ExternalLink } from '../../components/external-link';
-import { Body, Card, Heading, colors } from '../../components/ui';
+import { Body, Card, Heading, colors, type, lineHeight, MIN_TOUCH_TARGET } from '../../components/ui';
 import { APP_VERSION, ISSUES_URL } from '../../core/app-info';
 
 export function PrivacyScreen() {
@@ -18,7 +18,13 @@ export function PrivacyPolicy() {
     <View testID="privacy-screen" style={{ width: '100%', maxWidth: 760, alignSelf: 'center', gap: 16 }}>
       <Link
         href="/settings"
-        style={{ color: colors.accent, fontSize: 14, lineHeight: 20, paddingVertical: 12, minHeight: 44 }}
+        style={{
+          color: colors.accent,
+          fontSize: type.body,
+          lineHeight: lineHeight.body,
+          paddingVertical: 12,
+          minHeight: MIN_TOUCH_TARGET,
+        }}
       >
         Back to Settings
       </Link>
@@ -37,13 +43,14 @@ export function PrivacyPolicy() {
           serial. Enabled GPS and available Health measurements become part of the local ride.
         </Body>
         <Body>
-          iPhone and Android keep rides and live chart data in local databases, settings in app files, and temporary
-          imports and exports in app storage. An exported file stays there for at least 24 hours so the app you share it
-          with can read it; Power Log deletes it the next time it starts or exports after that. iPhone also remembers
-          the selected Bluetooth device and the identifiers, model and firmware of controllers it has recognized
-          (disconnecting does not clear that list), and keeps bounded connection logs. Apple Watch keeps its own ride
-          database, recording settings and files waiting to transfer to iPhone. Synchronization and recovery records
-          help complete interrupted rides and transfers. Native apps also write operational errors to system logs.
+          iPhone and Android keep recorded rides in local databases and pre-Start previews in bounded memory, settings
+          in app files, and temporary imports and exports in app storage. An exported file stays there for at least 24
+          hours so the app you share it with can read it; Power Log deletes it the next time it starts or exports after
+          that. iPhone also remembers the selected Bluetooth device and the identifiers, model and firmware of
+          controllers it has recognized (disconnecting does not clear that list), and keeps bounded connection logs.
+          Apple Watch keeps recording settings and a bounded in-memory buffer of observations for its paired iPhone. The
+          phone keeps the ride archive; interrupted rides retain only committed data. Native apps also write operational
+          errors to system logs.
         </Body>
         <Body>
           Depending on your Apple backup settings, iPhone app data, including rides with their Health readings and
@@ -54,11 +61,11 @@ export function PrivacyPolicy() {
         <Body>
           The website keeps saved rides in this browser’s IndexedDB and settings in localStorage. CSV files you open are
           read on your device. Exports are prepared in this site’s private browser file storage where the browser offers
-          it, and deleted from it the next time the site starts or exports after 24 hours. Browser recording requires an
-          active page and does not use GPS, Apple Health or Health Connect. Starting a browser recording asks the
-          browser to keep this site’s storage persistent, which reduces automatic eviction; clearing site data still
-          removes it. Browser data is not encrypted by Power Log; it is accessible to that browser profile and other
-          code allowed to run on the same website origin.
+          it, and deleted from it the next time the site starts or exports after 24 hours. Browser recording requires a
+          visible page. Optional GPS records your route locally; the browser does not use Apple Health or Health
+          Connect. Starting a browser recording asks the browser to keep this site’s storage persistent, which reduces
+          automatic eviction; clearing site data still removes it. Browser data is not encrypted by Power Log; it is
+          accessible to that browser profile and other code allowed to run on the same website origin.
         </Body>
       </Card>
       <Card>
@@ -73,11 +80,11 @@ export function PrivacyPolicy() {
           permission to scan for Bluetooth devices, even if GPS recording is off.
         </Body>
         <Body>
-          With GPS route enabled, the phone or Watch recording the ride uses location for your route, distance, speed
-          and elevation. It stores coordinates, times, altitude, direction and accuracy readings. Native recording can
-          continue with the screen locked or the app in the background. iPhone and Watch request location access while
-          in use; iPhone enables background location during recording. Android requires precise location and runs a
-          foreground recording service. The website does not request location.
+          With GPS route enabled, the phone uses location for your route, distance, speed and elevation. It stores
+          coordinates, times, altitude, direction and accuracy readings. Native recording can continue with the screen
+          locked or the app in the background. iPhone requests location access while in use and enables background
+          location during recording. Android requires precise location and runs a foreground recording service. The
+          website requests browser location only when GPS recording is enabled.
         </Body>
         <Body>
           GPS and Health saving choices apply when you start a ride. Change them before starting the next ride. You can
@@ -87,28 +94,28 @@ export function PrivacyPolicy() {
       <Card>
         <Heading level={2}>Apple Health</Heading>
         <Body>
-          For phone-owned rides with Health saving enabled, Power Log requests read and write access to workouts, heart
-          rate, active and resting energy, and cycling distance. On iOS 17 or newer the permission set also includes
-          cycling power, cadence and speed. Route permission is included when GPS is enabled. These permissions support
-          recording, displaying and saving your ride; phone-owned Health saving requires iOS 26 or newer.
+          When Apple Health is used, Power Log requests read access to workouts, routes, heart rate, active and resting
+          energy, cycling distance, power, cadence and speed, breathing rate, blood oxygen, heart rate variability,
+          physical effort and cycling functional threshold power. Supported systems also provide workout effort and
+          estimated effort scores. Readings depend on your permissions and what the device provides.
         </Body>
         <Body>
-          With Health saving enabled, Apple Watch requests read and write access to workouts, heart rate, active and
+          The device running the native workout also requests write access to workouts, routes, heart rate, active and
           resting energy, cycling distance, power, cadence and speed, breathing rate, blood oxygen and heart rate
-          variability. It also requests read access to physical effort and cycling functional threshold power, plus
-          workout effort and estimated effort scores on watchOS 11 or newer. Route permission is included when GPS is
-          enabled. Readings depend on your permissions and what the device provides.
+          variability. The Watch writes Watch-assisted workouts; iPhone writes other Apple Health workouts. Route
+          permission can be requested even when GPS is off; route points are saved only when GPS recording is enabled.
         </Body>
         <Body>
-          Watch Health reads cover measurements from the Watch during the ride and records associated with the saved
-          workout, including their timestamps, source details and workout metadata. Power Log keeps these locally and
-          transfers them to iPhone. It writes CYC rider power and cadence to the workout; motor electrical power is not
+          Watch measurements are transferred to iPhone with their original times. Ride-related Health measurements can
+          also be read after Finish or an explicit refresh, retaining their sample identities, times and source details
+          locally. Power Log writes controller rider power and cadence to the workout; motor electrical power is not
           written as rider power.
         </Body>
         <Body>
           A Watch ride still needs Health workout write permission to run its sensor session when Save to Apple Health
-          is off. It still requests read access and keeps available sensor readings in the local ride, but does not save
-          that workout to Apple Health. A phone-owned ride with Health saving off does not need Health access.
+          is off. It still requests read access and forwards available sensor readings to the phone, but does not save
+          that workout to Apple Health. The native session may still produce system Health samples or Activity credit. A
+          ride without Watch assistance and with Health saving off does not need Health access.
         </Body>
       </Card>
       <Card>
@@ -116,8 +123,9 @@ export function PrivacyPolicy() {
         <Body>
           When Health Connect saving is enabled, Power Log requests permission to write completed cycling sessions,
           rider power, cadence and distance. With GPS enabled it also requests speed and exercise route write access. It
-          does not request permission to read your Health Connect records. Your saved Health copy is separate from the
-          local ride.
+          also requests optional read permissions for supported ride-related physiological measurements. New records are
+          collected at Finish, 15 minutes and 60 minutes later, or when you select Refresh Health data. Imported
+          measurements keep their original times. Your saved Health copy is separate from the local ride.
         </Body>
       </Card>
       <Card>
@@ -133,9 +141,9 @@ export function PrivacyPolicy() {
         <Heading level={2}>What leaves the app</Heading>
         <Body>
           Starting a Watch ride enables automatic transfers between your Watch and paired iPhone: ride controls, bike
-          measurements, Health readings, GPS points and saved recording files. Choosing Health saving lets the app write
-          the permitted ride data to Apple Health or Health Connect. Those system services manage their own copies and
-          any sharing or synchronization you enable there.
+          measurements, Health readings and GPS points. Choosing Health saving lets the app write the permitted ride
+          data to Apple Health or Health Connect. Those system services manage their own copies and any sharing or
+          synchronization you enable there.
         </Body>
         <Body>
           Export buttons create a FIT file or a ride-data ZIP. On iPhone and Android, sharing opens the system share
@@ -159,10 +167,9 @@ export function PrivacyPolicy() {
       <Card>
         <Heading level={2}>Keeping and deleting data</Heading>
         <Body>
-          Saved rides stay locally until you delete them or their storage is removed. Use Delete ride in History. For
-          Watch rides, iPhone also requests deletion on the Watch; that device must reconnect to complete it. Small
-          deletion records remain to prevent a delayed transfer from restoring a deleted ride. Live chart storage and
-          connection logs are cleaned up separately.
+          Saved rides stay locally until you delete them or their storage is removed. Use Delete ride in History. The
+          Watch does not maintain a second ride archive. Pre-Start previews disappear when the app stops; connection
+          logs are bounded separately.
         </Body>
         <Body>
           Deleting a ride does not delete an Apple Health or Health Connect copy, a downloaded or shared file, or
@@ -196,7 +203,7 @@ export function PrivacyPolicy() {
         </Body>
         <ExternalLink href={ISSUES_URL}>GitHub Issues</ExternalLink>
       </Card>
-      <Text style={{ color: colors.muted, fontSize: 12 }}>Power Log {APP_VERSION}</Text>
+      <Text style={{ color: colors.muted, fontSize: type.caption }}>Power Log {APP_VERSION}</Text>
     </View>
   );
 }

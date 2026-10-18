@@ -1,6 +1,8 @@
 import type { TelemetrySample } from '../../src/core/types';
+import { controllerProtocol } from '../../shared/js';
+import { telemetrySample } from '../../src/core/telemetry';
+import { controllerReadingFrame } from '../support/controller-frames';
 
-/** Deterministic synthetic telemetry for tests; never used by the app. */
 export function syntheticSample(
   seconds: number,
   sequence: number,
@@ -11,15 +13,9 @@ export function syntheticSample(
   const watts = 75 + effort * 135 + Math.sin(seconds * 0.7) * 9;
   const voltage = 53.6 - seconds * 0.0002;
   const current = 4 + effort * 7;
-  return {
-    timestamp,
-    elapsedSeconds: seconds,
-    sequence,
-    interruptionIndex: 0,
-    connectionEpoch: 'synthetic-connection',
+  const frame = controllerReadingFrame({
     humanPowerW: Math.round(watts),
     cadenceRpm: cadence,
-    motorInputPowerW: voltage * current,
     batteryVoltageV: voltage,
     batteryCurrentA: current,
     motorCurrentA: current * 1.7,
@@ -34,5 +30,10 @@ export function syntheticSample(
     assistLevel: 2,
     raceMode: 0,
     speedRaw: 0,
+  });
+  const reply = controllerProtocol().feed(new Int8Array(frame), null).replies[0]!;
+  return {
+    ...telemetrySample(reply.reading!, { timestamp, elapsedSeconds: seconds, sequence }),
+    connectionEpoch: 'synthetic-connection',
   };
 }

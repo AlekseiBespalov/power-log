@@ -1,10 +1,18 @@
-import { decimateChart, findChartSample } from './chart';
-import { chartVisibleRange } from './chart-viewport';
+import {
+  AnalyticsItem,
+  InspectionMetricQuery,
+  InspectionOriginalInput,
+  InspectionMetricPolicy,
+  InspectionTargetInput,
+  analyticsTimeUs,
+  inspectionHeldTail,
+} from '../../shared/js';
+import { inspectionPoint, inspectionStatistics, monitorInspectionItem, plotMonitorItems } from './monitor-inspection';
+import { isDistanceMetric } from './distance';
+import { isConsumptionMetric } from './consumption';
 import {
   metricById,
-  metricAllowsMean,
   MONITOR_METRICS,
-  type MonitorMetric,
   type MonitorChange,
   type MonitorChangesRequest,
   type MonitorChangesResult,
@@ -21,8 +29,6 @@ import {
   type MonitorStatsResult,
 } from './monitor';
 import {
-  MAX_SAMPLE_GAP_SECONDS,
-  REQUIRED_SAMPLE_COLUMNS,
   sampleAcquisition,
   samplePresentationTime,
   type MonotonicMapping,
@@ -30,27 +36,28 @@ import {
   type TelemetrySample,
 } from './types';
 
-const telemetryFields = new Set<string>([...REQUIRED_SAMPLE_COLUMNS, 'controllerSpeedMps']);
-type MonitorSample = TelemetrySample & { activeInterval?: number | null };
-export const metricIntegrationGapSeconds = (metric: MonitorMetric) =>
-  telemetryFields.has(metric.id) ? MAX_SAMPLE_GAP_SECONDS : metric.gapSeconds;
+type MonitorSample = TelemetrySample & {
+  activeInterval?: number | null;
+  clockEpoch?: string;
+  observationId?: string;
+  producer?: string;
+  inspection?: { kind?: string; declared?: string[]; selected?: boolean; accuracy?: number; exactValue?: string };
+};
+type PreparedOriginal = { item: AnalyticsItem; input: InspectionOriginalInput; sample: MonitorSample; time: bigint };
+type PreparedMetric = {
+  through: number;
+  originals: PreparedOriginal[];
+  valid: PreparedOriginal[];
+  identities: Map<string, PreparedOriginal>;
+  interruptions: Map<string, Set<number>>;
+};
 
 const CACHE_BYTES = 4 * 1024 * 1024;
 const JOURNAL_ENTRIES = 256;
-const pointOrder = (a: MonitorPoint, b: MonitorPoint) =>
-  a.elapsedSeconds - b.elapsedSeconds || (a.observationId ?? '').localeCompare(b.observationId ?? '');
-const originalRange = (points: readonly MonitorPoint[], view: { start: number; end: number }) => {
-  const range = chartVisibleRange(points, view);
-  while (range.start > 0 && points[range.start - 1]!.elapsedSeconds === points[range.start]!.elapsedSeconds)
-    range.start--;
-  while (range.end < points.length && points[range.end]!.elapsedSeconds <= view.end) range.end++;
-  return range;
-};
-
-/** Browser and imported CSV analysis. Originals and their identities survive every read. */
 export class TelemetryMonitor implements MonitorSource {
   private samples: MonitorSample[] = [];
-  private cache = new Map<string, { processed: number; points: MonitorPoint[]; gap: boolean }>();
+  private cache = new Map<string, PreparedMetric>();
+  private identities = new Set<string>();
   private renderCache = new Map<string, { series: MonitorPoint[]; bytes: number }>();
   private cacheBytes = 0;
   private available = new Set<string>();
@@ -67,6 +74,7 @@ export class TelemetryMonitor implements MonitorSource {
     readonly live: boolean,
     samples: readonly MonitorSample[] = [],
     private readonly now = () => performance.now() / 1000,
+    private readonly evidence: { lifecycle?: AnalyticsItem[]; rideEndSeconds?: number } = {},
   ) {
     for (const sample of samples) this.append(sample);
   }
@@ -74,6 +82,7 @@ export class TelemetryMonitor implements MonitorSource {
     this.session++;
     this.samples = [];
     this.cache.clear();
+    this.identities.clear();
     this.renderCache.clear();
     this.cacheBytes = 0;
     this.available.clear();
@@ -89,8 +98,11 @@ export class TelemetryMonitor implements MonitorSource {
     return this.session ? `${this.key}:session:${this.session}` : this.key;
   }
   append(sample: MonitorSample, delivery?: SampleDelivery) {
-    const last = this.samples[this.samples.length - 1];
-    if (this.live && last && sample.elapsedSeconds <= last.elapsedSeconds) return;
+    const identity =
+      sample.observationId ??
+      `${sample.producer ?? 'controller'}:${sample.connectionEpoch}:${sample.sequence}:${sample.timestamp}:${sample.elapsedSeconds}`;
+    if (this.live && this.identities.has(identity)) return;
+    this.identities.add(identity);
     this.samples.push(sample);
     const time = sample.elapsedSeconds,
       previousEnd = this.end,
@@ -141,37 +153,81 @@ export class TelemetryMonitor implements MonitorSource {
   private envelope(generation: number) {
     return { generation, sourceId: this.sourceId, revision: String(this.samples.length) };
   }
-  private original(point: MonitorPoint) {
-    return this.samples[Number(point.observationId!.slice(-16))]!;
+  private point(index: number, id: string): MonitorPoint {
+    const sample = this.samples[index]!;
+    const value = sample[id as keyof TelemetrySample];
+    return {
+      elapsedSeconds: sample.elapsedSeconds,
+      timestamp: sample.timestamp,
+      value: typeof value === 'number' ? value : NaN,
+      ...(sample.inspection?.exactValue === undefined ? {} : { exactValue: sample.inspection.exactValue }),
+      observationId: sample.observationId ?? `${this.sourceId}:${String(index).padStart(16, '0')}`,
+    };
   }
-  private points(id: string) {
-    const cached = this.cache.get(id) ?? { processed: 0, points: [], gap: false };
-    let needsSort = false;
-    for (let i = cached.processed; i < this.samples.length; i++) {
-      const sample = this.samples[i]!,
-        value = sample[id as keyof TelemetrySample],
-        elapsedSeconds = sample.elapsedSeconds;
-      if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isFinite(elapsedSeconds)) {
-        cached.gap = true;
-        continue;
-      }
-      if (cached.points.length && elapsedSeconds <= cached.points[cached.points.length - 1]!.elapsedSeconds)
-        needsSort = true;
-      const previous = cached.points[cached.points.length - 1];
-      cached.points.push({
-        elapsedSeconds,
-        timestamp: sample.timestamp,
-        value,
-        observationId: `${this.sourceId}:${String(i).padStart(16, '0')}`,
-        startsSegment:
-          !previous || cached.gap || this.original(previous).interruptionIndex !== sample.interruptionIndex,
-      });
-      cached.gap = false;
+  private lowerBound(items: PreparedOriginal[], time: bigint, after = false): number {
+    let lo = 0,
+      hi = items.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (items[mid]!.time < time || (after && items[mid]!.time === time)) lo = mid + 1;
+      else hi = mid;
     }
-    if (needsSort) cached.points.sort(pointOrder);
-    cached.processed = this.samples.length;
-    this.cache.set(id, cached);
-    return cached.points;
+    return lo;
+  }
+  private prepare(id: string): PreparedMetric {
+    let cached = this.cache.get(id);
+    if (!cached) {
+      cached = { through: 0, originals: [], valid: [], identities: new Map(), interruptions: new Map() };
+      this.cache.set(id, cached);
+    }
+    for (let index = cached.through; index < this.samples.length; index++) {
+      const sample = this.samples[index]!;
+      if (!Object.hasOwn(sample, id)) continue;
+      const item = monitorInspectionItem(id, this.point(index, id), {
+        ...sample.inspection,
+        clockEpoch: sample.clockEpoch,
+        connectionEpoch: sample.connectionEpoch,
+        interruptionIndex: sample.interruptionIndex,
+        sequence: index + 1,
+        producer: sample.producer,
+      });
+      const input = new InspectionOriginalInput(item);
+      if (!input.isReading(id) || sample.inspection?.selected === false) continue;
+      const original = { item, input, sample, time: BigInt(item.collectionUs) };
+      const insert = (items: PreparedOriginal[]) => {
+        if (!items.length || items[items.length - 1]!.time <= original.time) items.push(original);
+        else items.splice(this.lowerBound(items, original.time, true), 0, original);
+      };
+      insert(cached.originals);
+      cached.identities.set(item.observationId, original);
+      const interruptions = cached.interruptions.get(item.collectionUs) ?? new Set<number>();
+      interruptions.add(item.interruptionIndex);
+      cached.interruptions.set(item.collectionUs, interruptions);
+      if (input.plotValid(id)) insert(cached.valid);
+    }
+    cached.through = this.samples.length;
+    return cached;
+  }
+  private items(id: string): AnalyticsItem[] {
+    return this.prepare(id).originals.map(original => original.item);
+  }
+  private candidates(cached: PreparedMetric, time: bigint, anchor?: string): PreparedOriginal[] {
+    const selected = new Set<PreparedOriginal>();
+    const addGroup = (item: PreparedOriginal | undefined) => {
+      if (!item) return;
+      for (
+        let i = this.lowerBound(cached.originals, item.time);
+        i < cached.originals.length && cached.originals[i]!.time === item.time;
+        i++
+      )
+        selected.add(cached.originals[i]!);
+    };
+    addGroup(cached.valid[this.lowerBound(cached.valid, time, true) - 1]);
+    addGroup(cached.valid[this.lowerBound(cached.valid, time)]);
+    if (anchor) addGroup(cached.identities.get(anchor));
+    return [...selected].sort((a, b) =>
+      a.time < b.time ? -1 : a.time > b.time ? 1 : Number(a.item.sequence) - Number(b.item.sequence),
+    );
   }
   async describeSource({ generation }: MonitorDescribeRequest): Promise<MonitorDescribeResult> {
     const first = this.samples[0];
@@ -194,24 +250,21 @@ export class TelemetryMonitor implements MonitorSource {
     if (request.expectedRevision !== envelope.revision) return { ...envelope, status: 'retry' };
     const view = { start: request.startSeconds ?? this.start, end: request.endSeconds ?? this.end };
     const series: Record<string, MonitorPoint[]> = {};
-    // Geometry is byte bounded; originals remain in the separate local source store.
     const buckets = Math.max(
       1,
       Math.min(request.buckets ?? request.pixelWidth ?? 240, Math.floor(4096 / Math.max(1, request.metrics.length))),
     );
     for (const id of request.metrics) {
-      const metric = metricById(id);
+      if (isDistanceMetric(id) || isConsumptionMetric(id)) {
+        series[id] = [];
+        continue;
+      }
+      const metric = metricById(id) ?? new InspectionMetricPolicy(id);
       if (!metric) continue;
-      const points = this.points(id),
-        key = `${id}:${envelope.revision}:${view.start}:${view.end}:${buckets}`;
+      const key = `${id}:${envelope.revision}:${view.start}:${view.end}:${buckets}`;
       let rendered = this.renderCache.get(key);
       if (!rendered) {
-        const range = originalRange(points, view),
-          visible = points.slice(range.start, range.end);
-        const geometry = decimateChart(visible, point => point.value, buckets, metric.gapSeconds).map(point => ({
-          ...visible[point.sampleIndex]!,
-          startsSegment: point.startsSegment,
-        }));
+        const geometry = plotMonitorItems(id, this.items(id), view.start, view.end, buckets);
         const bytes = JSON.stringify(geometry).length * 2;
         rendered = { series: geometry, bytes };
         while (this.renderCache.size && this.cacheBytes + bytes > CACHE_BYTES) {
@@ -233,8 +286,9 @@ export class TelemetryMonitor implements MonitorSource {
   ): Promise<import('./monitor').MonitorLatestResult> {
     const points = Object.fromEntries(
       request.metrics.map(id => {
-        const originals = this.points(id);
-        return [id, originals[originals.length - 1] ?? null];
+        if (!metricById(id)) return [id, null];
+        const point = this.samples.length ? this.point(this.samples.length - 1, id) : null;
+        return [id, point && Number.isFinite(point.value) ? point : null];
       }),
     );
     return {
@@ -256,73 +310,55 @@ export class TelemetryMonitor implements MonitorSource {
     const points: Record<string, MonitorPoint | null> = {},
       gaps: Record<string, boolean> = {};
     for (const id of request.metrics) {
-      const metric = metricById(id);
-      if (!metric) continue;
-      if (request.anchor?.metric === id) {
-        // Source IDs encode the original append index: anchored lookup stays O(1)
-        // even when a reduced chart represents hundreds of thousands of rows.
-        const prefix = `${this.sourceId}:`,
-          identity = request.anchor.observationId;
-        const suffix = identity.startsWith(prefix) ? identity.slice(prefix.length) : '';
-        const index = /^\d{16}$/.test(suffix) ? Number(suffix) : -1;
-        const sample = Number.isSafeInteger(index) ? this.samples[index] : undefined;
-        const value = sample?.[id as keyof TelemetrySample],
-          elapsedSeconds = sample?.elapsedSeconds ?? NaN;
-        const point: MonitorPoint | null =
-          sample &&
-          typeof value === 'number' &&
-          Number.isFinite(value) &&
-          Math.abs(elapsedSeconds - request.seconds) <= 1e-6
-            ? { elapsedSeconds, timestamp: sample.timestamp, value, observationId: identity }
-            : null;
-        points[id] = point;
-        gaps[id] = point === null;
+      if (isDistanceMetric(id) || isConsumptionMetric(id)) {
+        points[id] = null;
+        gaps[id] = true;
         continue;
       }
-      const originals = this.points(id);
-      // Pointer-to-time arithmetic can land a fraction of a microsecond beyond a gap endpoint.
-      // Snap only that numerical tolerance to an original, without rounding its stored time.
-      let low = 0,
-        high = originals.length;
-      while (low < high) {
-        const middle = (low + high) >>> 1;
-        if (originals[middle]!.elapsedSeconds < request.seconds) low = middle + 1;
-        else high = middle;
-      }
-      const endpoint = [originals[low - 1], originals[low]]
-        .filter((point): point is MonitorPoint => !!point && Math.abs(point.elapsedSeconds - request.seconds) <= 1e-6)
-        .sort(
-          (a, b) =>
-            Math.abs(a.elapsedSeconds - request.seconds) - Math.abs(b.elapsedSeconds - request.seconds) ||
-            pointOrder(a, b),
-        )[0];
-      const selected = findChartSample(originals, endpoint?.elapsedSeconds ?? request.seconds, metric.gapSeconds);
-      const tail = originals[originals.length - 1];
-      const acquiredAt = this.liveAcquiredAt[id];
-      const receivedAt = acquiredAt == null ? null : this.mapMonotonicSeconds(acquiredAt);
-      let point =
-        selected.sample ??
-        (this.live &&
-        receivedAt !== null &&
-        this.now() >= receivedAt &&
-        this.now() - receivedAt < Math.min(6, metric.gapSeconds) &&
-        tail &&
-        this.original(tail).interruptionIndex === this.samples[this.samples.length - 1]!.interruptionIndex &&
-        request.seconds > tail.elapsedSeconds &&
-        request.seconds - tail.elapsedSeconds < metric.gapSeconds
-          ? tail
-          : null);
-      if (point) {
-        let index = selected.sampleIndex ?? originals.length - 1;
-        const interruptionIndex = this.original(point).interruptionIndex;
-        while (
-          index > 0 &&
-          originals[index - 1]!.elapsedSeconds === point.elapsedSeconds &&
-          this.original(originals[index - 1]!).interruptionIndex === interruptionIndex
-        )
-          index--;
-        point = originals[index]!;
-      }
+      const metric = metricById(id) ?? new InspectionMetricPolicy(id);
+      if (!metric) continue;
+      const cached = this.prepare(id);
+      const anchor = request.anchor?.metric === id ? request.anchor.observationId : undefined;
+      const timeUs = analyticsTimeUs(request.seconds);
+      const originals = this.candidates(cached, BigInt(timeUs), anchor);
+      const tail = cached.valid[cached.valid.length - 1];
+      const acquired = this.liveAcquiredAt[id];
+      const mapped = acquired == null ? null : this.mapMonotonicSeconds(acquired);
+      const trailing =
+        this.live &&
+        tail !== undefined &&
+        inspectionHeldTail(
+          id,
+          tail.item.observationId,
+          tail.item.collectionElapsedSeconds,
+          this.point(Number(tail.item.sequence) - 1, id).value,
+          tail.item.observationId,
+          mapped,
+          this.now(),
+          request.seconds,
+        ) !== null;
+      const query = new InspectionMetricQuery(
+        id,
+        '0',
+        analyticsTimeUs(this.evidence.rideEndSeconds ?? this.end),
+        analyticsTimeUs(this.evidence.rideEndSeconds ?? this.end),
+        this.evidence.lifecycle ?? [],
+        new InspectionTargetInput(timeUs, anchor ?? null, anchor ? timeUs : null).withNearbyOriginal(
+          id,
+          originals.map(original => original.input),
+        ),
+        null,
+        trailing,
+      );
+      for (const original of originals)
+        query.appendPreparedInspection(
+          original.input,
+          true,
+          !this.evidence.lifecycle,
+          (cached.interruptions.get(original.item.collectionUs)?.size ?? 0) > 1,
+        );
+      const selected = query.result().selection;
+      const point = selected ? inspectionPoint(selected) : null;
       points[id] = point;
       gaps[id] = point === null;
     }
@@ -335,65 +371,26 @@ export class TelemetryMonitor implements MonitorSource {
     const start = Math.min(request.startSeconds, request.endSeconds),
       end = Math.max(request.startSeconds, request.endSeconds);
     for (const id of request.metrics) {
-      const metric = metricById(id);
+      if (isDistanceMetric(id) || isConsumptionMetric(id)) continue;
+      const metric = metricById(id) ?? new InspectionMetricPolicy(id);
       if (!metric) continue;
-      const points = this.points(id),
-        range = originalRange(points, { start, end }),
-        visible = points.slice(range.start, range.end);
-      const selected = visible.filter(
-        point =>
-          point.elapsedSeconds >= start && point.elapsedSeconds <= end && this.original(point).activeInterval !== null,
+      const reducer = new InspectionMetricQuery(
+        id,
+        analyticsTimeUs(start),
+        analyticsTimeUs(end),
+        analyticsTimeUs(this.evidence.rideEndSeconds ?? this.end),
+        this.evidence.lifecycle ?? [],
+        null,
+        null,
+        false,
       );
-      let coveredSeconds = 0,
-        integral = 0;
-      const timeline = visible.filter(
-        (point, i) =>
-          i === 0 ||
-          point.startsSegment ||
-          point.elapsedSeconds !== visible[i - 1]!.elapsedSeconds ||
-          this.original(point).interruptionIndex !== this.original(visible[i - 1]!).interruptionIndex,
-      );
-      for (let i = 1; i < timeline.length; i++) {
-        const a = timeline[i - 1]!,
-          b = timeline[i]!,
-          dt = b.elapsedSeconds - a.elapsedSeconds;
-        if (dt <= 0 || dt > metricIntegrationGapSeconds(metric)) continue;
-        const before = this.original(a),
-          after = this.original(b);
-        if (
-          b.startsSegment ||
-          before.activeInterval === null ||
-          before.interruptionIndex !== after.interruptionIndex ||
-          before.connectionEpoch !== after.connectionEpoch
-        )
-          continue;
-        const left = Math.max(start, a.elapsedSeconds),
-          right = Math.min(end, b.elapsedSeconds);
-        if (right <= left) continue;
-        const valueAt = (time: number) => a.value + ((b.value - a.value) * (time - a.elapsedSeconds)) / dt;
-        coveredSeconds += right - left;
-        integral +=
-          metric.kind === 'step' ? a.value * (right - left) : ((valueAt(left) + valueAt(right)) * (right - left)) / 2;
+      for (const { item, sample } of this.prepare(id).originals) {
+        if (this.evidence.lifecycle) reducer.append(item, true);
+        else reducer.appendRetained(item, sample.activeInterval === null ? null : (sample.activeInterval ?? 0));
       }
-      if (!selected.length && !coveredSeconds) continue;
-      statistics[id] = {
-        ...(selected.length
-          ? {
-              min: selected.reduce((a, b) => (b.value < a.value ? b : a)),
-              max: selected.reduce((a, b) => (b.value > a.value ? b : a)),
-            }
-          : {}),
-        count: selected.length,
-        coveredSeconds,
-        ...(metricAllowsMean(metric)
-          ? {
-              ...(selected.length
-                ? { sampleMean: selected.reduce((sum, point) => sum + point.value, 0) / selected.length }
-                : {}),
-              integral,
-            }
-          : {}),
-      };
+      const result = reducer.result();
+      if (result.outcome.startsWith('numericOverflow')) throw new Error(result.outcome);
+      if (result.statistics) statistics[id] = inspectionStatistics(result.statistics);
     }
     const firstEndpoint = request.includeEndpoints
       ? this.inspection({ ...request, seconds: request.startSeconds, anchor: request.startAnchor })

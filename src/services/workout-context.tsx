@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CatalogRequest } from '../core/catalog';
+import { RideFailureError, presentFailure } from '../core/failures';
 import {
   unavailableWorkoutState,
   type WorkoutMetadata,
@@ -11,7 +12,8 @@ import { appIsForeground, subscribeAppVisibility } from './app-visibility';
 import { useHistoryCatalog } from './use-history-catalog';
 import { WorkoutStateDelivery, workoutHistoryRevision } from './workout-state-delivery';
 import { useMonitorPreferences } from './monitor-preferences';
-import { WorkoutActions, type WorkoutActionKind } from './workout-actions';
+import { WorkoutActions, type WorkoutActionKind, type WorkoutActionFlight } from './workout-actions';
+import { finishExternalRide } from './workout-external-actions';
 
 const loadHistory = (request: CatalogRequest) => workouts.list(request);
 
@@ -38,40 +40,50 @@ function useWorkoutController() {
   const [actions] = useState(() => new WorkoutActions(setActionState));
   const { busy, recoveryAvailable, error } = actionState;
   const settings = useMonitorPreferences();
-  const options = settings.preferences.workoutOptions,
+  const options = useMemo(
+      () => ({
+        ...settings.preferences.workoutOptions,
+        distanceSource: settings.preferences.distanceSource,
+        batteryConsumptionSource: settings.preferences.batteryConsumptionSource,
+      }),
+      [settings.preferences.workoutOptions, settings.preferences.distanceSource],
+    ),
     setOptions = settings.setWorkoutOptions,
     optionsReady = settings.ready;
   const [permissions, setPermissions] = useState<WorkoutPermissionStatus | null>(null);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const permissionRequest = useRef(0);
-  const refreshPermissions = useCallback(async () => {
+  const refreshPermissions = useCallback(async (current: () => boolean = () => true) => {
     const request = ++permissionRequest.current;
     try {
       const next = await workouts.getPermissions();
-      if (request === permissionRequest.current) {
+      if (current() && request === permissionRequest.current) {
         setPermissions(next);
         setPermissionsError(null);
       }
     } catch (error) {
-      if (request === permissionRequest.current) {
+      if (current() && request === permissionRequest.current) {
         setPermissions(null);
-        setPermissionsError(error instanceof Error ? error.message : String(error));
+        setPermissionsError(presentFailure(error).text);
       }
     }
   }, []);
-  const refresh = useCallback(async () => {
-    const request = stateDelivery.beginRefresh();
-    // Lifecycle recovery must not wait for catalog or authorization queries.
-    void refreshRecords().catch(() => {});
-    const state = await workouts.getState();
-    stateDelivery.finishRefresh(request, state);
-    setReady(true);
-    if (state.supported && appIsForeground()) void refreshPermissions();
-    else {
-      setPermissions(null);
-      setPermissionsError(null);
-    }
-  }, [refreshPermissions, refreshRecords, stateDelivery]);
+  const refresh = useCallback(
+    async (current: () => boolean = () => true) => {
+      const request = stateDelivery.beginRefresh();
+      void refreshRecords().catch(() => {});
+      const state = await workouts.getState();
+      if (!current()) return;
+      stateDelivery.finishRefresh(request, state);
+      setReady(true);
+      if (state.supported && appIsForeground()) await refreshPermissions(current);
+      else {
+        setPermissions(null);
+        setPermissionsError(null);
+      }
+    },
+    [refreshPermissions, refreshRecords, stateDelivery],
+  );
   useEffect(() => {
     let mounted = true;
     let catalogRevision: string | undefined;
@@ -107,9 +119,24 @@ function useWorkoutController() {
     };
   }, [actions, refresh, refreshRecords, setHistoryActive, stateDelivery]);
   const run = useCallback(
-    (operation: () => Promise<unknown>, kind?: WorkoutActionKind) => actions.run(operation, refresh, kind),
+    (operation: (flight: WorkoutActionFlight) => Promise<unknown>, kind?: WorkoutActionKind) =>
+      actions.run(operation, refresh, kind),
     [actions, refresh],
   );
+  const finishRide = useCallback(
+    async (id: string, discard: boolean) => {
+      const request = state.externalFinish;
+      if (request) {
+        if (!workouts.finishExternal) throw new RideFailureError('actionUnavailable');
+        await finishExternalRide(state, request, id, discard, workouts.finishExternal);
+      } else throw new RideFailureError('rideChanged');
+    },
+    [state],
+  );
+  const cancelFinish = useCallback(() => {
+    const request = state.externalFinish;
+    if (request && workouts.cancelExternal) void run(() => workouts.cancelExternal!(request)).catch(() => {});
+  }, [run, state.externalFinish]);
   return useMemo(
     () => ({
       state,
@@ -135,10 +162,14 @@ function useWorkoutController() {
       permissions,
       permissionsError,
       refreshPermissions,
+      finishRide,
+      cancelFinish,
       clearError: actions.clearError,
     }),
     [
       actions,
+      finishRide,
+      cancelFinish,
       state,
       ready,
       records,

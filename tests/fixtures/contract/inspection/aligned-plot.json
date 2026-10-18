@@ -1,0 +1,92 @@
+{
+  "cases": [
+    {
+      "id": "clean-node-crosses-fifteen-second-pixel",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "30000000",
+      "buckets": 2,
+      "alignedSlotUs": "16000000",
+      "nodeStartUs": "8000000",
+      "nodeEndUs": "16000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "1",
+          "timeUs": "8000000",
+          "value": 100
+        },
+        {
+          "id": "minimum",
+          "reference": "2",
+          "timeUs": "10000000",
+          "value": 0
+        },
+        {
+          "id": "omitted",
+          "reference": "3",
+          "timeUs": "11000000",
+          "value": 90
+        },
+        {
+          "id": "maximum",
+          "reference": "4",
+          "timeUs": "12000000",
+          "value": 300
+        },
+        {
+          "id": "last",
+          "reference": "5",
+          "timeUs": "15875000",
+          "value": 100
+        }
+      ],
+      "expected": ["a", "minimum", "maximum", "last"],
+      "segments": [0, 0, 0, 0]
+    },
+    {
+      "id": "clean-terminal-node-with-nominal-padding",
+      "metric": "humanPowerW",
+      "startUs": "0",
+      "endUs": "28845000000",
+      "buckets": 480,
+      "alignedSlotUs": "64000000",
+      "nodeStartUs": "28800000000",
+      "nodeEndUs": "28864000000",
+      "points": [
+        {
+          "id": "a",
+          "reference": "1",
+          "timeUs": "28840000000",
+          "value": 100
+        },
+        {
+          "id": "minimum",
+          "reference": "2",
+          "timeUs": "28841000000",
+          "value": 0
+        },
+        {
+          "id": "omitted",
+          "reference": "3",
+          "timeUs": "28842000000",
+          "value": 90
+        },
+        {
+          "id": "maximum",
+          "reference": "4",
+          "timeUs": "28843000000",
+          "value": 300
+        },
+        {
+          "id": "last",
+          "reference": "5",
+          "timeUs": "28844875000",
+          "value": 100
+        }
+      ],
+      "expected": ["a", "minimum", "maximum", "last"],
+      "segments": [0, 0, 0, 0]
+    }
+  ]
+}

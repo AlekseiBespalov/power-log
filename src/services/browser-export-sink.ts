@@ -47,10 +47,7 @@ function sinkError(error: unknown): ExportError {
       'sink',
       "There isn't enough browser storage for this export. Free some space and try again.",
     );
-  return new ExportError(
-    'sink',
-    `Power Log couldn't write the export file.${error instanceof Error ? ` ${error.message}` : ''}`,
-  );
+  return new ExportError('sink', "Power Log couldn't write the export file.");
 }
 
 // Continuous work is measured from the first slice after the event loop last ran a timer task.

@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { inspectionFixtures, fixturePoint } from '../support/inspection-fixtures';
+import { describe, expect, it, vi } from 'vitest';
+import { InspectionOriginalInput } from '../../shared/js';
 import { metricById, type MonitorData, type MonitorPoint } from '../../src/core/monitor';
 import {
   groupMonitorMetrics,
@@ -14,6 +16,8 @@ import {
   stepMonitorCursor,
 } from '../../src/core/monitor-chart';
 import { monitorRasterScene } from '../../src/core/monitor-raster';
+import { TelemetryMonitor } from '../../src/core/monitor-data';
+import { syntheticCsvSample } from './csv-fixture';
 
 const point = (elapsedSeconds: number, value: number, startsSegment?: boolean): MonitorPoint => ({
   elapsedSeconds,
@@ -33,6 +37,44 @@ const data = (series: MonitorData['series'] = {}): MonitorData => ({
 const identity = (value: number) => value;
 
 describe('monitor plot geometry', () => {
+  it('follows the cursor using plotted originals while an older exact lookup is pending', () => {
+    const points = [point(0, 10, true), point(40, 20, false), point(50, 30, true), point(80, 40, false)];
+    const input = {
+      ...data({ controllerEnergyWh: points }),
+      selection: { controllerEnergyWh: points[0]! },
+      selectionSeconds: 0,
+      selectionPending: true,
+    };
+    expect(monitorSelection(input, metric('controllerEnergyWh'), 40)).toBe(points[1]);
+    expect(monitorSelection(input, metric('controllerEnergyWh'), 45)).toBeNull();
+    expect(monitorSelection(input, metric('controllerEnergyWh'), 80)).toBe(points[3]);
+    expect(
+      monitorSelection(
+        { ...input, selection: { controllerEnergyWh: null }, selectionSeconds: 40, selectionPending: false },
+        metric('controllerEnergyWh'),
+        40,
+      ),
+    ).toBeNull();
+  });
+  it.each([
+    'distanceMeters',
+    'gpsDistanceMeters',
+    'controllerDistanceMeters',
+    'controllerEnergyWh',
+    'controllerChargeAh',
+    'calculatedEnergyWh',
+    'calculatedChargeAh',
+  ])('inspects rendered %s totals without treating them as raw measurements', id => {
+    const points = [point(0, 0, true), point(40, 5, false), point(40.1, 5, true), point(80, 8, false)];
+    const selectedMetric = metric(id);
+    expect(nearestMonitorPoint(points, 40, selectedMetric)).toBe(points[1]);
+    expect(nearestMonitorPoint(points, 20, selectedMetric)).toBe(points[0]);
+    expect(nearestMonitorPoint(points, 40.05, selectedMetric)).toBeNull();
+    // Every visible chart renders cursor/reference readouts, including while exact queries are pending.
+    const input = data({ [id]: points });
+    expect(monitorSelection(input, selectedMetric, 40)).toBe(points[1]);
+    expect(monitorSelection(input, selectedMetric, 80, 'reference')).toBe(points[3]);
+  });
   it.each(['km/h', 'mph'] as const)(
     'overlays GPS and controller speed in %s without combining their samples or raw fallback',
     unit => {
@@ -142,9 +184,9 @@ describe('monitor plot geometry', () => {
     expect(monitorLineGeometry(points, metric('batteryVoltageV'), identity, identity).path).toBe(
       'M0.00,40.00 L40.00,45.00 M40.10,42.00 L80.00,41.00',
     );
-    expect(nearestMonitorPoint(points, 20, 6)).toBe(points[0]);
-    expect(nearestMonitorPoint(points, 40.05, 6)).toBeNull();
-    expect(nearestMonitorPoint(points, 40.1, 6)).toBe(points[2]);
+    expect(nearestMonitorPoint(points, 20, metricById('humanPowerW')!)).toBe(points[0]);
+    expect(nearestMonitorPoint(points, 40.05, metricById('humanPowerW')!)).toBeNull();
+    expect(nearestMonitorPoint(points, 40.1, metricById('humanPowerW')!)).toBe(points[2]);
   });
 
   it('infers six-second gaps only when a backend marker is absent', () => {
@@ -152,8 +194,8 @@ describe('monitor plot geometry', () => {
     expect(monitorLineGeometry(points, metric('humanPowerW'), identity, identity).path).toBe(
       'M0.00,0.00 L6.00,1.00 M12.00,2.00 L12.00,3.00',
     );
-    expect(nearestMonitorPoint(points, 8, 6)).toBeNull();
-    expect(nearestMonitorPoint(points, 2, 6)).toBe(points[0]);
+    expect(nearestMonitorPoint(points, 8, metricById('humanPowerW')!)).toBeNull();
+    expect(nearestMonitorPoint(points, 2, metricById('humanPowerW')!)).toBe(points[0]);
   });
 
   it('breaks invalid and reversed input without bridging it; renders isolated valid observations', () => {
@@ -260,23 +302,79 @@ describe('monitor inspection and comparison', () => {
 
   it('never selects outside recorded time or in a gap, including a live display-only tail', () => {
     const points = [point(1, 20), point(2, 30), point(10, 80, true)];
-    expect(nearestMonitorPoint(points, 0, 6)).toBeNull();
-    expect(nearestMonitorPoint(points, 2.1, 6)).toBeNull();
-    expect(nearestMonitorPoint(points, 10.1, 6)).toBeNull();
-    expect(monitorTailSeconds(points[2], 15.999, 15, 10, 15.999, points[2])).toBe(15.999);
-    expect(monitorTailSeconds(points[2], 16, 15, 10, 16, points[2])).toBeNull();
-    expect(monitorTailSeconds(points[2], 9, 6, 10, 9, points[2])).toBeNull();
-    expect(monitorTailSeconds(points[2], Infinity, 6, 10, Infinity, points[2])).toBeNull();
-    expect(nearestMonitorPoint(points, 15, 6)).toBeNull();
+    expect(nearestMonitorPoint(points, 0, metricById('humanPowerW')!)).toBeNull();
+    expect(nearestMonitorPoint(points, 2.1, metricById('humanPowerW')!)).toBeNull();
+    expect(nearestMonitorPoint(points, 10.1, metricById('humanPowerW')!)).toBeNull();
+    expect(monitorTailSeconds(points[2], 15.999, metricById('humanPowerW')!, 10, 15.999, points[2])).toBe(15.999);
+    expect(monitorTailSeconds(points[2], 16, metricById('humanPowerW')!, 10, 16, points[2])).toBeNull();
+    expect(monitorTailSeconds(points[2], 9, metricById('humanPowerW')!, 10, 9, points[2])).toBeNull();
+    expect(monitorTailSeconds(points[2], Infinity, metricById('humanPowerW')!, 10, Infinity, points[2])).toBeNull();
+    expect(nearestMonitorPoint(points, 15, metricById('humanPowerW')!)).toBeNull();
     expect(points).toHaveLength(3);
   });
 
   it('absorbs sub-microsecond pointer roundoff at a gap edge without filling the gap', () => {
     const points = [point(0, 0), point(2, 40), point(8, 160, true)];
-    expect(nearestMonitorPoint(points, 2 + 1e-12, 6)).toBe(points[1]);
-    expect(nearestMonitorPoint(points, 8 - 1e-12, 6)).toBe(points[2]);
-    expect(nearestMonitorPoint(points, 2.00001, 6)).toBeNull();
-    expect(nearestMonitorPoint(points, 7.99999, 6)).toBeNull();
+    expect(nearestMonitorPoint(points, 2 + 1e-12, metricById('humanPowerW')!)).toBe(points[1]);
+    expect(nearestMonitorPoint(points, 8 - 1e-12, metricById('humanPowerW')!)).toBe(points[2]);
+    expect(nearestMonitorPoint(points, 2.00001, metricById('humanPowerW')!)).toBeNull();
+    expect(nearestMonitorPoint(points, 7.99999, metricById('humanPowerW')!)).toBeNull();
+  });
+
+  it('inspects the original at the visible gap edge after zoom and pan', async () => {
+    const startedAt = '2026-09-08T00:00:00.000Z';
+    const samples = [0, 1, 2, 8, 9, 10].map((elapsedSeconds, sequence) => ({
+      ...syntheticCsvSample(),
+      elapsedSeconds,
+      sequence,
+      timestamp: new Date(Date.parse(startedAt) + elapsedSeconds * 1000).toISOString(),
+      humanPowerW: 100 + sequence * 20,
+      motorInputPowerW: 200 + sequence * 40,
+    }));
+    const source = new TelemetryMonitor('visible-edge', false, samples);
+    const request = { generation: 1, expectedRevision: '6', metrics: ['humanPowerW', 'motorInputPowerW'] };
+    for (const view of [
+      { start: 2.5, end: 7.5 },
+      { start: 3.5, end: 8.5 },
+      { start: 4.999999919521155, end: 8.333333252854489 },
+    ]) {
+      const plot = await source.readPlot({ ...request, startSeconds: view.start, endSeconds: view.end });
+      expect(plot.status).toBe('ok');
+      if (plot.status !== 'ok') throw new Error('Missing plot');
+      const snapshot: MonitorData = {
+        ...data(plot.series),
+        startedAt,
+        domain: { start: 0, end: 10 },
+        plotViewport: view,
+      };
+      const seconds = 7.999999855138079;
+      const inspected = await source.inspectAt({ ...request, seconds });
+      expect(inspected).toMatchObject({
+        status: 'ok',
+        points: {
+          humanPowerW: { value: 160, elapsedSeconds: 8, timestamp: '2026-09-08T00:00:08.000Z' },
+          motorInputPowerW: { value: 320, elapsedSeconds: 8, timestamp: '2026-09-08T00:00:08.000Z' },
+        },
+      });
+      if (inspected.status !== 'ok') throw new Error('Missing inspection');
+      expect(
+        monitorSelection(
+          { ...snapshot, selectionSeconds: seconds, selection: inspected.points },
+          metric('humanPowerW'),
+          seconds,
+        ),
+      ).toMatchObject({ value: 160, elapsedSeconds: 8, timestamp: '2026-09-08T00:00:08.000Z' });
+      if (view.start > 4)
+        expect(monitorSelection(snapshot, metric('humanPowerW'), seconds)).toMatchObject({
+          value: 160,
+          elapsedSeconds: 8,
+          timestamp: '2026-09-08T00:00:08.000Z',
+        });
+      expect(await source.inspectAt({ ...request, seconds: 7.99999 })).toMatchObject({
+        status: 'ok',
+        points: { humanPowerW: null, motorInputPowerW: null },
+      });
+    }
   });
 
   it('advances only the live time axis without extending historical selection or source data', () => {
@@ -286,7 +384,16 @@ describe('monitor inspection and comparison', () => {
     expect(monitorDisplayDomain(input, true, NaN)).toEqual(input.domain);
     expect(input.domain.end).toBe(100);
     expect(monitorSelection(input, metric('humanPowerW'), 105)).toBeNull();
-    expect(monitorTailSeconds(input.series.humanPowerW![1], 110, 6, 110, 110, input.series.humanPowerW![1])).toBeNull();
+    expect(
+      monitorTailSeconds(
+        input.series.humanPowerW![1],
+        110,
+        metricById('humanPowerW')!,
+        110,
+        110,
+        input.series.humanPowerW![1],
+      ),
+    ).toBeNull();
   });
 
   it('keyboard inspection starts within the viewport and can advance to available points beyond it', () => {
@@ -311,3 +418,40 @@ describe('monitor inspection and comparison', () => {
     expect(stepMonitorCursor(input, [metric('humanPowerW')], null, -1, view)).toBe(2);
   });
 });
+
+for (const row of inspectionFixtures('selection').filter(row => !row.lifecycle && !row.allowTrailing && !row.anchor)) {
+  it(`runs rendered original selection fixture ${row.id}`, () => {
+    const originals = row.points.map(fixturePoint);
+    const selected = nearestMonitorPoint(originals, Number(row.timeUs) / 1e6, metric(row.metric));
+    expect(selected?.observationId ?? null).toBe(row.expected);
+    if (selected) expect(originals).toContain(selected);
+  });
+}
+
+it.each(['humanPowerW', 'batteryVoltageV'])(
+  'selects among 4096 %s vertices after preparing at most four groups',
+  id => {
+    const points = Array.from({ length: 4096 }, (_, index) => ({
+      elapsedSeconds: index / 8,
+      observationId: `vertex:${index}`,
+      timestamp: new Date(Date.UTC(2026, 0, 1) + index * 125).toISOString(),
+      value: id === 'humanPowerW' ? index % 300 : 48 + (index % 10) / 100,
+      startsSegment: index === 0,
+    }));
+    const chart: MonitorData = {
+      sourceId: 'vertices',
+      startedAt: points[0]!.timestamp,
+      domain: { start: 0, end: points.at(-1)!.elapsedSeconds },
+      series: { [id]: points },
+      statistics: {},
+    };
+    const preparation = vi.spyOn(InspectionOriginalInput.prototype, 'plotValid');
+    try {
+      expect(monitorSelection(chart, metric(id), 256.03)).toBe(points[2048]);
+      expect(preparation.mock.calls.length).toBeLessThanOrEqual(4);
+    } finally {
+      preparation.mockRestore();
+    }
+    expect(monitorSelection(chart, metric(id), 256.03 + 29 / 8)).toBe(points[2077]);
+  },
+);

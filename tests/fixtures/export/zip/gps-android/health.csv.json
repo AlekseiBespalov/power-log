@@ -1,3 +1,3 @@
 [
-  "timestamp,startTimestamp,elapsedSeconds,activeInterval,source,sourceApp,metric,value,unit,kind,sampleCount,sampleId"
+  "timestamp,startTimestamp,elapsedSeconds,activeInterval,source,metric,value,unit,kind,sampleCount,provider,parentId,memberIndex,dataOrigin,originalEventId,originalEndTimestamp,logicalKey,targetEventId,originRevision,valueBits,evidence"
 ]

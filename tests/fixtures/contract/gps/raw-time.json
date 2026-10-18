@@ -1,0 +1,61 @@
+{
+  "fixtures": ["F03", "F15", "F38"],
+  "cases": [
+    {
+      "id": "raw-future",
+      "fix": "2026-01-01T00:00:20.000000900Z",
+      "receipt": "2026-01-01T00:00:20.000000000Z",
+      "uptime": 20,
+      "mapped": false
+    },
+    {
+      "id": "raw-age-15-inclusive",
+      "fix": "2026-01-01T00:00:05.000000100Z",
+      "receipt": "2026-01-01T00:00:20.000000100Z",
+      "uptime": 20,
+      "mapped": true,
+      "acquisition": 5,
+      "elapsedUs": "5000000",
+      "uncertain": false
+    },
+    {
+      "id": "raw-age-over-15",
+      "fix": "2026-01-01T00:00:05.000000100Z",
+      "receipt": "2026-01-01T00:00:20.000000101Z",
+      "uptime": 20,
+      "mapped": false
+    },
+    {
+      "id": "raw-age-under-15",
+      "fix": "2026-01-01T00:00:05.000000101Z",
+      "receipt": "2026-01-01T00:00:20.000000100Z",
+      "uptime": 20,
+      "mapped": true,
+      "acquisition": 5.000000001,
+      "elapsedUs": "5000000",
+      "uncertain": false
+    },
+    {
+      "id": "raw-initial-wall-barrier",
+      "fix": "2026-01-01T00:00:21.000000001Z",
+      "receipt": "2026-01-01T00:00:21.000000001Z",
+      "uptime": 20,
+      "mapped": true,
+      "acquisition": 20,
+      "elapsedUs": "20000000",
+      "uncertain": true
+    },
+    {
+      "id": "raw-subsequent-wall-barrier",
+      "prime": "2026-01-01T00:00:20.000000900Z",
+      "primeUptime": 20,
+      "fix": "2026-01-01T00:00:31.000000901Z",
+      "receipt": "2026-01-01T00:00:31.000000901Z",
+      "uptime": 30,
+      "mapped": true,
+      "acquisition": 30,
+      "elapsedUs": "30000000",
+      "uncertain": true
+    }
+  ]
+}

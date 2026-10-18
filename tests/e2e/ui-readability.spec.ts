@@ -1,10 +1,11 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { crc16Xmodem, UART_WRITE } from '../../src/core/protocol';
+import { UART_WRITE } from '../../src/services/controller-gatt';
+import { framePayload } from '../support/controller-frames';
 import fixture from '../fixtures/protocol.json';
+import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 
 async function syntheticBike(page: Page) {
-  const payload = Uint8Array.from(Buffer.from(fixture.identity.payloadHex, 'hex')),
-    crc = crc16Xmodem(payload);
+  const identity = framePayload(Uint8Array.from(Buffer.from(fixture.identity.payloadHex, 'hex')));
   await page.addInitScript(
     ({ identity, telemetry, writerID }) => {
       class Characteristic extends EventTarget {
@@ -36,7 +37,7 @@ async function syntheticBike(page: Page) {
           },
           disconnect() {
             this.connected = false;
-            device.dispatchEvent(new Event('gattserverdisconnected'));
+            void Promise.resolve().then(() => device.dispatchEvent(new Event('gattserverdisconnected')));
           },
         },
       });
@@ -46,7 +47,7 @@ async function syntheticBike(page: Page) {
       });
     },
     {
-      identity: [2, payload.length, ...payload, crc >> 8, crc & 255, 3],
+      identity: [...identity],
       telemetry: [...Buffer.from(fixture.telemetry[3]!.frameHex!, 'hex')],
       writerID: UART_WRITE,
     },
@@ -126,13 +127,20 @@ test('full metric labels fit narrow number cells without moving value baselines'
 test('Finish and Delete keep their text and actions reachable in a short window', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await syntheticBike(page);
+  const preferences = defaultMonitorPreferences();
+  preferences.workoutOptions.recordGPS = false;
+  await page.addInitScript(
+    preferences => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences)),
+    JSON.parse(monitorPreferencesJson(preferences)),
+  );
   await page.goto('/');
   await page.getByTestId('ride-setup').click();
-  await page.getByRole('button', { name: 'Find bike', exact: true }).click();
+  await page.getByTestId('ride-setup-sheet').getByTestId('setup-find-bike').click();
   await page.getByRole('button', { name: /^Connect CYC/ }).click();
-  await expect(page.getByTestId('bike-connection-status')).toContainText('Connected');
+  await expect(page.getByTestId('ride-setup-sheet').getByTestId('bike-connection-status')).toContainText('Connected');
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByTestId('start-ride').filter({ visible: true }).click();
+  await expect(page.getByTestId('ride-controls').getByTestId('ride-state-badge')).toHaveText('Running');
   await page.getByRole('button', { name: 'Finish', exact: true }).click();
   await page.setViewportSize({ width: 760, height: 240 });
   let dialog = await boundedDialog(page, 'finish-ride-sheet', 24);
@@ -177,14 +185,17 @@ test('app and History headers keep enlarged text and navigation inside320px', as
   const toolbar = page.getByTestId('history-toolbar');
   await settled(toolbar);
   await doubleText(toolbar);
+  await toolbar.getByRole('button', { name: 'History actions', exact: true }).click();
+  const menu = page.getByTestId('history-actions-menu');
+  await doubleText(menu);
   for (const name of ['Refresh', 'Open CSV']) {
-    const button = toolbar.getByRole('button', { name, exact: true });
+    const button = menu.getByRole('button', { name, exact: true });
     const box = (await button.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(320);
     expect(box.height).toBeGreaterThanOrEqual(44);
   }
-  await toolbar.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await menu.getByRole('button', { name: 'Refresh', exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
 });
 

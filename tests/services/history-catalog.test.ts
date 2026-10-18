@@ -8,6 +8,7 @@ import {
 } from '../../src/core/catalog';
 import { afterCatalogCursor } from '../support/catalog';
 import { HistoryCatalog } from '../../src/services/history-catalog';
+import { presentationFailure } from '../../shared/js';
 
 const row = (i: number, prefix = 'ride'): CatalogEntry => ({
   id: `${prefix}-${String(i).padStart(4, '0')}`,
@@ -131,9 +132,16 @@ describe('catalog error dismissal', () => {
       read = source(rows),
       catalog = new HistoryCatalog(read);
     await catalog.refresh();
-    read.mockRejectedValueOnce(new Error('Catalog unavailable'));
-    await expect(catalog.refresh()).rejects.toThrow('Catalog unavailable');
-    expect(catalog.getSnapshot().error).toBe('Catalog unavailable');
+    read.mockRejectedValueOnce(
+      Object.assign(
+        new Error('BridgeException: Workout storage is unavailable. (at PowerLogBridge/WorkoutEngine.swift:2330)'),
+        {
+          code: 'storageFailed',
+        },
+      ),
+    );
+    await expect(catalog.refresh()).rejects.toThrow('BridgeException');
+    expect(catalog.getSnapshot().error).toBe(presentationFailure('storageFailed').text);
     catalog.clearError();
     expect(catalog.getSnapshot()).toMatchObject({ error: null, records: rows });
     expect(read).toHaveBeenCalledTimes(2);
@@ -183,4 +191,29 @@ describe('partial catalog results', () => {
       error: null,
     });
   });
+});
+
+it('backs off busy catalog pages with a cap and resets on refresh', async () => {
+  vi.useFakeTimers();
+  const read = vi.fn().mockRejectedValue({ code: 'ERR_STORAGE_BUSY' });
+  const catalog = new HistoryCatalog<CatalogEntry>(read);
+  try {
+    await catalog.refresh();
+    for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+      const count = read.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(read).toHaveBeenCalledTimes(count);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(read).toHaveBeenCalledTimes(count + 1);
+    }
+    await catalog.refresh();
+    const count = read.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(999);
+    expect(read).toHaveBeenCalledTimes(count);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(read).toHaveBeenCalledTimes(count + 1);
+  } finally {
+    catalog.setActive(false);
+    vi.useRealTimers();
+  }
 });

@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { MonitorChartGridProps } from './monitor-chart-grid.types';
-import { colors } from './ui';
+import { colors, MIN_TOUCH_TARGET } from './ui';
 
 export function MonitorChartGrid({ items, columns, onMove }: MonitorChartGridProps) {
   const [dragged, setDragged] = useState<string | null>(null);
@@ -80,8 +80,8 @@ export function MonitorChartGrid({ items, columns, onMove }: MonitorChartGridPro
               top: 4,
               right: 4,
               zIndex: 1,
-              width: 36,
-              height: 36,
+              width: MIN_TOUCH_TARGET,
+              height: MIN_TOUCH_TARGET,
               border: 0,
               borderRadius: 6,
               background: 'transparent',

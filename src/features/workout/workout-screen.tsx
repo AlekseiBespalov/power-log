@@ -1,103 +1,213 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { presentationRecoveryStopOffered } from '../../../shared/js';
+import { createContext, useContext, useState, useMemo, type ReactNode } from 'react';
 import { bikeDisplayName } from '../../core/bikes';
-import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
-import { Body, Button, Chip, colors, formatDuration, Metric, styles } from '../../components/ui';
+import { Body, Button, Chip, colors, formatDuration, Metric, styles, type, Pressable } from '../../components/ui';
 import { Icon } from '../../components/icon';
 import { ModalDialog } from '../../components/modal-dialog';
+import { useMonitorPreferences } from '../../services/monitor-preferences';
 import { effectiveWorkoutOptions, workoutInProgress } from '../../core/workouts';
-import { workoutPermissionAction } from '../../core/workout-permissions';
+import { failurePresentation } from '../../core/failures';
+import { workoutPermissionAction } from '../../services/workout-permission-action';
 import {
   workoutFinishPresentation,
-  workoutHealthPresentation,
+  workoutOwnershipPresentation,
   workoutSourcePresentation,
+  workoutHealthResultPresentation,
+  workoutDistanceSelectionLabel,
+  workoutStartReadiness,
 } from '../../core/workout-presentation';
 import { bikeConnectionLabel } from '../../core/telemetry-display';
 import { haptics } from '../../services/haptics';
 import { useSession } from '../../services/session-context';
 import { useWorkout } from '../../services/workout-context';
 import { workouts } from '../../services/workouts';
+import { externalRideDecision } from '../../services/workout-external-actions';
 import type { WorkoutActionKind } from '../../services/workout-actions';
+import {
+  RideControlActions,
+  browserDiscardAvailable,
+  type PresentedRideAction,
+  type RideHaptic,
+} from '../../services/ride-control-actions';
 
 const phaseChips: Record<string, string> = {
   preparing: 'Starting',
-  running: 'Recording',
+  running: 'Running',
   paused: 'Paused',
-  recoverable: 'Needs attention',
+  interrupted: 'Needs attention',
   finishing: 'Finishing',
   completed: 'Saved',
   failed: 'Failed',
 };
 
+const failureText = (code: string | null | undefined) => (code ? failurePresentation(code).text : null);
+
+function rideHaptic(outcome: RideHaptic) {
+  switch (outcome) {
+    case 'success':
+      haptics.success();
+      break;
+    case 'warning':
+      haptics.warning();
+      break;
+    case 'impact':
+      haptics.impact();
+      break;
+    case 'lightImpact':
+      haptics.impact('light');
+      break;
+  }
+}
+
 function useRideControlState() {
   const workout = useWorkout(),
-    session = useSession();
+    session = useSession(),
+    settings = useMonitorPreferences();
   const { state, busy } = workout;
-  const finish = workoutFinishPresentation(state);
-  const options = effectiveWorkoutOptions({ ...workout.options, sampleHz: session.hz }, state.capabilities);
-  const health = workoutHealthPresentation(workout.options, state.capabilities);
-  const { useWatch, recordGPS } = options;
+  const [controls] = useState(() => new RideControlActions(rideHaptic));
+  const finish = useMemo(() => workoutFinishPresentation(state), [state]);
+  const options = useMemo(
+    () => effectiveWorkoutOptions({ ...workout.options, sampleHz: session.hz }, state.capabilities),
+    [workout.options, session.hz, state.capabilities],
+  );
+  const healthResult = useMemo(
+    () => workoutHealthResultPresentation({ ...state, healthProvider: state.capabilities.healthProvider ?? undefined }),
+    [state],
+  );
   const [setup, setSetup] = useState(false);
-  const [finishTarget, setFinishTarget] = useState<string | null>(null);
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const confirmationIdentity = JSON.stringify([
+    state.id,
+    ['running', 'paused'].includes(state.phase) ? 'active' : state.phase,
+  ]);
+  const [localFinish, setLocalFinish] = useState<{ target: string; identity: string } | null>(null);
+  const localFinishTarget = localFinish?.identity === confirmationIdentity ? localFinish.target : null;
+  const externalFinish = state.externalFinish;
+  const finishTarget = externalFinish?.rideId ?? localFinishTarget;
+  const setFinishTarget = (target: string | null) => {
+    setLocalFinish(target === null ? null : { target, identity: confirmationIdentity });
+    if (target === null && externalFinish) workout.cancelFinish();
+  };
+  const [discardTarget, setDiscardTarget] = useState<string | null>(null);
+  if (localFinish && localFinish.identity !== confirmationIdentity) {
+    setLocalFinish(null);
+    setDiscardTarget(null);
+  }
+  const finishConfirmationKey = externalFinish?.controlToken ?? localFinish?.identity ?? null;
+  const confirmDiscard = discardTarget !== null && discardTarget === finishConfirmationKey;
+  const setConfirmDiscard = (confirm: boolean) => setDiscardTarget(confirm ? finishConfirmationKey : null);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
-  const errorMessage = workout.error ?? state.error;
-  const active = workoutInProgress(state.phase);
-  const bikeDisplay = session.display;
+  const errorMessage = workout.error ?? state.failure?.message ?? null;
+  const active =
+    workoutInProgress(state.phase) ||
+    Boolean(state.id && (state.pendingAction === 'discard' || state.pendingAction === 'stop'));
+  const bikeDisplay = active ? session.display : session.state.status === 'connected' ? 'live' : 'unavailable';
   const bikeName = bikeDisplayName({
     id: session.state.deviceId,
     name: session.state.deviceName,
     controllerModel: session.state.controllerModel,
   });
   const bikeReady =
-    (session.adapter.kind === 'native' || Platform.OS === 'web') &&
-    (session.state.status === 'connected' || bikeDisplay === 'held');
-  const sources = workoutSourcePresentation(state, options, bikeReady);
-  const bikePresentation =
-    active && bikeDisplay !== 'unavailable'
-      ? { ...sources.bike, label: 'Receiving samples', tone: 'ready' as const }
-      : sources.bike;
-  const disabled = busy || Boolean(state.pendingAction);
-  const recoveryBusy = busy && !workout.recoveryAvailable;
-  const canRequestStop = ['preparing', 'recoverable'].includes(state.phase) || !state.pendingAction;
-  const permission = workoutPermissionAction(workout.permissions, options);
+    (session.adapter.kind === 'native' || Platform.OS === 'web') && session.state.status === 'connected';
+  const bikeDisplayReady = bikeReady || (active && bikeDisplay === 'held');
+  const sources = useMemo(
+    () => workoutSourcePresentation(state, options, bikeDisplayReady, bikeDisplay),
+    [state, options, bikeDisplayReady, bikeDisplay],
+  );
+  const bikePresentation = sources.bike;
+  const ownershipMessage = workoutOwnershipPresentation(state);
+  const recoveryBusy = (busy && !workout.recoveryAvailable) || Boolean(state.foreignOwner);
+  const recoveryActionBusy = busy && !workout.recoveryAvailable;
+  const adapterBusy = (action: PresentedRideAction) => (action === 'stopUnconfirmed' ? recoveryActionBusy : busy);
+  const availability = useMemo(
+    () => ({
+      pause: controls.availability('pause', state, null, busy),
+      resume: controls.availability('resume', state, null, busy),
+      lap: controls.availability('lap', state, null, busy),
+      stop: controls.availability('stop', state, state.id, busy),
+      discard: controls.availability('discard', state, state.id, busy),
+      stopUnconfirmed: controls.availability('stopUnconfirmed', state, null, recoveryActionBusy),
+    }),
+    [controls, state, busy, recoveryActionBusy],
+  );
+  const permission = useMemo(
+    () => workoutPermissionAction(workout.permissions, options),
+    [workout.permissions, options],
+  );
   const permissionVisible =
-    (workout.permissions !== null || workout.permissionsError !== null) && permission.action !== 'none';
-  const action = (operation: () => Promise<unknown>, kind?: WorkoutActionKind, haptic?: () => void) => () => {
-    setDismissedError(null);
-    void workout.run(async () => {
-      try {
-        await operation();
-      } catch (error) {
-        haptics.warning();
-        throw error;
-      }
-      haptic?.();
-    }, kind);
-  };
+    workout.permissionsError !== null || (workout.permissions !== null && permission.action !== 'none');
+  const action =
+    (
+      operation: (current: () => boolean) => Promise<unknown>,
+      kind?: WorkoutActionKind,
+      haptic?: () => void,
+      presented?: PresentedRideAction,
+      confirmation: string | null = null,
+    ) =>
+    () => {
+      setDismissedError(null);
+      void workout.run(async flight => {
+        if (presented) {
+          await controls.run(
+            presented,
+            state,
+            () => operation(flight.current),
+            confirmation,
+            state.id,
+            adapterBusy(presented),
+            flight.signal,
+          );
+          if (presented === 'start' && flight.current()) setSetup(false);
+          return;
+        }
+        try {
+          await operation(flight.current);
+        } catch (error) {
+          if (flight.current()) haptics.warning();
+          throw error;
+        }
+        if (flight.current()) haptic?.();
+      }, kind);
+    };
   const start = action(
-    async () => {
-      await workouts.start(options);
-      setSetup(false);
+    async current => {
+      const preferences = await settings.prepareRecording();
+      if (!current()) return;
+      await workouts.start(
+        effectiveWorkoutOptions(
+          {
+            ...preferences.workoutOptions,
+            sampleHz: preferences.sampleHz,
+            distanceSource: preferences.distanceSource,
+            batteryConsumptionSource: preferences.batteryConsumptionSource,
+          },
+          state.capabilities,
+        ),
+      );
     },
     'start',
-    haptics.success,
+    undefined,
+    'start',
   );
-  const sourceReady =
-    Platform.OS === 'web' ? bikeReady : session.adapter.kind === 'native' && (bikeReady || useWatch || recordGPS);
-  const needsSetup = !sourceReady || (useWatch && !state.watch.installed) || permissionVisible;
+  const readiness = useMemo(
+    () => workoutStartReadiness(state, options, bikeReady, busy),
+    [state, options, bikeReady, busy],
+  );
+  const startAvailable = readiness.available;
+  const startUnavailableReason = failureText(readiness.error);
+  const needsSetup = !readiness.available || permissionVisible;
   const connectionLabel = bikeConnectionLabel(session.state.status, bikeDisplay);
+  const findBike = () => {
+    setSetup(true);
+    void session.run(session.scan);
+  };
+  const findBikeDisabled =
+    session.busy ||
+    session.adapter.kind === 'unavailable' ||
+    ['scanning', 'connecting', 'reconnecting'].includes(session.state.status) ||
+    (active && Boolean(session.state.deviceId));
   const visibleError = errorMessage && errorMessage !== dismissedError;
   const askToFinish = () => {
     if (state.id) {
@@ -106,44 +216,30 @@ function useRideControlState() {
       setFinishTarget(state.id);
     }
   };
-  const modeSummary = [
-    options.indoor ? 'Indoor' : 'Outdoor',
-    recordGPS ? 'GPS route' : null,
-    useWatch ? 'Apple Watch' : null,
-    options.saveToHealth ? health.label : 'No Health save',
-  ]
-    .filter(Boolean)
-    .join(' · ');
   const finishVisible =
-    finishTarget !== null && finishTarget === state.id && ['running', 'paused'].includes(state.phase);
-  const finishAvailable = finishVisible && !disabled;
+    finishTarget !== null &&
+    finishTarget === state.id &&
+    (['running', 'paused', 'interrupted'].includes(state.phase) || browserDiscardAvailable(state)) &&
+    (!externalFinish || externalRideDecision(state, externalFinish, false).outcome === 'confirmationRequired');
+  const finishAvailable = finishVisible && availability.stop.admitted;
+  const discardAvailable = finishVisible && availability.discard.admitted;
   const finishRide = (discard: boolean) =>
     action(
-      async () => {
-        if (!finishTarget) return;
-        await (discard ? workouts.discard(finishTarget) : workouts.stop(finishTarget));
-        setFinishTarget(null);
+      async current => {
+        if (!finishTarget || !finishVisible || (discard && !confirmDiscard)) return;
+        if (externalFinish) await workout.finishRide(finishTarget, discard);
+        else await (discard ? workouts.discard(finishTarget) : workouts.stop(finishTarget));
+        if (current()) setLocalFinish(null);
       },
       undefined,
-      discard ? haptics.warning : haptics.success,
+      undefined,
+      discard ? 'discard' : 'stop',
+      finishTarget,
     );
-  const pause = action(
-    () => workouts.pause(state.id ?? undefined),
-    undefined,
-    () => haptics.impact(),
-  );
-  const resume = action(
-    () => workouts.resume(state.id ?? undefined),
-    undefined,
-    () => haptics.impact(),
-  );
-  const lap = action(
-    () => workouts.lap(state.id ?? undefined),
-    undefined,
-    () => haptics.impact('light'),
-  );
-  const recover = action(() => workouts.recover(state.id!));
-  const stopUnconfirmed = action(() => workouts.stop(state.id ?? undefined));
+  const pause = action(() => workouts.pause(state.id ?? undefined), undefined, undefined, 'pause');
+  const resume = action(() => workouts.resume(state.id ?? undefined), undefined, undefined, 'resume');
+  const lap = action(() => workouts.lap(state.id ?? undefined), undefined, undefined, 'lap');
+  const stopUnconfirmed = action(() => workouts.stop(state.id ?? undefined), undefined, undefined, 'stopUnconfirmed');
   return {
     workout,
     session,
@@ -151,9 +247,7 @@ function useRideControlState() {
     busy,
     finish,
     options,
-    health,
-    useWatch,
-    recordGPS,
+    healthResult,
     setup,
     setSetup,
     finishTarget,
@@ -168,26 +262,28 @@ function useRideControlState() {
     bikeName,
     sources,
     bikePresentation,
-    disabled,
+    availability,
+    ownershipMessage,
+    findBike,
+    findBikeDisabled,
     recoveryBusy,
-    canRequestStop,
     permission,
     permissionVisible,
     action,
     start,
-    sourceReady,
+    startAvailable,
+    startUnavailableReason,
     needsSetup,
     connectionLabel,
     visibleError,
     askToFinish,
-    modeSummary,
     finishVisible,
     finishAvailable,
+    discardAvailable,
     finishRide,
     pause,
     resume,
     lap,
-    recover,
     stopUnconfirmed,
   };
 }
@@ -203,11 +299,12 @@ function useRideControls() {
   return value;
 }
 
-/** Start, Pause, Resume, Lap and Finish. Rendered in the shell footer on phones and inline on desktop. */
 export function RideActionBar({ inline = false }: { inline?: boolean }) {
   const c = useRideControls();
   const { state, busy, workout } = c;
-  const iconColor = (primary: boolean) => (primary ? colors.bg : colors.text);
+  const { fontScale } = useWindowDimensions();
+  const showSetup = c.needsSetup || c.bikeDisplay === 'unavailable';
+  const stateTone = state.phase === 'running' ? 'accent' : state.phase === 'paused' ? 'warning' : 'neutral';
   return (
     <View
       testID="ride-controls"
@@ -221,84 +318,66 @@ export function RideActionBar({ inline = false }: { inline?: boolean }) {
       }}
     >
       {c.active && (
-        <Text
-          style={{
-            flex: 1,
-            minWidth: 72,
-            color: colors.text,
-            fontSize: 22,
-            fontWeight: '600',
-            fontVariant: ['tabular-nums'],
-            letterSpacing: -0.6,
-          }}
-        >
-          {formatDuration(state.timerSeconds)}
-        </Text>
+        <View style={{ flexGrow: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <Text style={{ color: colors.text, fontSize: type.value, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+            {formatDuration(state.timerSeconds)}
+          </Text>
+          <View testID="ride-state-badge">
+            <Chip tone={stateTone}>{phaseChips[state.phase] ?? state.phase}</Chip>
+          </View>
+        </View>
       )}
       {state.supported && !c.active && (
         <Button
           testID="start-ride"
           block={!inline}
+          secondary={c.bikeDisplay === 'unavailable'}
           disabled={busy || !workout.optionsReady}
-          icon={<Icon name="play" size={18} color={colors.bg} />}
-          onPress={c.needsSetup ? () => c.setSetup(true) : c.start}
+          icon={<Icon name="play" size={18} color={c.bikeDisplay === 'unavailable' ? colors.text : colors.bg} />}
+          onPress={showSetup ? () => c.setSetup(true) : c.start}
         >
-          {c.needsSetup ? 'Set up ride' : 'Start ride'}
+          {showSetup ? 'Set up ride' : 'Start ride'}
         </Button>
       )}
       {state.supported && c.active && (
         <>
-          {state.phase === 'running' && (
-            <Button
-              secondary
-              disabled={c.disabled}
-              accessibilityLabel="Pause"
-              icon={<Icon name="pause" size={18} color={iconColor(false)} />}
-              onPress={c.pause}
-            >
-              {inline ? 'Pause' : undefined}
-            </Button>
+          {['running', 'paused', 'interrupted'].includes(state.phase) && (
+            <View style={{ flexDirection: 'row', width: inline ? 360 * fontScale : '100%', maxWidth: '100%', gap: 8 }}>
+              <RideControlButton
+                label={state.phase === 'paused' ? 'Resume' : 'Pause'}
+                icon={<Icon name={state.phase === 'paused' ? 'play' : 'pause'} size={18} color={colors.text} />}
+                disabled={!c.availability[state.phase === 'paused' ? 'resume' : 'pause'].admitted}
+                reason={failureText(c.availability[state.phase === 'paused' ? 'resume' : 'pause'].error)}
+                onPress={state.phase === 'paused' ? c.resume : c.pause}
+              />
+              <RideControlButton
+                label="Lap"
+                disabled={!c.availability.lap.admitted}
+                reason={failureText(c.availability.lap.error)}
+                icon={<Icon name="lap" size={18} color={colors.text} />}
+                onPress={c.lap}
+              />
+              <RideControlButton
+                label="Finish"
+                danger
+                disabled={!c.availability.stop.admitted}
+                reason={failureText(c.availability.stop.error)}
+                icon={<Icon name="stop" size={18} color={colors.bg} />}
+                onPress={c.askToFinish}
+              />
+            </View>
           )}
-          {state.phase === 'paused' && (
-            <Button
-              disabled={c.disabled}
-              accessibilityLabel="Resume"
-              icon={<Icon name="play" size={18} color={iconColor(true)} />}
-              onPress={c.resume}
-            >
-              {inline ? 'Resume' : undefined}
-            </Button>
-          )}
-          {state.phase === 'running' && (
-            <Button
-              secondary
-              disabled={c.disabled}
-              accessibilityLabel="Lap"
-              icon={<Icon name="lap" size={18} color={iconColor(false)} />}
-              onPress={c.lap}
-            >
-              {inline ? 'Lap' : undefined}
-            </Button>
-          )}
-          {['running', 'paused'].includes(state.phase) && (
-            <Button
-              danger
-              disabled={c.disabled}
-              icon={<Icon name="stop" size={18} color={colors.bg} />}
-              onPress={c.askToFinish}
-            >
-              Finish
-            </Button>
-          )}
-          {state.phase === 'recoverable' && (
+          {state.phase === 'interrupted' && (
             <Button secondary onPress={() => c.setSetup(true)}>
               Review ride
             </Button>
           )}
-          {['preparing', 'finishing'].includes(state.phase) && (
+          {(['preparing', 'finishing'].includes(state.phase) ||
+            state.pendingAction === 'stop' ||
+            state.pendingAction === 'discard') && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <ActivityIndicator size="small" color={colors.accent} />
-              <Text style={{ color: colors.muted, fontSize: 14 }}>
+              <Text style={{ color: colors.muted, fontSize: type.body }}>
                 {state.phase === 'preparing' ? 'Starting…' : c.finish.label}
               </Text>
             </View>
@@ -306,18 +385,75 @@ export function RideActionBar({ inline = false }: { inline?: boolean }) {
         </>
       )}
       {!state.supported && Platform.OS !== 'web' && (
-        <Text style={{ color: colors.muted, fontSize: 12 }}>Ride recording is unavailable on this device.</Text>
+        <Text style={{ color: colors.muted, fontSize: type.caption }}>
+          Ride recording is unavailable on this device.
+        </Text>
       )}
     </View>
   );
 }
 
-/** Bike status pill with the ride setup and finish sheets. */
+function RideControlButton({
+  label,
+  icon,
+  disabled,
+  reason,
+  danger = false,
+  onPress,
+}: {
+  label: string;
+  icon: ReactNode;
+  disabled: boolean;
+  reason?: string | null;
+  danger?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      accessibilityHint={disabled ? (reason ?? undefined) : undefined}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        !danger && styles.secondary,
+        danger && { backgroundColor: colors.red },
+        { flex: 1, minWidth: 0, paddingHorizontal: 6 },
+        disabled && { opacity: 0.38 },
+        pressed && { opacity: 0.75 },
+      ]}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        {icon}
+        <Text style={[styles.buttonText, { flexShrink: 1, color: danger ? colors.bg : colors.text }]}>{label}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+export function RideEmptyState() {
+  const c = useRideControls();
+  return (
+    <View style={{ gap: 12 }}>
+      <Text accessibilityRole="header" style={{ color: colors.text, fontSize: type.title, fontWeight: '600' }}>
+        No bike connected
+      </Text>
+      <Body muted>Turn on your bike, then find it to see live readings.</Body>
+      <Button disabled={c.findBikeDisabled} onPress={c.findBike}>
+        Find bike
+      </Button>
+    </View>
+  );
+}
+
 export function RideStatus({ connection }: { connection: ReactNode }) {
   const c = useRideControls();
   const { workout, state, busy } = c;
   const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { preferences } = useMonitorPreferences();
   return (
     <View style={{ gap: 8 }}>
       <View
@@ -354,7 +490,7 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
             style={{
               flexShrink: 1,
               color: colors.text,
-              fontSize: 14,
+              fontSize: type.body,
               fontWeight: '600',
               fontVariant: ['tabular-nums'],
             }}
@@ -378,7 +514,7 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
       </View>
       {!c.setup && c.visibleError && (
         <View accessibilityRole="alert" style={{ gap: 6 }}>
-          <Text style={{ color: colors.red, fontSize: 12 }}>{c.errorMessage}</Text>
+          <Text style={{ color: colors.red, fontSize: type.caption }}>{c.errorMessage}</Text>
           <Button secondary onPress={() => c.setSetup(true)}>
             Review ride
           </Button>
@@ -412,10 +548,16 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
             gap: 10,
           }}
         >
-          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>
+          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: type.title, fontWeight: '600' }}>
             Ride setup
           </Text>
-          <Button onPress={() => c.setSetup(false)}>Done</Button>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => c.setSetup(false)}
+            style={{ minHeight: 44, paddingHorizontal: 8, justifyContent: 'center' }}
+          >
+            <Text style={{ color: colors.accent, fontSize: type.control }}>Done</Text>
+          </Pressable>
         </View>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -444,27 +586,31 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
                   {state.capabilities.foregroundOnly && (
                     <Body muted>Keep this browser tab visible while recording.</Body>
                   )}
-                  {c.health.detail && <Body muted>{c.health.detail}</Body>}
-                  {c.useWatch && !state.watch.installed && (
-                    <Text style={{ color: colors.warning, fontSize: 12 }}>Install Power Log on your Watch.</Text>
-                  )}
                   {c.permissionVisible && (
                     <View style={{ gap: 6 }}>
+                      <Text
+                        accessibilityRole="header"
+                        style={{ color: colors.text, fontSize: type.body, fontWeight: '600' }}
+                      >
+                        Permissions
+                      </Text>
                       {workout.permissionsError && (
-                        <Text style={{ color: colors.red, fontSize: 12 }}>{workout.permissionsError}</Text>
+                        <Text style={{ color: colors.red, fontSize: type.caption }}>{workout.permissionsError}</Text>
                       )}
                       {c.permission.action === 'settings' && (
-                        <Text style={{ color: colors.muted, fontSize: 12 }}>{c.permission.detail}</Text>
+                        <Text style={{ color: colors.muted, fontSize: type.caption }}>{c.permission.detail}</Text>
                       )}
-                      {c.permission.action === 'unavailable' ? (
+                      {c.permission.action === 'unavailable' && !workout.permissionsError ? (
                         <Text style={{ color: colors.red }}>{c.permission.label}</Text>
                       ) : (
                         <Button
                           secondary
                           disabled={busy}
-                          onPress={c.action(async () => {
-                            if (c.permission.action === 'request') await workouts.requestPermissions(c.options);
-                            else if (c.permission.action === 'check') await workout.refreshPermissions();
+                          onPress={c.action(async current => {
+                            if (workout.permissionsError) await workout.refreshPermissions(current);
+                            else if (c.permission.action === 'request') await workouts.requestPermissions(c.options);
+                            else if (c.permission.action === 'check' || Platform.OS === 'web')
+                              await workout.refreshPermissions(current);
                             else if (c.permission.settingsTarget === 'health')
                               Alert.alert(
                                 'Health access',
@@ -473,32 +619,40 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
                             else await Linking.openSettings();
                           })}
                         >
-                          {c.permission.label}
+                          {workout.permissionsError ? 'Check permissions' : c.permission.label}
                         </Button>
                       )}
                     </View>
                   )}
-                  <Body muted>
-                    {c.modeSummary} ·{' '}
-                    <Link href="/settings" style={{ color: colors.accent }}>
-                      Change
-                    </Link>
-                  </Body>
+                  <Link href="/settings" asChild>
+                    <Pressable
+                      accessibilityRole="link"
+                      accessibilityLabel="Ride settings"
+                      onPress={() => c.setSetup(false)}
+                      style={{ minHeight: 48, justifyContent: 'center' }}
+                    >
+                      <Text style={{ color: colors.accent, fontSize: type.body }}>Ride settings</Text>
+                    </Pressable>
+                  </Link>
                   <Button
-                    disabled={busy || !workout.optionsReady || !c.sourceReady || (c.useWatch && !state.watch.installed)}
+                    testID="setup-start-ride"
+                    secondary={!c.startAvailable}
+                    disabled={busy || !workout.optionsReady || !c.startAvailable}
                     onPress={c.start}
                   >
                     {busy ? 'Starting…' : 'Start ride'}
                   </Button>
+                  {c.startUnavailableReason && <Body muted>{c.startUnavailableReason}</Body>}
                 </>
               ) : (
                 <>
+                  {c.ownershipMessage && <Body muted>{c.ownershipMessage}</Body>}
                   <View style={styles.row}>
                     <Chip
                       tone={
                         state.phase === 'running'
                           ? 'accent'
-                          : state.phase === 'recoverable' || state.phase === 'failed'
+                          : state.phase === 'interrupted' || state.phase === 'failed'
                             ? 'warning'
                             : 'neutral'
                       }
@@ -512,25 +666,40 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
                     <Metric label="Time" value={formatDuration(state.timerSeconds)} unit="" />
                   </View>
                   <View style={styles.row}>
-                    {(state.phase === 'recoverable' || state.phase === 'finishing' || state.pendingAction) &&
-                      state.id && (
-                        <Button secondary disabled={c.recoveryBusy} onPress={c.recover}>
-                          Retry
-                        </Button>
+                    <Body muted>
+                      Distance source:{' '}
+                      {workoutDistanceSelectionLabel(
+                        state.distanceSource ?? preferences.distanceSource,
+                        state.capabilities.foregroundOnly,
                       )}
-                    {['preparing', 'recoverable'].includes(state.phase) && (
-                      <Button danger disabled={c.recoveryBusy || !c.canRequestStop} onPress={c.stopUnconfirmed}>
-                        Stop
+                    </Body>
+                    <Body muted>Fixed for this ride</Body>
+                  </View>
+                  <View style={styles.row}>
+                    {state.phase === 'interrupted' && (
+                      <Button danger disabled={!c.availability.stop.admitted} onPress={c.askToFinish}>
+                        Finish or discard ride
                       </Button>
                     )}
+                    {state.recoveryState !== 'absent' &&
+                      presentationRecoveryStopOffered(state.phase, state.pendingAction ?? null) && (
+                        <Button danger disabled={!c.availability.stopUnconfirmed.admitted} onPress={c.stopUnconfirmed}>
+                          Stop
+                        </Button>
+                      )}
                   </View>
+                  {state.phase === 'preparing' && !state.pendingAction && !c.availability.stopUnconfirmed.admitted && (
+                    <Body muted>{failureText(c.availability.stopUnconfirmed.error)}</Body>
+                  )}
                   {(state.phase === 'preparing' || state.phase === 'finishing' || state.pendingAction) && (
                     <View style={styles.row}>
                       <ActivityIndicator size="small" color={colors.accent} />
                       <Body muted>
                         {state.phase === 'preparing'
                           ? 'Starting ride…'
-                          : state.phase === 'finishing'
+                          : state.phase === 'finishing' ||
+                              state.pendingAction === 'stop' ||
+                              state.pendingAction === 'discard'
                             ? c.finish.detail
                             : state.recoveryState === 'checking'
                               ? 'Checking ride recovery…'
@@ -540,7 +709,14 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
                       </Body>
                     </View>
                   )}
-                  {state.recoveryMessage && <Body muted>{state.recoveryMessage}</Body>}
+                  <View testID="workout-health-sync" style={{ gap: 6 }}>
+                    <Body muted>{c.healthResult.label}</Body>
+                    {c.healthResult.details.map((detail, index) => (
+                      <Body key={index} muted>
+                        {detail}
+                      </Body>
+                    ))}
+                  </View>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                     {(
                       [
@@ -554,7 +730,7 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
                         <Text
                           key={String(title)}
                           style={{
-                            fontSize: 12,
+                            fontSize: type.caption,
                             color:
                               presentation.tone === 'ready'
                                 ? colors.accent
@@ -597,7 +773,7 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
           style={{ flexShrink: 1 }}
           contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 12 }}
         >
-          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 20, fontWeight: '600' }}>
+          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: type.title, fontWeight: '600' }}>
             Finish this ride?
           </Text>
           <Body>Save the ride, or permanently discard it from Power Log.</Body>
@@ -606,12 +782,17 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
               {workout.error}
             </Text>
           )}
+          {(!c.finishAvailable || !c.discardAvailable) && (
+            <Body muted>
+              {failureText(!c.finishAvailable ? c.availability.stop.error : c.availability.discard.error)}
+            </Body>
+          )}
           {!c.confirmDiscard ? (
             <>
               <Button disabled={!c.finishAvailable} onPress={c.finishRide(false)}>
                 Save ride
               </Button>
-              <Button secondary disabled={!c.finishAvailable} onPress={() => c.setConfirmDiscard(true)}>
+              <Button secondary disabled={!c.discardAvailable} onPress={() => c.setConfirmDiscard(true)}>
                 Discard ride
               </Button>
               <Button secondary disabled={busy} onPress={() => c.setFinishTarget(null)}>
@@ -620,8 +801,8 @@ export function RideStatus({ connection }: { connection: ReactNode }) {
             </>
           ) : (
             <>
-              <Body>Discarding removes this ride for good. Nothing will be saved.</Body>
-              <Button danger disabled={!c.finishAvailable} onPress={c.finishRide(true)}>
+              <Body>Discarding permanently removes this ride from Power Log and ends recording.</Body>
+              <Button danger disabled={!c.discardAvailable} onPress={c.finishRide(true)}>
                 Discard for good
               </Button>
               <Button secondary disabled={busy} onPress={() => c.setConfirmDiscard(false)}>

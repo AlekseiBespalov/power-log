@@ -28,7 +28,7 @@ interface Event {
   sequence?: number;
   epoch?: string | null;
   interrupted?: boolean;
-  cyc?: number;
+  controller?: number;
 }
 
 interface Observation {
@@ -53,7 +53,7 @@ function lifecycle(platform: ExportPlatform, events: Event[]): Page<'lifecycle'>
   if (platform === 'ios') {
     columns.producerSequence = Float64Array.from(events.map((event, i) => event.sequence ?? 1000 + i));
     columns.clockEpoch = events.map(event => event.epoch ?? null);
-    columns.cycSequence = Float64Array.from(events.map(event => event.cyc ?? NaN));
+    columns.controllerSequence = Float64Array.from(events.map(event => event.controller ?? NaN));
   }
   return { rows: events.length, columns } as Page<'lifecycle'>;
 }
@@ -78,6 +78,7 @@ function observations<P extends ObservationProjection>(
     columns.clockEpoch = rows.map(row => row.epoch ?? null);
     if (projection === 'gps') columns.distanceBarrier = Float64Array.from(rows.map(row => (row.barrier ? 1 : 0)));
   } else columns.active = Float64Array.from(rows.map(row => (row.active === false ? 0 : 1)));
+  if (platform === 'android' && projection === 'telemetry') columns.clockEpoch = rows.map(row => row.epoch ?? null);
   if (platform === 'web') columns.interval = Float64Array.from(rows.map(row => row.stored ?? 0));
   return { rows: rows.length, columns } as Page<P>;
 }
@@ -132,11 +133,11 @@ describe('iPhone activity intervals', () => {
   });
 
   it.each([false, true])(
-    'orders equal-elapsed telemetry around a hard interruption by cycSequence, same epoch %s',
+    'orders equal-elapsed telemetry around a hard interruption by controllerSequence, same epoch %s',
     sameEpoch => {
       const ride = timelineOf('ios', 2, [
         { t: 0, action: 'start', sequence: 1 },
-        { t: 1, action: 'pause', sequence: 2, interrupted: true, epoch: 'old-process', cyc: 260 },
+        { t: 1, action: 'pause', sequence: 2, interrupted: true, epoch: 'old-process', controller: 260 },
         { t: 1, action: 'resume', sequence: 3, epoch: 'new-process' },
       ]);
       const rows = Array.from({ length: 520 }, (_, i) => ({
@@ -155,7 +156,7 @@ describe('iPhone activity intervals', () => {
 
   it.each([false, true])('orders the interrupted producer by its own sequence, same epoch %s', sameEpoch => {
     const ride = timelineOf('ios', 1.1, [
-      { t: 1, action: 'pause', sequence: 3, interrupted: true, epoch: 'before-restart', cyc: 2 },
+      { t: 1, action: 'pause', sequence: 3, interrupted: true, epoch: 'before-restart', controller: 2 },
       { t: 1, action: 'resume', sequence: 4, epoch: 'after-restart' },
     ]);
     const epochs = sameEpoch
@@ -170,7 +171,7 @@ describe('iPhone activity intervals', () => {
   it('orders other producers by clock epoch when both epochs are known', () => {
     const ride = (epoch: string | null) =>
       timelineOf('ios', 2, [
-        { t: 1, action: 'pause', producer: 'phone', sequence: 3, interrupted: true, epoch, cyc: 2 },
+        { t: 1, action: 'pause', producer: 'phone', sequence: 3, interrupted: true, epoch, controller: 2 },
         { t: 1, action: 'resume', producer: 'phone', sequence: 4, epoch: 'after-restart' },
       ]);
     const rows = [
@@ -188,7 +189,7 @@ describe('iPhone activity intervals', () => {
 
   it('keeps the ride running after an equal-elapsed interruption pause and resume', () => {
     const ride = timelineOf('ios', 1, [
-      { t: 0.4, action: 'pause', producer: 'phone', sequence: 1, interrupted: true, cyc: 2 },
+      { t: 0.4, action: 'pause', producer: 'phone', sequence: 1, interrupted: true, controller: 2 },
       { t: 0.4, action: 'resume', producer: 'phone', sequence: 2 },
     ]);
     expect(ride.intervals).toEqual([
@@ -214,8 +215,8 @@ describe('iPhone activity intervals', () => {
       { t: 3, action: 'pause' },
       { t: 5, action: 'resume' },
       { t: 6, action: 'resume' },
-      { t: 8, action: 'interruption', cyc: 5 },
-      { t: 8.5, action: 'pause', interrupted: true, cyc: 7 },
+      { t: 8, action: 'interruption', controller: 5 },
+      { t: 8.5, action: 'pause', interrupted: true, controller: 7 },
       { t: 9, action: 'resume' },
       { t: 10, action: 'stop' },
     ]);
@@ -274,10 +275,10 @@ describe('iPhone activity intervals', () => {
   });
 
   it.each([
-    ['without a retained telemetry sequence', { cyc: NaN }],
-    ['with a negative telemetry sequence', { cyc: -1 }],
-    ['with a fractional telemetry sequence', { cyc: 2.5 }],
-    ['without a producer sequence', { cyc: 2, sequence: NaN }],
+    ['without a retained telemetry sequence', { controller: NaN }],
+    ['with a negative telemetry sequence', { controller: -1 }],
+    ['with a fractional telemetry sequence', { controller: 2.5 }],
+    ['without a producer sequence', { controller: 2, sequence: NaN }],
   ])('rejects an interruption %s, even after the final stop', (_, fields) => {
     for (const t of [1, 20])
       expect(code(() => timelineOf('ios', 10, [{ t, action: 'pause', interrupted: true, ...fields }]))).toBe('page');
@@ -285,8 +286,8 @@ describe('iPhone activity intervals', () => {
 
   it('walks equal-elapsed interruptions in stored order and stops at the first one an observation does not follow', () => {
     const ride = timelineOf('ios', 2, [
-      { t: 1, action: 'pause', producer: 'phone', sequence: 3, interrupted: true, cyc: 2 },
-      { t: 1, action: 'pause', producer: 'watch', sequence: 5, interrupted: true, cyc: 4 },
+      { t: 1, action: 'pause', producer: 'phone', sequence: 3, interrupted: true, controller: 2 },
+      { t: 1, action: 'pause', producer: 'watch', sequence: 5, interrupted: true, controller: 4 },
       { t: 1, action: 'resume', producer: 'watch', sequence: 6 },
     ]);
     expect(ride.intervals).toEqual([
@@ -481,7 +482,7 @@ describe('runs', () => {
   it('starts a run at an interrupted resume while the ride is already running', () => {
     const ride = timelineOf('ios', 10, [
       { t: 0, action: 'start', sequence: 1 },
-      { t: 4, action: 'resume', sequence: 2, interrupted: true, cyc: 3 },
+      { t: 4, action: 'resume', sequence: 2, interrupted: true, controller: 3 },
     ]);
     expect(ride.intervals).toEqual([{ id: 1, open: 0, close: 10 }]);
     const telemetry = observations(
@@ -510,7 +511,7 @@ describe('runs', () => {
   it('starts a run between the two sides of an interruption at the final stop', () => {
     const ride = timelineOf('ios', 10, [
       { t: 0, action: 'start', sequence: 1 },
-      { t: 10, action: 'pause', sequence: 5, interrupted: true, epoch: 'old', cyc: 2 },
+      { t: 10, action: 'pause', sequence: 5, interrupted: true, epoch: 'old', controller: 2 },
     ]);
     expect(ride.intervals).toEqual([{ id: 1, open: 0, close: 10 }]);
     const telemetry = observations(
@@ -538,7 +539,7 @@ describe('runs', () => {
     [0.1, 0.4, 0.4, 0.9, 1.1],
   ])('starts a telemetry run at a clock-epoch change without a lifecycle change (%s, %s, %s, ...)', (...sampled) => {
     const ride = timelineOf('ios', 1.1, [
-      { t: 0.4, action: 'pause', producer: 'watch', sequence: 1, interrupted: true, cyc: 2 },
+      { t: 0.4, action: 'pause', producer: 'watch', sequence: 1, interrupted: true, controller: 2 },
     ]);
     const epochs = ['first', 'first', 'second', 'second', 'third'];
     const rows = sampled.map((t, i) => ({ t, sequence: i + 1, epoch: epochs[i] }));

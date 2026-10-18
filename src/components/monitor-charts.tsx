@@ -1,5 +1,4 @@
 import type { MonitorSnap, MonitorHitScene } from '../core/monitor-hit-test';
-import { distanceSourceCaption, type MetricSourceInfo } from '../core/distance';
 import { useSharedValue } from 'react-native-reanimated';
 import {
   useEffect,
@@ -11,10 +10,10 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 import { beginChartTransform, moveChartTransform, type ChartTransform } from '../core/chart-touch';
 import {
   CHART_INSET,
@@ -25,7 +24,8 @@ import {
   type ChartViewport,
 } from '../core/chart-viewport';
 import {
-  currentMonitorPoint,
+  formatMetric,
+  metricAllowsMean,
   formatMetricPoint,
   formatMetricDifference,
   metricValue,
@@ -48,16 +48,17 @@ import {
   validMonitorPoint,
   type MonitorPlotGroup,
 } from '../core/monitor-chart';
-import { colors, formatDuration } from './ui';
-import { DistanceSourceCaption } from './distance-source-caption';
+import { Card, colors, formatDuration, Pressable, type, lineHeight } from './ui';
 import { useChartInteraction, type ChartInteraction } from './use-chart-interaction';
 import { useNativeChartGestures } from './use-native-chart-gestures';
 import { MonitorRaster } from './monitor-raster';
+import { MonitorRasterAxis } from './monitor-raster-axis';
 import { MonitorChartGrid } from './monitor-chart-grid';
 import { useFocusedModal } from './modal-dialog';
+import { useModalAccessibility } from '../services/modal-accessibility';
 
 export interface MonitorChartsProps {
-  metricSources?: Record<string, MetricSourceInfo>;
+  emptyState?: ReactNode;
   resetKey?: number;
   data: MonitorData;
   metricIds: readonly string[];
@@ -82,7 +83,6 @@ const leftInset = CHART_INSET.left;
 const rightInset = CHART_INSET.right;
 const isVoltage = (metric: MonitorMetric) => metric.id === 'batteryVoltageV' || metric.id === 'throttleVoltageV';
 
-/** Query, inspection and comparison state stay with the parent across inline/fullscreen surfaces. */
 export function MonitorCharts(props: MonitorChartsProps) {
   const groups = useMemo(
     () => groupMonitorMetrics(props.metricIds, props.speedUnit),
@@ -102,6 +102,8 @@ export function MonitorCharts(props: MonitorChartsProps) {
     setReady(false);
   };
   const fullscreenVisible = useFocusedModal(fullscreen, close);
+  const fullscreenRef = useModalAccessibility(fullscreenVisible);
+  if (props.emptyState) return <Card>{props.emptyState}</Card>;
   if (!groups.length) return null;
   return (
     <View testID="monitor-charts" onLayout={event => setWidth(event.nativeEvent.layout.width)}>
@@ -126,11 +128,13 @@ export function MonitorCharts(props: MonitorChartsProps) {
         onRequestClose={close}
         supportedOrientations={['portrait', 'landscape']}
       >
-        <GestureHandlerRootView style={styles.fullscreen}>
-          <SafeAreaProvider>
-            {fullscreenVisible && ready && <FullscreenCharts {...props} groups={groups} onClose={close} />}
-          </SafeAreaProvider>
-        </GestureHandlerRootView>
+        <View ref={fullscreenRef} aria-hidden={!fullscreenVisible} style={{ flex: 1 }}>
+          <GestureHandlerRootView style={styles.fullscreen}>
+            <SafeAreaProvider>
+              {fullscreenVisible && ready && <FullscreenCharts {...props} groups={groups} onClose={close} />}
+            </SafeAreaProvider>
+          </GestureHandlerRootView>
+        </View>
       </Modal>
     </View>
   );
@@ -339,9 +343,35 @@ function latestMonitorPoint(
   return null;
 }
 
+export function historyRangeReadout(data: MonitorData, metric: MonitorMetric, view: ChartViewport) {
+  const matches =
+    !data.statisticsPending &&
+    (!data.statisticsViewport ||
+      (Math.abs(data.statisticsViewport.start - view.start) < 1e-6 &&
+        Math.abs(data.statisticsViewport.end - view.end) < 1e-6));
+  const stats = matches ? data.statistics[metric.id] : undefined;
+  const cumulative = stats?.amount ?? stats?.distance;
+  if (metric.semantics === 'cumulative' || metric.semantics === 'distance')
+    return {
+      value: formatMetric(metric, cumulative),
+      detail: '',
+    };
+  const mean = metricAllowsMean(metric) && stats && (stats.count ?? 0) > 0 ? stats.sampleMean : undefined;
+  const max = stats && (stats.count ?? 0) > 0 && validMonitorPoint(stats.max) ? stats.max : null;
+  const min = stats && (stats.count ?? 0) > 0 && validMonitorPoint(stats.min) ? stats.min : null;
+  const value =
+    mean !== undefined && Number.isFinite(mean)
+      ? `avg ${formatMetric(metric, mean)}`
+      : `min ${formatMetricPoint(metric, min)}`;
+
+  return {
+    value,
+    detail: matches ? `max ${formatMetricPoint(metric, max)} ${metric.unit}` : '',
+  };
+}
+
 function MonitorPlot({
   data,
-  metricSources,
   view,
   domain,
   group,
@@ -416,6 +446,8 @@ function MonitorPlot({
         : [];
     return { x, y, paths };
   }, [data.series, group.metrics, geometryView.start, geometryDuration, plotWidth, scale, height]);
+  const elapsed = live ? monitorElapsed : formatDuration;
+  const historyRange = !live && cursor === null;
   const historical = !live || (following !== undefined ? !following : view.end < domain.end - 1e-6);
   const readings = group.metrics.map(metric => {
     const selected = monitorSelection(data, metric, cursor);
@@ -424,27 +456,39 @@ function MonitorPlot({
       : data.latest
         ? data.latest[metric.id]
         : latestMonitorPoint(data.series[metric.id] ?? [], metric);
-    const shown =
-      cursor !== null
-        ? selected
-        : currentMonitorPoint(
-            latest,
-            !historical && metric.semantics !== 'distance',
-            data.monotonicAt,
-            metric.gapSeconds,
-            data.liveAcquiredAt?.[metric.id],
-            data.mapMonotonicSeconds,
-          );
-    return { metric, selected, shown, reference: monitorSelection(data, metric, referenceSeconds, 'reference') };
+    const shown = cursor !== null ? selected : latest;
+    const range = live ? null : historyRangeReadout(data, metric, view);
+    const rangeValue = range?.value ?? '';
+    const rangeDetail = range?.detail ?? '';
+    const pointValue = shown ? formatMetricPoint(metric, shown) : cursor === null ? 'Unavailable' : 'No sample';
+    const pointTime = shown && cursor !== null ? elapsed(shown.elapsedSeconds) : '';
+    const pointAnnouncement = shown
+      ? `${elapsed(shown.elapsedSeconds)} elapsed, ${shown.timestamp}`
+      : cursor === null
+        ? 'Unavailable'
+        : 'No sample';
+    return {
+      metric,
+      selected,
+      shown,
+      rangeValue,
+      rangeDetail,
+      valueText: historyRange ? rangeValue : pointValue,
+      timeText: historyRange ? rangeDetail : pointTime,
+      timeAnnouncement: historyRange ? rangeDetail : pointAnnouncement,
+      reference: monitorSelection(data, metric, referenceSeconds, 'reference'),
+    };
   });
   const readingRows = Array.from({ length: Math.ceil(readings.length / readingColumns) }, (_, row) =>
     readings.slice(row * readingColumns, (row + 1) * readingColumns),
   );
   const accessibleValue = readings
-    .map(({ metric, shown }) =>
-      shown
-        ? `${metric.label}${cursor === null && historical ? ', last in visible range' : ''} ${formatMetricPoint(metric, shown)} ${metric.unit}, ${monitorElapsed(shown.elapsedSeconds)} elapsed, ${shown.timestamp}`
-        : `${metric.label}: ${cursor === null ? 'Unavailable' : 'No sample'}`,
+    .map(({ metric, shown, rangeValue, rangeDetail, timeAnnouncement }) =>
+      historyRange
+        ? `${metric.label}: ${rangeValue} ${metric.unit}${rangeDetail ? `. ${rangeDetail}` : ''}`
+        : shown
+          ? `${metric.label} ${formatMetricPoint(metric, shown)} ${metric.unit}, ${timeAnnouncement}`
+          : `${metric.label}: ${cursor === null ? 'Unavailable' : 'No sample'}`,
     )
     .join('. ');
   const selectAt = (locationX: number) => {
@@ -567,7 +611,8 @@ function MonitorPlot({
   const webProps =
     Platform.OS === 'web'
       ? {
-          'aria-valuetext': `${accessibleValue}. Visible ${monitorElapsed(view.start)} to ${monitorElapsed(view.end)}.`,
+          'aria-valuetext': `${accessibleValue}. Visible ${elapsed(view.start)} to ${elapsed(view.end)}.`,
+          dataSet: { visibleStart: String(view.start), visibleEnd: String(view.end) },
           tabIndex: 0 as const,
           onKeyUp: (event: KeyboardEvent<HTMLDivElement>) => {
             if (event.key === 'Escape') event.stopPropagation();
@@ -618,25 +663,9 @@ function MonitorPlot({
           <View style={[styles.plotHeader, !!desktopColumns && { paddingRight: 32 }]}>
             <View style={{ flex: 1 }}>
               <View style={styles.plotTitle}>
-                <Text style={styles.title}>{group.label}</Text>
+                <Text style={styles.title}>{group.metrics.length === 1 ? group.metrics[0]!.label : group.label}</Text>
                 <Text style={styles.unit}>{group.unit}</Text>
               </View>
-              {group.metrics.map(metric =>
-                metric.id === 'distanceMeters' ? (
-                  <DistanceSourceCaption
-                    key={metric.id}
-                    testID={`monitor-source-${metric.id}`}
-                    info={metricSources?.[metric.id]}
-                    style={styles.sampleTime}
-                  />
-                ) : (
-                  metricSources?.[metric.id] && (
-                    <Text key={metric.id} testID={`monitor-source-${metric.id}`} style={styles.sampleTime}>
-                      {distanceSourceCaption(metricSources[metric.id]!)}
-                    </Text>
-                  )
-                ),
-              )}
             </View>
             {ownsComparison && (
               <View style={styles.controls}>
@@ -665,36 +694,31 @@ function MonitorPlot({
           <View style={styles.readings}>
             {readingRows.map(row => (
               <View key={row[0]!.metric.id} style={styles.readingRow}>
-                {row.map(({ metric, selected, shown, reference }) => {
+                {row.map(({ metric, selected, shown, reference, valueText, timeText, timeAnnouncement }) => {
                   return (
                     <View key={metric.id} style={styles.reading} testID={`monitor-readout-${metric.id}${suffix}`}>
-                      <View style={styles.readingLabel}>
-                        <View style={[styles.dot, { backgroundColor: metric.color }]} />
-                        <Text style={styles.label}>{metric.shortLabel}</Text>
-                      </View>
+                      {group.metrics.length > 1 && (
+                        <View style={styles.readingLabel}>
+                          <View style={[styles.dot, { backgroundColor: metric.color }]} />
+                          <Text style={styles.label}>{metric.shortLabel}</Text>
+                        </View>
+                      )}
                       <Text
                         numberOfLines={1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.75}
-                        style={[styles.value, { color: shown ? metric.color : colors.muted }]}
+                        style={[styles.value, { color: historyRange || shown ? metric.color : colors.muted }]}
                       >
-                        {shown ? formatMetricPoint(metric, shown) : cursor === null ? 'Unavailable' : 'No sample'}
-                        <Text style={styles.unit}>{shown ? ` ${metric.unit}` : '\u00a0'}</Text>
+                        {valueText}
+                        <Text style={styles.unit}>{historyRange || shown ? ` ${metric.unit}` : '\u00a0'}</Text>
                       </Text>
                       <Text
                         numberOfLines={1}
-                        style={[styles.sampleTime, { minHeight: 15 * fontScale }]}
-                        accessibilityLabel={
-                          shown
-                            ? `${cursor === null && historical ? 'Last in visible range, ' : ''}${monitorElapsed(shown.elapsedSeconds)} elapsed, ${shown.timestamp}`
-                            : cursor === null
-                              ? 'Unavailable'
-                              : 'No sample'
-                        }
+                        style={styles.sampleTime}
+                        accessible={!!timeText}
+                        accessibilityLabel={timeText ? timeAnnouncement : undefined}
                       >
-                        {shown && (cursor !== null || historical)
-                          ? `${cursor === null ? 'Last in range · ' : ''}${monitorElapsed(shown.elapsedSeconds)}`
-                          : '\u00a0'}
+                        {timeText || '\u00a0'}
                       </Text>
                       {isVoltage(metric) && (
                         <VoltageDetails
@@ -704,6 +728,7 @@ function MonitorPlot({
                           b={selected}
                           comparing={referenceSeconds !== null}
                           suffix={suffix}
+                          elapsed={elapsed}
                         />
                       )}
                     </View>
@@ -731,7 +756,9 @@ function MonitorPlot({
               accessibilityLabel={`${group.label} chart`}
               accessibilityHint="One finger inspects; tap again to clear. Two fingers pan or pinch to zoom. Swipe vertically with one finger to scroll."
               accessibilityValue={{
-                text: `${accessibleValue}. Visible ${monitorElapsed(view.start)} to ${monitorElapsed(view.end)}.`,
+                text: hasSamples
+                  ? `${accessibleValue}. Visible ${elapsed(view.start)} to ${elapsed(view.end)}.`
+                  : accessibleValue,
               }}
               accessibilityActions={[
                 { name: 'increment', label: 'Next sample' },
@@ -766,8 +793,7 @@ function MonitorPlot({
                     </ClipPath>
                   </Defs>
                   {[0, 0.5, 1].map(fraction => {
-                    const value = scale.min + fraction * (scale.max - scale.min);
-                    const y = plot.y(value);
+                    const y = plot.y(scale.min + fraction * (scale.max - scale.min));
                     return (
                       <G key={fraction}>
                         <Line
@@ -778,18 +804,6 @@ function MonitorPlot({
                           stroke={colors.border}
                           strokeDasharray="2 5"
                         />
-                        {hasSamples && (
-                          <SvgText
-                            fontFamily="Arial"
-                            x={leftInset + 4}
-                            y={y + 11}
-                            textAnchor="start"
-                            fill={colors.muted}
-                            fontSize={10}
-                          >
-                            {value.toFixed(scale.decimals)}
-                          </SvgText>
-                        )}
                       </G>
                     );
                   })}
@@ -825,7 +839,7 @@ function MonitorPlot({
                         const tail = monitorTailSeconds(
                           last,
                           displayTimeSeconds ?? data.nowSeconds,
-                          metric.gapSeconds,
+                          metric,
                           data.liveAcquiredAt?.[metric.id],
                           data.monotonicAt,
                           data.latest?.[metric.id],
@@ -895,19 +909,27 @@ function MonitorPlot({
                     ))}
                   </G>
                   {hasSamples &&
-                    [0, 0.5, 1].map(fraction => (
-                      <SvgText
-                        fontFamily="Arial"
-                        key={fraction}
-                        x={leftInset + fraction * plotWidth}
-                        y={height - 3}
-                        fill={colors.muted}
-                        fontSize={10}
-                        textAnchor={fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle'}
-                      >
-                        {formatDuration(view.start + duration * fraction)}
-                      </SvgText>
-                    ))}
+                    [0, 0.5, 1].flatMap(fraction => {
+                      const value = scale.min + fraction * (scale.max - scale.min);
+                      return [
+                        <MonitorRasterAxis
+                          key={`y-${fraction}`}
+                          axis="y"
+                          position={plot.y(value)}
+                          text={value.toFixed(scale.decimals)}
+                          width={width}
+                          height={height}
+                        />,
+                        <MonitorRasterAxis
+                          key={`x-${fraction}`}
+                          axis="x"
+                          position={fraction}
+                          text={formatDuration(view.start + duration * fraction)}
+                          width={width}
+                          height={height}
+                        />,
+                      ];
+                    })}
                 </Svg>
               )}
               {!hasSamples && (
@@ -936,6 +958,7 @@ function VoltageDetails({
   b,
   comparing,
   suffix,
+  elapsed,
 }: {
   metric: MonitorMetric;
   data: MonitorData;
@@ -943,6 +966,7 @@ function VoltageDetails({
   b: MonitorPoint | null;
   comparing: boolean;
   suffix: string;
+  elapsed: (seconds: number) => string;
 }) {
   const { fontScale } = useWindowDimensions();
   const statistics = data.statistics[metric.id];
@@ -955,12 +979,12 @@ function VoltageDetails({
         style={styles.sampleTime}
         accessibilityLabel={
           minimum
-            ? `Minimum ${formatMetricPoint(metric, minimum)} ${metric.unit}, ${monitorElapsed(minimum.elapsedSeconds)} elapsed, ${minimum.timestamp}${data.statisticsViewport ? `, ${data.statisticsPending ? 'previous interval' : 'interval'} ${monitorElapsed(data.statisticsViewport.start)} to ${monitorElapsed(data.statisticsViewport.end)}` : ''}`
+            ? `Minimum ${formatMetricPoint(metric, minimum)} ${metric.unit}, ${elapsed(minimum.elapsedSeconds)} elapsed, ${minimum.timestamp}${data.statisticsViewport ? `, ${data.statisticsPending ? 'previous interval' : 'interval'} ${elapsed(data.statisticsViewport.start)} to ${elapsed(data.statisticsViewport.end)}` : ''}`
             : 'Minimum unavailable'
         }
       >
         {minimum
-          ? `Min ${formatMetricPoint(metric, minimum)} ${metric.unit} · ${monitorElapsed(minimum.elapsedSeconds)}`
+          ? `Min ${formatMetricPoint(metric, minimum)} ${metric.unit} · ${elapsed(minimum.elapsedSeconds)}`
           : 'Min —'}
       </Text>
       {data.statisticsViewport && (
@@ -990,12 +1014,10 @@ function VoltageDetails({
               key={label}
               numberOfLines={2}
               style={[styles.sampleTime, { minHeight: 30 * fontScale }]}
-              accessibilityLabel={`${label}: ${point ? `${formatMetricPoint(metric, point)} ${metric.unit}, ${monitorElapsed(point.elapsedSeconds)} elapsed, ${point.timestamp}` : 'No sample'}`}
+              accessibilityLabel={`${label}: ${point ? `${formatMetricPoint(metric, point)} ${metric.unit}, ${elapsed(point.elapsedSeconds)} elapsed, ${point.timestamp}` : 'No sample'}`}
             >
               {label}{' '}
-              {point
-                ? `${formatMetricPoint(metric, point)} ${metric.unit} · ${monitorElapsed(point.elapsedSeconds)}`
-                : '—'}
+              {point ? `${formatMetricPoint(metric, point)} ${metric.unit} · ${elapsed(point.elapsedSeconds)}` : '—'}
             </Text>
           ))}
         </View>
@@ -1043,7 +1065,7 @@ const styles = StyleSheet.create({
   },
   range: {
     color: colors.muted,
-    fontSize: 11,
+    fontSize: type.label,
     flexGrow: 1,
     flexBasis: 112,
     paddingVertical: 8,
@@ -1052,8 +1074,8 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' },
   control: { minHeight: 44, minWidth: 44, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' },
   disabled: { opacity: 0.3 },
-  controlText: { color: colors.text, fontSize: 12 },
-  zoomText: { color: colors.text, fontSize: 22 },
+  controlText: { color: colors.text, fontSize: type.caption },
+  zoomText: { color: colors.text, fontSize: type.title },
   chartRoot: {
     flexGrow: 0,
     flexShrink: 0,
@@ -1069,7 +1091,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     backgroundColor: colors.bg,
     paddingHorizontal: 8,
-    fontSize: 12,
+    fontSize: type.caption,
     textAlign: 'center',
   },
   plotHeader: {
@@ -1081,16 +1103,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   plotTitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 6, paddingVertical: 4 },
-  title: { color: colors.text, fontWeight: '600', fontSize: 12 },
-  unit: { color: colors.muted, fontSize: 10, fontWeight: '400' },
+  title: { color: colors.text, fontWeight: '600', fontSize: type.caption },
+  unit: { color: colors.muted, fontSize: type.label, fontWeight: '400' },
   readings: { gap: 12, marginBottom: 8 },
   readingRow: { flexDirection: 'row', gap: 12 },
   reading: { flex: 1, minWidth: 0, gap: 2 },
   readingLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, alignSelf: 'center' },
-  label: { color: colors.muted, fontSize: 11, lineHeight: 15, flexShrink: 1 },
-  value: { fontSize: 14, lineHeight: 19, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  sampleTime: { color: colors.muted, fontSize: 10, lineHeight: 15, fontVariant: ['tabular-nums'] },
+  label: { color: colors.muted, fontSize: type.label, lineHeight: lineHeight.label, flexShrink: 1 },
+  value: { fontSize: type.body, lineHeight: lineHeight.body, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  sampleTime: {
+    color: colors.muted,
+    fontSize: type.label,
+    lineHeight: lineHeight.label,
+    fontVariant: ['tabular-nums'],
+  },
   voltageDetails: { gap: 2 },
   fullscreen: { flex: 1, backgroundColor: colors.bg },
   fullscreenContent: { paddingHorizontal: 16, paddingVertical: 8 },

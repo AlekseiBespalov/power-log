@@ -8,33 +8,47 @@ function inspect(project) {
   const targets = Object.entries(objects.PBXNativeTarget).filter(([, target]) => target.isa === 'PBXNativeTarget');
   const [activityID, activity] = targets.find(([, target]) => target.name.replaceAll('"', '') === 'PowerLogActivity');
   const phone = project.getFirstTarget().firstTarget;
-  const sources = target => target.buildPhases.flatMap(reference => objects.PBXSourcesBuildPhase[reference.value]?.files ?? [])
-    .map(reference => objects.PBXFileReference[objects.PBXBuildFile[reference.value].fileRef].path.replaceAll('"', ''));
+  const sources = target =>
+    target.buildPhases
+      .flatMap(reference => objects.PBXSourcesBuildPhase[reference.value]?.files ?? [])
+      .map(reference =>
+        objects.PBXFileReference[objects.PBXBuildFile[reference.value].fileRef].path.replaceAll('"', ''),
+      );
   return { objects, targets, phone, activityID, activity, sources };
 }
 
 test('prebuild embeds one activity and keeps native intent available in both targets', () => {
   const project = projectFixture();
   for (let repetition = 0; repetition < 3; repetition++) {
-    configureActivityProject(project, { version: '2.4.6', ios: { bundleIdentifier: 'app.powerlog.test', appleTeamId: 'SYNTHETIC', buildNumber: '73' } });
+    configureActivityProject(project, {
+      version: '2.4.6',
+      scheme: 'power-log',
+      ios: { bundleIdentifier: 'app.powerlog.test', appleTeamId: 'SYNTHETIC', buildNumber: '73' },
+    });
     const { objects, targets, phone, activityID, activity, sources } = inspect(project);
     assert.equal(targets.length, 2);
-    assert.equal(phone.dependencies.filter(reference => objects.PBXTargetDependency[reference.value].target === activityID).length, 1);
+    assert.equal(
+      phone.dependencies.filter(reference => objects.PBXTargetDependency[reference.value].target === activityID).length,
+      1,
+    );
     assert.equal(sources(phone).filter(source => source.endsWith('PowerLogRideIntent.swift')).length, 1);
     assert.deepEqual(sources(activity).sort(), [
       '../apple/LiveActivity/PowerLogRideIntent.swift',
       '../apple/LiveActivity/PowerLogRideWidget.swift',
-      '../modules/cyc-bridge/ios/PowerLogRideAttributes.swift',
+      '../modules/power-log-bridge/ios/PowerLogRideAttributes.swift',
     ]);
-    const embedded = phone.buildPhases.flatMap(reference => objects.PBXCopyFilesBuildPhase?.[reference.value]?.files ?? [])
+    const embedded = phone.buildPhases
+      .flatMap(reference => objects.PBXCopyFilesBuildPhase?.[reference.value]?.files ?? [])
       .filter(reference => objects.PBXBuildFile[reference.value].fileRef === activity.productReference);
     assert.equal(embedded.length, 1);
     for (const reference of objects.XCConfigurationList[phone.buildConfigurationList].buildConfigurations) {
-      const conditions = objects.XCBuildConfiguration[reference.value].buildSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS;
+      const conditions =
+        objects.XCBuildConfiguration[reference.value].buildSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS;
       assert.equal(conditions.match(/POWER_LOG_APP/g)?.length, 1);
     }
     for (const reference of objects.XCConfigurationList[activity.buildConfigurationList].buildConfigurations) {
       const settings = objects.XCBuildConfiguration[reference.value].buildSettings;
+      assert.equal(settings.POWER_LOG_URL_SCHEME, '"power-log"');
       assert.equal(settings.IPHONEOS_DEPLOYMENT_TARGET, '26.0');
       assert.equal(settings.APPLICATION_EXTENSION_API_ONLY, 'YES');
       assert.equal(settings.SWIFT_ACTIVE_COMPILATION_CONDITIONS, undefined);
@@ -45,10 +59,44 @@ test('prebuild embeds one activity and keeps native intent available in both tar
 
 test('prebuild updates the extension identity with the configured phone identity', () => {
   const project = projectFixture();
-  configureActivityProject(project, { version: '2.4.6', ios: { bundleIdentifier: 'app.powerlog.first', buildNumber: '73' } });
-  configureActivityProject(project, { version: '3.7.9', ios: { bundleIdentifier: 'app.powerlog.second', buildNumber: '108' } });
+  configureActivityProject(project, {
+    version: '2.4.6',
+    scheme: 'power-log',
+    ios: { bundleIdentifier: 'app.powerlog.first', buildNumber: '73' },
+  });
+  configureActivityProject(project, {
+    version: '3.7.9',
+    scheme: 'power-log-lab',
+    ios: { bundleIdentifier: 'app.powerlog.second', buildNumber: '108' },
+  });
   const { objects, activity } = inspect(project);
   for (const reference of objects.XCConfigurationList[activity.buildConfigurationList].buildConfigurations) {
-    assert.equal(objects.XCBuildConfiguration[reference.value].buildSettings.PRODUCT_BUNDLE_IDENTIFIER, '"app.powerlog.second.activity"');
+    assert.equal(objects.XCBuildConfiguration[reference.value].buildSettings.POWER_LOG_URL_SCHEME, '"power-log-lab"');
+    assert.equal(
+      objects.XCBuildConfiguration[reference.value].buildSettings.PRODUCT_BUNDLE_IDENTIFIER,
+      '"app.powerlog.second.activity"',
+    );
   }
 });
+
+for (const scheme of ['power-log', 'power-log-lab']) {
+  test(`activity links use the configured ${scheme} scheme`, async () => {
+    const plugin = require('../../plugins/with-power-log-live-activity');
+    const fs = require('node:fs');
+    const plist = require('@expo/plist').default;
+    const configured = plugin({ scheme });
+    const result = await configured.mods.ios.infoPlist({
+      ...configured,
+      modResults: {},
+      modRequest: { projectRoot: process.cwd() },
+    });
+    assert.equal(result.modResults.PowerLogURLScheme, scheme);
+    const extension = plist.parse(fs.readFileSync('apple/LiveActivity/Info.plist', 'utf8'));
+    assert.equal(extension.PowerLogURLScheme, '$(POWER_LOG_URL_SCHEME)');
+    const widget = fs.readFileSync('apple/LiveActivity/PowerLogRideWidget.swift', 'utf8');
+    assert.doesNotMatch(widget, /power-log:\/\//);
+    assert.match(widget, /Bundle\.main\.object\(forInfoDictionaryKey: "PowerLogURLScheme"\)/);
+    assert.equal(widget.match(/\.widgetURL\(rideURL\)/g)?.length, 2);
+    assert.match(widget, /Link\(destination: rideURL\)/);
+  });
+}

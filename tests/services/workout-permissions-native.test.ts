@@ -11,7 +11,7 @@ const native = vi.hoisted(() => {
   };
   return { bridge: bridge as typeof bridge | null };
 });
-vi.mock('../../modules/cyc-bridge', () => ({
+vi.mock('../../modules/power-log-bridge', () => ({
   get default() {
     return native.bridge;
   },

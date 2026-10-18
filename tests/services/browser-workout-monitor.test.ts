@@ -1,13 +1,17 @@
+import { isConsumptionMetric } from '../../src/core/consumption';
+import { isDistanceMetric } from '../../src/core/distance';
+import { InspectionPlotBucket, InspectionMetricPolicy, InspectionPlotQuery } from '../../shared/js';
+import { presentFailure } from '../../src/core/failures';
+import { browserInspectionItem, browserStatistics } from '../../src/services/browser-analytics';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentMonitorPoint, MONITOR_METRICS } from '../../src/core/monitor';
 import {
   BrowserRideStore,
   BROWSER_PAGE,
   TILE_SECONDS,
-  mergeAggregate,
-  rowAggregate,
   type BrowserRide,
   type RideRow,
+  type RideLocationRow,
   type RideTile,
 } from '../../src/services/browser-ride-store';
 import { browserWorkoutMonitorSource, registerBrowserWorkoutClock } from '../../src/services/browser-workout-monitor';
@@ -17,6 +21,8 @@ import { TestTelemetryAdapter } from '../support/telemetry-adapter';
 import { ensureBrowserDistance, browserDistanceCurrent } from '../../src/services/browser-distance-store';
 import { MonitorReadController } from '../../src/features/monitor/monitor-read-controller';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { secondsUs } from '../../src/services/browser-storage-keys';
+import { browserMemoryStore } from '../support/browser-memory-store';
 import { browserRide, browserRow } from '../support/browser-ride';
 
 vi.mock('../../src/services/browser-distance-store', async importOriginal => ({
@@ -26,6 +32,13 @@ vi.mock('../../src/services/browser-distance-store', async importOriginal => ({
     throw new Error('No distance provider in this fixture');
   }),
   browserDistanceCurrent: vi.fn(async () => true),
+  browserConsumptionSummary: vi.fn(async () => ({
+    source: 'controller',
+    energyWh: null,
+    chargeAh: null,
+    partial: true,
+  })),
+  retainBrowserDistance: vi.fn(async () => async () => {}),
 }));
 afterEach(() => {
   vi.restoreAllMocks();
@@ -35,6 +48,194 @@ afterEach(() => {
 const settle = async () => {
   for (let i = 0; i < 100; i++) await Promise.resolve();
 };
+
+it('does not scan originals for unavailable inspection metrics', async () => {
+  const h = fixture([
+    { time: 0, power: 100 },
+    { time: 1, power: 100 },
+  ]);
+  h.record.availableMetrics = ['humanPowerW'];
+  const description = await h.source.describeSource({ generation: 1 });
+  const result = await h.source.inspectAt({
+    generation: 1,
+    expectedRevision: description.revision,
+    seconds: 0.5,
+    metrics: ['heartRateBpm'],
+  });
+  expect(h.store.inspectionGroups).not.toHaveBeenCalled();
+  expect(result).toMatchObject({ status: 'ok', points: { heartRateBpm: null } });
+});
+it.each(['heartRateBpm', 'controllerSpeedMps', 'speedMps'])(
+  'does not read tiles or originals for unavailable plot and statistics metric %s',
+  async metric => {
+    const { source, store, record } = fixture([
+      { time: 0, power: 100 },
+      { time: 1, power: 200 },
+    ]);
+    vi.mocked(store.tiles).mockResolvedValue([]);
+    const locations = vi.spyOn(store, 'locationPage').mockResolvedValue([]);
+    expect(record.availableMetrics).not.toContain(metric);
+    const description = await source.describeSource({ generation: 1 });
+    const request = {
+      generation: 1,
+      expectedRevision: description.revision,
+      startSeconds: 0,
+      endSeconds: 1,
+      metrics: [metric],
+    };
+    const plot = await source.readPlot(request);
+    const stats = await source.rangeStats({ ...request, includeEndpoints: true });
+    const directStats = await browserStatistics(record, store, 0, 1, [metric]);
+    const emptyStatistics =
+      metric === 'controllerSpeedMps' ? { [metric]: { count: 0, coveredSeconds: 0, integral: 0 } } : {};
+    expect(plot).toMatchObject({ status: 'ok', series: { [metric]: [] } });
+    expect(stats).toMatchObject({
+      status: 'ok',
+      endpoints: { start: { [metric]: null }, end: { [metric]: null } },
+    });
+    if (stats.status !== 'ok') throw new Error('Unexpected retry');
+    expect(stats.statistics).toEqual(emptyStatistics);
+    expect(directStats).toEqual(emptyStatistics);
+    expect(store.page).not.toHaveBeenCalled();
+    expect(store.pageExact).not.toHaveBeenCalled();
+    expect(locations).not.toHaveBeenCalled();
+    expect(store.neighbor).not.toHaveBeenCalled();
+    expect(store.locationNeighbor).not.toHaveBeenCalled();
+    expect(store.tiles).not.toHaveBeenCalled();
+    expect(store.inspectionGroups).not.toHaveBeenCalled();
+  },
+);
+it('keeps available readings and cached response shapes when absent metrics share a request', async () => {
+  const { source, store } = fixture([
+    { time: 0, power: 100 },
+    { time: 1, power: 200 },
+  ]);
+  vi.mocked(store.tiles).mockResolvedValue([]);
+  const description = await source.describeSource({ generation: 1 });
+  const request = {
+    generation: 1,
+    expectedRevision: description.revision,
+    startSeconds: 0,
+    endSeconds: 1,
+    metrics: ['humanPowerW'],
+  };
+  const plot = await source.readPlot(request);
+  const stats = await source.rangeStats(request);
+  const mixed = { ...request, metrics: ['humanPowerW', 'controllerSpeedMps', 'heartRateBpm'] };
+  const mixedPlot = await source.readPlot(mixed);
+  const mixedStats = await source.rangeStats(mixed);
+  if (plot.status !== 'ok' || stats.status !== 'ok' || mixedPlot.status !== 'ok' || mixedStats.status !== 'ok')
+    throw new Error('Unexpected retry');
+  expect(plot.series.humanPowerW?.map(point => point.value)).toEqual([100, 200]);
+  expect(stats.statistics.humanPowerW).toMatchObject({ count: 2, sampleMean: 150 });
+  expect(mixedPlot.series).toEqual({ ...plot.series, controllerSpeedMps: [], heartRateBpm: [] });
+  expect(mixedStats.statistics).toEqual({
+    ...stats.statistics,
+    controllerSpeedMps: { count: 0, coveredSeconds: 0, integral: 0 },
+  });
+  expect(await source.readPlot(request)).toEqual(plot);
+  expect(await source.rangeStats(request)).toEqual(stats);
+});
+it('bounds inspection prefetch by the shared metric gap', async () => {
+  const h = fixture(Array.from({ length: 301 }, (_, time) => ({ time, power: 100 })));
+  Object.assign(h.rows[0]!, {
+    controllerSpeedMps: 10,
+    speedRaw: 36,
+    controllerModel: 'X6',
+    controllerProtocol: '5.3',
+    firmwareLabel: '20260101',
+  });
+  h.record.availableMetrics = ['controllerSpeedMps'];
+  const seconds = 150;
+  const description = await h.source.describeSource({ generation: 1 });
+  const result = await h.source.inspectAt({
+    generation: 1,
+    expectedRevision: description.revision,
+    seconds,
+    metrics: ['controllerSpeedMps'],
+  });
+  expect(result).toMatchObject({ status: 'ok', points: { controllerSpeedMps: null } });
+  const pages = await Promise.all(
+    [...vi.mocked(h.store.page).mock.results, ...vi.mocked(h.store.pageExact).mock.results].map(
+      result => result.value as Promise<RideRow[]>,
+    ),
+  );
+  expect(pages).toHaveLength(1);
+  expect(h.store.pageExact).toHaveBeenCalledWith(
+    h.record.id,
+    '149000000',
+    '156000000',
+    null,
+    BROWSER_PAGE,
+    h.record.revision,
+  );
+  const target = BigInt(secondsUs(seconds));
+  const gap = BigInt(new InspectionMetricPolicy('controllerSpeedMps').plotGapUs);
+  expect(pages[0]!.length).toBeGreaterThan(0);
+  expect(
+    pages.flat().every(row => BigInt(row.elapsedUs) >= target - gap && BigInt(row.elapsedUs) <= target + gap),
+  ).toBe(true);
+});
+
+it('preserves invalid readings and tied anchors when inspection reuses its bounded prefetch', async () => {
+  const h = fixture([148, 149, 150, 150, 150, 151, 152, 153].map(time => ({ time, power: 100 })));
+  const speeds = [10, 11, 12, undefined, 20, undefined, 14, 15];
+  h.rows.forEach((row, index) => {
+    const speed = speeds[index];
+    if (speed !== undefined)
+      Object.assign(row, {
+        controllerSpeedMps: speed,
+        speedRaw: speed * 3.6,
+        controllerModel: 'X6',
+        controllerProtocol: '5.3',
+        firmwareLabel: '20260101',
+      });
+  });
+  h.record.availableMetrics = ['controllerSpeedMps'];
+  const description = await h.source.describeSource({ generation: 1 });
+  const request = { generation: 1, expectedRevision: description.revision, metrics: ['controllerSpeedMps'] };
+  await h.source.inspectAt({ ...request, seconds: 149.25 });
+  for (const target of [
+    { seconds: 150 },
+    { seconds: 150, anchor: { metric: 'controllerSpeedMps', observationId: `${h.record.id}:4` } },
+    { seconds: 151 },
+  ]) {
+    vi.mocked(h.store.inspectionGroups).mockClear();
+    const cached = await h.source.inspectAt({ ...request, ...target });
+    expect(h.store.inspectionGroups).not.toHaveBeenCalled();
+    const fresh = await browserWorkoutMonitorSource(h.record.id, false, h.store).inspectAt({ ...request, ...target });
+    expect(cached).toEqual(fresh);
+    if (target.anchor)
+      expect(cached).toMatchObject({
+        points: { controllerSpeedMps: { value: 20, observationId: target.anchor.observationId } },
+      });
+  }
+});
+
+it('presents a core chart-capacity outcome as a smaller-range action', async () => {
+  const capacity = new InspectionPlotQuery('humanPowerW', '0', '100000000', 1, 4);
+  let failure: unknown;
+  try {
+    for (let i = 0; i < 8; i++)
+      capacity.append(browserInspectionItem({ ...browserRow(i * 10, i), recordingId: 'capacity' }), true, false);
+    capacity.result();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toMatchObject({ name: 'InspectionCapacityException' });
+  const h = fixture([
+    { time: 0, power: 100 },
+    { time: 1, power: 100 },
+  ]);
+  vi.spyOn(InspectionPlotQuery.prototype, 'result').mockImplementationOnce(() => {
+    throw failure;
+  });
+  const description = await h.source.describeSource({ generation: 1 });
+  const error = await h.source
+    .readPlot({ generation: 1, expectedRevision: description.revision, metrics: ['humanPowerW'] })
+    .catch(error => error);
+  expect(presentFailure(error).text).toBe('Choose a smaller range with fewer chart discontinuities.');
+});
 
 function fixture(
   input: {
@@ -58,8 +259,87 @@ function fixture(
   }));
   const record: BrowserRide = browserRide({
     id,
-    samples: rows.length,
+    telemetryCount: rows.length,
+    availableMetrics: MONITOR_METRICS.filter(metric => rows.some(row => Object.hasOwn(row, metric.id))).map(
+      metric => metric.id,
+    ),
     elapsedSeconds: rows.at(-1)?.elapsedSeconds ?? 0,
+  });
+  vi.spyOn(store, 'openRead').mockImplementation(id => store.get(id));
+  vi.spyOn(store, 'checkRead').mockResolvedValue();
+  vi.spyOn(store, 'inspectionGroups').mockImplementation(async (_id, _seconds, _at, locations) =>
+    locations ? [] : rows,
+  );
+  vi.spyOn(store, 'locationNeighbor').mockResolvedValue(undefined);
+  const lifecycle: import('../../src/services/browser-ride-store').RideLifecycleRow[] = [];
+  let active = true;
+  for (const [index, row] of rows.entries()) {
+    const previous = rows[index - 1];
+    if (previous && row.interruptionIndex > previous.interruptionIndex) {
+      lifecycle.push({
+        recordingId: id,
+        eventId: `cutoff-${index}`,
+        producer: 'browser',
+        producerSequence: String(index * 2 + 1),
+        elapsedUs: previous.elapsedUs,
+        queryUs: previous.queryUs,
+        revision: '1',
+        timestamp: previous.timestamp,
+        elapsedSeconds: previous.elapsedSeconds,
+        timerSeconds: 0,
+        action: 'pause',
+        interrupted: true,
+        interruption: {
+          controllerSequence: previous.producerSequence,
+          cutoffUs: previous.elapsedUs,
+          producer: previous.producer,
+          producerSequence: previous.producerSequence,
+          eventId: previous.eventId,
+        },
+      });
+      lifecycle.push({
+        recordingId: id,
+        eventId: `resume-${index}`,
+        producer: 'browser',
+        producerSequence: String(index * 2 + 2),
+        elapsedUs: row.elapsedUs,
+        queryUs: row.queryUs,
+        revision: '1',
+        timestamp: row.timestamp,
+        elapsedSeconds: row.elapsedSeconds,
+        timerSeconds: 0,
+        action: 'resume',
+        interrupted: false,
+      });
+    }
+    if (row.active === active) continue;
+    active = row.active;
+    lifecycle.push({
+      recordingId: id,
+      eventId: `lifecycle-${index}`,
+      producer: 'browser',
+      producerSequence: String(index + 1),
+      elapsedUs: row.elapsedUs,
+      queryUs: row.queryUs,
+      revision: '1',
+      timestamp: row.timestamp,
+      elapsedSeconds: row.elapsedSeconds,
+      timerSeconds: 0,
+      action: active ? 'resume' : 'pause',
+      interrupted: false,
+    });
+  }
+  vi.spyOn(store, 'analysisPage').mockImplementation(async (name, _id, after) => {
+    if (name === 'ride-lifecycle') return after ? [] : [...lifecycle];
+    if (name !== 'samples') return [];
+    return rows
+      .filter(
+        row =>
+          !after ||
+          BigInt(row.elapsedUs) > BigInt(after[0]) ||
+          (row.elapsedUs === after[0] && BigInt(row.producerSequence) > BigInt(after[2])),
+      )
+      .slice(0, BROWSER_PAGE);
   });
   vi.spyOn(store, 'get').mockImplementation(async () => record);
   vi.spyOn(store, 'bySequence').mockImplementation(async (_id, sequence) => rows[sequence]);
@@ -73,29 +353,228 @@ function fixture(
       )
       .slice(0, BROWSER_PAGE),
   );
+  vi.spyOn(store, 'pageExact').mockImplementation(async (_id, start, end, after) =>
+    rows
+      .filter(
+        row =>
+          BigInt(row.elapsedUs) >= BigInt(start) &&
+          BigInt(row.elapsedUs) <= BigInt(end) &&
+          (!after ||
+            BigInt(row.elapsedUs) > BigInt(after[0]) ||
+            (row.elapsedUs === after[0] && BigInt(row.producerSequence) > BigInt(after[2]))),
+      )
+      .slice(0, BROWSER_PAGE),
+  );
   vi.spyOn(store, 'neighbor').mockImplementation(async (_id, time, direction) =>
     direction === 'prev'
       ? rows.filter(row => row.elapsedSeconds <= time).at(-1)
       : rows.find(row => row.elapsedSeconds >= time),
   );
   vi.spyOn(store, 'tiles').mockImplementation(async (_id, level, first, last) => {
-    const tiles = new Map<number, RideTile>();
-    for (const row of rows) {
-      const bucket = Math.floor(row.elapsedSeconds / TILE_SECONDS[level]!);
-      if (bucket < first || bucket > last) continue;
-      const tile = tiles.get(bucket) ?? { recordingId: id, level, bucket, stats: {} };
+    const tiles: RideTile[] = [];
+    const size = TILE_SECONDS[level]!;
+    for (let bucket = first; bucket <= last; bucket++) {
+      const raw = rows.filter(row => row.elapsedSeconds >= bucket * size && row.elapsedSeconds < (bucket + 1) * size);
+      if (!raw.length) continue;
+      const stats: RideTile['stats'] = {};
       for (const metric of MONITOR_METRICS) {
-        const next = rowAggregate(row, metric.id);
-        if (next) tile.stats[metric.id] = mergeAggregate(tile.stats[metric.id], next, metric.id);
+        if (
+          isDistanceMetric(metric.id) ||
+          isConsumptionMetric(metric.id) ||
+          new InspectionMetricPolicy(metric.id).channel !== 'telemetry'
+        )
+          continue;
+        const reducer = new InspectionPlotBucket(metric.id, secondsUs(bucket * size), secondsUs((bucket + 1) * size));
+        raw.map(browserInspectionItem).forEach(item => reducer.append(item, true));
+        stats[metric.id] = { plot: reducer.aggregate().payload };
       }
-      tiles.set(bucket, tile);
+      tiles.push({ recordingId: id, level, bucket, stats });
     }
-    return [...tiles.values()];
+    return tiles;
   });
+
   return { store, record, rows, source: browserWorkoutMonitorSource(id, false, store) };
 }
 
 describe('browser monitor projections', () => {
+  it('shares pinned boundary pages across metric statistics', async () => {
+    const { store, record, source } = fixture(
+      Array.from({ length: 32 }, (_, index) => ({ time: index / 8, power: index + 10, cadence: index + 60 })),
+    );
+    const description = await source.describeSource({ generation: 1 });
+    const result = await source.rangeStats({
+      generation: 1,
+      expectedRevision: description.revision,
+      metrics: ['humanPowerW', 'cadenceRpm'],
+      startSeconds: 0,
+      endSeconds: record.elapsedSeconds,
+    });
+    expect(result).toMatchObject({
+      status: 'ok',
+      statistics: { humanPowerW: { count: 32 }, cadenceRpm: { count: 32 } },
+    });
+    const pages = await Promise.all(
+      vi.mocked(store.page).mock.results.map(result => result.value as Promise<RideRow[]>),
+    );
+    expect(pages.reduce((count, rows) => count + rows.length, 0)).toBeLessThanOrEqual(32);
+  });
+
+  it('rebuilds plots from pinned originals when all tile payloads are missing', async () => {
+    const { store, record, source } = fixture([
+      { time: 0, power: 10 },
+      { time: 1, power: 20 },
+      { time: 2, power: 30 },
+    ]);
+    vi.mocked(store.tiles).mockResolvedValue([]);
+    const description = await source.describeSource({ generation: 1 });
+    const result = await source.readPlot({
+      generation: 1,
+      expectedRevision: description.revision,
+      metrics: ['humanPowerW'],
+      startSeconds: 0,
+      endSeconds: 2,
+      pixelWidth: 4,
+    });
+    if (result.status !== 'ok') throw new Error('Unexpected retry');
+    expect(result.series.humanPowerW?.map(point => [point.elapsedSeconds, point.value])).toEqual([
+      [0, 10],
+      [1, 20],
+      [2, 30],
+    ]);
+    expect(vi.mocked(store.page).mock.calls.every(call => call[5] === record.revision)).toBe(true);
+  });
+
+  it('retains historical GPS but clears its live freshness evidence on recovery', async () => {
+    const { store, record } = fixture([]);
+    const location = {
+      recordingId: record.id,
+      eventId: '00000000-0000-4000-8000-000000000002',
+      elapsedUs: '1000000',
+      queryUs: '1767225601000000',
+      revision: '1',
+      originalTimestamp: '2026-01-01T00:00:01.000Z',
+      originalElapsedSeconds: 1,
+      clockEpoch: 'original-gps',
+      interval: 0,
+      originalAltitudeDatum: 'unknown',
+      producer: 'browser',
+      producerSequence: '2',
+      elapsedSeconds: 1,
+      timestamp: '2026-01-01T00:00:01.000Z',
+      speedMps: 2,
+      acquiredAtSeconds: 1001,
+      latitude: 0,
+      longitude: 0,
+      active: true,
+      distanceBarrier: false,
+    } as RideLocationRow;
+    vi.mocked(store.locationNeighbor).mockResolvedValue(location);
+    record.locationCount = 1;
+    const release = registerBrowserWorkoutClock(record.id, 0, () => ({ nowSeconds: 2, monotonicAt: 2 }), store, 0, '3');
+    try {
+      const source = browserWorkoutMonitorSource(record.id, true, store);
+      const old = await source.readLatest({ generation: 1, metrics: ['speedMps'] });
+      expect(old).toMatchObject({
+        points: { speedMps: { observationId: `${record.id}:00000000-0000-4000-8000-000000000002`, value: 2 } },
+        liveAcquiredAt: { speedMps: null },
+      });
+      location.producerSequence = '3';
+      location.acquiredAtSeconds = 1.5;
+      expect(await source.readLatest({ generation: 2, metrics: ['speedMps'] })).toMatchObject({
+        liveAcquiredAt: { speedMps: 1.5 },
+      });
+    } finally {
+      release();
+    }
+  });
+  it('streams GPS chart geometry and inspects the original independently of reduction', async () => {
+    const { store, record, source } = fixture([]);
+    const rows: RideLocationRow[] = Array.from({ length: 1000 }, (_, index) => {
+      const elapsed = index / 100;
+      return {
+        recordingId: record.id,
+        eventId: crypto.randomUUID(),
+        producer: 'browser',
+        producerSequence: String(index + 2),
+        elapsedUs: secondsUs(elapsed),
+        queryUs: '1767225600000000',
+        timestamp: '2026-01-01T00:00:00Z',
+        originalTimestamp: '2026-01-01T00:00:00Z',
+        originalElapsedSeconds: elapsed,
+        elapsedSeconds: elapsed,
+        acquiredAtSeconds: elapsed,
+        clockEpoch: 'clock',
+        active: true,
+        interval: 0,
+        distanceBarrier: index === 500,
+        latitude: -1,
+        longitude: -1,
+        horizontalAccuracyM: 5,
+        speedMps: index === 523 ? 99 : 2,
+        originalAltitudeDatum: 'wgs84Ellipsoid',
+      };
+    });
+    record.locationCount = rows.length;
+    record.availableMetrics = ['speedMps'];
+    record.elapsedSeconds = 10;
+    vi.spyOn(store, 'locationPage').mockImplementation(async (_id, start, end, after) =>
+      rows
+        .filter(
+          row =>
+            BigInt(row.elapsedUs) >= BigInt(start) &&
+            BigInt(row.elapsedUs) <= BigInt(end) &&
+            (!after || BigInt(row.producerSequence) > BigInt(after[2])),
+        )
+        .slice(0, BROWSER_PAGE),
+    );
+    vi.mocked(store.analysisPage).mockImplementation(async (name, _id, after) =>
+      name === 'ride-locations'
+        ? rows.filter(row => !after || BigInt(row.producerSequence) > BigInt(after[2])).slice(0, BROWSER_PAGE)
+        : [],
+    );
+    vi.mocked(store.locationNeighbor).mockImplementation(async (_id, seconds, direction) =>
+      direction === 'prev'
+        ? rows.filter(row => row.elapsedSeconds <= seconds).at(-1)
+        : rows.find(row => row.elapsedSeconds >= seconds),
+    );
+    const description = await source.describeSource({ generation: 1 });
+    const query = {
+      generation: 1,
+      expectedRevision: description.revision,
+      metrics: ['speedMps'],
+      startSeconds: 0,
+      endSeconds: 10,
+      pixelWidth: 4,
+    };
+    const result = await source.readPlot(query);
+    if (result.status !== 'ok') throw new Error('Unexpected retry');
+    expect(result.series.speedMps!.length).toBeLessThan(40);
+    expect(result.series.speedMps!.filter(point => point.startsSegment).map(point => point.elapsedSeconds)).toEqual([
+      0,
+    ]);
+    expect(result.series.speedMps).toContainEqual(
+      expect.objectContaining({ observationId: `${record.id}:${rows[523]!.eventId}`, elapsedSeconds: 5.23, value: 99 }),
+    );
+    vi.spyOn(store, 'inspectionGroups').mockResolvedValue(rows);
+    const inspected = await source.inspectAt({ ...query, seconds: 5.23 });
+    expect(inspected).toMatchObject({
+      points: { speedMps: { observationId: `${record.id}:${rows[523]!.eventId}`, elapsedSeconds: 5.23, value: 99 } },
+    });
+    const stats = await source.rangeStats(query);
+    expect(stats).toMatchObject({ statistics: { speedMps: { count: 1000, max: { value: 99 } } } });
+    vi.mocked(store.locationPage).mockClear();
+    vi.mocked(store.analysisPage).mockClear();
+    const narrow = { ...query, startSeconds: 5.015, endSeconds: 5.205 };
+    const narrowStats = await source.rangeStats(narrow);
+    const narrowPlot = await source.readPlot(narrow);
+    expect(narrowStats).toMatchObject({ statistics: { speedMps: { count: 19, max: { value: 2 } } } });
+    expect(narrowPlot).toMatchObject({ status: 'ok' });
+    expect(vi.mocked(store.locationPage).mock.calls).toHaveLength(2);
+    expect(vi.mocked(store.locationPage).mock.calls.every(call => call[1] === '5015000' && call[2] === '5205000')).toBe(
+      true,
+    );
+    expect(vi.mocked(store.analysisPage).mock.calls.every(call => call[0] !== 'ride-locations')).toBe(true);
+  });
   it('keeps stored acquisitions fixed across rereads and clears evidence when capture stops', async () => {
     const { store, record } = fixture([{ time: 1.125, power: 100 }]);
     const origin = 100.456;
@@ -184,6 +663,7 @@ describe('browser monitor projections', () => {
   );
   it('does not lend the last original through a sealed interruption on a retained live source', async () => {
     const { store, record } = fixture([{ time: 1, power: 100 }]);
+    registerBrowserWorkoutClock(record.id, 100, () => ({ nowSeconds: 2, monotonicAt: 102 }), store);
     const source = browserWorkoutMonitorSource(record.id, true, store);
     const query = {
       generation: 1,
@@ -196,7 +676,7 @@ describe('browser monitor projections', () => {
       phase: 'completed',
       interrupted: true,
       endedAt: record.checkpointAt,
-      revision: record.revision + 1,
+      revision: (BigInt(record.revision) + 1n).toString(),
     });
     query.expectedRevision = (await source.describeSource({ generation: 1 })).revision;
     expect(await source.inspectAt(query)).toMatchObject({ points: { humanPowerW: null } });
@@ -234,18 +714,24 @@ describe('browser monitor projections', () => {
       profile: {
         recordingId: record.id,
         generation: 'test',
-        inputSequence: record.samples - 1,
-        state: { distance: 0, covered: 0, intervals: 0 },
-        segment: -1,
-        plotSegment: 0,
+        source: 'controller',
+        generationKey: '09223372036854775809',
+        revisionKey: '09223372036854775809',
+        inputSequence: record.telemetryCount - 1,
+        intervalEndUs: '0',
+        prefixes: [],
+        state: { intervals: 0 },
         building: false,
         recordRevision: String(record.revision),
-        lifecycleRevision: 0,
+        coveredUs: '0',
+        distanceQ: '0',
+        timerUs: '0',
+        telemetryCount: record.telemetryCount,
+        locationCount: 0,
         lifecycleCount: 0,
-        activeIntervals: [],
-        activeOpen: null,
       },
       info: { selection: 'auto', selected: null, available: [] },
+      profiles: [],
     });
     vi.mocked(browserDistanceCurrent).mockResolvedValue(true);
     const { summary } = await recorder.read(record.id);
@@ -335,11 +821,16 @@ describe('browser monitor projections', () => {
     ]) {
       const result = await source.rangeStats({ ...query, startSeconds: startSeconds!, endSeconds: endSeconds! });
       if (result.status !== 'ok') throw new Error('Unexpected retry');
-      for (const metric of query.metrics) expect(result.statistics[metric]?.coveredSeconds, metric).toBe(covered);
+      for (const metric of query.metrics) {
+        if (metric === 'assistLevel') {
+          expect(result.statistics[metric]).not.toHaveProperty('coveredSeconds');
+          expect(result.statistics[metric]).not.toHaveProperty('integral');
+        } else expect(result.statistics[metric]?.coveredSeconds, metric).toBe(covered);
+      }
     }
     const empty = await source.rangeStats({ ...query, startSeconds: 3, endSeconds: 5 });
     if (empty.status !== 'ok') throw new Error('Unexpected retry');
-    expect(empty.statistics).toEqual({});
+    for (const metric of query.metrics) expect(empty.statistics[metric]).toMatchObject({ count: 0 });
   });
 
   it.each([
@@ -358,8 +849,9 @@ describe('browser monitor projections', () => {
       pixelWidth: 4,
     });
     if (result.status !== 'ok') throw new Error('Unexpected retry');
-    expect(result.series.humanPowerW?.map(point => point.elapsedSeconds)).toEqual(times);
-    expect(result.series.humanPowerW?.map(point => point.value)).toEqual(powers);
+    const retained = [0, 1, 2, 3, 4, 5];
+    expect(result.series.humanPowerW?.map(point => point.elapsedSeconds)).toEqual(retained.map(i => times[i]));
+    expect(result.series.humanPowerW?.map(point => point.value)).toEqual(retained.map(i => powers[i]));
     expect(result.series.humanPowerW?.filter(point => point.startsSegment).map(point => point.elapsedSeconds)).toEqual(
       starts,
     );
@@ -373,9 +865,10 @@ describe('browser monitor projections', () => {
       locks: { request: (_name: string, _options: unknown, work: (lock: object) => Promise<void>) => work({}) },
     });
     const { store, record, rows } = fixture([]);
-    vi.spyOn(store, 'recoverOrphan').mockResolvedValue(null);
-    vi.spyOn(store, 'begin').mockResolvedValue(record);
+    const memory = browserMemoryStore(store, record);
+    const append = memory.append.getMockImplementation()!;
     vi.spyOn(store, 'append').mockImplementation(async (_id, _token, batch, elapsed, timer, at) => {
+      await append(_id, _token, batch, elapsed, timer, at);
       expect(elapsed).toBe(batch.at(-1)!.elapsedSeconds);
       expect(timer).toBe(elapsed);
       expect(at).toBe(batch.at(-1)!.timestamp);
@@ -384,18 +877,10 @@ describe('browser monitor projections', () => {
         elapsedSeconds: elapsed,
         timerSeconds: timer,
         checkpointAt: at,
-        samples: rows.length,
-        revision: record.revision! + 1,
+        telemetryCount: rows.length,
+        revision: (BigInt(record.revision) + 1n).toString(),
       });
     });
-    vi.spyOn(store, 'transition').mockImplementation(async (_id, _token, action, elapsed, timer, at) =>
-      Object.assign(record, {
-        elapsedSeconds: elapsed,
-        timerSeconds: timer,
-        ...(action === 'save' ? { endedAt: at } : {}),
-        revision: record.revision! + 1,
-      }),
-    );
     class Source extends TestTelemetryAdapter {
       override subscribe(events: AdapterEvents) {
         return super.subscribe({
@@ -426,15 +911,15 @@ describe('browser monitor projections', () => {
       await recorder.lap();
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ elapsedSeconds: 1, originalElapsedSeconds: 1 });
-      expect((await recorder.getState()).streams.cyc.status).toBe('receiving');
+      expect((await recorder.getState()).streams.controller.status).toBe('receiving');
       controller.configure(['humanPowerW'], 'all');
       controller.refresh();
       await settle();
       expect(controller.getSnapshot().liveAcquiredAt.humanPowerW).toBe(1);
       await vi.advanceTimersByTimeAsync(3999);
-      expect((await recorder.getState()).streams.cyc.status).toBe('receiving');
+      expect((await recorder.getState()).streams.controller.status).toBe('receiving');
       await vi.advanceTimersByTimeAsync(1);
-      expect((await recorder.getState()).streams.cyc.status).toBe('stale');
+      expect((await recorder.getState()).streams.controller.status).toBe('stale');
       controller.tick();
       const state = controller.getSnapshot();
       expect(
@@ -462,26 +947,19 @@ describe('browser monitor projections', () => {
       locks: { request: (_name: string, _options: unknown, work: (lock: object) => Promise<void>) => work({}) },
     });
     const { store, record, rows } = fixture([]);
-    vi.spyOn(store, 'recoverOrphan').mockResolvedValue(null);
-    vi.spyOn(store, 'begin').mockResolvedValue(record);
+    const memory = browserMemoryStore(store, record);
+    const append = memory.append.getMockImplementation()!;
     vi.spyOn(store, 'append').mockImplementation(async (_id, _token, batch, elapsed, timer, at) => {
+      await append(_id, _token, batch, elapsed, timer, at);
       rows.push(...batch);
       return Object.assign(record, {
         elapsedSeconds: elapsed,
         timerSeconds: timer,
         checkpointAt: at,
-        samples: rows.length,
-        revision: record.revision! + 1,
+        telemetryCount: rows.length,
+        revision: (BigInt(record.revision) + 1n).toString(),
       });
     });
-    vi.spyOn(store, 'transition').mockImplementation(async (_id, _token, action, elapsed, timer, at) =>
-      Object.assign(record, {
-        elapsedSeconds: elapsed,
-        timerSeconds: timer,
-        ...(action === 'save' ? { endedAt: at } : {}),
-        revision: record.revision! + 1,
-      }),
-    );
     class Source extends TestTelemetryAdapter {
       sample(sequence: number) {
         this.emitSample({
@@ -534,5 +1012,24 @@ describe('browser monitor projections', () => {
     } finally {
       controller.dispose();
     }
+  });
+});
+
+it('inspects every original in an equal-time group before applying core identity order', async () => {
+  const { source, record } = fixture([
+    { time: 0, power: 100 },
+    { time: 0.5, power: 100 },
+    ...Array.from({ length: 11 }, (_, i) => ({ time: 1, power: i + 2 })),
+  ]);
+  const description = await source.describeSource({ generation: 1 });
+  const result = await source.inspectAt({
+    generation: 1,
+    expectedRevision: description.revision,
+    metrics: ['humanPowerW'],
+    seconds: 1,
+  });
+  expect(result).toMatchObject({
+    status: 'ok',
+    points: { humanPowerW: { observationId: `${record.id}:10`, value: 10 } },
   });
 });

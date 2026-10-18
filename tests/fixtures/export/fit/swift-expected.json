@@ -1,0 +1,1594 @@
+{
+  "shared": [
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160000,
+        "event": "timer",
+        "event_type": "start",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160000,
+        "position_lat": 536870912,
+        "position_long": 83513253,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 0,
+        "heart_rate": 111,
+        "power": 121,
+        "cadence": 70,
+        "motor_power": 301,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": 301,
+          "battery_voltage": 51.994998931884766,
+          "battery_current": 5.793799877166748,
+          "motor_current": 6,
+          "motor_speed": 2502.5,
+          "motor_temperature": 35,
+          "controller_temperature": 30,
+          "pedal_torque": 25,
+          "energy_used_controller": 0.05000000074505806,
+          "charge_used_controller": 0.0010000000474974513
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160001,
+        "position_lat": 536870912,
+        "position_long": 83513492,
+        "enhanced_altitude": 101.60000000000002,
+        "enhanced_speed": 3.1,
+        "distance": 1.57,
+        "power": 123,
+        "cadence": 71,
+        "motor_power": 286,
+        "ebike_assist_mode": 1,
+        "developer_fields": {
+          "battery_power": 286,
+          "battery_voltage": 51.94499969482422,
+          "battery_current": 5.5106000900268555,
+          "motor_current": 6.099999904632568,
+          "motor_speed": 2512.5,
+          "motor_temperature": 35,
+          "controller_temperature": 30,
+          "pedal_torque": 25.25,
+          "energy_used_controller": 0.15000000596046448,
+          "charge_used_controller": 0.003000000026077032
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160002,
+        "position_lat": 536870912,
+        "position_long": 83513730,
+        "enhanced_altitude": 103.20000000000005,
+        "enhanced_speed": 3.2,
+        "distance": 3.15,
+        "heart_rate": 111,
+        "power": 125,
+        "cadence": 72,
+        "motor_power": 271,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": 271,
+          "battery_voltage": 51.89500045776367,
+          "battery_current": 5.226900100708008,
+          "motor_current": 6.199999809265137,
+          "motor_speed": 2522.5,
+          "motor_temperature": 36,
+          "controller_temperature": 30,
+          "pedal_torque": 25.5,
+          "energy_used_controller": 0.25,
+          "charge_used_controller": 0.004999999888241291
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160003,
+        "position_lat": 536870912,
+        "position_long": 83513969,
+        "enhanced_altitude": 104.79999999999995,
+        "enhanced_speed": 3.3,
+        "distance": 4.72,
+        "power": 127,
+        "cadence": 73,
+        "motor_power": 256,
+        "ebike_assist_mode": 3,
+        "developer_fields": {
+          "battery_power": 256,
+          "battery_voltage": 51.845001220703125,
+          "battery_current": 4.942599773406982,
+          "motor_current": 6.300000190734863,
+          "motor_speed": 2532.5,
+          "motor_temperature": 36,
+          "controller_temperature": 31,
+          "pedal_torque": 25.75,
+          "energy_used_controller": 0.3499999940395355,
+          "charge_used_controller": 0.007000000216066837
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160004,
+        "position_lat": 536870912,
+        "position_long": 83514207,
+        "enhanced_altitude": 106.39999999999998,
+        "enhanced_speed": 3.4,
+        "distance": 6.29,
+        "heart_rate": 112,
+        "power": 129,
+        "cadence": 74,
+        "motor_power": 241,
+        "ebike_assist_mode": 4,
+        "developer_fields": {
+          "battery_power": 241,
+          "battery_voltage": 51.79499816894531,
+          "battery_current": 4.657800197601318,
+          "motor_current": 6.400000095367432,
+          "motor_speed": 2542.5,
+          "motor_temperature": 36,
+          "controller_temperature": 31,
+          "pedal_torque": 26,
+          "energy_used_controller": 0.44999998807907104,
+          "charge_used_controller": 0.008999999612569809
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160005,
+        "position_lat": 536870912,
+        "position_long": 83514446,
+        "enhanced_altitude": 108,
+        "enhanced_speed": 3.5,
+        "distance": 7.86,
+        "power": 131,
+        "cadence": 75,
+        "motor_power": 226,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": 226,
+          "battery_voltage": 51.744998931884766,
+          "battery_current": 4.372399806976318,
+          "motor_current": 6.5,
+          "motor_speed": 2552.5,
+          "motor_temperature": 37,
+          "controller_temperature": 31,
+          "pedal_torque": 26.25,
+          "energy_used_controller": 0.550000011920929,
+          "charge_used_controller": 0.010999999940395355
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160006,
+        "position_lat": 536870912,
+        "position_long": 83514685,
+        "enhanced_altitude": 109.60000000000002,
+        "enhanced_speed": 3.6,
+        "distance": 9.44,
+        "heart_rate": 113,
+        "power": 133,
+        "cadence": 76,
+        "motor_power": 211,
+        "ebike_assist_mode": 1,
+        "developer_fields": {
+          "battery_power": 211,
+          "battery_voltage": 51.69499969482422,
+          "battery_current": 4.086450099945068,
+          "motor_current": 6.599999904632568,
+          "motor_speed": 2562.5,
+          "motor_temperature": 37,
+          "controller_temperature": 31,
+          "pedal_torque": 26.5,
+          "energy_used_controller": 0.6499999761581421,
+          "charge_used_controller": 0.013000000268220901
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160007,
+        "position_lat": 536870912,
+        "position_long": 83514923,
+        "enhanced_altitude": 111.20000000000005,
+        "enhanced_speed": 3.7,
+        "distance": 11.01,
+        "power": 135,
+        "cadence": 77,
+        "motor_power": 196,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": 196,
+          "battery_voltage": 51.64500045776367,
+          "battery_current": 3.799999952316284,
+          "motor_current": 6.699999809265137,
+          "motor_speed": 2572.5,
+          "motor_temperature": 37,
+          "controller_temperature": 31,
+          "pedal_torque": 26.75,
+          "energy_used_controller": 0.75,
+          "charge_used_controller": 0.014999999664723873
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160008,
+        "position_lat": 536870912,
+        "position_long": 83515162,
+        "enhanced_altitude": 112.79999999999995,
+        "enhanced_speed": 3.8,
+        "distance": 12.58,
+        "heart_rate": 115,
+        "power": 137,
+        "cadence": 78,
+        "motor_power": 181,
+        "ebike_assist_mode": 3,
+        "developer_fields": {
+          "battery_power": 181,
+          "battery_voltage": 51.595001220703125,
+          "battery_current": 3.5129499435424805,
+          "motor_current": 6.800000190734863,
+          "motor_speed": 2582.5,
+          "motor_temperature": 37,
+          "controller_temperature": 32,
+          "pedal_torque": 27,
+          "energy_used_controller": 0.8500000238418579,
+          "charge_used_controller": 0.017000000923871994
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160009,
+        "position_lat": 536870912,
+        "position_long": 83515400,
+        "enhanced_altitude": 114.39999999999998,
+        "enhanced_speed": 3.9,
+        "distance": 14.15,
+        "power": 139,
+        "cadence": 79,
+        "motor_power": 166,
+        "ebike_assist_mode": 4,
+        "developer_fields": {
+          "battery_power": 166,
+          "battery_voltage": 51.54499816894531,
+          "battery_current": 3.2253499031066895,
+          "motor_current": 6.900000095367432,
+          "motor_speed": 2592.5,
+          "motor_temperature": 38,
+          "controller_temperature": 32,
+          "pedal_torque": 27.25,
+          "energy_used_controller": 0.949999988079071,
+          "charge_used_controller": 0.01899999938905239
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160010,
+        "position_lat": 536870912,
+        "position_long": 83515639,
+        "enhanced_altitude": 116,
+        "enhanced_speed": 4,
+        "distance": 15.73,
+        "heart_rate": 115,
+        "power": 141,
+        "cadence": 80,
+        "motor_power": 151,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": 151,
+          "battery_voltage": 51.494998931884766,
+          "battery_current": 2.937150001525879,
+          "motor_current": 7,
+          "motor_speed": 2602.5,
+          "motor_temperature": 38,
+          "controller_temperature": 32,
+          "pedal_torque": 27.5,
+          "energy_used_controller": 1.0499999523162842,
+          "charge_used_controller": 0.020999999716877937
+        }
+      }
+    },
+    {
+      "mesg_num": 19,
+      "fields": {
+        "timestamp": 1136160010,
+        "message_index": 0,
+        "event": "lap",
+        "event_type": "stop",
+        "start_time": 1136160000,
+        "total_elapsed_time": 10.3,
+        "total_timer_time": 10.3,
+        "total_distance": 16.04,
+        "lap_trigger": "manual",
+        "sport": "cycling"
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160011,
+        "position_lat": 536870912,
+        "position_long": 83515878,
+        "enhanced_altitude": 117.60000000000002,
+        "enhanced_speed": 4.1,
+        "distance": 17.3,
+        "power": 143,
+        "cadence": 81,
+        "motor_power": 136,
+        "ebike_assist_mode": 1,
+        "developer_fields": {
+          "battery_power": 136,
+          "battery_voltage": 51.44499969482422,
+          "battery_current": 2.6484498977661133,
+          "motor_current": 7.099999904632568,
+          "motor_speed": 2612.5,
+          "motor_temperature": 38,
+          "controller_temperature": 32,
+          "pedal_torque": 27.75,
+          "energy_used_controller": 1.149999976158142,
+          "charge_used_controller": 0.023000000044703484
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160012,
+        "position_lat": 536870912,
+        "position_long": 83516116,
+        "enhanced_altitude": 119.20000000000005,
+        "enhanced_speed": 4.2,
+        "distance": 18.87,
+        "heart_rate": 116,
+        "power": 145,
+        "cadence": 82,
+        "motor_power": 121,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": 121,
+          "battery_voltage": 51.39500045776367,
+          "battery_current": 2.359149932861328,
+          "motor_current": 7.199999809265137,
+          "motor_speed": 2622.5,
+          "motor_temperature": 39,
+          "controller_temperature": 32,
+          "pedal_torque": 28,
+          "energy_used_controller": 1.25,
+          "charge_used_controller": 0.02500000037252903
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160013,
+        "position_lat": 536870912,
+        "position_long": 83516355,
+        "enhanced_altitude": 120.79999999999995,
+        "enhanced_speed": 4.3,
+        "distance": 20.44,
+        "power": 147,
+        "cadence": 83,
+        "motor_power": 106,
+        "ebike_assist_mode": 3,
+        "developer_fields": {
+          "battery_power": 106,
+          "battery_voltage": 51.345001220703125,
+          "battery_current": 2.069350004196167,
+          "motor_current": 7.300000190734863,
+          "motor_speed": 2632.5,
+          "motor_temperature": 39,
+          "controller_temperature": 33,
+          "pedal_torque": 28.25,
+          "energy_used_controller": 1.350000023841858,
+          "charge_used_controller": 0.027000000700354576
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160014,
+        "position_lat": 536870912,
+        "position_long": 83516594,
+        "enhanced_altitude": 122.39999999999998,
+        "enhanced_speed": 4.4,
+        "distance": 22.02,
+        "heart_rate": 117,
+        "power": 149,
+        "cadence": 84,
+        "motor_power": 91,
+        "ebike_assist_mode": 4,
+        "developer_fields": {
+          "battery_power": 91,
+          "battery_voltage": 51.29499816894531,
+          "battery_current": 1.7789499759674072,
+          "motor_current": 7.400000095367432,
+          "motor_speed": 2642.5,
+          "motor_temperature": 39,
+          "controller_temperature": 33,
+          "pedal_torque": 28.5,
+          "energy_used_controller": 1.4500000476837158,
+          "charge_used_controller": 0.028999999165534973
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160015,
+        "position_lat": 536870912,
+        "position_long": 83516832,
+        "enhanced_altitude": 124,
+        "enhanced_speed": 4.5,
+        "distance": 23.59,
+        "power": 151,
+        "cadence": 70,
+        "motor_power": 76,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": 76,
+          "battery_voltage": 51.244998931884766,
+          "battery_current": 1.4879499673843384,
+          "motor_current": 7.5,
+          "motor_speed": 2652.5,
+          "motor_temperature": 40,
+          "controller_temperature": 33,
+          "pedal_torque": 28.75,
+          "energy_used_controller": 1.5499999523162842,
+          "charge_used_controller": 0.03099999949336052
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160016,
+        "position_lat": 536870912,
+        "position_long": 83517071,
+        "enhanced_altitude": 125.60000000000002,
+        "enhanced_speed": 4.6,
+        "distance": 25.16,
+        "heart_rate": 119,
+        "power": 153,
+        "cadence": 71,
+        "motor_power": 61,
+        "ebike_assist_mode": 1,
+        "developer_fields": {
+          "battery_power": 61,
+          "battery_voltage": 51.19499969482422,
+          "battery_current": 1.1964000463485718,
+          "motor_current": 7.599999904632568,
+          "motor_speed": 2662.5,
+          "motor_temperature": 40,
+          "controller_temperature": 33,
+          "pedal_torque": 29,
+          "energy_used_controller": 1.649999976158142,
+          "charge_used_controller": 0.032999999821186066
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160017,
+        "position_lat": 536870912,
+        "position_long": 83517309,
+        "enhanced_altitude": 127.20000000000005,
+        "enhanced_speed": 4.7,
+        "distance": 26.73,
+        "power": 155,
+        "cadence": 72,
+        "motor_power": 46,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": 46,
+          "battery_voltage": 51.14500045776367,
+          "battery_current": 0.9042999744415283,
+          "motor_current": 7.699999809265137,
+          "motor_speed": 2672.5,
+          "motor_temperature": 40,
+          "controller_temperature": 33,
+          "pedal_torque": 29.25,
+          "energy_used_controller": 1.75,
+          "charge_used_controller": 0.03500000014901161
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160018,
+        "position_lat": 536870912,
+        "position_long": 83517548,
+        "enhanced_altitude": 128.79999999999995,
+        "enhanced_speed": 4.8,
+        "distance": 28.31,
+        "heart_rate": 119,
+        "power": 157,
+        "cadence": 73,
+        "motor_power": 31,
+        "ebike_assist_mode": 3,
+        "developer_fields": {
+          "battery_power": 31,
+          "battery_voltage": 51.095001220703125,
+          "battery_current": 0.6115999817848206,
+          "motor_current": 7.800000190734863,
+          "motor_speed": 2682.5,
+          "motor_temperature": 40,
+          "controller_temperature": 34,
+          "pedal_torque": 29.5,
+          "energy_used_controller": 1.850000023841858,
+          "charge_used_controller": 0.03700000047683716
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160019,
+        "position_lat": 536870912,
+        "position_long": 83517787,
+        "enhanced_altitude": 130.39999999999998,
+        "enhanced_speed": 4.9,
+        "distance": 29.88,
+        "power": 159,
+        "cadence": 74,
+        "motor_power": 16,
+        "ebike_assist_mode": 4,
+        "developer_fields": {
+          "battery_power": 16,
+          "battery_voltage": 51.04499816894531,
+          "battery_current": 0.3183499872684479,
+          "motor_current": 7.900000095367432,
+          "motor_speed": 2692.5,
+          "motor_temperature": 41,
+          "controller_temperature": 34,
+          "pedal_torque": 29.75,
+          "energy_used_controller": 1.9500000476837158,
+          "charge_used_controller": 0.039000000804662704
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160020,
+        "position_lat": 536870912,
+        "position_long": 83518025,
+        "enhanced_altitude": 132,
+        "enhanced_speed": 5,
+        "distance": 31.45,
+        "heart_rate": 120,
+        "power": 161,
+        "cadence": 75,
+        "motor_power": 1,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": 1,
+          "battery_voltage": 50.994998931884766,
+          "battery_current": 0.02449999935925007,
+          "motor_current": 8,
+          "motor_speed": 2702.5,
+          "motor_temperature": 41,
+          "controller_temperature": 34,
+          "pedal_torque": 30,
+          "energy_used_controller": 2.049999952316284,
+          "charge_used_controller": 0.04100000113248825
+        }
+      }
+    },
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160020,
+        "event": "timer",
+        "event_type": "stop_all",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160025,
+        "event": "timer",
+        "event_type": "start",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160025,
+        "power": 172,
+        "cadence": 81,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": -73,
+          "battery_voltage": 50.7400016784668,
+          "battery_current": -1.4289000034332275,
+          "motor_current": 8.5,
+          "motor_speed": 2755,
+          "motor_temperature": 43,
+          "controller_temperature": 35,
+          "pedal_torque": 31.25,
+          "energy_used_controller": 2.049999952316284,
+          "charge_used_controller": 0.04100000113248825
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160026,
+        "position_lat": 536870912,
+        "position_long": 83519457,
+        "enhanced_altitude": 141.60000000000002,
+        "enhanced_speed": 5.6,
+        "distance": 31.45,
+        "heart_rate": 123,
+        "power": 173,
+        "cadence": 81,
+        "ebike_assist_mode": 1,
+        "developer_fields": {
+          "battery_power": -89,
+          "battery_voltage": 50.69499969482422,
+          "battery_current": -1.7506500482559204,
+          "motor_current": 8.600000381469727,
+          "motor_speed": 2762.5,
+          "motor_temperature": 43,
+          "controller_temperature": 35,
+          "pedal_torque": 31.5,
+          "energy_used_controller": 2.1500000953674316,
+          "charge_used_controller": 0.0430000014603138
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160027,
+        "position_lat": 536870912,
+        "position_long": 83519695,
+        "enhanced_altitude": 143.20000000000005,
+        "enhanced_speed": 5.7,
+        "distance": 33.02,
+        "power": 175,
+        "cadence": 82,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": -104,
+          "battery_voltage": 50.64500045776367,
+          "battery_current": -2.0485999584198,
+          "motor_current": 8.699999809265137,
+          "motor_speed": 2772.5,
+          "motor_temperature": 43,
+          "controller_temperature": 35,
+          "pedal_torque": 31.75,
+          "energy_used_controller": 2.25,
+          "charge_used_controller": 0.04500000178813934
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160028,
+        "position_lat": 536870912,
+        "position_long": 83519934,
+        "enhanced_altitude": 144.79999999999995,
+        "enhanced_speed": 5.8,
+        "distance": 34.6,
+        "heart_rate": 124,
+        "power": 177,
+        "cadence": 83,
+        "ebike_assist_mode": 3,
+        "developer_fields": {
+          "battery_power": -119,
+          "battery_voltage": 50.595001220703125,
+          "battery_current": -2.3470499515533447,
+          "motor_current": 8.800000190734863,
+          "motor_speed": 2782.5,
+          "motor_temperature": 43,
+          "controller_temperature": 36,
+          "pedal_torque": 32,
+          "energy_used_controller": 2.3499999046325684,
+          "charge_used_controller": 0.04699999839067459
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160029,
+        "position_lat": 536870912,
+        "position_long": 83520173,
+        "enhanced_altitude": 146.39999999999998,
+        "enhanced_speed": 5.9,
+        "distance": 36.17,
+        "power": 179,
+        "cadence": 84,
+        "ebike_assist_mode": 4,
+        "developer_fields": {
+          "battery_power": -134,
+          "battery_voltage": 50.54499816894531,
+          "battery_current": -2.6461501121520996,
+          "motor_current": 8.899999618530273,
+          "motor_speed": 2792.5,
+          "motor_temperature": 44,
+          "controller_temperature": 36,
+          "pedal_torque": 32.25,
+          "energy_used_controller": 2.450000047683716,
+          "charge_used_controller": 0.04899999871850014
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160030,
+        "position_lat": 536870912,
+        "position_long": 83520411,
+        "enhanced_altitude": 148,
+        "enhanced_speed": 6,
+        "distance": 37.74,
+        "heart_rate": 125,
+        "power": 181,
+        "cadence": 70,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": -149,
+          "battery_voltage": 50.494998931884766,
+          "battery_current": -2.945849895477295,
+          "motor_current": 9,
+          "motor_speed": 2802.5,
+          "motor_temperature": 44,
+          "controller_temperature": 36,
+          "pedal_torque": 32.5,
+          "energy_used_controller": 2.549999952316284,
+          "charge_used_controller": 0.050999999046325684
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160031,
+        "position_lat": 536870912,
+        "position_long": 83520650,
+        "enhanced_altitude": 146,
+        "enhanced_speed": 6.1,
+        "distance": 39.31,
+        "power": 183,
+        "cadence": 71,
+        "ebike_assist_mode": 1,
+        "developer_fields": {
+          "battery_power": -164,
+          "battery_voltage": 50.44499969482422,
+          "battery_current": -3.2460999488830566,
+          "motor_current": 9.100000381469727,
+          "motor_speed": 2812.5,
+          "motor_temperature": 44,
+          "controller_temperature": 36,
+          "pedal_torque": 32.75,
+          "energy_used_controller": 2.6500000953674316,
+          "charge_used_controller": 0.05299999937415123
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160032,
+        "position_lat": 536870912,
+        "position_long": 83520888,
+        "enhanced_altitude": 144,
+        "enhanced_speed": 6.2,
+        "distance": 40.89,
+        "heart_rate": 127,
+        "power": 185,
+        "cadence": 72,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": -179,
+          "battery_voltage": 50.39500045776367,
+          "battery_current": -3.546950101852417,
+          "motor_current": 9.199999809265137,
+          "motor_speed": 2822.5,
+          "motor_temperature": 45,
+          "controller_temperature": 36,
+          "pedal_torque": 33,
+          "energy_used_controller": 2.75,
+          "charge_used_controller": 0.054999999701976776
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160033,
+        "position_lat": 536870912,
+        "position_long": 83521127,
+        "enhanced_altitude": 142,
+        "enhanced_speed": 6.3,
+        "distance": 42.46,
+        "power": 187,
+        "cadence": 73,
+        "ebike_assist_mode": 3,
+        "developer_fields": {
+          "battery_power": -194,
+          "battery_voltage": 50.345001220703125,
+          "battery_current": -3.848449945449829,
+          "motor_current": 9.300000190734863,
+          "motor_speed": 2832.5,
+          "motor_temperature": 45,
+          "controller_temperature": 37,
+          "pedal_torque": 33.25,
+          "energy_used_controller": 2.8499999046325684,
+          "charge_used_controller": 0.05700000002980232
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160034,
+        "position_lat": 536870912,
+        "position_long": 83521366,
+        "enhanced_altitude": 140,
+        "enhanced_speed": 6.4,
+        "distance": 44.03,
+        "heart_rate": 127,
+        "power": 189,
+        "cadence": 74,
+        "ebike_assist_mode": 4,
+        "developer_fields": {
+          "battery_power": -209,
+          "battery_voltage": 50.29499816894531,
+          "battery_current": -4.15054988861084,
+          "motor_current": 9.399999618530273,
+          "motor_speed": 2842.5,
+          "motor_temperature": 45,
+          "controller_temperature": 37,
+          "pedal_torque": 33.5,
+          "energy_used_controller": 2.950000047683716,
+          "charge_used_controller": 0.05900000035762787
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160035,
+        "position_lat": 536870912,
+        "position_long": 83521604,
+        "enhanced_altitude": 138,
+        "enhanced_speed": 6.5,
+        "distance": 45.6,
+        "power": 191,
+        "cadence": 75,
+        "ebike_assist_mode": 0,
+        "developer_fields": {
+          "battery_power": -224,
+          "battery_voltage": 50.244998931884766,
+          "battery_current": -4.453149795532227,
+          "motor_current": 9.5,
+          "motor_speed": 2852.5,
+          "motor_temperature": 46,
+          "controller_temperature": 37,
+          "pedal_torque": 33.75,
+          "energy_used_controller": 3.049999952316284,
+          "charge_used_controller": 0.061000000685453415
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160036,
+        "position_lat": 536870912,
+        "position_long": 83521843,
+        "enhanced_altitude": 136,
+        "enhanced_speed": 6.6,
+        "distance": 47.18,
+        "heart_rate": 128,
+        "power": 193,
+        "cadence": 76,
+        "ebike_assist_mode": 1,
+        "developer_fields": {
+          "battery_power": -239,
+          "battery_voltage": 50.19499969482422,
+          "battery_current": -4.756450176239014,
+          "motor_current": 9.600000381469727,
+          "motor_speed": 2862.5,
+          "motor_temperature": 46,
+          "controller_temperature": 37,
+          "pedal_torque": 34,
+          "energy_used_controller": 3.1500000953674316,
+          "charge_used_controller": 0.06300000101327896
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160037,
+        "position_lat": 536870912,
+        "position_long": 83522082,
+        "enhanced_altitude": 134,
+        "enhanced_speed": 6.7,
+        "distance": 48.75,
+        "power": 195,
+        "cadence": 77,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": -254,
+          "battery_voltage": 50.14500045776367,
+          "battery_current": -5.060299873352051,
+          "motor_current": 9.699999809265137,
+          "motor_speed": 2872.5,
+          "motor_temperature": 46,
+          "controller_temperature": 37,
+          "pedal_torque": 34.25,
+          "energy_used_controller": 3.25,
+          "charge_used_controller": 0.06499999761581421
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160038,
+        "position_lat": 536870912,
+        "position_long": 83522320,
+        "enhanced_altitude": 132,
+        "enhanced_speed": 6.8,
+        "distance": 50.32,
+        "heart_rate": 129,
+        "power": 197,
+        "cadence": 78,
+        "ebike_assist_mode": 3,
+        "developer_fields": {
+          "battery_power": -269,
+          "battery_voltage": 50.095001220703125,
+          "battery_current": -5.364799976348877,
+          "motor_current": 9.800000190734863,
+          "motor_speed": 2882.5,
+          "motor_temperature": 46,
+          "controller_temperature": 38,
+          "pedal_torque": 34.5,
+          "energy_used_controller": 3.3499999046325684,
+          "charge_used_controller": 0.06700000166893005
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160039,
+        "position_lat": 536870912,
+        "position_long": 83522559,
+        "enhanced_altitude": 130,
+        "enhanced_speed": 6.9,
+        "distance": 51.89,
+        "power": 199,
+        "cadence": 79,
+        "ebike_assist_mode": 4,
+        "developer_fields": {
+          "battery_power": -284,
+          "battery_voltage": 50.04499816894531,
+          "battery_current": -5.669899940490723,
+          "motor_current": 9.899999618530273,
+          "motor_speed": 2892.5,
+          "motor_temperature": 47,
+          "controller_temperature": 38,
+          "pedal_torque": 34.75,
+          "energy_used_controller": 3.450000047683716,
+          "charge_used_controller": 0.0689999982714653
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160040,
+        "power": 210,
+        "cadence": 90,
+        "motor_power": 50,
+        "ebike_assist_mode": 2,
+        "developer_fields": {
+          "battery_power": 50,
+          "battery_voltage": 49.900001525878906,
+          "battery_current": 1.0019999742507935,
+          "motor_current": 9.899999618530273,
+          "motor_speed": 2900,
+          "motor_temperature": 47,
+          "controller_temperature": 38,
+          "pedal_torque": 35,
+          "energy_used_controller": 3.5,
+          "charge_used_controller": 0.07000000029802322
+        }
+      }
+    },
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160040,
+        "event": "timer",
+        "event_type": "stop_all",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 19,
+      "fields": {
+        "timestamp": 1136160040,
+        "message_index": 1,
+        "event": "lap",
+        "event_type": "stop",
+        "start_time": 1136160010,
+        "total_elapsed_time": 29.7,
+        "total_timer_time": 24.8,
+        "total_distance": 35.85,
+        "lap_trigger": "session_end",
+        "sport": "cycling"
+      }
+    },
+    {
+      "mesg_num": 18,
+      "fields": {
+        "timestamp": 1136160040,
+        "message_index": 0,
+        "event": "session",
+        "event_type": "stop",
+        "start_time": 1136160000,
+        "sport": "cycling",
+        "sub_sport": "e_bike_fitness",
+        "total_elapsed_time": 40,
+        "total_timer_time": 35.1,
+        "total_distance": 51.89,
+        "total_calories": 19,
+        "max_speed": 6.9,
+        "avg_heart_rate": 119,
+        "max_heart_rate": 129,
+        "avg_cadence": 77,
+        "max_cadence": 90,
+        "avg_power": 160,
+        "max_power": 210,
+        "total_ascent": 38,
+        "total_descent": 16,
+        "first_lap_index": 0,
+        "num_laps": 2,
+        "total_work": 5594,
+        "avg_lev_motor_power": 13,
+        "max_lev_motor_power": 303,
+        "enhanced_max_speed": 6.9
+      }
+    },
+    {
+      "mesg_num": 34,
+      "fields": {
+        "timestamp": 1136160040,
+        "total_timer_time": 35.1,
+        "num_sessions": 1,
+        "type": "manual",
+        "event": "activity",
+        "event_type": "stop"
+      }
+    }
+  ],
+  "changes": [
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160000,
+        "event": "timer",
+        "event_type": "start",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160000,
+        "position_lat": 536870912,
+        "position_long": 83513253,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 0,
+        "power": 150,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160001,
+        "position_lat": 536870912,
+        "position_long": 83513492,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 1.57,
+        "heart_rate": 100,
+        "power": 151,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160002,
+        "position_lat": 536870912,
+        "position_long": 83513730,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 3.15,
+        "power": 152,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160003,
+        "position_lat": 536870912,
+        "position_long": 83514017,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 5.03,
+        "heart_rate": 110,
+        "power": 153,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160004,
+        "position_lat": 536870912,
+        "position_long": 83514207,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 6.29,
+        "power": 154,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160005,
+        "position_lat": 536870912,
+        "position_long": 83514446,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 7.86,
+        "heart_rate": 120,
+        "power": 155,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160006,
+        "position_lat": 536870912,
+        "position_long": 83514685,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 9.44,
+        "power": 156,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160007,
+        "position_lat": 536870912,
+        "position_long": 83514923,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 11.01,
+        "heart_rate": 130,
+        "power": 157,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160008,
+        "position_lat": 536870912,
+        "position_long": 83515162,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 12.58,
+        "power": 158,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160009,
+        "position_lat": 536870912,
+        "position_long": 83515400,
+        "enhanced_altitude": 100,
+        "enhanced_speed": 3,
+        "distance": 14.15,
+        "power": 159,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 19,
+      "fields": {
+        "timestamp": 1136160010,
+        "message_index": 0,
+        "event": "lap",
+        "event_type": "stop",
+        "start_time": 1136160000,
+        "total_elapsed_time": 10,
+        "total_timer_time": 10,
+        "total_distance": 14.15,
+        "lap_trigger": "manual",
+        "sport": "cycling"
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160010,
+        "power": 160,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160011,
+        "power": 161,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160012,
+        "power": 162,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160013,
+        "power": 163,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160014,
+        "power": 164,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160015,
+        "power": 165,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160016,
+        "power": 166,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160017,
+        "power": 167,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160018,
+        "power": 168,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160019,
+        "power": 169,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 19,
+      "fields": {
+        "timestamp": 1136160020,
+        "message_index": 1,
+        "event": "lap",
+        "event_type": "stop",
+        "start_time": 1136160010,
+        "total_elapsed_time": 10,
+        "total_timer_time": 10,
+        "lap_trigger": "manual",
+        "sport": "cycling"
+      }
+    },
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160020,
+        "event": "timer",
+        "event_type": "stop_all",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160022,
+        "event": "timer",
+        "event_type": "start",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160022,
+        "power": 172,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160023,
+        "power": 173,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160024,
+        "power": 174,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160025,
+        "power": 175,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160026,
+        "power": 176,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160027,
+        "power": 177,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160028,
+        "power": 178,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 20,
+      "fields": {
+        "timestamp": 1136160029,
+        "power": 179,
+        "cadence": 80,
+        "developer_fields": {
+          "battery_voltage": 50
+        }
+      }
+    },
+    {
+      "mesg_num": 21,
+      "fields": {
+        "timestamp": 1136160030,
+        "event": "timer",
+        "event_type": "stop_all",
+        "data": 0,
+        "timer_trigger": "manual"
+      }
+    },
+    {
+      "mesg_num": 19,
+      "fields": {
+        "timestamp": 1136160030,
+        "message_index": 2,
+        "event": "lap",
+        "event_type": "stop",
+        "start_time": 1136160020,
+        "total_elapsed_time": 10,
+        "total_timer_time": 8,
+        "lap_trigger": "session_end",
+        "sport": "cycling"
+      }
+    },
+    {
+      "mesg_num": 18,
+      "fields": {
+        "timestamp": 1136160030,
+        "message_index": 0,
+        "event": "session",
+        "event_type": "stop",
+        "start_time": 1136160000,
+        "sport": "cycling",
+        "sub_sport": "e_bike_fitness",
+        "total_elapsed_time": 30,
+        "total_timer_time": 28,
+        "total_distance": 14.15,
+        "total_calories": 15,
+        "max_speed": 3,
+        "max_heart_rate": 130,
+        "avg_cadence": 80,
+        "max_cadence": 80,
+        "avg_power": 164,
+        "max_power": 179,
+        "total_ascent": 0,
+        "total_descent": 0,
+        "first_lap_index": 0,
+        "num_laps": 3,
+        "total_work": 4259,
+        "enhanced_max_speed": 3
+      }
+    },
+    {
+      "mesg_num": 34,
+      "fields": {
+        "timestamp": 1136160030,
+        "total_timer_time": 28,
+        "num_sessions": 1,
+        "type": "manual",
+        "event": "activity",
+        "event_type": "stop"
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import bridge from '../../modules/cyc-bridge';
+import bridge from '../../modules/power-log-bridge';
 import { nativeMonotonicClock, subscribeNativeClock } from './native-monotonic-clock';
 import { idleState, type TelemetryAdapter } from './adapter';
 

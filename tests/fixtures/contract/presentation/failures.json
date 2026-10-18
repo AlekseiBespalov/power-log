@@ -1,0 +1,352 @@
+{
+  "forbidden": [
+    "Exception",
+    "Kotlin",
+    ".swift",
+    "(at ",
+    "ERR_",
+    "E_POWER_LOG",
+    "E_WORKOUT",
+    "invalidValue",
+    "wrongEndpoint",
+    "unmatchedReceipt",
+    "java."
+  ],
+  "vocabulary": [
+    {
+      "code": "watchLaunchFailed",
+      "message": "Power Log couldn't open on your Apple Watch.",
+      "nextStep": "Unlock your Apple Watch and keep it near your iPhone, then start again."
+    },
+    {
+      "code": "watchNotInstalled",
+      "message": "Power Log isn't installed on your Apple Watch.",
+      "nextStep": "Install it from the Watch app on your iPhone, or turn off Use Watch."
+    },
+    {
+      "code": "watchStartUnconfirmed",
+      "message": "Your Apple Watch didn't confirm the start.",
+      "nextStep": "Open Power Log on your Apple Watch, keep it unlocked and nearby, then start again."
+    },
+    {
+      "code": "watchBusy",
+      "message": "Your Apple Watch is still busy with another ride.",
+      "nextStep": "Finish or discard it on your Apple Watch, then start again."
+    },
+    {
+      "code": "startUnconfirmed",
+      "message": "Power Log couldn't confirm the start.",
+      "nextStep": "Start again."
+    },
+    {
+      "code": "startCancelled",
+      "message": "This start was cancelled before the ride began.",
+      "nextStep": "Start again."
+    },
+    {
+      "code": "startExpired",
+      "message": "This start arrived too late to begin the ride.",
+      "nextStep": "Start again."
+    },
+    {
+      "code": "startInterrupted",
+      "message": "The ride didn't start.",
+      "nextStep": "Start again."
+    },
+    {
+      "code": "bikeRequired",
+      "message": "Connect your bike to start.",
+      "nextStep": ""
+    },
+    {
+      "code": "ownerUnresolved",
+      "message": "Power Log is still checking your last ride.",
+      "nextStep": "Open Power Log on the device that recorded it, then start again."
+    },
+    {
+      "code": "rideFinishing",
+      "message": "Power Log is still finishing your last ride.",
+      "nextStep": "Wait a moment, then start again."
+    },
+    {
+      "code": "rideActive",
+      "message": "A ride is already in progress.",
+      "nextStep": "Finish or discard it before starting another."
+    },
+    {
+      "code": "actionPending",
+      "message": "Another ride action is still running.",
+      "nextStep": "Wait for it to finish."
+    },
+    {
+      "code": "discardPending",
+      "message": "Discard hasn't finished yet.",
+      "nextStep": "Retry Discard."
+    },
+    {
+      "code": "rideChanged",
+      "message": "This ride changed.",
+      "nextStep": "Check the current ride, then try again."
+    },
+    {
+      "code": "ownerForeign",
+      "message": "This ride is being recorded somewhere else.",
+      "nextStep": "Finish it where it is recording."
+    },
+    {
+      "code": "finishConfirmationRequired",
+      "message": "Finish needs your confirmation.",
+      "nextStep": "Confirm Finish to end the ride."
+    },
+    {
+      "code": "actionUnavailable",
+      "message": "This action isn't available right now.",
+      "nextStep": "Check the current ride, then try again."
+    },
+    {
+      "code": "finishUnconfirmed",
+      "message": "Your Apple Watch hasn't confirmed Finish yet.",
+      "nextStep": "Keep it nearby. You can also finish on the Watch; your ride is kept."
+    },
+    {
+      "code": "ownerUnconfirmed",
+      "message": "Power Log couldn't confirm the recording.",
+      "nextStep": "Open Power Log on the device that recorded the ride, then try again."
+    },
+    {
+      "code": "recordingInterrupted",
+      "message": "Recording was interrupted.",
+      "nextStep": "Finish the retained recording or discard it."
+    },
+    {
+      "code": "sessionUnavailable",
+      "message": "The recording session ended unexpectedly.",
+      "nextStep": "Finish or discard the ride to keep what was recorded."
+    },
+    {
+      "code": "syncPending",
+      "message": "This ride is still syncing between your watch and phone.",
+      "nextStep": "Open Power Log on both, and keep them close together."
+    },
+    {
+      "code": "watchDataRejected",
+      "message": "Watch data couldn't be synced.",
+      "nextStep": "Finish without Watch data to keep the rest."
+    },
+    {
+      "code": "needsAttention",
+      "message": "This ride needs attention.",
+      "nextStep": "Tap Retry. Your recorded data is kept."
+    },
+    {
+      "code": "healthDenied",
+      "message": "Power Log can't save to Health.",
+      "nextStep": "Allow it in the Health app, or turn off Save to Health."
+    },
+    {
+      "code": "healthLocked",
+      "message": "Health data is unavailable while this device is locked.",
+      "nextStep": "Unlock it, then try again."
+    },
+    {
+      "code": "bluetoothDenied",
+      "message": "Power Log can't use Bluetooth.",
+      "nextStep": "Allow Bluetooth for Power Log in Settings."
+    },
+    {
+      "code": "locationDenied",
+      "message": "Power Log can't use your location.",
+      "nextStep": "Allow location in Settings, or turn off GPS for this ride."
+    },
+    {
+      "code": "bikeUnavailable",
+      "message": "Your bike isn't connected.",
+      "nextStep": "Turn on Bluetooth and the bike, keep it nearby, then try again."
+    },
+    {
+      "code": "storageBusy",
+      "message": "Power Log is busy saving your ride.",
+      "nextStep": "Try again in a moment."
+    },
+    {
+      "code": "storageFull",
+      "message": "This device is out of storage.",
+      "nextStep": "Free up space, then try again."
+    },
+    {
+      "code": "storageFailed",
+      "message": "Power Log couldn't save this change.",
+      "nextStep": "Try again. Your recorded data is kept."
+    },
+    {
+      "code": "rideDeleted",
+      "message": "This ride was deleted.",
+      "nextStep": "Choose another ride in History."
+    },
+    {
+      "code": "ownerEvidenceRejected",
+      "message": "Something went wrong.",
+      "nextStep": "Try again. Your recorded data is kept."
+    },
+    {
+      "code": "captureRejected",
+      "message": "Something went wrong.",
+      "nextStep": "Try again. Your recorded data is kept."
+    },
+    {
+      "code": "cutoffBeforeStart",
+      "message": "Something went wrong.",
+      "nextStep": "Try again. Your recorded data is kept."
+    },
+    {
+      "code": "unknown",
+      "message": "Something went wrong.",
+      "nextStep": "Try again. Your recorded data is kept."
+    }
+  ],
+  "unknownInputs": [
+    null,
+    "",
+    "UnexpectedException: The operation couldn\u2019t be completed. Unable to open URLs while locked or passcode compliance is pending (at ExpoModulesCore/Promise.swift:56)",
+    "BridgeException: Invalid retained owner timing (at PowerLogBridge/PowerLogBridgeModule.swift:11)",
+    "invalidValue",
+    "KotlinException 0",
+    "A session already belongs to this workout",
+    "Watch storage [owner heartbeat, 11111111-1111-4111-8111-111111111111]: invalidValue",
+    "java.lang.IllegalStateException: Check failed.",
+    "The ride was discarded.",
+    "WATCHLAUNCHFAILED"
+  ],
+  "bridge": {
+    "snapshot": {
+      "field": "failure",
+      "shape": ["code", "message"],
+      "cases": [
+        {
+          "platform": "ios",
+          "name": "Watch locked at start",
+          "stage": "watchLaunch",
+          "nativeDetail": "UnexpectedException: The operation couldn\u2019t be completed. Unable to open URLs while locked or passcode compliance is pending (at ExpoModulesCore/Promise.swift:56)",
+          "wire": {
+            "failure": {
+              "code": "watchLaunchFailed",
+              "message": "Power Log couldn't open on your Apple Watch. Unlock your Apple Watch and keep it near your iPhone, then start again."
+            },
+            "sessionBusy": false,
+            "healthBusy": false
+          }
+        },
+        {
+          "platform": "ios",
+          "name": "Finish cutoff rejected",
+          "stage": "finish",
+          "nativeDetail": "BridgeException: Invalid retained owner timing (at PowerLogBridge/PowerLogBridgeModule.swift:11)",
+          "wire": {
+            "failure": {
+              "code": "unknown",
+              "message": "Something went wrong. Try again. Your recorded data is kept."
+            },
+            "sessionBusy": false,
+            "healthBusy": false
+          }
+        },
+        {
+          "platform": "ios",
+          "name": "after-ride Health work never holds a session",
+          "stage": null,
+          "nativeDetail": null,
+          "wire": {
+            "failure": null,
+            "sessionBusy": false,
+            "healthBusy": true
+          }
+        },
+        {
+          "platform": "ios",
+          "name": "primary Health session open",
+          "stage": null,
+          "nativeDetail": null,
+          "wire": {
+            "failure": null,
+            "sessionBusy": true,
+            "healthBusy": true
+          }
+        },
+        {
+          "platform": "ios",
+          "name": "Watch ride still finishing",
+          "stage": null,
+          "nativeDetail": null,
+          "wire": {
+            "failure": null,
+            "sessionBusy": false,
+            "endingOwner": true,
+            "healthBusy": false
+          }
+        },
+        {
+          "platform": "android",
+          "name": "storage full while recording",
+          "stage": "capture",
+          "nativeDetail": "android.database.sqlite.SQLiteFullException: database or disk is full (code 13 SQLITE_FULL)",
+          "wire": {
+            "failure": {
+              "code": "storageFull",
+              "message": "This device is out of storage. Free up space, then try again."
+            },
+            "sessionBusy": false,
+            "healthBusy": false
+          }
+        },
+        {
+          "platform": "android",
+          "name": "background Health Connect work",
+          "stage": null,
+          "nativeDetail": null,
+          "wire": {
+            "failure": null,
+            "sessionBusy": false,
+            "healthBusy": true
+          }
+        }
+      ]
+    },
+    "rejection": {
+      "shape": ["code", "message"],
+      "cases": [
+        {
+          "platform": "ios",
+          "function": "startWorkout",
+          "stage": "watchLaunch",
+          "nativeDetail": "UnexpectedException: The operation couldn\u2019t be completed. Unable to open URLs while locked or passcode compliance is pending (at ExpoModulesCore/Promise.swift:56)",
+          "code": "watchLaunchFailed",
+          "message": "Power Log couldn't open on your Apple Watch. Unlock your Apple Watch and keep it near your iPhone, then start again."
+        },
+        {
+          "platform": "ios",
+          "function": "stopWorkout",
+          "stage": "finish",
+          "nativeDetail": "BridgeException: Invalid retained owner timing (at PowerLogBridge/PowerLogBridgeModule.swift:11)",
+          "code": "unknown",
+          "message": "Something went wrong. Try again. Your recorded data is kept."
+        },
+        {
+          "platform": "android",
+          "function": "stopWorkout",
+          "stage": "finish",
+          "nativeDetail": "java.lang.IllegalStateException: Check failed.",
+          "code": "unknown",
+          "message": "Something went wrong. Try again. Your recorded data is kept."
+        },
+        {
+          "platform": "android",
+          "function": "getWorkoutState",
+          "stage": "read",
+          "nativeDetail": "Ride was deleted",
+          "code": "rideDeleted",
+          "message": "This ride was deleted. Choose another ride in History."
+        }
+      ]
+    }
+  }
+}

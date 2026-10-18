@@ -5,6 +5,9 @@ import { browserTestBundle } from '../helpers/browser-test-bundle';
 import { syntheticCsvSample } from '../core/csv-fixture';
 import { parseCsv } from '../support/csv';
 import type * as Harness from './history-actions-harness';
+import { presentationFailure } from '../../shared/js';
+
+const text = (code: string) => presentationFailure(code).text;
 
 declare global {
   interface Window {
@@ -70,6 +73,8 @@ const csvFile = {
 };
 async function openCsv(page: Page) {
   await page.evaluate(file => window.historyTests.setCsvImport(file), csvFile);
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
 }
 async function expectCsv(page: Page) {
@@ -81,6 +86,44 @@ async function expectCsv(page: Page) {
 }
 
 describe('History saved and CSV selection', () => {
+  it.each(['appleHealth', 'healthConnect'] as const)(
+    'deletes an earlier failed Start without trying to finish it or touching the current %s ride',
+    async healthProvider =>
+      run(async page => {
+        await page.evaluate(healthProvider => {
+          const h = window.historyTests;
+          h.seed(
+            [
+              {
+                ...h.metadata('failed-start', 2, 'failed'),
+                endedAt: undefined,
+                elapsedSeconds: 0,
+                eventCount: '0',
+                healthProvider,
+              },
+              { ...h.metadata('current-ride', 1, 'running'), endedAt: undefined, healthProvider },
+            ],
+            { id: 'current-ride', phase: 'running', collectionRevision: '2' },
+          );
+          h.mount();
+        }, healthProvider);
+        await selectFirst(page);
+        await ui(
+          page.getByText('This ride did not complete. Use Delete ride to remove it from History.', { exact: true }),
+        ).toBeVisible();
+        await ui(page.getByText('Finish the local ride to export it.', { exact: true })).toHaveCount(0);
+        await ui(page.getByRole('button', { name: 'Finish saved portion', exact: true })).toHaveCount(0);
+        await ui(page.getByRole('button', { name: 'Discard ride', exact: true })).toHaveCount(0);
+        await page.getByRole('button', { name: 'Delete ride', exact: true }).click();
+        const modal = page.getByTestId('delete-ride-sheet');
+        await modal.getByRole('button', { name: 'Delete ride', exact: true }).click();
+        await ui(modal).toHaveCount(0);
+        const retained = await page.evaluate(() => window.historyTests.snapshot());
+        expect(retained.ids).toEqual(['current-ride']);
+        expect(retained.state).toMatchObject({ id: 'current-ride', phase: 'running' });
+      }),
+  );
+
   it('switches saved → CSV → list → saved and exports only the imported samples', async () =>
     run(async page => {
       await page.evaluate(() => {
@@ -98,7 +141,7 @@ describe('History saved and CSV selection', () => {
       expect(exported).toHaveLength(1);
       expect(exported[0]!.name).toBe(csvFile.name);
       expect(parseCsv(exported[0]!.contents)).toEqual(csvFile.recording);
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await ui(rows(page)).toHaveCount(2);
       await ui(chart(page)).toHaveCount(0);
       await ui(page.getByText(csvFile.name, { exact: true })).toHaveCount(0);
@@ -127,7 +170,7 @@ describe('History saved and CSV selection', () => {
           await openCsv(page);
           await expectCsv(page);
         } else {
-          await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+          await page.getByRole('button', { name: '‹ History', exact: true }).click();
           await rows(page).last().click();
           await ui(chart(page)).toHaveAttribute('data-source', 'workout:keep');
         }
@@ -138,7 +181,7 @@ describe('History saved and CSV selection', () => {
           await ui(chart(page)).toHaveAttribute('data-source', 'workout:keep');
           await ui(page.getByTestId('ride-summary')).toBeVisible();
         }
-        await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+        await page.getByRole('button', { name: '‹ History', exact: true }).click();
         await ui(rows(page)).toHaveCount(1);
         expect(await page.evaluate(() => window.historyTests.snapshot().ids)).toEqual(['keep']);
       }));
@@ -166,7 +209,7 @@ describe('History saved and CSV selection', () => {
         });
         await expectCsv(page);
         await ui(page.getByRole('alert')).toHaveCount(0);
-        await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+        await page.getByRole('button', { name: '‹ History', exact: true }).click();
         await rows(page).last().click();
         await ui(chart(page)).toHaveAttribute('data-source', 'workout:new');
         await ui(page.getByTestId('ride-summary')).toBeVisible();
@@ -185,7 +228,7 @@ describe('History saved and CSV selection', () => {
         await selectFirst(page);
         await openCsv(page);
         await ui(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeDisabled();
-        await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+        await page.getByRole('button', { name: '‹ History', exact: true }).click();
         if (destination !== 'list') {
           await rows(page)
             .nth(destination === 'same ride' ? 0 : 1)
@@ -218,7 +261,7 @@ describe('History saved and CSV selection', () => {
       await openCsv(page);
       await rows(page).nth(0).click();
       await ui(page.getByTestId('ride-summary')).toBeVisible();
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await page.evaluate(() => window.historyTests.releaseArchive('import', 'csv'));
       await ui(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeEnabled();
       await ui(page.getByText(csvFile.name, { exact: true })).toHaveCount(0);
@@ -257,6 +300,8 @@ describe('History saved and CSV selection', () => {
         window.historyTests.setCsvImport(null);
         window.historyTests.holdArchive('import', 'csv');
       });
+      if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+        await page.getByRole('button', { name: 'History actions', exact: true }).click();
       await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
       await ui(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeDisabled();
       await page.evaluate(() => window.historyTests.releaseArchive('import', 'csv'));
@@ -276,8 +321,8 @@ describe('production History and resource lifecycle in React', () => {
         ]);
         h.mount();
       });
-      await ui(page.getByText(/· 01:15 elapsed/)).toBeVisible();
-      await ui(page.getByText(/· 02:05 elapsed/)).toBeVisible();
+      await ui(page.getByText(/· 01:15/)).toBeVisible();
+      await ui(page.getByText(/· 02:05/)).toBeVisible();
     }));
   it('shows partial catalog warnings alongside healthy rides', async () =>
     run(async page => {
@@ -316,13 +361,14 @@ describe('production History and resource lifecycle in React', () => {
       expect(await page.evaluate(() => window.historyTests.snapshot().counts.read)).toEqual(['health-save']);
       await page.evaluate(async () => {
         const h = window.historyTests;
-        h.updateRecord('health-save', { eventCount: 4 });
+        h.updateRecord('health-save', { eventCount: '4' });
         await h.refreshCatalog();
       });
       await page.evaluate(async () => {
         for (let i = 0; i < 4; i++) await new Promise(requestAnimationFrame);
       });
       expect(await page.evaluate(() => window.historyTests.snapshot().counts.read)).toEqual(['health-save']);
+      await page.getByRole('button', { name: 'History actions', exact: true }).click();
       await page.getByRole('button', { name: 'Refresh', exact: true }).click();
       await page.waitForFunction(() => window.historyTests.snapshot().counts.read.length === 2);
       await page.evaluate(() => {
@@ -333,7 +379,7 @@ describe('production History and resource lifecycle in React', () => {
       await page.waitForFunction(() => window.historyTests.snapshot().counts.read.length === 3);
       await ui(page.getByRole('button', { name: 'Retry Health Connect', exact: true })).toHaveCount(0);
     }));
-  it('shows why Health did not save in place of the Health status until Health saves', async () =>
+  it('shows the provider and parent failure reason until Health saves', async () =>
     run(async page => {
       await page.evaluate(() => {
         const h = window.historyTests;
@@ -343,20 +389,18 @@ describe('production History and resource lifecycle in React', () => {
             watchEnabled: false,
             saveToHealth: true,
             healthKitState: 'failed',
-            healthReason: 'Health data is unavailable while the iPhone is locked.',
+            healthReason: 'locked',
           },
         ]);
         h.mount();
       });
       await selectFirst(page);
       const status = (text: string) => page.getByText(text, { exact: true });
-      await ui(
-        status('iPhone · Health not saved: Health data is unavailable while the iPhone is locked.'),
-      ).toBeVisible();
+      await ui(status('Apple Health is locked. Unlock the device to allow Health access.')).toBeVisible();
       for (const [patch, text] of [
-        [{ healthKitState: 'saved' }, 'iPhone · Health saved'],
-        [{ healthKitState: 'notSaved', healthReason: null }, 'iPhone · Health not saved'],
-        [{ healthKitState: 'notRequested', saveToHealth: false }, 'iPhone · Saved only in Power Log'],
+        [{ healthKitState: 'saved' }, 'Apple Health saved'],
+        [{ healthKitState: 'notSaved', healthReason: null }, 'Apple Health not saved'],
+        [{ healthKitState: 'notRequested', saveToHealth: false }, 'Saved only in Power Log'],
       ] as const) {
         await page.evaluate(async patch => {
           window.historyTests.updateRecord('health-reason', patch);
@@ -365,49 +409,17 @@ describe('production History and resource lifecycle in React', () => {
         await ui(status(text)).toBeVisible();
       }
     }));
-  it('shows a Watch sync failure in place of the syncing line only while the ride is pending', async () =>
+  it('exports the completed local ride while Health remains unconfirmed', async () =>
     run(async page => {
       await page.evaluate(() => {
         const h = window.historyTests;
-        h.seed([{ ...h.metadata('sync-reason', 1, 'finishing'), syncReason: 'The Watch archive did not verify.' }]);
+        h.seed([{ ...h.metadata('pending-health', 1), saveToHealth: true, healthKitState: 'unknown' }]);
         h.mount();
       });
       await selectFirst(page);
-      const failed = page.getByText('Watch sync failed: The Watch archive did not verify.', { exact: true });
-      const syncing = page.getByText('Ride ended. Syncing remaining data…', { exact: true });
-      const exportsWait = page.getByText('Exports are available when syncing finishes.', { exact: true });
-      await ui(failed).toBeVisible();
-      await ui(syncing).toHaveCount(0);
-      await ui(exportsWait).toBeVisible();
-      await page.evaluate(async () => {
-        window.historyTests.updateRecord('sync-reason', { syncReason: null });
-        await window.historyTests.refreshCatalog();
-      });
-      await ui(syncing).toBeVisible();
-      await ui(failed).toHaveCount(0);
-      await page.evaluate(async () => {
-        window.historyTests.updateRecord('sync-reason', {
-          phase: 'completed',
-          watchSyncState: 'received',
-          finalizationState: 'complete',
-          verifiedSealRevision: 1,
-          syncReason: 'The Watch archive did not verify.',
-        });
-        await window.historyTests.refreshCatalog();
-      });
-      await ui(syncing).toHaveCount(0);
-      await ui(exportsWait).toHaveCount(0);
-      await ui(failed).toHaveCount(0);
-    }));
-  it('marks a partial ride as incomplete', async () =>
-    run(async page => {
-      await page.evaluate(() => {
-        const h = window.historyTests;
-        h.seed([{ ...h.metadata('partial-ride', 1), finalizationState: 'partial' }]);
-        h.mount();
-      });
-      await selectFirst(page);
-      await ui(page.getByText('Incomplete ride. Some sources are unavailable.', { exact: true })).toBeVisible();
+      await ui(page.getByText('Apple Health save unconfirmed', { exact: true })).toBeVisible();
+      await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
+      await ui(page.getByRole('button', { name: 'Export ZIP', exact: true })).toBeEnabled();
     }));
   it('exports FIT with the chosen distance source and opens manual Strava upload only on request', async () =>
     run(async page => {
@@ -468,34 +480,14 @@ describe('production History and resource lifecycle in React', () => {
         await ui(page.getByRole('button', { name: 'Export ZIP', exact: true })).toBeEnabled();
         await ui(page.getByRole('button', { name: 'Export CSV', exact: true })).toHaveCount(0);
       }));
-  it('identifies a builder Health snapshot as provisional and refreshes a separately named final report', async () =>
-    run(async page => {
-      await page.evaluate(() => {
-        const h = window.historyTests;
-        h.seed([h.metadata('health-report', 1)]);
-        h.setDistanceFixture('health-report', { selection: 'auto', selected: null, available: [] });
-        h.setHealthReportFixture('health-report', true);
-        h.mount();
-      });
-      await selectFirst(page);
-      await ui(page.getByText('Health distance · Provisional', { exact: true })).toBeVisible();
-      await ui(page.getByTestId('distance-source-caption')).toHaveText('Distance unavailable');
-      await page.evaluate(() => {
-        window.historyTests.setHealthReportFixture('health-report', false);
-        window.historyTests.emit({ historyRevision: '1' });
-      });
-      await ui(page.getByText('Health reported distance', { exact: true })).toBeVisible();
-      await ui(page.getByText('Health distance · Provisional', { exact: true })).toHaveCount(0);
-      await ui(page.getByTestId('distance-source-caption')).toHaveText('Distance unavailable');
-    }));
-  it('shows source coverage, applies global interpretation without metadata writes and keeps live history actions disabled', async () =>
+  it('shows frozen source coverage despite settings changes and keeps active history actions disabled', async () =>
     run(async page => {
       await page.evaluate(() => {
         const h = window.historyTests;
         h.seed([h.metadata('saved-source', 2), h.metadata('live-source', 1, 'running')]);
         const gps = {
-          source: 'gps:watch' as const,
-          label: 'GPS · Watch',
+          source: 'gps:phone' as const,
+          label: 'GPS · Phone',
           distanceMeters: 800,
           coveredSeconds: 40,
           uncoveredSeconds: 8,
@@ -514,16 +506,16 @@ describe('production History and resource lifecycle in React', () => {
         h.mount();
       });
       await selectFirst(page);
-      await ui(page.getByTestId('distance-source-caption')).toHaveText('GPS · Watch · Partial');
-      await ui(page.getByText('Ride distance', { exact: true })).toBeVisible();
+      await ui(page.getByTestId('distance-source-caption')).toHaveCount(0);
+      await ui(page.getByText('Distance', { exact: true })).toBeVisible();
       await ui(page.getByRole('button', { name: 'Distance source', exact: true })).toHaveCount(0);
       await page.evaluate(() => window.historyTests.setGlobalDistanceSource('controller'));
-      await ui(page.getByTestId('distance-source-caption')).toHaveText('Controller estimate');
-      await ui(page.getByText('Ride distance', { exact: true })).toBeVisible();
+      await ui(page.getByTestId('distance-source-caption')).toHaveCount(0);
+      await ui(page.getByText('Distance', { exact: true })).toBeVisible();
       const saved = await page.evaluate(() => window.historyTests.workouts.read('saved-source', 'controller'));
-      expect(saved.metadata).toMatchObject({ collectionRevision: 1, eventCount: 3 });
-      expect(saved.summary.distanceMeters).toBe(900);
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      expect(saved.metadata).toMatchObject({ collectionRevision: '1', eventCount: '3' });
+      expect(saved.summary.distanceMeters).toBe(800);
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await ui(rows(page).last()).toBeDisabled();
       await ui(page.getByRole('button', { name: 'Distance source', exact: true })).toHaveCount(0);
     }));
@@ -664,10 +656,11 @@ describe('production History and resource lifecycle in React', () => {
       });
       await selectFirst(page);
       await page.evaluate(() => {
-        window.historyTests.failRead('keep', 'SQLite disk I/O failure');
+        window.historyTests.failRead('keep', 'storageFailed');
         window.historyTests.emit({ historyRevision: '1' });
       });
-      await ui(page.getByText('SQLite disk I/O failure', { exact: true })).toBeVisible();
+      await ui(page.getByText(text('storageFailed'), { exact: true })).toBeVisible();
+      await ui(page.getByText(/BridgeException|\(at /)).toHaveCount(0);
       await ui(chart(page)).toHaveAttribute('data-source', 'workout:keep');
       await ui(page.getByText('Ride time', { exact: true })).toBeVisible();
     }));
@@ -677,17 +670,17 @@ describe('production History and resource lifecycle in React', () => {
       await page.evaluate(() => {
         const h = window.historyTests;
         h.seed([h.metadata('bad', 2), h.metadata('good', 1)]);
-        h.failRead('bad', 'Bad ride read failure');
+        h.failRead('bad', 'storageBusy');
         h.mount();
       });
       await rows(page).first().click();
-      await ui(page.getByText('Bad ride read failure', { exact: true })).toBeVisible();
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
-      await ui(page.getByText('Bad ride read failure', { exact: true })).toHaveCount(0);
+      await ui(page.getByText(text('storageBusy'), { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
+      await ui(page.getByText(text('storageBusy'), { exact: true })).toHaveCount(0);
       await rows(page).last().click();
       await ui(chart(page)).toHaveAttribute('data-source', 'workout:good');
       await ui(page.getByText('Ride time', { exact: true })).toBeVisible();
-      await ui(page.getByText('Bad ride read failure', { exact: true })).toHaveCount(0);
+      await ui(page.getByText(text('storageBusy'), { exact: true })).toHaveCount(0);
     }));
 
   it('cancels a held old read without releasing admission until it settles, then shows only the new identity', async () =>
@@ -701,7 +694,7 @@ describe('production History and resource lifecycle in React', () => {
       await rows(page).first().click();
       await ui(chart(page)).toHaveAttribute('data-source', 'workout:old');
       await page.waitForFunction(() => window.historyTests.snapshot().counts.read.includes('old'));
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await rows(page).last().click();
       await ui(chart(page)).toHaveAttribute('data-source', 'workout:new');
       expect(await page.evaluate(() => window.historyTests.snapshot().counts.read)).toEqual(['old']);
@@ -733,7 +726,7 @@ describe('History archive controls alongside an active ride', () => {
           JSON.parse(document.querySelector('[data-testid="ride-controls-state"]')!.textContent!).phase === 'paused',
       );
       expect(await page.evaluate(() => window.historyTests.pauseCalls)).toBe(1);
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await rows(page).last().click();
       await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
       await page.getByRole('button', { name: 'Export FIT', exact: true }).click();
@@ -753,17 +746,15 @@ describe('History archive controls alongside an active ride', () => {
       });
       await selectFirst(page);
       await page.getByRole('button', { name: 'Export FIT', exact: true }).click();
-      await page.evaluate(() =>
-        window.historyTests.releaseArchive('export', 'failed-export', 'Share destination unavailable'),
-      );
-      await ui(page.getByRole('alert')).toHaveText('Share destination unavailable');
+      await page.evaluate(() => window.historyTests.releaseArchive('export', 'failed-export', 'storageFull'));
+      await ui(page.getByRole('alert')).toHaveText(text('storageFull'));
       expect(JSON.parse(await page.getByTestId('ride-controls-state').innerText()).error).toBeNull();
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await rows(page).last().click();
       await ui(page.getByRole('alert')).toHaveCount(0);
-      await page.getByRole('button', { name: '‹ Rides', exact: true }).click();
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
       await rows(page).first().click();
-      await ui(page.getByRole('alert')).toHaveText('Share destination unavailable');
+      await ui(page.getByRole('alert')).toHaveText(text('storageFull'));
       await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
       await ui(page.getByRole('alert')).toHaveCount(0);
     }));
@@ -782,8 +773,8 @@ describe('History archive controls alongside an active ride', () => {
       await modal.getByRole('button', { name: 'Delete ride', exact: true }).click();
       await ui(modal.getByRole('button', { name: 'Deleting…', exact: true })).toBeDisabled();
       expect(JSON.parse(await page.getByTestId('ride-controls-state').innerText()).busy).toBe(false);
-      await page.evaluate(() => window.historyTests.releaseArchive('remove', 'delete-target', 'Recording is in use'));
-      await ui(modal.getByRole('alert')).toHaveText('Recording is in use');
+      await page.evaluate(() => window.historyTests.releaseArchive('remove', 'delete-target', 'storageBusy'));
+      await ui(modal.getByRole('alert')).toHaveText(text('storageBusy'));
       expect(JSON.parse(await page.getByTestId('ride-controls-state').innerText()).error).toBeNull();
     }));
 });
@@ -796,6 +787,8 @@ it('keeps ride commands available while the CSV chooser is open', async () =>
       h.holdArchive('import', 'csv');
       h.mountWithControls();
     });
+    if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+      await page.getByRole('button', { name: 'History actions', exact: true }).click();
     await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
     await ui(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeDisabled();
     expect(JSON.parse(await page.getByTestId('ride-controls-state').innerText()).busy).toBe(false);
@@ -814,10 +807,10 @@ it('keeps catalog refresh failures in History without reporting a ride-command e
     });
     await ui(rows(page)).toHaveCount(1);
     await page.evaluate(() => {
-      window.historyTests.failCatalog('History storage unavailable');
+      window.historyTests.failCatalog('storageFailed');
       window.historyTests.emit({ historyRevision: 'changed' });
     });
-    await ui(page.getByRole('alert')).toHaveText('History storage unavailable');
+    await ui(page.getByRole('alert')).toHaveText(text('storageFailed'));
     expect(JSON.parse(await page.getByTestId('ride-controls-state').innerText()).error).toBeNull();
     await ui(page.getByRole('button', { name: 'Pause active ride' })).toBeEnabled();
   }));

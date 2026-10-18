@@ -14,10 +14,11 @@ export function reorderMonitorMetric(selected: readonly string[], id: string, ta
 }
 export function searchMonitorMetrics(query: string, speedUnit: SpeedUnit = 'km/h') {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
-  return MONITOR_METRICS.filter(metric => metric.id !== 'speedRaw')
+  return MONITOR_METRICS.filter(metric => metric.id !== 'speedRaw' && metric.id !== 'basalEnergyKcal')
     .map(metric => metricById(metric.id, speedUnit)!)
     .filter(metric => {
-      const searchable = `${metric.label} ${metric.shortLabel} ${metric.unit} ${metric.group}`.toLocaleLowerCase();
+      const searchable =
+        `${metric.label} ${metric.shortLabel} ${metric.unit} ${metric.group} ${metric.description ?? ''}`.toLocaleLowerCase();
       return words.every(word => searchable.includes(word));
     });
 }

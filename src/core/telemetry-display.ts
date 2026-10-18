@@ -1,24 +1,13 @@
-import { isFreshSample, type ConnectionStatus } from './types';
+import { presentationTransportDisplay, presentationConnectionLabel, telemetryTimingPolicy } from '../../shared/js';
+import type { ConnectionStatus } from './types';
 
-/** Presentation only. Capture, exports and sensor sharing keep their own freshness rules. */
-export const TELEMETRY_DISPLAY_HOLD_SECONDS = 6;
+export const TELEMETRY_DISPLAY_HOLD_SECONDS = telemetryTimingPolicy().displayHoldSeconds;
 export type TelemetryDisplay = 'live' | 'held' | 'unavailable';
 
 export function telemetryDisplay(status: ConnectionStatus, receivedAt: number | null, now: number): TelemetryDisplay {
-  if (status !== 'connected' && status !== 'reconnecting') return 'unavailable';
-  if (status === 'connected' && isFreshSample(receivedAt, now)) return 'live';
-  return receivedAt !== null &&
-    isFreshSample(receivedAt, now, TELEMETRY_DISPLAY_HOLD_SECONDS) &&
-    now - receivedAt < TELEMETRY_DISPLAY_HOLD_SECONDS
-    ? 'held'
-    : 'unavailable';
+  return presentationTransportDisplay(status, receivedAt, now) as TelemetryDisplay;
 }
 
 export function bikeConnectionLabel(status: ConnectionStatus, display: TelemetryDisplay): string {
-  if (display === 'live' || display === 'held') return 'Connected';
-  if (status === 'reconnecting') return 'Reconnecting…';
-  if (status === 'connected') return 'Waiting for data';
-  if (status === 'connecting') return 'Connecting…';
-  if (status === 'scanning') return 'Searching…';
-  return 'Not connected';
+  return presentationConnectionLabel(status, display);
 }

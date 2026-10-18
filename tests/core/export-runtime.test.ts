@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportPlatform, exportSource, openExportSink } from '../../src/services/export-runtime.native';
 import { ExportError, type ExportContext, type ExportSink, type NativeExportPage } from '../../src/core/export/types';
+import { presentationFailure } from '../../shared/js';
+import failures from '../fixtures/contract/presentation/failures.json';
 
 const native = vi.hoisted(() => ({
   platform: 'ios',
@@ -25,7 +27,7 @@ vi.mock('react-native', () => ({
     },
   },
 }));
-vi.mock('../../modules/cyc-bridge', () => ({
+vi.mock('../../modules/power-log-bridge', () => ({
   get default() {
     return native.installed ? native.bridge : null;
   },
@@ -49,7 +51,7 @@ const coded = (code: string, message: string) => Object.assign(new Error(message
 const iosRejection = (fn: string, code: string, message: string) =>
   coded(
     code,
-    `FunctionCallException: Calling the '${fn}' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: BridgeException: ${message} (at CycBridge/CycBridgeModule.swift:17)`,
+    `FunctionCallException: Calling the '${fn}' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: BridgeException: ${message} (at PowerLogBridge/PowerLogBridgeModule.swift:17)`,
   );
 
 async function openSink(id = 'sink-1'): Promise<ExportSink> {
@@ -94,7 +96,9 @@ describe('native export source', () => {
   });
 
   it('passes telemetry connection identities through with the page', async () => {
-    const connections = [{ token: 'epoch-1', vendor: 'cyc' as const, model: 'X6', firmware: '1.2', protocol: '5.3' }];
+    const connections = [
+      { token: 'epoch-1', vendor: 'controller' as const, model: 'X6', firmware: '1.2', protocol: '5.3' },
+    ];
     native.bridge.exportPage.mockResolvedValue({
       rows: 1,
       last: [0.125, 0, 1, 4],
@@ -159,40 +163,42 @@ describe('native export errors', () => {
   const fail = (method: string, error: unknown) =>
     native.bridge[method as keyof typeof native.bridge].mockRejectedValue(error);
 
-  it.each(sourceCalls)('%s keeps an export error code and the rider message', async (_name, method, run) => {
-    fail(method, coded('deleted', 'This ride was deleted from Power Log.'));
+  it.each(sourceCalls)('%s keeps an export error code and shows only its export text', async (_name, method, run) => {
+    fail(method, coded('deleted', 'Ride was deleted (at PowerLogBridge/ExportSource.swift:127)'));
     const error = await rejection(run());
     expect(error.code).toBe('deleted');
-    expect(error.message).toBe('This ride was deleted from Power Log.');
+    expect(error.message).toBe("This ride no longer exists, so it can't be exported.");
   });
 
-  it.each(sinkCalls)('%s keeps an export error code and the rider message', async (_name, method, run) => {
+  it.each(sinkCalls)('%s keeps an export error code and shows only its export text', async (_name, method, run) => {
     const sink = await openSink();
     fail(method, coded('sink', 'The export file could not be written: No space left on device.'));
     const error = await rejection(run(sink));
     expect(error.code).toBe('sink');
-    expect(error.message).toBe('The export file could not be written: No space left on device.');
+    expect(error.message).toBe('Power Log could not write the export file.');
   });
 
-  it.each(sourceCalls)('%s takes the native reason out of an iOS rejection', async (_name, method, run) => {
+  it.each(sourceCalls)('%s never shows the native reason of an iOS rejection', async (_name, method, run) => {
     fail(method, iosRejection(method, 'changed', 'The ride changed while it was exported. Try the export again.'));
     const error = await rejection(run());
     expect(error.code).toBe('changed');
-    expect(error.message).toBe('The ride changed while it was exported. Try the export again.');
+    expect(error.message).toBe('This ride changed while it was exporting. Export it again.');
+    for (const forbidden of failures.forbidden) expect(error.message).not.toContain(forbidden);
   });
 
-  it('keeps parentheses and colons inside an iOS reason', async () => {
+  it('adds the shared text of a classified native failure to the call-site message', async () => {
     const sink = await openSink();
-    fail('sinkWrite', iosRejection('sinkWrite', 'sink', 'The export file could not write: Disk full (28).'));
+    fail('sinkWrite', iosRejection('sinkWrite', 'storageFull', 'This device is out of storage.'));
     const error = await rejection(sink.write(new Uint8Array([1])));
-    expect(error.message).toBe('The export file could not write: Disk full (28).');
+    expect(error.code).toBe('sink');
+    expect(error.message).toBe(`Power Log could not write the export file. ${presentationFailure('storageFull').text}`);
   });
 
   it.each(sourceCalls)('%s turns any other rejection into a page error', async (_name, method, run) => {
     fail(method, coded('E_POWER_LOG', 'database is locked'));
     const error = await rejection(run());
     expect(error.code).toBe('page');
-    expect(error.message).toBe('Power Log could not read this ride for export. database is locked');
+    expect(error.message).toBe('Power Log could not read this ride for export.');
   });
 
   it.each(sinkCalls)('%s turns any other rejection into a sink error', async (_name, method, run) => {
@@ -200,14 +206,14 @@ describe('native export errors', () => {
     fail(method, iosRejection(method, 'ERR_UNEXPECTED', 'Operation not permitted'));
     const error = await rejection(run(sink));
     expect(error.code).toBe('sink');
-    expect(error.message).toBe('Power Log could not write the export file. Operation not permitted');
+    expect(error.message).toBe('Power Log could not write the export file.');
   });
 
   it('maps rejections without a code or message by call site', async () => {
     fail('exportPage', 'busy');
     expect(await rejection(exportSource().page({ session: 's', projection: 'gps', after: null }))).toMatchObject({
       code: 'page',
-      message: 'Power Log could not read this ride for export. busy',
+      message: 'Power Log could not read this ride for export.',
     });
     native.bridge.sinkOpen.mockRejectedValue(new TypeError(''));
     expect(await rejection(openExportSink('fit', context))).toMatchObject({
@@ -216,19 +222,11 @@ describe('native export errors', () => {
     });
   });
 
-  it('reads the code and message of a rejected plain object', async () => {
+  it('reads the code of a rejected plain object', async () => {
     fail('exportOpen', { code: 'gate', message: 'Only saved rides can be exported.' });
     expect(await rejection(exportSource().open({ rideId: 'ride-1', kind: 'zip', context }))).toMatchObject({
       code: 'gate',
-      message: 'Only saved rides can be exported.',
-    });
-  });
-
-  it('uses the call-site message when a coded rejection has no text', async () => {
-    fail('exportOpen', coded('gate', ''));
-    expect(await rejection(exportSource().open({ rideId: 'ride-1', kind: 'zip', context }))).toMatchObject({
-      code: 'gate',
-      message: 'Power Log could not read this ride for export.',
+      message: "This ride isn't ready to export yet.",
     });
   });
 
@@ -315,7 +313,7 @@ describe('native export sink', () => {
     await flush();
     expect(native.bridge.sinkAbort).not.toHaveBeenCalled();
     write.reject(coded('sink', 'The export file could not be written.'));
-    expect((await writing).message).toBe('The export file could not be written.');
+    expect((await writing).message).toBe('Power Log could not write the export file.');
     await aborting;
     expect(native.bridge.sinkAbort).toHaveBeenCalledExactlyOnceWith('sink-1');
   });

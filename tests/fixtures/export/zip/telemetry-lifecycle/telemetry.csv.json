@@ -1,5 +1,5 @@
 [
-  "timestamp,elapsedSeconds,activeInterval,run,connection,humanPowerW,cadenceRpm,motorInputPowerW,batteryVoltageV,batteryCurrentA,motorCurrentA,motorRpm,pedalTorqueNm,controllerTempC,motorTempC,consumedAh,consumedWh,throttleVoltageV,faultCode,assistLevel,controllerSpeedMps,cyc.raceMode,cyc.speedRaw",
+  "timestamp,elapsedSeconds,activeInterval,run,connection,humanPowerW,cadenceRpm,motorInputPowerW,batteryVoltageV,batteryCurrentA,motorCurrentA,motorRpm,pedalTorqueNm,controllerTempC,motorTempC,consumedAh,consumedWh,throttleVoltageV,faultCode,assistLevel,controllerSpeedMps,controller.raceMode,controller.speedRaw",
   "2026-03-14T08:00:00.125Z,0,1,1,1,182,78.5,412.25,51.75,7.966,11.5,3150,21.375,38,44.5,0.125,6.5,0.85,0,3,6.25,0,22.5",
   "2026-03-14T08:00:00.625Z,0.5,1,1,1,0,0,-96.5,52.25,-1.847,,0,,38,,0.125,6.5,,,0,,,0",
   "2026-03-14T08:00:01.125Z,1,1,2,1,175,80,,,,,1e+21,,,,1e-7,,,12,2,,1,0.30000000000000004",

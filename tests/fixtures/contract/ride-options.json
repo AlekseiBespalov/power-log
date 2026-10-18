@@ -1,18 +1,9 @@
 {
   "capabilities": {
-    "iphone26": {
+    "iphone": {
       "phoneWorkout": true,
       "watchWorkout": true,
       "phoneHealth": true,
-      "watchHealth": true,
-      "healthProvider": "appleHealth",
-      "gps": true,
-      "foregroundOnly": false
-    },
-    "iphone17": {
-      "phoneWorkout": true,
-      "watchWorkout": true,
-      "phoneHealth": false,
       "watchHealth": true,
       "healthProvider": "appleHealth",
       "gps": true,
@@ -51,14 +42,14 @@
       "phoneHealth": false,
       "watchHealth": false,
       "healthProvider": null,
-      "gps": false,
+      "gps": true,
       "foregroundOnly": true
     }
   },
   "cases": [
     {
       "name": "outdoor defaults",
-      "capabilities": "iphone26",
+      "capabilities": "iphone",
       "input": {
         "indoor": false
       },
@@ -67,12 +58,14 @@
         "indoor": false,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": true
+        "recordGPS": true,
+        "distanceSource": "gps:phone",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
       "name": "indoor excludes GPS by default",
-      "capabilities": "iphone26",
+      "capabilities": "iphone",
       "input": {
         "indoor": true
       },
@@ -81,12 +74,14 @@
         "indoor": true,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": false
+        "recordGPS": false,
+        "distanceSource": "controller",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
       "name": "explicit indoor GPS",
-      "capabilities": "iphone26",
+      "capabilities": "iphone",
       "input": {
         "indoor": true,
         "recordGPS": true
@@ -96,12 +91,14 @@
         "indoor": true,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": true
+        "recordGPS": true,
+        "distanceSource": "controller",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
       "name": "explicit outdoor without GPS",
-      "capabilities": "iphone26",
+      "capabilities": "iphone",
       "input": {
         "indoor": false,
         "recordGPS": false
@@ -111,12 +108,14 @@
         "indoor": false,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": false
+        "recordGPS": false,
+        "distanceSource": "controller",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
       "name": "Health turned off",
-      "capabilities": "iphone26",
+      "capabilities": "iphone",
       "input": {
         "indoor": false,
         "saveToHealth": false
@@ -126,36 +125,9 @@
         "indoor": false,
         "useWatch": false,
         "saveToHealth": false,
-        "recordGPS": true
-      }
-    },
-    {
-      "name": "Watch ride below iOS 26 saves through the Watch",
-      "capabilities": "iphone17",
-      "input": {
-        "indoor": false,
-        "useWatch": true
-      },
-      "expected": {
-        "sampleHz": 2,
-        "indoor": false,
-        "useWatch": true,
-        "saveToHealth": true,
-        "recordGPS": true
-      }
-    },
-    {
-      "name": "phone ride below iOS 26 has no phone Health",
-      "capabilities": "iphone17",
-      "input": {
-        "indoor": false
-      },
-      "expected": {
-        "sampleHz": 2,
-        "indoor": false,
-        "useWatch": false,
-        "saveToHealth": false,
-        "recordGPS": true
+        "recordGPS": true,
+        "distanceSource": "gps:phone",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
@@ -170,7 +142,9 @@
         "indoor": false,
         "useWatch": false,
         "saveToHealth": false,
-        "recordGPS": true
+        "recordGPS": true,
+        "distanceSource": "gps:phone",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
@@ -185,7 +159,9 @@
         "indoor": false,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": true
+        "recordGPS": true,
+        "distanceSource": "gps:phone",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
@@ -199,27 +175,32 @@
         "indoor": true,
         "useWatch": false,
         "saveToHealth": false,
-        "recordGPS": false
+        "recordGPS": false,
+        "distanceSource": "controller",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
-      "name": "browser records neither Health nor GPS",
+      "name": "browser records foreground GPS without Health",
       "capabilities": "browser",
       "input": {
         "indoor": false,
-        "recordGPS": true
+        "recordGPS": true,
+        "sampleHz": 4
       },
       "expected": {
-        "sampleHz": 2,
+        "sampleHz": 4,
         "indoor": false,
         "useWatch": false,
         "saveToHealth": false,
-        "recordGPS": false
+        "recordGPS": true,
+        "distanceSource": "gps:phone",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
       "name": "4 Hz",
-      "capabilities": "iphone26",
+      "capabilities": "iphone",
       "input": {
         "indoor": false,
         "sampleHz": 4
@@ -229,7 +210,9 @@
         "indoor": false,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": true
+        "recordGPS": true,
+        "distanceSource": "gps:phone",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
@@ -244,7 +227,9 @@
         "indoor": false,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": true
+        "recordGPS": true,
+        "distanceSource": "gps:phone",
+        "batteryConsumptionSource": "controller"
       }
     },
     {
@@ -259,7 +244,9 @@
         "indoor": true,
         "useWatch": false,
         "saveToHealth": true,
-        "recordGPS": false
+        "recordGPS": false,
+        "distanceSource": "controller",
+        "batteryConsumptionSource": "controller"
       }
     }
   ],

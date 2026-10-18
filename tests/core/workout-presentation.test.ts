@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { locationPermissionLabel, workoutSourcePresentation } from '../../src/core/workout-presentation';
+import {
+  locationPermissionLabel,
+  workoutFinishPresentation,
+  workoutOwnershipPresentation,
+  workoutSourcePresentation,
+} from '../../src/core/workout-presentation';
 import {
   normalizeWorkoutState,
   parseStreamStatus,
@@ -7,6 +12,32 @@ import {
   type StreamStatus,
   type WorkoutState,
 } from '../../src/core/workouts';
+
+it.each(['start', 'pause', 'resume', 'lap', 'stop', 'discard'] as const)(
+  'normalizes pending ride action %s',
+  pendingAction => {
+    expect(normalizeWorkoutState({ ...unavailableWorkoutState, pendingAction }).pendingAction).toBe(pendingAction);
+  },
+);
+it.each(['anotherBrowserTab', 'save', 'unknown', 1, undefined])(
+  'rejects an invalid pending action %s',
+  pendingAction => {
+    expect(() => normalizeWorkoutState({ ...unavailableWorkoutState, pendingAction })).toThrow(
+      'Invalid pending ride action',
+    );
+  },
+);
+it('normalizes native ownership and keeps foreign ownership separate from a pending action', () => {
+  const { foreignOwner: _owner, ...native } = unavailableWorkoutState;
+  expect(normalizeWorkoutState(native).foreignOwner).toBeNull();
+  const foreign = normalizeWorkoutState({ ...native, foreignOwner: 'anotherBrowserTab' });
+  expect(foreign.pendingAction).toBeNull();
+  expect(workoutOwnershipPresentation(foreign)).toBe(
+    'Another browser tab is recording this ride. Use that tab to control it.',
+  );
+  expect(workoutOwnershipPresentation(normalizeWorkoutState(native))).toBeNull();
+  expect(() => normalizeWorkoutState({ ...native, foreignOwner: 'unknown' })).toThrow('Invalid foreign ride owner');
+});
 
 function state(): WorkoutState {
   return structuredClone({
@@ -41,7 +72,7 @@ describe('workout source presentation', () => {
     const value = state();
     value.phase = 'completed';
     value.useWatch = true;
-    value.streams.cyc.status = 'receiving';
+    value.streams.controller.status = 'receiving';
     value.streams.heartRate.status = 'receiving';
     value.streams.gps = { status: 'receiving', source: 'watch', accuracyMeters: 3 };
     const sources = workoutSourcePresentation(value, { useWatch: false, indoor: false }, false);
@@ -60,7 +91,7 @@ describe('workout source presentation', () => {
     const value = state();
     value.phase = 'running';
     value.useWatch = false;
-    value.streams.cyc.status = 'waiting';
+    value.streams.controller.status = 'waiting';
     value.streams.heartRate.status = 'stale';
     value.streams.gps.status = 'waiting';
     const sources = workoutSourcePresentation(value, { useWatch: true, indoor: true }, true);
@@ -75,7 +106,7 @@ describe('workout source presentation', () => {
     value.useWatch = true;
     value.indoor = true;
     value.recordGPS = false;
-    value.streams.cyc.status = 'receiving';
+    value.streams.controller.status = 'receiving';
     value.streams.heartRate.status = 'stale';
     const sources = workoutSourcePresentation(value, { useWatch: false, indoor: false }, false);
     expect(sources.bike).toMatchObject({ label: 'Receiving samples', tone: 'ready' });
@@ -86,6 +117,7 @@ describe('workout source presentation', () => {
   it('renders active GPS permission and availability statuses in plain language', () => {
     const labels: Record<StreamStatus, string> = {
       receiving: 'Receiving GPS',
+      backfilled: 'Backfilled GPS',
       waiting: 'Waiting for GPS',
       notDetermined: 'Location permission needed',
       denied: 'Location permission denied',
@@ -142,7 +174,7 @@ describe('native stream payloads', () => {
         foregroundOnly: false,
       },
       streams: {
-        cyc: { status: 'receiving' },
+        controller: { status: 'receiving' },
         heartRate: { status: 'unavailable' },
         gps: { status: 'receiving', source: 'phone' as const, accuracyMeters: 4.6 },
       },
@@ -162,7 +194,7 @@ describe('native stream payloads', () => {
         foregroundOnly: false,
       },
       streams: {
-        cyc: { status: 'receiving' },
+        controller: { status: 'receiving' },
         heartRate: { status: 'waiting' },
         gps: { status: 'weak', source: 'phone' as const, accuracyMeters: 70 },
       },
@@ -182,7 +214,7 @@ describe('native stream payloads', () => {
         foregroundOnly: false,
       },
       streams: {
-        cyc: { status: 'receiving' },
+        controller: { status: 'receiving' },
         heartRate: { status: 'receiving' },
         gps: { status: 'receiving', source: 'watch' as const, accuracyMeters: 8 },
       },
@@ -229,13 +261,13 @@ describe('native stream payloads', () => {
       ...state(),
       phase: 'running' as const,
       streams: {
-        cyc: { status },
+        controller: { status },
         heartRate: { status },
         gps: { status, source: 'watch' as const, accuracyMeters: 5 },
       },
     };
     const value = normalizeWorkoutState(raw);
-    expect(value.streams.cyc.status).toBe('waiting');
+    expect(value.streams.controller.status).toBe('waiting');
     expect(value.streams.heartRate.status).toBe('waiting');
     expect(value.streams.gps.status).toBe('waiting');
     expect(workoutSourcePresentation(value, { useWatch: false, indoor: false }, false).gps.label).toBe(
@@ -248,7 +280,7 @@ describe('native stream payloads', () => {
     const raw = {
       ...state(),
       streams: {
-        cyc: { status: 'receiving' },
+        controller: { status: 'receiving' },
         heartRate: { status: 'stale' },
         gps: { status: 'receiving', source: 'phone' as const, accuracyMeters: value },
       },
@@ -282,10 +314,25 @@ it.each(['off', 'unavailable'] as const)(
     const value = state();
     value.phase = 'running';
     value.useWatch = true;
-    value.streams.cyc.status = status;
+    value.streams.controller.status = status;
     value.streams.heartRate.status = status;
     const sources = workoutSourcePresentation(value, { indoor: false, useWatch: false }, true);
     expect(sources.bike.label).toBe(status === 'off' ? 'Not selected' : 'Bike unavailable');
     expect(sources.heartRate.label).toBe(status === 'off' ? 'Not selected' : 'Not available on this device');
   },
 );
+
+it.each(['stop', 'discard'] as const)('presents local %s without Watch recovery state', action => {
+  const value = normalizeWorkoutState({
+    ...state(),
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    phase: 'finishing',
+    useWatch: true,
+    pendingAction: action,
+  });
+  expect(workoutFinishPresentation(value)).toEqual(
+    action === 'stop'
+      ? { label: 'Saving…', detail: 'Saving local ride…' }
+      : { label: 'Discarding…', detail: 'Discarding local ride…' },
+  );
+});

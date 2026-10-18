@@ -1,14 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultMonitorPreferences } from '../../src/core/monitor';
+import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { MonitorPreferencesController } from '../../src/services/monitor-preferences-controller';
 
 const fs = vi.hoisted(() => ({
   files: new Map<string, string>(),
   directories: new Set<string>(),
+  failList: false,
   failMove: false,
   failWrite: false,
   moves: [] as unknown[],
 }));
+const expoFailure = (name: string) =>
+  new Error(
+    `Calling the '${name}' function has failed\n→ Caused by: NSCocoaErrorDomain 640 (at ExpoModulesCore/FileSystem.swift:12)`,
+  );
 vi.mock('expo-file-system', () => ({
   Paths: { document: 'file:///documents' },
   Directory: class {
@@ -23,6 +28,7 @@ vi.mock('expo-file-system', () => ({
       fs.directories.add(this.uri);
     }
     list() {
+      if (fs.failList) throw expoFailure('list');
       return [...fs.files.keys()]
         .filter(uri => uri.startsWith(`${this.uri}/`))
         .map(uri => ({ name: uri.slice(this.uri.length + 1) }));
@@ -42,12 +48,12 @@ vi.mock('expo-file-system', () => ({
       return value;
     }
     write(contents: string) {
-      if (fs.failWrite) throw new Error('Write failed');
+      if (fs.failWrite) throw expoFailure('write');
       fs.files.set(this.uri, contents);
     }
     moveSync(destination: { uri: string }, options?: unknown) {
       fs.moves.push(options);
-      if (fs.failMove) throw new Error('Rename failed');
+      if (fs.failMove) throw expoFailure('move');
       if (fs.files.has(destination.uri)) throw new Error('Destination exists');
       fs.files.set(destination.uri, this.textSync());
       fs.files.delete(this.uri);
@@ -63,6 +69,7 @@ beforeEach(() => {
   fs.files.clear();
   fs.directories.clear();
   fs.moves = [];
+  fs.failList = false;
   fs.failMove = false;
   fs.failWrite = false;
 });
@@ -73,22 +80,24 @@ const native = async () =>
   (await import('../../src/services/monitor-preferences-store.native')).monitorPreferencesStore;
 const file = (revision: number, suffix = 'json') =>
   `file:///documents/power-log-preferences/monitor-${String(revision).padStart(16, '0')}.${suffix}`;
-const defaults = defaultMonitorPreferences();
+const defaults = JSON.parse(monitorPreferencesJson(defaultMonitorPreferences()));
 const invalidEnvelopes = [
   { name: 'null', value: null },
   { name: 'empty object', value: {} },
   { name: 'array', value: [] },
   { name: 'wrong version', value: { ...defaults, version: 2 } },
+  { name: 'unknown envelope field', value: { ...defaults, other: true } },
   { name: 'missing active view', value: { ...defaults, activeView: undefined } },
   { name: 'wrong active view type', value: { ...defaults, activeView: 1 } },
   { name: 'unknown active view', value: { ...defaults, activeView: 'other' } },
   { name: 'wrong history view type', value: { ...defaults, historyView: null } },
   { name: 'invalid history range', value: { ...defaults, historyRange: '120' } },
   { name: 'invalid speed unit', value: { ...defaults, speedUnit: 'knots' } },
-  { name: 'invalid distance source', value: { ...defaults, distanceSource: 'constructor' } },
+  { name: 'non-text distance source', value: { ...defaults, distanceSource: 7 } },
   { name: 'invalid sample rate', value: { ...defaults, sampleHz: '8' } },
   { name: 'missing options', value: { ...defaults, workoutOptions: undefined } },
   { name: 'null options', value: { ...defaults, workoutOptions: null } },
+  { name: 'unknown option', value: { ...defaults, workoutOptions: { ...defaults.workoutOptions, other: true } } },
   {
     name: 'invalid Watch choice',
     value: { ...defaults, workoutOptions: { ...defaults.workoutOptions, useWatch: 'false' } },
@@ -104,15 +113,12 @@ const invalidEnvelopes = [
   },
   { name: 'missing views', value: { ...defaults, views: undefined } },
   { name: 'array views', value: { ...defaults, views: [] } },
+  { name: 'unknown preset', value: { ...defaults, views: { ...defaults.views, other: defaults.views.ride } } },
+  {
+    name: 'unknown preset field',
+    value: { ...defaults, views: { ...defaults.views, ride: { ...defaults.views.ride, other: true } } },
+  },
   { name: 'missing preset', value: { ...defaults, views: { ...defaults.views, battery: undefined } } },
-  {
-    name: 'unknown metric',
-    value: { ...defaults, views: { ...defaults.views, ride: { ...defaults.views.ride, charts: ['bogus'] } } },
-  },
-  {
-    name: 'raw controller speed selection',
-    value: { ...defaults, views: { ...defaults.views, ride: { ...defaults.views.ride, numbers: ['speedRaw'] } } },
-  },
   {
     name: 'duplicate metric',
     value: {
@@ -179,10 +185,10 @@ describe('native monitor preference commits', () => {
     const original = fs.files.get(file(1));
     preferences.activeView = 'temperature';
     fs.failWrite = true;
-    await expect(storage.save(preferences)).rejects.toThrow('Write failed');
+    await expect(storage.save(preferences)).rejects.toThrow(/^Power Log couldn't save this change\.$/);
     fs.failWrite = false;
     fs.failMove = true;
-    await expect(storage.save(preferences)).rejects.toThrow('Rename failed');
+    await expect(storage.save(preferences)).rejects.toThrow(/^Power Log couldn't save this change\.$/);
     expect(fs.files.get(file(1))).toBe(original);
     expect((await storage.load()).preferences.activeView).toBe('ride');
     fs.failMove = false;
@@ -204,6 +210,34 @@ describe('native monitor preference commits', () => {
     });
     fs.files.set(file(1), '{corrupt');
     await expect(storage.load()).rejects.toThrow('could not be read');
+  });
+  it('loads a revision holding removed Health choices without them and keeps saving', async () => {
+    const storage = await native();
+    await storage.save(defaultMonitorPreferences());
+    fs.files.set(
+      file(1),
+      JSON.stringify({
+        ...defaults,
+        distanceSource: 'health:watch',
+        views: {
+          ...defaults.views,
+          ride: { ...defaults.views.ride, charts: ['humanPowerW', 'healthSpeedMps', 'speedRaw', 'bogus'] },
+        },
+      }),
+    );
+    const controller = new MonitorPreferencesController(storage);
+    await controller.hydrate();
+    expect(controller.snapshot()).toMatchObject({ ready: true, error: null });
+    expect(controller.snapshot().preferences.distanceSource).toBe('auto');
+    expect(controller.snapshot().preferences.views.ride.charts).toEqual(['humanPowerW']);
+    controller.setSpeedUnit('mph');
+    await controller.flush();
+    expect(fs.files.size).toBe(2);
+    expect(JSON.parse(fs.files.get(file(2))!)).toMatchObject({
+      speedUnit: 'mph',
+      distanceSource: 'auto',
+      views: { ride: { charts: ['humanPowerW'] } },
+    });
   });
   it('serializes concurrent saves and snapshots each request before the caller changes it', async () => {
     const storage = await native(),
@@ -265,7 +299,7 @@ describe('native monitor preference commits', () => {
     fs.failMove = true;
     controller.setSampleHz(8);
     await controller.flush();
-    expect(controller.snapshot().error).toContain('Rename failed');
+    expect(controller.snapshot().error).toBe("Could not save monitor settings. Power Log couldn't save this change.");
     expect((await storage.load()).preferences).toMatchObject({ speedUnit: 'mph', sampleHz: 2 });
     fs.failMove = false;
     controller.selectView('battery');
@@ -273,9 +307,58 @@ describe('native monitor preference commits', () => {
     expect(controller.snapshot().error).toBeNull();
     expect((await storage.load()).preferences).toMatchObject({ speedUnit: 'mph', sampleHz: 8, activeView: 'battery' });
   });
+
+  it('shows plain text when the file system fails to load or save settings', async () => {
+    const storage = await native();
+    await storage.save(defaultMonitorPreferences());
+    fs.failList = true;
+    const unreadable = new MonitorPreferencesController(storage);
+    await unreadable.hydrate();
+    expect(unreadable.snapshot().error).toBe(
+      "Could not load monitor settings. Saved monitor settings could not be read. Changes won't be saved until settings can be read.",
+    );
+    fs.failList = false;
+    const controller = new MonitorPreferencesController(storage);
+    await controller.hydrate();
+    fs.failWrite = true;
+    controller.setSpeedUnit('mph');
+    await controller.flush();
+    expect(controller.snapshot().error).toBe("Could not save monitor settings. Power Log couldn't save this change.");
+    for (const error of [unreadable.snapshot().error, controller.snapshot().error])
+      expect(error).not.toMatch(/ExpoModulesCore|Caused by|function has failed/);
+  });
 });
 
 describe('browser monitor preferences', () => {
+  it.each(['denied read', 'malformed JSON'])(
+    'keeps session edits without overwriting settings after %s',
+    async failure => {
+      const contents = failure === 'denied read' ? monitorPreferencesJson(defaultMonitorPreferences()) : '{broken';
+      const getItem = vi.fn(() => {
+        if (failure === 'denied read') throw new Error('Storage denied');
+        return contents;
+      });
+      const setItem = vi.fn();
+      vi.stubGlobal('localStorage', { getItem, setItem });
+      const storage = (await import('../../src/services/monitor-preferences-store.web')).monitorPreferencesStore;
+      const controller = new MonitorPreferencesController(storage);
+      await controller.hydrate();
+      const error = controller.snapshot().error;
+      controller.selectView('battery');
+      controller.setSpeedUnit('mph');
+      await controller.flush();
+      expect(controller.snapshot().preferences).toMatchObject({ activeView: 'battery', speedUnit: 'mph' });
+      expect(controller.snapshot().error).toBe(error);
+      expect(error).toContain("Changes won't be saved until settings can be read.");
+      expect(setItem).not.toHaveBeenCalled();
+      getItem.mockImplementation(() => monitorPreferencesJson(defaultMonitorPreferences()));
+      const reloaded = new MonitorPreferencesController(storage);
+      await reloaded.hydrate();
+      expect(reloaded.snapshot().preferences).toEqual(defaultMonitorPreferences());
+      expect(reloaded.snapshot().error).toBeNull();
+      expect(setItem).not.toHaveBeenCalled();
+    },
+  );
   it('uses controller readings for first run and preserves existing Watch and reading choices', async () => {
     const values = new Map<string, string>();
     vi.stubGlobal('localStorage', {
@@ -295,9 +378,26 @@ describe('browser monitor preferences', () => {
     expect(values.size).toBe(0);
     preferences.workoutOptions.useWatch = true;
     preferences.views.ride.numbers = ['humanPowerW', 'cadenceRpm', 'heartRateBpm', 'speedMps'];
-    const original = JSON.stringify(preferences);
+    const original = monitorPreferencesJson(preferences);
     values.set(key, original);
     expect((await storage.load()).preferences).toEqual(preferences);
+    expect(values.get(key)).toBe(original);
+  });
+  it('refuses duplicate JSON fields without overwriting the unread browser store', async () => {
+    const original = JSON.stringify(defaults).replace('"version":1', '"version":1,"version":1');
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    const { monitorPreferencesStore: storage, MONITOR_PREFERENCES_KEY: key } =
+      await import('../../src/services/monitor-preferences-store.web');
+    values.set(key, original);
+    const controller = new MonitorPreferencesController(storage);
+    await controller.hydrate();
+    expect(controller.snapshot().error).toContain('Invalid saved monitor settings');
+    controller.setSampleHz(8);
+    await controller.flush();
     expect(values.get(key)).toBe(original);
   });
   it('uses one validated localStorage value and preserves independently configured views', async () => {
@@ -310,7 +410,7 @@ describe('browser monitor preferences', () => {
       await import('../../src/services/monitor-preferences-store.web');
     expect((await storage.load()).preferences.activeView).toBe('ride');
     const preferences = defaultMonitorPreferences();
-    preferences.views.ride.charts = ['controllerTempC', 'controllerTempC', 'unknown'];
+    preferences.views.ride.charts = ['controllerTempC'];
     preferences.views.temperature.numbers = ['batteryCurrentA'];
     await storage.save(preferences);
     expect(values.size).toBe(1);
@@ -318,19 +418,19 @@ describe('browser monitor preferences', () => {
     expect((await storage.load()).preferences.views.ride.charts).toEqual(['controllerTempC']);
     expect((await storage.load()).preferences.views.temperature.numbers).toEqual(['batteryCurrentA']);
   });
-  it('surfaces corrupt JSON, denied reads and quota errors', async () => {
+  it('surfaces corrupt JSON, denied reads and quota errors as plain text', async () => {
     const getItem = vi.fn(() => '{broken'),
       setItem = vi.fn(() => {
-        throw new Error('Quota exceeded');
+        throw new DOMException("Failed to execute 'setItem' on 'Storage': exceeded the quota.", 'QuotaExceededError');
       });
     vi.stubGlobal('localStorage', { getItem, setItem });
     const storage = (await import('../../src/services/monitor-preferences-store.web')).monitorPreferencesStore;
     await expect(storage.load()).rejects.toThrow();
     getItem.mockImplementation(() => {
-      throw new Error('Storage denied');
+      throw new DOMException('The operation is insecure.', 'SecurityError');
     });
-    await expect(storage.load()).rejects.toThrow('Storage denied');
-    await expect(storage.save(defaultMonitorPreferences())).rejects.toThrow('Quota exceeded');
+    await expect(storage.load()).rejects.toThrow(/^Saved monitor settings could not be read\.$/);
+    await expect(storage.save(defaultMonitorPreferences())).rejects.toThrow(/^This device is out of storage\.$/);
   });
 
   it.each(invalidEnvelopes)(
@@ -355,4 +455,28 @@ describe('browser monitor preferences', () => {
       await expect(storage.load()).rejects.toThrow('Invalid saved monitor settings');
     },
   );
+});
+
+it.each([undefined, false, true])('persists only editable preferences and preserves GPS choice %s', async recordGPS => {
+  const values = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  });
+  const { monitorPreferencesStore: storage, MONITOR_PREFERENCES_KEY: key } =
+    await import('../../src/services/monitor-preferences-store.web');
+  const preferences = defaultMonitorPreferences();
+  preferences.sampleHz = 8;
+  preferences.workoutOptions.sampleHz = 4;
+  if (recordGPS !== undefined) preferences.workoutOptions.recordGPS = recordGPS;
+  await storage.save(preferences);
+  const stored = JSON.parse(values.get(key)!);
+  expect(stored.sampleHz).toBe(8);
+  expect(stored.workoutOptions).not.toHaveProperty('sampleHz');
+  for (const view of Object.values(stored.views))
+    expect(Object.keys(view as object).sort()).toEqual(['charts', 'numbers', 'range', 'webColumns']);
+  const loaded = (await storage.load()).preferences;
+  expect(loaded.views.ride).toMatchObject({ id: 'ride', name: 'Ride' });
+  expect(loaded.workoutOptions.recordGPS).toBe(recordGPS);
+  expect(Object.hasOwn(stored.workoutOptions, 'recordGPS')).toBe(recordGPS !== undefined);
 });

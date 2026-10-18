@@ -30,11 +30,7 @@ const COMMON = [plain('start'), plain('pause'), plain('resume'), plain('lap')];
 const ACTIONS: Record<ExportPlatform, ReadonlyMap<string, EventAction>> = {
   ios: new Map([...COMMON, plain('stop'), ['interruption', { action: 'pause', interrupted: true }]]),
   android: new Map([...COMMON, plain('stop')]),
-  web: new Map([
-    ...COMMON,
-    ['save', { action: 'stop', interrupted: false }],
-    ['interrupted', { action: 'stop', interrupted: true }],
-  ]),
+  web: new Map([...COMMON, plain('stop'), ['interruption', { action: 'pause', interrupted: true }]]),
 };
 
 export async function writeEvents(input: Omit<TableInput, 'timeline'>): Promise<void> {

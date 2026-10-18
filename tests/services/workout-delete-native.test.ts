@@ -3,7 +3,7 @@ import { workouts } from '../../src/services/workouts.native';
 import { unavailableWorkoutState } from '../../src/core/workouts';
 
 const native = vi.hoisted(() => ({ getWorkoutState: vi.fn(), deleteWorkout: vi.fn() }));
-vi.mock('../../modules/cyc-bridge', () => ({ default: native }));
+vi.mock('../../modules/power-log-bridge', () => ({ default: native }));
 beforeEach(() => {
   vi.clearAllMocks();
 });

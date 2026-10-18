@@ -1,0 +1,1521 @@
+{
+  "shared": {
+    "gps1": {
+      "columns": {
+        "altitudeMeters": {
+          "base64": ""
+        },
+        "clockEpoch": [],
+        "distanceBarrier": {
+          "base64": ""
+        },
+        "elapsedSeconds": {
+          "base64": ""
+        },
+        "horizontalAccuracyM": {
+          "base64": ""
+        },
+        "latitude": {
+          "base64": ""
+        },
+        "longitude": {
+          "base64": ""
+        },
+        "producer": [],
+        "producerSequence": {
+          "base64": ""
+        },
+        "speedAccuracyMps": {
+          "base64": ""
+        },
+        "speedMps": {
+          "base64": ""
+        },
+        "verticalAccuracyM": {
+          "base64": ""
+        }
+      },
+      "done": true,
+      "last": null,
+      "rows": 0
+    },
+    "healthFit1": {
+      "columns": {
+        "activeEnergyKcal": {
+          "base64": ""
+        },
+        "basalEnergyKcal": {
+          "base64": ""
+        },
+        "channel": [],
+        "clockEpoch": [],
+        "connectionEpoch": [],
+        "dataOrigin": [],
+        "elapsedSeconds": {
+          "base64": ""
+        },
+        "endUs": [],
+        "heartRateBpm": {
+          "base64": ""
+        },
+        "identifier": [],
+        "observationRevision": [],
+        "originalEndTimestamp": [],
+        "originalEventId": [],
+        "originalStartTimestamp": [],
+        "producer": [],
+        "producerSequence": {
+          "base64": ""
+        },
+        "provider": [],
+        "providerParentId": [],
+        "representation": [],
+        "sampleCount": {
+          "base64": ""
+        },
+        "startUs": []
+      },
+      "done": true,
+      "last": null,
+      "rows": 0
+    },
+    "open1": {
+      "distanceProfile": null,
+      "elapsedEnd": 10,
+      "metadata": {
+        "batteryConsumptionSource": "controller",
+        "componentResults": [],
+        "endedAt": "2026-05-28T20:26:50.250Z",
+        "example": false,
+        "health": {
+          "export": null,
+          "provider": "appleHealth",
+          "state": "notRequested",
+          "workoutUUID": null
+        },
+        "healthPublisher": "phone",
+        "indoor": true,
+        "interrupted": false,
+        "ownerTiming": {
+          "elapsedSeconds": 10,
+          "timerSeconds": 10,
+          "timestamp": "2026-05-28T20:26:50.250Z"
+        },
+        "recordGPS": false,
+        "recordingOwner": "phone",
+        "sampleHz": 4,
+        "saveToHealth": false,
+        "startedAt": "2026-05-28T20:26:40.250Z",
+        "watchEnabled": false
+      },
+      "producers": {
+        "gps": [],
+        "health": ["phone"]
+      },
+      "session": "captured-native"
+    },
+    "distance1": {
+      "columns": {
+        "endSpeed": {
+          "base64": ""
+        },
+        "endUs": [],
+        "meters": {
+          "base64": ""
+        },
+        "segment": {
+          "base64": ""
+        },
+        "startSpeed": {
+          "base64": ""
+        },
+        "startUs": []
+      },
+      "done": true,
+      "last": null,
+      "rows": 0
+    },
+    "columns1": {
+      "assistLevel": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "batteryCurrentA": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "batteryVoltageV": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "cadenceRpm": {
+        "base64": "AAAAAAAAVEA="
+      },
+      "clockEpoch": [null],
+      "connection": [null],
+      "consumedAh": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "consumedWh": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "controllerTempC": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "elapsedSeconds": {
+        "base64": "AAAAAAAAAAA="
+      },
+      "humanPowerW": {
+        "base64": "AAAAAAAAWUA="
+      },
+      "motorCurrentA": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "motorInputPowerW": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "motorRpm": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "motorTempC": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "pedalTorqueNm": {
+        "base64": "AAAAAAAA+H8="
+      },
+      "producerSequence": {
+        "base64": "AAAAAAAA8D8="
+      }
+    },
+    "metadata1": {
+      "batteryConsumptionSource": "controller",
+      "componentResults": [],
+      "endedAt": "2026-05-28T20:26:50.250Z",
+      "example": false,
+      "health": {
+        "export": null,
+        "provider": "appleHealth",
+        "state": "notRequested",
+        "workoutUUID": null
+      },
+      "healthPublisher": "phone",
+      "indoor": true,
+      "interrupted": false,
+      "ownerTiming": {
+        "elapsedSeconds": 10,
+        "timerSeconds": 10,
+        "timestamp": "2026-05-28T20:26:50.250Z"
+      },
+      "recordGPS": false,
+      "recordingOwner": "phone",
+      "sampleHz": 4,
+      "saveToHealth": false,
+      "startedAt": "2026-05-28T20:26:40.250Z",
+      "watchEnabled": false
+    },
+    "columns2": {
+      "action": ["start", "stop"],
+      "clockEpoch": [null, null],
+      "controllerSequence": {
+        "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+      },
+      "elapsedSeconds": {
+        "base64": "AAAAAAAAAAAAAAAAAAAkQA=="
+      },
+      "interrupted": {
+        "base64": "AAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "producer": ["phone", "phone"],
+      "producerSequence": {
+        "base64": "AAAAAAAA8D8AAAAAAAAIQA=="
+      }
+    },
+    "columns3": {
+      "action": ["start", "stop"],
+      "clockEpoch": [null, null],
+      "controllerSequence": {
+        "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+      },
+      "elapsedSeconds": {
+        "base64": "AAAAAAAAAAAAAAAAAAAkQA=="
+      },
+      "interrupted": {
+        "base64": "AAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "producer": ["phone", "phone"],
+      "producerSequence": {
+        "base64": "AAAAAAAA8D8AAAAAAAAYQA=="
+      }
+    }
+  },
+  "distance-endpoints": {
+    "open": {
+      "distanceProfile": {
+        "kind": "controller",
+        "source": "controller"
+      },
+      "elapsedEnd": 1,
+      "metadata": {
+        "batteryConsumptionSource": "controller",
+        "componentResults": [],
+        "endedAt": "2026-05-28T20:26:41.250Z",
+        "example": false,
+        "health": {
+          "export": null,
+          "provider": "appleHealth",
+          "state": "notRequested",
+          "workoutUUID": null
+        },
+        "healthPublisher": "phone",
+        "indoor": true,
+        "interrupted": false,
+        "ownerTiming": {
+          "elapsedSeconds": 1,
+          "timerSeconds": 1,
+          "timestamp": "2026-05-28T20:26:41.250Z"
+        },
+        "recordGPS": false,
+        "recordingOwner": "phone",
+        "sampleHz": 4,
+        "saveToHealth": false,
+        "startedAt": "2026-05-28T20:26:40.250Z",
+        "watchEnabled": false
+      },
+      "producers": {
+        "gps": [],
+        "health": []
+      },
+      "session": "captured-native"
+    },
+    "pages": {
+      "distance": {
+        "columns": {
+          "endSpeed": {
+            "base64": "AAAAAAAAAEA="
+          },
+          "endUs": ["512500"],
+          "meters": {
+            "base64": "AAAAAAAA4D8="
+          },
+          "segment": {
+            "base64": "AAAAAAAA8D8="
+          },
+          "startSpeed": {
+            "base64": "AAAAAAAAAEA="
+          },
+          "startUs": ["0"]
+        },
+        "done": true,
+        "last": [0.512500125, 2],
+        "rows": 1
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "$ref": "healthFit1"
+      },
+      "lifecycle": {
+        "columns": {
+          "action": ["start", "lap", "stop"],
+          "clockEpoch": [null, null, null],
+          "controllerSequence": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAADTUKOQZGbgPwAAAAAAAPA/"
+          },
+          "interrupted": {
+            "base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "producer": ["phone", "phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQAAAAAAAAAhA"
+          }
+        },
+        "done": true,
+        "last": [1, 1, 3, 5926],
+        "rows": 3
+      },
+      "telemetry": {
+        "columns": {
+          "assistLevel": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "batteryCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "batteryVoltageV": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "cadenceRpm": {
+            "base64": "AAAAAAAAVEAAAAAAAABUQAAAAAAAAFRA"
+          },
+          "clockEpoch": [null, "clock", "clock"],
+          "connection": [null, "link", "link"],
+          "consumedAh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "consumedWh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "controllerTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADQPwAAAAAAAOA/"
+          },
+          "humanPowerW": {
+            "base64": "AAAAAAAAWUAAAAAAAABZQAAAAAAAAFlA"
+          },
+          "motorCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "motorInputPowerW": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "motorRpm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "motorTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "pedalTorqueNm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQAAAAAAAAAhA"
+          }
+        },
+        "connections": [
+          {
+            "firmware": null,
+            "model": "X6",
+            "protocol": "5.3",
+            "token": "link",
+            "vendor": "controller"
+          }
+        ],
+        "done": true,
+        "last": [0.5, 0, 3, 5924],
+        "rows": 3
+      }
+    }
+  },
+  "energy-n5": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAAEEAAAAAAAAAYQA=="
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "channel": [null, null],
+          "clockEpoch": [null, null],
+          "connectionEpoch": [null, null],
+          "dataOrigin": ["app.a", "app.a"],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAMAAAAAAAAAgQA=="
+          },
+          "endUs": ["2000000", "12000000"],
+          "heartRateBpm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "identifier": [null, null],
+          "observationRevision": ["3", "4"],
+          "originalEndTimestamp": ["2026-05-28T20:26:42.250Z", "2026-05-28T20:26:52.250Z"],
+          "originalEventId": ["00000000-0000-4000-8000-000000000180", "00000000-0000-4000-8000-000000000181"],
+          "originalStartTimestamp": ["2026-05-28T20:26:38.250Z", "2026-05-28T20:26:48.250Z"],
+          "producer": ["phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEAAAAAAAAAIQA=="
+          },
+          "provider": ["appleHealth", "appleHealth"],
+          "providerParentId": [null, null],
+          "representation": ["intervalRecord", "intervalRecord"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "startUs": ["-2000000", "8000000"]
+        },
+        "done": true,
+        "last": [8, 1, 3, 5915],
+        "rows": 2
+      },
+      "lifecycle": {
+        "columns": {
+          "action": ["start", "stop"],
+          "clockEpoch": [null, null],
+          "controllerSequence": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAAAkQA=="
+          },
+          "interrupted": {
+            "base64": "AAAAAAAAAAAAAAAAAAAAAA=="
+          },
+          "producer": ["phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAQQA=="
+          }
+        },
+        "done": true,
+        "last": [10, 1, 4, 5916],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5913],
+        "rows": 1
+      }
+    }
+  },
+  "energy-qualification": {
+    "open": {
+      "distanceProfile": null,
+      "elapsedEnd": 10,
+      "metadata": {
+        "$ref": "metadata1"
+      },
+      "producers": {
+        "gps": [],
+        "health": ["phone", "watch"]
+      },
+      "session": "captured-native"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAAVEAAAAAAAAAcQA=="
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "channel": [null, null],
+          "clockEpoch": [null, null],
+          "connectionEpoch": [null, null],
+          "dataOrigin": [null, null],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAMAAAAAAAADwPw=="
+          },
+          "endUs": [null, null],
+          "heartRateBpm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "identifier": [null, null],
+          "observationRevision": ["3", "4"],
+          "originalEndTimestamp": [null, null],
+          "originalEventId": ["00000000-0000-4000-8000-000000000140", "00000000-0000-4000-8000-000000000141"],
+          "originalStartTimestamp": [null, null],
+          "producer": ["phone", "watch"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEAAAAAAAADwPw=="
+          },
+          "provider": [null, null],
+          "providerParentId": [null, null],
+          "representation": ["cumulativeWorkoutTotal", "cumulativeWorkoutTotal"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "startUs": [null, null]
+        },
+        "done": true,
+        "last": [1, 2, 1, 5893],
+        "rows": 2
+      },
+      "lifecycle": {
+        "columns": {
+          "$ref": "columns2"
+        },
+        "done": true,
+        "last": [10, 1, 3, 5894],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5891],
+        "rows": 1
+      }
+    }
+  },
+  "energy-spanning": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAANEA="
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8="
+          },
+          "channel": [null],
+          "clockEpoch": [null],
+          "connectionEpoch": [null],
+          "dataOrigin": ["app.a"],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAFMA="
+          },
+          "endUs": ["15000000"],
+          "heartRateBpm": {
+            "base64": "AAAAAAAA+H8="
+          },
+          "identifier": [null],
+          "observationRevision": ["3"],
+          "originalEndTimestamp": ["2026-05-28T20:26:55.250Z"],
+          "originalEventId": ["00000000-0000-4000-8000-000000000190"],
+          "originalStartTimestamp": ["2026-05-28T20:26:35.250Z"],
+          "producer": ["phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEA="
+          },
+          "provider": ["appleHealth"],
+          "providerParentId": [null],
+          "representation": ["intervalRecord"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8="
+          },
+          "startUs": ["-5000000"]
+        },
+        "done": true,
+        "last": [-5, 1, 2, 5919],
+        "rows": 1
+      },
+      "lifecycle": {
+        "columns": {
+          "$ref": "columns2"
+        },
+        "done": true,
+        "last": [10, 1, 3, 5920],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5918],
+        "rows": 1
+      }
+    }
+  },
+  "hr-barrier": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "channel": ["heartRateBpm", "heartRateBpm", "heartRateBpm"],
+          "clockEpoch": [null, null, null],
+          "connectionEpoch": [null, null, null],
+          "dataOrigin": ["app.a", "app.a", "app.a"],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAABA"
+          },
+          "endUs": [null, null, null],
+          "heartRateBpm": {
+            "base64": "AAAAAAAAWUAAAAAAAAD4fwAAAAAAAFlA"
+          },
+          "identifier": [
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate"
+          ],
+          "observationRevision": ["3", "4", "5"],
+          "originalEndTimestamp": [null, null, null],
+          "originalEventId": [
+            "00000000-0000-4000-8000-000000000160",
+            "00000000-0000-4000-8000-000000000161",
+            "00000000-0000-4000-8000-000000000162"
+          ],
+          "originalStartTimestamp": [null, null, null],
+          "producer": ["phone", "phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEAAAAAAAAAIQAAAAAAAABBA"
+          },
+          "provider": ["appleHealth", "appleHealth", "appleHealth"],
+          "providerParentId": [null, null, null],
+          "representation": ["rawQuantity", "rawQuantity", "rawQuantity"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/"
+          },
+          "startUs": [null, null, null]
+        },
+        "done": true,
+        "last": [2, 1, 4, 5903],
+        "rows": 3
+      },
+      "lifecycle": {
+        "columns": {
+          "action": ["start", "stop"],
+          "clockEpoch": [null, null],
+          "controllerSequence": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAAAkQA=="
+          },
+          "interrupted": {
+            "base64": "AAAAAAAAAAAAAAAAAAAAAA=="
+          },
+          "producer": ["phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAUQA=="
+          }
+        },
+        "done": true,
+        "last": [10, 1, 5, 5904],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5900],
+        "rows": 1
+      }
+    }
+  },
+  "hr-membership": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "channel": ["heartRateBpm", null, "heartRateBpm", "riderPowerW"],
+          "clockEpoch": [null, null, null, null],
+          "connectionEpoch": [null, null, null, null],
+          "dataOrigin": ["app.a", "app.a", "app.a", "app.a"],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAABAAAAAAAAACEA="
+          },
+          "endUs": [null, null, null, null],
+          "heartRateBpm": {
+            "base64": "AAAAAAAAWUAAAAAAAAD4fwAAAAAAAFlAAAAAAAAA+H8="
+          },
+          "identifier": [
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierCyclingPower",
+            "HKQuantityTypeIdentifierHeartRate",
+            null
+          ],
+          "observationRevision": ["3", "4", "5", "6"],
+          "originalEndTimestamp": [null, null, null, null],
+          "originalEventId": [
+            "00000000-0000-4000-8000-000000000120",
+            "00000000-0000-4000-8000-000000000121",
+            "00000000-0000-4000-8000-000000000122",
+            "00000000-0000-4000-8000-000000000123"
+          ],
+          "originalStartTimestamp": [null, null, null, null],
+          "producer": ["phone", "phone", "phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEAAAAAAAAAIQAAAAAAAABBAAAAAAAAAFEA="
+          },
+          "provider": ["appleHealth", "appleHealth", "appleHealth", "appleHealth"],
+          "providerParentId": [null, null, null, null],
+          "representation": ["rawQuantity", "rawQuantity", "rawQuantity", "rawQuantity"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "startUs": [null, null, null, null]
+        },
+        "done": true,
+        "last": [3, 1, 5, 5881],
+        "rows": 4
+      },
+      "lifecycle": {
+        "columns": {
+          "$ref": "columns3"
+        },
+        "done": true,
+        "last": [10, 1, 6, 5882],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5877],
+        "rows": 1
+      }
+    }
+  },
+  "hr-origin": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "channel": ["heartRateBpm", "heartRateBpm", "heartRateBpm", "heartRateBpm"],
+          "clockEpoch": [null, null, null, null],
+          "connectionEpoch": [null, null, null, null],
+          "dataOrigin": ["app.a", "app.b", "app.a", "app.b"],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAABAAAAAAAAACEA="
+          },
+          "endUs": [null, null, null, null],
+          "heartRateBpm": {
+            "base64": "AAAAAAAAWUAAAAAAAABpQAAAAAAAAFlAAAAAAAAAaUA="
+          },
+          "identifier": [
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate"
+          ],
+          "observationRevision": ["3", "4", "5", "6"],
+          "originalEndTimestamp": [null, null, null, null],
+          "originalEventId": [
+            "00000000-0000-4000-8000-000000000130",
+            "00000000-0000-4000-8000-000000000131",
+            "00000000-0000-4000-8000-000000000132",
+            "00000000-0000-4000-8000-000000000133"
+          ],
+          "originalStartTimestamp": [null, null, null, null],
+          "producer": ["phone", "phone", "phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEAAAAAAAAAIQAAAAAAAABBAAAAAAAAAFEA="
+          },
+          "provider": ["appleHealth", "appleHealth", "appleHealth", "appleHealth"],
+          "providerParentId": [null, null, null, null],
+          "representation": ["rawQuantity", "rawQuantity", "rawQuantity", "rawQuantity"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "startUs": [null, null, null, null]
+        },
+        "done": true,
+        "last": [3, 1, 5, 5888],
+        "rows": 4
+      },
+      "lifecycle": {
+        "columns": {
+          "$ref": "columns3"
+        },
+        "done": true,
+        "last": [10, 1, 6, 5889],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5884],
+        "rows": 1
+      }
+    }
+  },
+  "hr-origin-precedence": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "channel": ["heartRateBpm", "heartRateBpm", "heartRateBpm", "heartRateBpm"],
+          "clockEpoch": [null, null, null, null],
+          "connectionEpoch": [null, null, null, null],
+          "dataOrigin": ["app.a", "app.b", "app.a", "app.b"],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAAAAAAAAADwPwAAAAAAAABAAAAAAAAACEA="
+          },
+          "endUs": [null, null, null, null],
+          "heartRateBpm": {
+            "base64": "AAAAAAAAWUAAAAAAAABpQAAAAAAAAFlAAAAAAAAAaUA="
+          },
+          "identifier": [
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate",
+            "HKQuantityTypeIdentifierHeartRate"
+          ],
+          "observationRevision": ["3", "4", "5", "6"],
+          "originalEndTimestamp": [null, null, null, null],
+          "originalEventId": [
+            "00000000-0000-4000-8000-000000000170",
+            "00000000-0000-4000-8000-000000000171",
+            "00000000-0000-4000-8000-000000000172",
+            "00000000-0000-4000-8000-000000000173"
+          ],
+          "originalStartTimestamp": [null, null, null, null],
+          "producer": ["phone", "phone", "phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEAAAAAAAAAIQAAAAAAAABBAAAAAAAAAFEA="
+          },
+          "provider": ["appleHealth", "appleHealth", "appleHealth", "appleHealth"],
+          "providerParentId": [null, null, null, null],
+          "representation": ["builderMostRecent", "rawQuantity", "builderMostRecent", "rawQuantity"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh/AAAAAAAA+H8="
+          },
+          "startUs": [null, null, null, null]
+        },
+        "done": true,
+        "last": [3, 1, 5, 5910],
+        "rows": 4
+      },
+      "lifecycle": {
+        "columns": {
+          "$ref": "columns3"
+        },
+        "done": true,
+        "last": [10, 1, 6, 5911],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5906],
+        "rows": 1
+      }
+    }
+  },
+  "integer-boundary": {
+    "open": {
+      "distanceProfile": null,
+      "elapsedEnd": 0.512500125,
+      "metadata": {
+        "batteryConsumptionSource": "controller",
+        "componentResults": [],
+        "endedAt": "2026-05-28T20:26:40.763Z",
+        "example": false,
+        "health": {
+          "export": null,
+          "provider": "appleHealth",
+          "state": "notRequested",
+          "workoutUUID": null
+        },
+        "healthPublisher": "phone",
+        "indoor": true,
+        "interrupted": false,
+        "ownerTiming": {
+          "elapsedSeconds": 0.512500125,
+          "timerSeconds": 0.512500125,
+          "timestamp": "2026-05-28T20:26:40.763Z"
+        },
+        "recordGPS": false,
+        "recordingOwner": "phone",
+        "sampleHz": 4,
+        "saveToHealth": false,
+        "startedAt": "2026-05-28T20:26:40.250Z",
+        "watchEnabled": false
+      },
+      "producers": {
+        "gps": [],
+        "health": []
+      },
+      "session": "captured-native"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "$ref": "healthFit1"
+      },
+      "lifecycle": {
+        "columns": {
+          "action": ["start", "stop"],
+          "clockEpoch": [null, null],
+          "controllerSequence": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAADpRIKpZmbgPw=="
+          },
+          "interrupted": {
+            "base64": "AAAAAAAAAAAAAAAAAAAAAA=="
+          },
+          "producer": ["phone", "phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQA=="
+          }
+        },
+        "done": true,
+        "last": [0.512500125, 1, 2, 5870],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "assistLevel": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "batteryCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "batteryVoltageV": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "cadenceRpm": {
+            "base64": "AAAAAAAAVEAAAAAAAABUQA=="
+          },
+          "clockEpoch": [null, null],
+          "connection": [null, null],
+          "consumedAh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "consumedWh": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "controllerTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAAAABWT6BZmbgPw=="
+          },
+          "humanPowerW": {
+            "base64": "AAAAAAAAWUAAAAAAAABpQA=="
+          },
+          "motorCurrentA": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "motorInputPowerW": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "motorRpm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "motorTempC": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "pedalTorqueNm": {
+            "base64": "AAAAAAAA+H8AAAAAAAD4fw=="
+          },
+          "producerSequence": {
+            "base64": "AAAAAAAA8D8AAAAAAAAAQA=="
+          }
+        },
+        "connections": [],
+        "done": true,
+        "last": [0.51250005, 0, 2, 5869],
+        "rows": 2
+      }
+    }
+  },
+  "overlapping-energy": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": [
+        {
+          "$ref": "distance1"
+        }
+      ],
+      "gps": [
+        {
+          "$ref": "gps1"
+        }
+      ],
+      "gpsDiscovery": [
+        {
+          "columns": {
+            "horizontalAccuracyM": {
+              "base64": ""
+            },
+            "producer": []
+          },
+          "done": true,
+          "last": null,
+          "rows": 0
+        }
+      ],
+      "healthFit": [
+        {
+          "columns": {
+            "activeEnergyKcal": {
+              "base64": "AAAAAAAAJEA="
+            },
+            "basalEnergyKcal": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "channel": [null],
+            "clockEpoch": [null],
+            "connectionEpoch": [null],
+            "dataOrigin": ["app.a"],
+            "elapsedSeconds": {
+              "base64": "AAAAAAAAEEA="
+            },
+            "endUs": ["4000000"],
+            "heartRateBpm": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "identifier": [null],
+            "observationRevision": ["3"],
+            "originalEndTimestamp": ["2026-05-28T20:26:44.250Z"],
+            "originalEventId": ["00000000-0000-4000-8000-000000000110"],
+            "originalStartTimestamp": ["2026-05-28T20:26:42.250Z"],
+            "producer": ["phone"],
+            "producerSequence": {
+              "base64": "AAAAAAAAAEA="
+            },
+            "provider": ["appleHealth"],
+            "providerParentId": [null],
+            "representation": ["intervalRecord"],
+            "sampleCount": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "startUs": ["2000000"]
+          },
+          "done": false,
+          "last": [4, 1, 2, 5873],
+          "rows": 1
+        },
+        {
+          "columns": {
+            "activeEnergyKcal": {
+              "base64": "AAAAAAAAWUA="
+            },
+            "basalEnergyKcal": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "channel": [null],
+            "clockEpoch": [null],
+            "connectionEpoch": [null],
+            "dataOrigin": ["app.a"],
+            "elapsedSeconds": {
+              "base64": "AAAAAAAAJEA="
+            },
+            "endUs": ["10000000"],
+            "heartRateBpm": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "identifier": [null],
+            "observationRevision": ["4"],
+            "originalEndTimestamp": ["2026-05-28T20:26:50.250Z"],
+            "originalEventId": ["00000000-0000-4000-8000-000000000111"],
+            "originalStartTimestamp": ["2026-05-28T20:26:40.250Z"],
+            "producer": ["phone"],
+            "producerSequence": {
+              "base64": "AAAAAAAACEA="
+            },
+            "provider": ["appleHealth"],
+            "providerParentId": [null],
+            "representation": ["intervalRecord"],
+            "sampleCount": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "startUs": ["0"]
+          },
+          "done": false,
+          "last": [10, 1, 3, 5874],
+          "rows": 1
+        },
+        {
+          "$ref": "healthFit1"
+        }
+      ],
+      "lifecycle": [
+        {
+          "columns": {
+            "action": ["start"],
+            "clockEpoch": [null],
+            "controllerSequence": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "elapsedSeconds": {
+              "base64": "AAAAAAAAAAA="
+            },
+            "interrupted": {
+              "base64": "AAAAAAAAAAA="
+            },
+            "producer": ["phone"],
+            "producerSequence": {
+              "base64": "AAAAAAAA8D8="
+            }
+          },
+          "done": false,
+          "last": [0, 1, 1, 5871],
+          "rows": 1
+        },
+        {
+          "columns": {
+            "action": ["stop"],
+            "clockEpoch": [null],
+            "controllerSequence": {
+              "base64": "AAAAAAAA+H8="
+            },
+            "elapsedSeconds": {
+              "base64": "AAAAAAAAJEA="
+            },
+            "interrupted": {
+              "base64": "AAAAAAAAAAA="
+            },
+            "producer": ["phone"],
+            "producerSequence": {
+              "base64": "AAAAAAAAEEA="
+            }
+          },
+          "done": false,
+          "last": [10, 1, 4, 5875],
+          "rows": 1
+        },
+        {
+          "columns": {
+            "action": [],
+            "clockEpoch": [],
+            "controllerSequence": {
+              "base64": ""
+            },
+            "elapsedSeconds": {
+              "base64": ""
+            },
+            "interrupted": {
+              "base64": ""
+            },
+            "producer": [],
+            "producerSequence": {
+              "base64": ""
+            }
+          },
+          "done": true,
+          "last": null,
+          "rows": 0
+        }
+      ],
+      "telemetry": [
+        {
+          "columns": {
+            "$ref": "columns1"
+          },
+          "connections": [],
+          "done": false,
+          "last": [0, 0, 1, 5872],
+          "rows": 1
+        },
+        {
+          "columns": {
+            "assistLevel": {
+              "base64": ""
+            },
+            "batteryCurrentA": {
+              "base64": ""
+            },
+            "batteryVoltageV": {
+              "base64": ""
+            },
+            "cadenceRpm": {
+              "base64": ""
+            },
+            "clockEpoch": [],
+            "connection": [],
+            "consumedAh": {
+              "base64": ""
+            },
+            "consumedWh": {
+              "base64": ""
+            },
+            "controllerTempC": {
+              "base64": ""
+            },
+            "elapsedSeconds": {
+              "base64": ""
+            },
+            "humanPowerW": {
+              "base64": ""
+            },
+            "motorCurrentA": {
+              "base64": ""
+            },
+            "motorInputPowerW": {
+              "base64": ""
+            },
+            "motorRpm": {
+              "base64": ""
+            },
+            "motorTempC": {
+              "base64": ""
+            },
+            "pedalTorqueNm": {
+              "base64": ""
+            },
+            "producerSequence": {
+              "base64": ""
+            }
+          },
+          "connections": [],
+          "done": true,
+          "last": null,
+          "rows": 0
+        }
+      ]
+    }
+  },
+  "utc-bounds": {
+    "open": {
+      "$ref": "open1"
+    },
+    "pages": {
+      "distance": {
+        "$ref": "distance1"
+      },
+      "gps": {
+        "$ref": "gps1"
+      },
+      "gpsDiscovery": {
+        "columns": {
+          "horizontalAccuracyM": {
+            "base64": ""
+          },
+          "producer": []
+        },
+        "done": true,
+        "last": null,
+        "rows": 0
+      },
+      "healthFit": {
+        "columns": {
+          "activeEnergyKcal": {
+            "base64": "AAAAAAAAWUA="
+          },
+          "basalEnergyKcal": {
+            "base64": "AAAAAAAA+H8="
+          },
+          "channel": [null],
+          "clockEpoch": [null],
+          "connectionEpoch": [null],
+          "dataOrigin": ["app.a"],
+          "elapsedSeconds": {
+            "base64": "AAAAAAAAJEA="
+          },
+          "endUs": ["10000000"],
+          "heartRateBpm": {
+            "base64": "AAAAAAAA+H8="
+          },
+          "identifier": [null],
+          "observationRevision": ["3"],
+          "originalEndTimestamp": ["2026-05-28T20:26:50.250+00:00"],
+          "originalEventId": ["00000000-0000-4000-8000-000000000150"],
+          "originalStartTimestamp": ["2026-05-28T20:26:40.250+00:00"],
+          "producer": ["phone"],
+          "producerSequence": {
+            "base64": "AAAAAAAAAEA="
+          },
+          "provider": ["appleHealth"],
+          "providerParentId": [null],
+          "representation": ["intervalRecord"],
+          "sampleCount": {
+            "base64": "AAAAAAAA+H8="
+          },
+          "startUs": ["0"]
+        },
+        "done": true,
+        "last": [10, 1, 2, 5897],
+        "rows": 1
+      },
+      "lifecycle": {
+        "columns": {
+          "$ref": "columns2"
+        },
+        "done": true,
+        "last": [10, 1, 3, 5898],
+        "rows": 2
+      },
+      "telemetry": {
+        "columns": {
+          "$ref": "columns1"
+        },
+        "connections": [],
+        "done": true,
+        "last": [0, 0, 1, 5896],
+        "rows": 1
+      }
+    }
+  }
+}

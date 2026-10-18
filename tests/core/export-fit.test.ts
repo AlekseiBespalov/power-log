@@ -266,8 +266,9 @@ describe('FIT heart rate continuity', () => {
         end: 10,
         lifecycle: [
           { t: 0, action: 'start', sequence: 1 },
-          { t: 1.5, action: 'resume', sequence: 2, interrupted: true, cyc: 0 },
-          { t: 10, action: 'stop', sequence: 3 },
+          { t: 1.5, action: 'pause', sequence: 2, interrupted: true, controller: 0 },
+          { t: 1.5, action: 'resume', sequence: 3 },
+          { t: 10, action: 'stop', sequence: 4 },
         ],
         health: [...base, ...tail()],
       }),
@@ -351,7 +352,7 @@ describe('FIT message order', () => {
         return `${{ 18: 'session', 19: 'lap', 20: 'record', 34: 'activity' }[message.global]} ${time}`;
       });
 
-  it('writes a record whose interval closes in an equal-elapsed group before the whole group', async () => {
+  it('omits an ordinary pause endpoint and retains lifecycle order at equal elapsed', async () => {
     const { bytes } = await runFit({
       platform: 'android',
       end: 10,
@@ -367,7 +368,6 @@ describe('FIT message order', () => {
     expect(order(bytes)).toEqual([
       'start 0',
       'record 4',
-      'record 5',
       'lap 5',
       'stop 5',
       'start 6',
@@ -551,8 +551,9 @@ describe('FIT session statistics', () => {
     expect(
       await totals([
         { t: 0, action: 'start', sequence: 1 },
-        { t: 1.5, action: 'resume', sequence: 2, interrupted: true, cyc: 0 },
-        { t: 10, action: 'stop', sequence: 3 },
+        { t: 1.5, action: 'pause', sequence: 2, interrupted: true, controller: 0 },
+        { t: 1.5, action: 'resume', sequence: 3 },
+        { t: 10, action: 'stop', sequence: 4 },
       ]),
     ).toEqual([160, 240, 320]);
   });

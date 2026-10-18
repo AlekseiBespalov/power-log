@@ -1,11 +1,21 @@
-import { Link, usePathname } from 'expo-router';
+import { Link, usePathname, useRootNavigationState, type Href } from 'expo-router';
 import { Platform, Text, View, useWindowDimensions } from 'react-native';
 import { haptics } from '../services/haptics';
-import { colors } from './ui';
+import { colors, type, MIN_TOUCH_TARGET } from './ui';
 import { APP_NAVIGATION, appNavigationIndex } from './app-navigation';
 
 export function AppHeader() {
-  const selectedIndex = appNavigationIndex(usePathname());
+  const selectedIndex = appNavigationIndex(usePathname().split('/').slice(0, 2).join('/'));
+  const navigation = useRootNavigationState();
+  const tabs =
+    navigation.type === 'tab' ? navigation : navigation.routes.find(route => route.state?.type === 'tab')?.state;
+  const history = tabs?.routes.find(route => route.name === 'sessions')?.state;
+  const historyRoute = history?.routes[history.index ?? history.routes.length - 1];
+  const historyId = (historyRoute?.params as { id?: unknown } | undefined)?.id;
+  const historyHref: Href =
+    historyRoute?.name === 'ride' && typeof historyId === 'string'
+      ? { pathname: '/sessions/ride', params: { id: historyId } }
+      : '/sessions';
   const { width, fontScale } = useWindowDimensions();
   const desktop = Platform.OS === 'web' && width >= 1100;
   const stacked = width < 420 * fontScale + (width > 700 ? 48 : 24);
@@ -45,19 +55,21 @@ export function AppHeader() {
               justifyContent: 'center',
             }}
           >
-            <Text allowFontScaling={false} style={{ fontSize: 23, fontWeight: '800', color: colors.bg }}>
+            <Text allowFontScaling={false} style={{ fontSize: type.value, fontWeight: '800', color: colors.bg }}>
               ϟ
             </Text>
           </View>
-          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', flexShrink: 1 }}>Power Log</Text>
+          <Text style={{ color: colors.text, fontSize: type.control, fontWeight: '600', flexShrink: 1 }}>
+            Power Log
+          </Text>
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2, maxWidth: '100%' }}>
-          {APP_NAVIGATION.map(({ href, title }, index) => {
+          {APP_NAVIGATION.map(({ href, title, route }, index) => {
             const selected = selectedIndex === index;
             return (
               <Link
                 key={href}
-                href={href}
+                href={route === 'sessions' && !selected ? historyHref : href}
                 onPress={() => {
                   if (!selected) haptics.selection();
                 }}
@@ -69,9 +81,9 @@ export function AppHeader() {
                   paddingHorizontal: stacked ? 8 : 13,
                   paddingVertical: 13,
                   borderRadius: 10,
-                  fontSize: 14,
+                  fontSize: type.body,
                   fontWeight: '600',
-                  minHeight: 44,
+                  minHeight: MIN_TOUCH_TARGET,
                   maxWidth: '100%',
                   textAlign: 'center',
                   flexShrink: 1,

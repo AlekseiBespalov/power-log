@@ -1,168 +1,118 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Platform, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Linking, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Body, Button, Card, Chip, colors, formatDuration, Heading, Metric, styles } from '../../components/ui';
+import {
+  Body,
+  Button,
+  Card,
+  colors,
+  formatDuration,
+  Heading,
+  Metric,
+  styles,
+  type,
+  Pressable,
+  MIN_TOUCH_TARGET,
+} from '../../components/ui';
 import { ModalDialog } from '../../components/modal-dialog';
-import { DistanceSourceCaption } from '../../components/distance-source-caption';
 import { RoutePreview } from '../../components/route-preview';
-import { workoutCanDelete, workoutExportReady, workoutRecoveryAction, type WorkoutMetadata } from '../../core/workouts';
-import { ArchiveActions } from '../../services/workout-actions';
-import { useWorkout } from '../../services/workout-context';
+import {
+  healthProviderLabel,
+  workoutHealthResultPresentation,
+  workoutHistoryStatusPresentation,
+  workoutPhysiologyLabel,
+} from '../../core/workout-presentation';
+import { workoutCanDelete, type WorkoutMetadata } from '../../core/workouts';
 import { workouts } from '../../services/workouts';
-import { importRecording } from '../../services/files';
 import { exportRecording, exportRide } from '../../services/ride-export';
-import { workoutMonitorSource } from '../../services/workout-monitor-source';
-import { CsvRideDetails, type CsvRide } from './csv-ride-details';
+import { CsvRideDetails } from './csv-ride-details';
 import { MonitorPanel } from '../monitor/monitor-panel';
-import { useReadResource } from '../../services/use-read-resource';
-import { useMonitorPreferences } from '../../services/monitor-preferences';
 import { metricById, formatMetric } from '../../core/monitor';
-import { useForegroundActivity } from '../../services/use-foreground-activity';
 
-const recordKey = (id: string) => `record:${id}`;
+import { recordKey, useHistory } from './history-controller';
 const number = (value: number | null | undefined, decimals = 0) =>
   value == null || !Number.isFinite(value) ? '—' : value.toFixed(decimals);
-const dateLabel = (date: string) =>
-  new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const dateLabel = (date: string) => {
+  const value = new Date(date);
+  return `${value.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${value.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+};
+function recordingDevice(record: WorkoutMetadata) {
+  if (record.storage === 'browser') return 'Browser';
+  if (record.watchEnabled) return 'Watch + iPhone';
+  return record.healthProvider === 'healthConnect' ? 'Android' : 'iPhone';
+}
 const phases: Record<string, string> = {
   preparing: 'Preparing',
   running: 'Recording',
   paused: 'Paused',
-  recoverable: 'Needs attention',
+  interrupted: 'Needs attention',
   finishing: 'Ended',
   failed: 'Failed',
 };
 const phaseLabel = (phase: string) => phases[phase] ?? phase;
-type HistorySelection = null | { kind: 'saved'; id: string } | { kind: 'csv'; csv: CsvRide };
 function elapsedLabel(record: WorkoutMetadata) {
-  return `${formatDuration(record.elapsedSeconds)} elapsed`;
+  return formatDuration(record.elapsedSeconds);
 }
-function healthLabel(record: WorkoutMetadata) {
-  if (record.healthReason && record.healthKitState !== 'saved') return `Health not saved: ${record.healthReason}`;
-  if (record.healthKitState === 'notRequested') return 'Saved only in Power Log';
-  return `Health ${record.healthKitState === 'notSaved' ? 'not saved' : record.healthKitState}`;
+function HealthResult({ record }: { record: WorkoutMetadata }) {
+  const health = workoutHealthResultPresentation(record);
+  return (
+    <View testID="ride-health-sync" style={{ gap: 6 }}>
+      {record.storage !== 'browser' && (
+        <>
+          <Body muted>{health.label}</Body>
+          {record.watchEnabled &&
+            record.saveToHealth !== false &&
+            (record.healthProvider ?? 'appleHealth') === 'appleHealth' && (
+              <Body muted>Detailed Health results are on the Watch.</Body>
+            )}
+          {health.details.map((detail, index) => (
+            <Body key={index} muted>
+              {detail}
+            </Body>
+          ))}
+        </>
+      )}
+    </View>
+  );
 }
 
-export function SavedRides() {
-  const workout = useWorkout();
-  const [archiveState, setArchiveState] = useState<ReturnType<ArchiveActions['snapshot']>>(() => new Map());
-  const [archiveActions] = useState(() => new ArchiveActions(setArchiveState));
-  const pending = (key: string) => archiveState.get(key)?.pending === true;
-  const active = useForegroundActivity(),
-    setHistoryActive = workout.setHistoryActive;
-  useEffect(() => {
-    setHistoryActive(active);
-    return () => setHistoryActive(false);
-  }, [active, setHistoryActive]);
-  const { preferences } = useMonitorPreferences();
-  const { distanceSource, speedUnit } = preferences;
-  const speedMetric = metricById('speedMps', speedUnit)!;
-  const [navigation, setNavigation] = useState<{ selection: HistorySelection; version: number }>({
-    selection: null,
-    version: 0,
-  });
-  const selection = navigation.selection;
-  const navigate = (next: HistorySelection) =>
-    setNavigation(value => ({ selection: next, version: value.version + 1 }));
-  const clearSaved = (id: string) =>
-    setNavigation(value =>
-      value.selection?.kind === 'saved' && value.selection.id === id
-        ? { selection: null, version: value.version + 1 }
-        : value,
-    );
-  const selectedId = selection?.kind === 'saved' ? selection.id : null;
-  const csv = selection?.kind === 'csv' ? selection.csv : null;
-  const insets = useSafeAreaInsets();
-  const [removalTarget, setRemovalTarget] = useState<WorkoutMetadata | null>(null);
-  const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [observedDeletion, setObservedDeletion] = useState<string | null>();
-  const records = useMemo(
-    () =>
-      workout.records.filter(record => !removedIds.has(record.id) && record.id !== workout.state.lastDeletedWorkoutId),
-    [workout.records, workout.state.lastDeletedWorkoutId, removedIds],
-  );
-  const [refreshVersion, setRefreshVersion] = useState(0);
-  const [editing, setEditing] = useState(false);
-  const [repairingId, setRepairingId] = useState<string | null>(null);
-  const latest = records.find(record => record.id === selectedId);
-  const revision = selectedId
-    ? JSON.stringify([
-        selectedId,
-        latest?.collectionRevision,
-        latest?.sealRevision,
-        latest?.verifiedSealRevision,
-        latest?.finalizationState,
-        latest?.phase,
-        latest?.watchSyncState,
-        latest?.endedAt,
-        workout.state.historyRevision,
-        refreshVersion,
-        distanceSource,
-      ])
-    : null;
-  const baseMonitorSource = useMemo(
-    () => workoutMonitorSource(selectedId ?? '', false, distanceSource),
-    [selectedId, distanceSource],
-  );
-  const monitorSource = useMemo(
-    () => ({ ...baseMonitorSource, revisionHint: revision ?? undefined }),
-    [baseMonitorSource, revision],
-  );
-  const resource = useReadResource(selectedId, revision, () => workouts.read(selectedId!, distanceSource));
-  const { data: detail, loading, error } = resource;
-  const deleted =
-    selectedId !== null &&
-    (workout.state.lastDeletedWorkoutId === selectedId || resource.errorCode === 'ERR_RIDE_DELETED');
-  const refreshHistory = workout.refreshRecords;
-  useEffect(() => {
-    if (removedIds.size) void refreshHistory().catch(() => {});
-  }, [removedIds, refreshHistory]);
-  if (observedDeletion !== workout.state.lastDeletedWorkoutId) {
-    setObservedDeletion(workout.state.lastDeletedWorkoutId);
-    const id = workout.state.lastDeletedWorkoutId;
-    if (id && !removedIds.has(id)) setRemovedIds(ids => new Set([...ids, id]));
-    if (id && removalTarget?.id === id) setRemovalTarget(null);
-  }
-  if (deleted && selectedId) {
-    setRemovedIds(ids => new Set([...ids, selectedId]));
-    clearSaved(selectedId);
-    setRemovalTarget(null);
-  }
-  const action = (key: string, operation: () => Promise<unknown>) => () => {
-    void archiveActions.run(key, operation);
-  };
-  const selectedKey = selectedId ? recordKey(selectedId) : 'csv';
-  const removalKey = removalTarget ? recordKey(removalTarget.id) : null;
-  const removing = removalKey !== null && pending(removalKey);
-  const record = deleted ? null : (latest ?? (detail?.metadata.id === selectedId ? detail.metadata : null));
-  const summary = detail?.metadata.id === selectedId ? detail.summary : null;
-  const ready = record ? workoutExportReady(record) : false;
-  const recoveryAction = record ? workoutRecoveryAction(record, workout.state.id) : null;
-  const visibleError =
-    (deleted ? null : error) ??
-    archiveState.get(selectedKey)?.error ??
-    archiveState.get('catalog')?.error ??
-    archiveState.get('csv')?.error ??
-    workout.error ??
-    workout.catalogError;
-  const askToRemove = (target: WorkoutMetadata) => {
-    archiveActions.clearError(recordKey(target.id));
-    setRemovalTarget({ ...target });
-  };
-  const confirmRemoval = () => {
-    if (!removalTarget) return;
-    const target = removalTarget;
-    void archiveActions.run(recordKey(target.id), async () => {
-      const current = records.find(record => record.id === target.id) ?? target;
-      if (!workoutCanDelete(current, workout.state)) throw new Error('Finish or resolve this ride before deleting it.');
-      await workouts.remove(target.id);
-      setRemovedIds(ids => new Set([...ids, target.id]));
-      if (records.length <= 1) setEditing(false);
-      clearSaved(target.id);
-      resource.clearError();
-      setRemovalTarget(value => (value?.id === target.id ? null : value));
-    });
-  };
+export function SavedRides({ detail }: { detail: boolean }) {
+  const {
+    workout,
+    archiveState,
+    archiveActions,
+    pending,
+    preferences,
+    records,
+    editing,
+    setEditing,
+    repairingId,
+    setRepairingId,
+    setRefreshVersion,
+    monitorSource,
+    resource,
+    loading,
+    error,
+    deleted,
+    record,
+    summary,
+    ready,
+    visibleError,
+    action,
+    selectedKey,
+    askToRemove,
+    navigate,
+    refreshHistory,
+    refresh,
+    openCsv,
+  } = useHistory();
+  const history = useHistory();
+  const selectedId = detail ? history.selectedId : null;
+  const csv = detail ? null : history.csv;
+  const selection = detail ? history.selection : csv;
+  const speedMetric = metricById('speedMps', preferences.speedUnit)!;
+  const distanceSource = record?.distanceSource ?? 'auto';
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <View style={{ gap: 12 }}>
@@ -176,7 +126,7 @@ export function SavedRides() {
           gap: 12,
         }}
       >
-        {selection !== null ? (
+        {detail || selection !== null ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -185,52 +135,49 @@ export function SavedRides() {
             }}
             style={{ minHeight: 44, justifyContent: 'center' }}
           >
-            <Text style={{ color: colors.accent }}>‹ Rides</Text>
+            <Text style={{ color: colors.accent }}>‹ History</Text>
           </Pressable>
         ) : (
-          <Body muted>
-            {records.length} {records.length === 1 ? 'ride' : 'rides'}
-          </Body>
+          <Heading>History</Heading>
         )}
         <View style={[styles.row, { maxWidth: '100%' }]}>
-          {selection === null && records.length > 0 && (
+          {!detail && selection === null && records.length > 0 && (
             <Button secondary onPress={() => setEditing(value => !value)}>
               {editing ? 'Done' : 'Edit'}
             </Button>
           )}
-          <Button
-            secondary
-            disabled={pending('catalog')}
-            onPress={action('catalog', async () => {
-              resource.clearError();
-              await refreshHistory();
-              if (selectedId) setRefreshVersion(value => value + 1);
-            })}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="History actions"
+            accessibilityState={{ expanded: menuOpen }}
+            onPress={() => setMenuOpen(value => !value)}
+            style={{
+              minHeight: MIN_TOUCH_TARGET,
+              minWidth: MIN_TOUCH_TARGET,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
+            <Text style={{ color: colors.text, fontSize: type.title }}>•••</Text>
+          </Pressable>
+        </View>
+      </View>
+      {menuOpen && (
+        <View testID="history-actions-menu" style={styles.row}>
+          <Button secondary disabled={pending('catalog')} onPress={refresh}>
             Refresh
           </Button>
-          <Button
-            secondary
-            disabled={pending('csv')}
-            onPress={action('csv', async () => {
-              const started = navigation.version;
-              const file = await importRecording();
-              if (!file) return;
-              setNavigation(value =>
-                value.version === started
-                  ? {
-                      selection: { kind: 'csv', csv: { title: file.name, samples: file.recording.samples } },
-                      version: value.version + 1,
-                    }
-                  : value,
-              );
-              setEditing(false);
-            })}
-          >
+          <Button secondary disabled={pending('csv')} onPress={openCsv}>
             Open CSV
           </Button>
         </View>
-      </View>
+      )}
+      {!detail && selection === null && (
+        <Body muted>
+          {pending('catalog') ? 'Refreshing…' : 'Pull to refresh'} · {records.length}{' '}
+          {records.length === 1 ? 'ride' : 'rides'}
+        </Body>
+      )}
       {(workout.catalogUnreadableCount > 0 || workout.catalogUnindexedCount > 0) && (
         <Card style={{ padding: 14, gap: 6 }}>
           {workout.catalogUnreadableCount > 0 && (
@@ -292,6 +239,8 @@ export function SavedRides() {
             Export CSV
           </Button>
         </>
+      ) : detail && !selectedId ? (
+        <Body muted>Choose a ride from History.</Body>
       ) : selectedId ? (
         <>
           {!record && !error && !deleted && <Body muted>Loading ride details…</Body>}
@@ -299,132 +248,22 @@ export function SavedRides() {
             <View style={{ gap: 14 }}>
               <View style={{ gap: 4 }}>
                 <Heading>{dateLabel(record.startedAt)}</Heading>
-                {record.example && <Chip>Example</Chip>}
                 <Body muted>
-                  {record.indoor ? 'Indoor' : 'Outdoor'} · E-bike
+                  {record.example ? 'Example' : 'Recorded'} · {record.indoor ? 'Indoor' : 'Outdoor'} ·{' '}
+                  {recordingDevice(record)}
+                  {summary && summary.lapCount > 0
+                    ? ` · ${summary.lapCount} ${summary.lapCount === 1 ? 'lap' : 'laps'}`
+                    : ''}
                   {record.phase !== 'completed' ? ` · ${phaseLabel(record.phase)}` : ''}
-                  {record.interrupted ? ' · Recovered' : ''}
+                  {record.interrupted ? ' · Interrupted' : ''}
                 </Body>
               </View>
-              {summary ? (
-                <View testID="ride-summary" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>
-                  <Metric label="Ride time" value={formatDuration(summary.timerSeconds)} unit="" />
-                  {(summary.distance || summary.distanceMeters != null) && (
-                    <Metric
-                      label="Ride distance"
-                      value={number(summary.distanceMeters == null ? null : summary.distanceMeters / 1000, 2)}
-                      unit="km"
-                    />
-                  )}
-                  {summary.healthDistanceMeters != null && (
-                    <Metric
-                      label={
-                        summary.healthDistanceProvisional ? 'Health distance · Provisional' : 'Health reported distance'
-                      }
-                      value={number(summary.healthDistanceMeters / 1000, 2)}
-                      unit="km"
-                    />
-                  )}
-                  {(summary.distance || summary.averageSpeedMps != null) && (
-                    <Metric
-                      label={summary.distance ? 'Recorded avg speed' : 'Avg speed'}
-                      value={formatMetric(speedMetric, summary.averageSpeedMps)}
-                      unit={speedMetric.unit}
-                    />
-                  )}
-                  <Metric label="Avg power" value={number(summary.averageRiderPowerW)} unit="W" color={colors.accent} />
-                  <Metric
-                    label="Avg cadence"
-                    value={number(summary.averageCadenceRpm)}
-                    unit="rpm"
-                    color={colors.cadence}
-                  />
-                  {summary.averageHeartRateBpm != null && (
-                    <Metric
-                      label="Avg heart rate"
-                      value={number(summary.averageHeartRateBpm)}
-                      unit="bpm"
-                      color={colors.red}
-                    />
-                  )}
-                  {summary.ascentMeters != null && (
-                    <Metric label="Ascent" value={number(summary.ascentMeters)} unit="m" />
-                  )}
-                  {summary.activeEnergyKcal != null && (
-                    <Metric label="Active energy" value={number(summary.activeEnergyKcal)} unit="kcal" />
-                  )}
-                </View>
-              ) : (
-                <Body muted>
-                  {loading ? 'Preparing summary… Charts are available below.' : 'Ride summary unavailable.'}
-                </Body>
-              )}
-              {summary?.distance && (
-                <View testID="ride-distance-source" style={{ gap: 6 }}>
-                  <DistanceSourceCaption
-                    testID="distance-source-caption"
-                    info={summary.distance.selected ?? undefined}
-                    unavailable="Distance unavailable"
-                  />
-                </View>
-              )}
-              {(record.recordGPS ?? !record.indoor) && summary && <RoutePreview points={summary.routePreview} />}
-              <MonitorPanel source={monitorSource} embedded />
-              <Body muted>
-                {record.storage === 'browser'
-                  ? 'Browser'
-                  : record.watchEnabled
-                    ? 'Watch + iPhone'
-                    : Platform.OS === 'android'
-                      ? 'Android'
-                      : 'iPhone'}
-                {record.storage !== 'browser' ? ` · ${healthLabel(record)}` : ''}
-                {summary && summary.lapCount > 0 ? ` · ${summary.lapCount} laps` : ''}
-              </Body>
-              {record.finalizationState === 'pending' && (
-                <Body>
-                  {record.syncReason
-                    ? `Watch sync failed: ${record.syncReason}`
-                    : 'Ride ended. Syncing remaining data…'}
-                </Body>
-              )}
-              {record.finalizationState === 'partial' && <Body>Incomplete ride. Some sources are unavailable.</Body>}
-              {!ready && (
-                <Body muted>
-                  {record.watchEnabled
-                    ? 'Exports are available when syncing finishes.'
-                    : 'Exports are available when saving finishes.'}
-                </Body>
-              )}
-              {recoveryAction && (
-                <Button
-                  secondary
-                  disabled={workout.busy || pending(recordKey(record.id))}
-                  onPress={() => {
-                    void workout.run(async () => {
-                      setRepairingId(record.id);
-                      try {
-                        await workouts.recover(record.id);
-                        setRefreshVersion(value => value + 1);
-                      } finally {
-                        setRepairingId(null);
-                      }
-                    });
-                  }}
-                >
-                  {repairingId === record.id
-                    ? 'Checking ride…'
-                    : recoveryAction === 'repair'
-                      ? record.healthProvider === 'healthConnect'
-                        ? 'Retry Health Connect'
-                        : 'Finish saving'
-                      : 'Retry'}
-                </Button>
-              )}
               <View style={styles.row}>
                 <Button
                   disabled={pending(recordKey(record.id)) || !ready}
-                  onPress={action(recordKey(record.id), () => exportRide('fit', record.id, distanceSource))}
+                  onPress={action(recordKey(record.id), () =>
+                    exportRide('fit', record.id, distanceSource, preferences.fitPowerSource),
+                  )}
                 >
                   Export FIT
                 </Button>
@@ -436,6 +275,125 @@ export function SavedRides() {
                   Export ZIP
                 </Button>
               </View>
+              <Heading level={2}>Ride summary</Heading>
+              {summary ? (
+                <View testID="ride-summary" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>
+                  <Metric label="Ride time" value={formatDuration(summary.timerSeconds)} unit="" />
+                  {(summary.distance || summary.distanceMeters != null) && (
+                    <Metric
+                      label="Distance"
+                      value={number(summary.distanceMeters == null ? null : summary.distanceMeters / 1000, 2)}
+                      unit="km"
+                    />
+                  )}
+                  {(summary.distance || summary.averageSpeedMps != null) && (
+                    <Metric
+                      label="Avg speed"
+                      value={formatMetric(speedMetric, summary.averageSpeedMps)}
+                      unit={speedMetric.unit}
+                    />
+                  )}
+                  {summary.batteryConsumption && (
+                    <>
+                      <Metric
+                        label={`Energy used (${summary.batteryConsumption.source === 'controller' ? 'controller' : 'calc'})`}
+                        value={number(summary.batteryConsumption.energyWh, 2)}
+                        unit="Wh"
+                      />
+                      <Metric
+                        label={`Charge used (${summary.batteryConsumption.source === 'controller' ? 'controller' : 'calc'})`}
+                        value={number(summary.batteryConsumption.chargeAh, 2)}
+                        unit="Ah"
+                      />
+                    </>
+                  )}
+                  <Metric label="Avg power" value={number(summary.averageRiderPowerW)} unit="W" color={colors.accent} />
+                  <Metric
+                    label="Avg cadence"
+                    value={number(summary.averageCadenceRpm)}
+                    unit="rpm"
+                    color={colors.cadence}
+                  />
+                  {summary.averageHeartRateBpm != null && (
+                    <Metric
+                      label={workoutPhysiologyLabel(record, 'Avg heart rate')}
+                      value={number(summary.averageHeartRateBpm)}
+                      unit="bpm"
+                      color={colors.red}
+                    />
+                  )}
+                  {summary.ascentMeters != null && (
+                    <Metric label="Ascent" value={number(summary.ascentMeters)} unit="m" />
+                  )}
+                  {summary.activeEnergyKcal != null && (
+                    <Metric
+                      label={workoutPhysiologyLabel(record, 'Active energy')}
+                      value={number(summary.activeEnergyKcal)}
+                      unit="kcal"
+                    />
+                  )}
+                </View>
+              ) : (
+                <Body muted>
+                  {loading ? 'Preparing summary… Charts are available below.' : 'Ride summary unavailable.'}
+                </Body>
+              )}
+              {(record.recordGPS ?? !record.indoor) && summary && <RoutePreview points={summary.routePreview} />}
+              <Heading level={2}>Chart inspection</Heading>
+              <MonitorPanel source={monitorSource} embedded />
+              <HealthResult record={record} />
+              {!ready && (
+                <Body muted>
+                  {record.phase === 'failed'
+                    ? 'This ride did not complete. Use Delete ride to remove it from History.'
+                    : 'Finish the local ride to export it.'}
+                </Body>
+              )}
+              {record.phase === 'interrupted' && record.id === workout.state.id && (
+                <View style={styles.row}>
+                  <Button
+                    disabled={workout.busy}
+                    onPress={action(recordKey(record.id), async () => {
+                      await workouts.stop(record.id);
+                      await workout.refresh();
+                      setRefreshVersion(value => value + 1);
+                    })}
+                  >
+                    Finish saved portion
+                  </Button>
+                  <Button danger disabled={workout.busy} onPress={() => askToRemove(record)}>
+                    Discard ride
+                  </Button>
+                </View>
+              )}
+              {record.phase === 'completed' && record.storage !== 'browser' && workouts.refreshHealth && (
+                <Button
+                  secondary
+                  disabled={workout.busy || pending(recordKey(record.id)) || repairingId === record.id}
+                  onPress={() =>
+                    void workout.run(async ({ current, signal }) => {
+                      const clear = () => setRepairingId(value => (value === record.id ? null : value));
+                      setRepairingId(record.id);
+                      signal.addEventListener('abort', clear, { once: true });
+                      try {
+                        if (record.healthRetryAvailable && workouts.retryHealthSave)
+                          await workouts.retryHealthSave(record.id);
+                        else await workouts.refreshHealth!(record.id);
+                        if (current()) setRefreshVersion(value => value + 1);
+                      } finally {
+                        signal.removeEventListener('abort', clear);
+                        if (current()) clear();
+                      }
+                    })
+                  }
+                >
+                  {repairingId === record.id
+                    ? 'Refreshing Health…'
+                    : record.healthRetryAvailable && workouts.retryHealthSave
+                      ? 'Retry Health save'
+                      : 'Refresh Health data'}
+                </Button>
+              )}
               {!record.example && (
                 <View style={{ gap: 8 }}>
                   <Body muted>Export FIT, then select the file on Strava.</Body>
@@ -452,7 +410,7 @@ export function SavedRides() {
               )}
               {workoutCanDelete(record, workout.state) && (
                 <Button
-                  secondary
+                  danger
                   disabled={pending(recordKey(record.id)) || repairingId === record.id}
                   onPress={() => askToRemove(record)}
                 >
@@ -465,11 +423,12 @@ export function SavedRides() {
       ) : records.length ? (
         <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
           {records.map(record => {
+            const status = workoutHistoryStatusPresentation(record);
             const secondary = [
-              record.example ? 'Example' : null,
+              record.example ? 'Example' : 'Recorded',
               record.indoor ? 'Indoor' : 'Outdoor',
               elapsedLabel(record),
-              record.interrupted ? 'Recovered' : null,
+              record.interrupted ? 'Interrupted' : null,
             ]
               .filter(Boolean)
               .join(' · ');
@@ -479,7 +438,9 @@ export function SavedRides() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Open ride, ${dateLabel(record.startedAt)}, ${secondary}`}
+                    accessibilityLabel={[`Open ride, ${dateLabel(record.startedAt)}, ${secondary}`, status]
+                      .filter(Boolean)
+                      .join(', ')}
                     accessibilityState={{ disabled: unavailable }}
                     disabled={unavailable}
                     onPress={() => {
@@ -498,17 +459,29 @@ export function SavedRides() {
                     })}
                   >
                     <View style={{ flex: 1, gap: 5 }}>
-                      <Text style={{ color: colors.text, fontSize: 15, fontWeight: '500' }}>
+                      <Text style={{ color: colors.text, fontSize: type.control, fontWeight: '500' }}>
                         {dateLabel(record.startedAt)}
                       </Text>
-                      <Text style={{ color: colors.muted, fontSize: 13 }}>{secondary}</Text>
+                      <Text style={{ color: colors.muted, fontSize: type.caption }}>{secondary}</Text>
+                      {status && (
+                        <Text
+                          testID="ride-health-sync-summary"
+                          accessible={false}
+                          numberOfLines={1}
+                          style={{ color: colors.muted, fontSize: type.caption }}
+                        >
+                          {status}
+                        </Text>
+                      )}
                     </View>
                     {record.phase !== 'completed' && (
-                      <Text style={{ color: record.phase === 'failed' ? colors.red : colors.muted, fontSize: 12 }}>
+                      <Text
+                        style={{ color: record.phase === 'failed' ? colors.red : colors.muted, fontSize: type.caption }}
+                      >
                         {phaseLabel(record.phase)}
                       </Text>
                     )}
-                    <Text style={{ color: colors.muted, fontSize: 22 }}>›</Text>
+                    <Text style={{ color: colors.muted, fontSize: type.title }}>›</Text>
                   </Pressable>
                   {editing && workoutCanDelete(record, workout.state) && (
                     <Pressable
@@ -525,7 +498,7 @@ export function SavedRides() {
                         opacity: pending(recordKey(record.id)) ? 0.4 : 1,
                       }}
                     >
-                      <Text style={{ color: colors.red, fontSize: 13 }}>Delete</Text>
+                      <Text style={{ color: colors.red, fontSize: type.caption }}>Delete</Text>
                     </Pressable>
                   )}
                 </View>
@@ -565,59 +538,67 @@ export function SavedRides() {
           </Body>
         </Card>
       )}
-      <ModalDialog
-        visible={removalTarget !== null}
-        onClose={() => {
-          if (!removing) setRemovalTarget(null);
-        }}
-        closeLabel="Cancel ride deletion"
-        testID="delete-ride-sheet"
-        style={{
-          width: '100%',
-          maxWidth: 600,
-          alignSelf: 'center',
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-        }}
-      >
-        <ScrollView
-          testID="delete-ride-scroll"
-          style={{ flexShrink: 1 }}
-          contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 12 }}
-        >
-          <Heading>Delete ride?</Heading>
-          {removalTarget && <Body muted>{dateLabel(removalTarget.startedAt)}</Body>}
-          <Body>
-            This permanently removes the recording and charts from Power Log.
-            {removalTarget?.watchEnabled ? ' The Watch copy will be removed when it connects.' : ''}
-            {removalTarget?.storage !== 'browser'
-              ? ` Workouts already saved in ${Platform.OS === 'android' ? 'Health Connect' : 'Apple Health'} stay there.`
-              : ''}
-          </Body>
-          {removalKey && archiveState.get(removalKey)?.error && (
-            <Text accessibilityRole="alert" style={{ color: colors.red }}>
-              {archiveState.get(removalKey)!.error}
-            </Text>
-          )}
-          <Button
-            danger
-            disabled={
-              removing ||
-              !removalTarget ||
-              !workoutCanDelete(records.find(record => record.id === removalTarget.id) ?? removalTarget, workout.state)
-            }
-            onPress={confirmRemoval}
-          >
-            {removing ? 'Deleting…' : 'Delete ride'}
-          </Button>
-          <Button secondary disabled={removing} onPress={() => setRemovalTarget(null)}>
-            Keep ride
-          </Button>
-        </ScrollView>
-      </ModalDialog>
     </View>
+  );
+}
+
+export function HistoryDeletionDialog() {
+  const { workout, archiveState, records, removalTarget, setRemovalTarget, removalKey, removing, confirmRemoval } =
+    useHistory();
+  const insets = useSafeAreaInsets();
+  return (
+    <ModalDialog
+      visible={removalTarget !== null}
+      onClose={() => {
+        if (!removing) setRemovalTarget(null);
+      }}
+      closeLabel="Cancel ride deletion"
+      testID="delete-ride-sheet"
+      style={{
+        width: '100%',
+        maxWidth: 600,
+        alignSelf: 'center',
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+      }}
+    >
+      <ScrollView
+        testID="delete-ride-scroll"
+        style={{ flexShrink: 1 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 12 }}
+      >
+        <Heading>Delete ride?</Heading>
+        {removalTarget && <Body muted>{dateLabel(removalTarget.startedAt)}</Body>}
+        <Body>
+          This permanently removes the recording and charts from Power Log.
+          {removalTarget?.storage !== 'browser'
+            ? ` Workouts already saved in ${healthProviderLabel(removalTarget?.healthProvider ?? 'appleHealth')} stay there.`
+            : ''}
+        </Body>
+        {removalKey && archiveState.get(removalKey)?.error && (
+          <Text accessibilityRole="alert" style={{ color: colors.red }}>
+            {archiveState.get(removalKey)!.error}
+          </Text>
+        )}
+        <Button
+          danger
+          disabled={
+            removing ||
+            !removalTarget ||
+            (!(removalTarget.phase === 'interrupted' && removalTarget.id === workout.state.id) &&
+              !workoutCanDelete(records.find(record => record.id === removalTarget.id) ?? removalTarget, workout.state))
+          }
+          onPress={confirmRemoval}
+        >
+          {removing ? 'Deleting…' : 'Delete ride'}
+        </Button>
+        <Button secondary disabled={removing} onPress={() => setRemovalTarget(null)}>
+          Keep ride
+        </Button>
+      </ScrollView>
+    </ModalDialog>
   );
 }

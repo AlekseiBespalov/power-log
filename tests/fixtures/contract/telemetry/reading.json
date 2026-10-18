@@ -1,0 +1,28 @@
+{
+  "original": {
+    "rideId": "10000000-0000-4000-8000-000000000001",
+    "observationId": "50000000-0000-4000-8000-000000000001",
+    "captureSessionId": "20000000-0000-4000-8000-000000000001",
+    "clockEpoch": "30000000-0000-4000-8000-000000000001",
+    "connectionEpoch": "40000000-0000-4000-8000-000000000001",
+    "sequence": "9007199254740993",
+    "timestamp": "2026-01-01T00:00:00.000Z",
+    "acquisitionMonotonic": 100,
+    "sourceElapsedSeconds": 10,
+    "clockDiscontinuitySeconds": null,
+    "identity": {
+      "controllerModel": "Example controller",
+      "firmwareLabel": "release-1",
+      "controllerProtocol": "test-v2",
+      "capabilities": {
+        "suppliedMetrics": ["humanPowerW", "controllerSpeedMps"],
+        "hasKnownSpeedUnit": true
+      }
+    },
+    "metrics": {
+      "humanPowerW": 1.25,
+      "controllerSpeedMps": 2.6
+    }
+  },
+  "changedPower": 2.75
+}

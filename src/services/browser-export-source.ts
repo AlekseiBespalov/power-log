@@ -1,4 +1,4 @@
-import { DISTANCE_SOURCE_LABELS } from '../core/distance';
+import { completionOpenExport } from '../../shared/js';
 import { EXPORT_PAGE_MAX_BYTES, EXPORT_PAGE_MAX_ROWS, PROJECTIONS } from '../core/export/catalog';
 import {
   ExportError,
@@ -19,33 +19,33 @@ import type { TelemetrySample } from '../core/types';
 import { isRecord, validateSample, validateTimestamp } from '../core/validation';
 import {
   browserDistanceIntervals,
+  browserDistanceCurrent,
   ensureBrowserDistance,
   type BrowserDistanceHandle,
   type BrowserDistanceInterval,
 } from './browser-distance-store';
-import { browserRideStore, type BrowserRide, type RideLifecycleRow } from './browser-ride-store';
+import {
+  browserRideStore,
+  metadataOf,
+  validateLocation,
+  type BrowserRide,
+  type RideLifecycleRow,
+  type RideLocationRow,
+} from './browser-ride-store';
 
 const READ_BATCH = 1024;
-const ACTIONS: ReadonlySet<unknown> = new Set<RideLifecycleRow['action']>([
-  'start',
-  'pause',
-  'resume',
-  'lap',
-  'save',
-  'interrupted',
-]);
+const ACTIONS: ReadonlySet<unknown> = new Set<RideLifecycleRow['action']>(['start', 'pause', 'resume', 'lap', 'stop']);
 const CONSUMERS: Record<ExportKind, readonly ExportConsumer[]> = { zip: ['zip'], fit: ['fit', 'discovery'] };
 
-type TelemetryRow = TelemetrySample & { connectionEpoch: string; active: boolean; interval: number };
-type CatalogColumn<P extends ProjectionName> = (typeof PROJECTIONS)[P]['columns'][number];
-type WebColumn<C, T> = C extends { name: infer N; type: T; platforms: readonly (infer X)[] }
-  ? 'web' extends X
-    ? N
-    : never
-  : never;
-interface Accessors<P extends ProjectionName, R> {
-  numbers: { [K in WebColumn<CatalogColumn<P>, 'number'>]: (row: R) => number };
-  strings: { [K in WebColumn<CatalogColumn<P>, 'string'>]: (row: R) => string | null };
+type TelemetryRow = TelemetrySample & {
+  connectionEpoch: string;
+  active: boolean;
+  interval: number;
+  producerSequence: string;
+};
+interface Accessors<R> {
+  numbers: Record<string, (row: R) => number>;
+  strings: Record<string, (row: R) => string | null>;
 }
 interface Plan<R> {
   numbers: [string, (row: R) => number][];
@@ -62,54 +62,68 @@ interface Session {
   token: string;
   id: string;
   kind: ExportKind;
-  revision: number;
+  revision: string;
   distance: BrowserDistanceHandle | null;
   connections: Set<string>;
 }
 
-const TELEMETRY: Accessors<'telemetry', TelemetryRow> = {
-  numbers: {
-    elapsedSeconds: row => row.elapsedSeconds,
-    active: row => (row.active ? 1 : 0),
-    interval: row => row.interval,
-    humanPowerW: row => row.humanPowerW,
-    cadenceRpm: row => row.cadenceRpm,
-    motorInputPowerW: row => row.motorInputPowerW,
-    batteryVoltageV: row => row.batteryVoltageV,
-    batteryCurrentA: row => row.batteryCurrentA,
-    motorCurrentA: row => row.motorCurrentA,
-    motorRpm: row => row.motorRpm,
-    pedalTorqueNm: row => row.pedalTorqueNm,
-    controllerTempC: row => row.controllerTempC,
-    motorTempC: row => row.motorTempC,
-    consumedAh: row => row.consumedAh,
-    consumedWh: row => row.consumedWh,
-    throttleVoltageV: row => row.throttleVoltageV,
-    faultCode: row => row.faultCode,
-    assistLevel: row => row.assistLevel,
-    controllerSpeedMps: row => row.controllerSpeedMps ?? NaN,
-    raceMode: row => row.raceMode,
-    speedRaw: row => row.speedRaw,
-  },
+function numericAccessors<R extends object>(
+  projection: ProjectionName,
+  overrides: Record<string, (row: R) => number> = {},
+): Record<string, (row: R) => number> {
+  return Object.fromEntries(
+    PROJECTIONS[projection].columns
+      .filter(column => column.type === 'number' && column.platforms.includes('web'))
+      .map(column => [
+        column.name,
+        overrides[column.name] ?? ((row: R) => (row[column.name as keyof R] as number | undefined) ?? NaN),
+      ]),
+  );
+}
+const TELEMETRY: Accessors<TelemetryRow> = {
+  numbers: numericAccessors<TelemetryRow>('telemetry', {
+    producerSequence: row => Number(row.producerSequence),
+    active: row => Number(row.active),
+  }),
   strings: { timestamp: row => row.timestamp, connection: row => row.connectionEpoch },
 };
-const LIFECYCLE: Accessors<'lifecycle', RideLifecycleRow> = {
-  numbers: { elapsedSeconds: row => row.elapsedSeconds },
-  strings: { timestamp: row => row.timestamp, producer: () => 'browser', action: row => row.action },
-};
-const DISTANCE: Accessors<'distance', BrowserDistanceInterval> = {
+const LIFECYCLE: Accessors<RideLifecycleRow> = {
   numbers: {
-    start: row => row.start,
-    end: row => row.end,
-    meters: row => row.distance,
-    segment: row => row.segment,
-    startSpeed: row => row.startSpeed,
-    endSpeed: row => row.endSpeed,
+    elapsedSeconds: row => row.elapsedSeconds,
+    producerSequence: row => Number(row.producerSequence),
+    interrupted: row => Number(row.interrupted),
+    controllerSequence: row => Number(row.interruption?.controllerSequence ?? NaN),
   },
-  strings: {},
+  strings: {
+    timestamp: row => row.timestamp,
+    producer: () => 'browser',
+    clockEpoch: row => row.interruption?.clockEpoch ?? null,
+    action: row => (row.interrupted ? 'interruption' : row.action),
+  },
+};
+const DISTANCE: Accessors<BrowserDistanceInterval> = {
+  numbers: numericAccessors<BrowserDistanceInterval>('distance', { meters: row => row.distance }),
+  strings: { startUs: row => row.startUs, endUs: row => row.endUs },
 };
 
-function plan<P extends ProjectionName, R>(projection: P, kind: ExportKind, accessors: Accessors<P, R>): Plan<R> {
+const GPS: Accessors<RideLocationRow> = {
+  numbers: numericAccessors<RideLocationRow>('gps', {
+    producerSequence: row => Number(row.producerSequence),
+    active: row => Number(row.active),
+    distanceBarrier: row => Number(row.distanceBarrier),
+  }),
+  strings: {
+    timestamp: row => row.originalTimestamp,
+    producer: () => 'phone',
+    clockEpoch: row => row.clockEpoch,
+    originalAltitudeDatum: row => row.originalAltitudeDatum,
+  },
+};
+const GPS_DISCOVERY: Accessors<RideLocationRow> = {
+  numbers: numericAccessors<RideLocationRow>('gpsDiscovery'),
+  strings: { producer: () => 'phone' },
+};
+function plan<P extends ProjectionName, R>(projection: P, kind: ExportKind, accessors: Accessors<R>): Plan<R> {
   const columns: readonly ProjectionColumn[] = PROJECTIONS[projection].columns;
   const numbers: Record<string, (row: R) => number> = accessors.numbers;
   const strings: Record<string, (row: R) => string | null> = accessors.strings;
@@ -122,6 +136,8 @@ function plan<P extends ProjectionName, R>(projection: P, kind: ExportKind, acce
   return result;
 }
 const PLANS = {
+  gps: { zip: plan('gps', 'zip', GPS), fit: plan('gps', 'fit', GPS) },
+  gpsDiscovery: { zip: plan('gpsDiscovery', 'zip', GPS_DISCOVERY), fit: plan('gpsDiscovery', 'fit', GPS_DISCOVERY) },
   telemetry: { zip: plan('telemetry', 'zip', TELEMETRY), fit: plan('telemetry', 'fit', TELEMETRY) },
   lifecycle: { zip: plan('lifecycle', 'zip', LIFECYCLE), fit: plan('lifecycle', 'fit', LIFECYCLE) },
   distance: { zip: plan('distance', 'zip', DISTANCE), fit: plan('distance', 'fit', DISTANCE) },
@@ -160,11 +176,8 @@ function columnsOf<R>(plan: Plan<R>, rows: readonly R[]): ExportPage['columns'] 
   return columns as ExportPage['columns'];
 }
 
-const unreadable = (detail?: unknown) =>
-  new ExportError(
-    'gate',
-    `Power Log can't read this ride's saved data, so it can't be exported.${detail instanceof Error ? ` ${detail.message.replace(/\.?$/, '.')}` : ''}`,
-  );
+const unreadable = () =>
+  new ExportError('gate', "Power Log can't read this ride's saved data, so it can't be exported.");
 const deleted = () => new ExportError('deleted', "This ride no longer exists, so it can't be exported.");
 const changed = () => new ExportError('changed', 'This ride changed while it was exporting. Export it again.');
 const closed = () => new ExportError('cancelled', 'This export was closed.');
@@ -173,7 +186,7 @@ async function stored<T>(read: () => Promise<T>): Promise<T> {
     return await read();
   } catch (error) {
     if (error instanceof ExportError || error instanceof DOMException) throw error;
-    throw unreadable(error);
+    throw unreadable();
   }
 }
 
@@ -181,8 +194,8 @@ function telemetryRow(value: unknown, id: string): TelemetryRow {
   let sample: TelemetrySample;
   try {
     sample = validateSample(value);
-  } catch (error) {
-    throw unreadable(error);
+  } catch {
+    throw unreadable();
   }
   const row = value as Record<string, unknown>;
   const interval = row.interval;
@@ -195,15 +208,22 @@ function telemetryRow(value: unknown, id: string): TelemetryRow {
     !sample.connectionEpoch
   )
     throw unreadable();
-  return { ...sample, connectionEpoch: sample.connectionEpoch, active: row.active, interval };
+  const producerSequence = row.producerSequence;
+  if (
+    typeof producerSequence !== 'string' ||
+    !/^[1-9]\d*$/.test(producerSequence) ||
+    BigInt(producerSequence) > 9007199254740991n
+  )
+    throw unreadable();
+  return { ...sample, producerSequence, connectionEpoch: sample.connectionEpoch, active: row.active, interval };
 }
 function lifecycleRow(value: unknown, id: string): RideLifecycleRow {
   if (
     !isRecord(value) ||
     value.recordingId !== id ||
-    typeof value.revision !== 'number' ||
-    !Number.isSafeInteger(value.revision) ||
-    value.revision < 1 ||
+    typeof value.revision !== 'string' ||
+    !/^[1-9]\d*$/.test(value.revision) ||
+    BigInt(value.revision) > 9007199254740991n ||
     !ACTIONS.has(value.action) ||
     typeof value.elapsedSeconds !== 'number' ||
     !Number.isFinite(value.elapsedSeconds) ||
@@ -212,8 +232,8 @@ function lifecycleRow(value: unknown, id: string): RideLifecycleRow {
     throw unreadable();
   try {
     validateTimestamp(value.timestamp);
-  } catch (error) {
-    throw unreadable(error);
+  } catch {
+    throw unreadable();
   }
   return value as RideLifecycleRow;
 }
@@ -222,12 +242,14 @@ function distanceRow(value: unknown): BrowserDistanceInterval {
   const counter = (item: unknown) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0;
   if (
     !isRecord(value) ||
-    !measure(value.start) ||
-    !measure(value.end) ||
-    value.end <= value.start ||
+    typeof value.startUs !== 'string' ||
+    typeof value.endUs !== 'string' ||
+    !/^(0|[1-9]\d*)$/.test(value.startUs) ||
+    !/^(0|[1-9]\d*)$/.test(value.endUs) ||
+    BigInt(value.endUs) <= BigInt(value.startUs) ||
     !measure(value.distance) ||
-    !measure(value.startSpeed) ||
-    !measure(value.endSpeed) ||
+    (value.startSpeed !== null && !measure(value.startSpeed)) ||
+    (value.endSpeed !== null && !measure(value.endSpeed)) ||
     !counter(value.segment) ||
     !counter(value.sequence)
   )
@@ -247,12 +269,11 @@ function exportMetadata(record: BrowserRide, endedAt: string): ExportRideMetadat
     interrupted: record.interrupted,
     watchEnabled: false,
     saveToHealth: false,
-    recordGPS: false,
+    recordGPS: record.recordGPS,
     health: { provider: null, state: 'notRequested', workoutUUID: null, export: null },
-    watchSyncState: 'notRequired',
-    finalizationState: 'complete',
     example: false,
-    sampleHz: null,
+    sampleHz: record.sampleHz,
+    batteryConsumptionSource: record.batteryConsumptionSource,
   };
 }
 function cursorOf(after: ExportCursor | null, width: number): ExportCursor | null {
@@ -285,12 +306,15 @@ export class BrowserExportSource implements ExportSource {
       throw new ExportError('unsupported', 'Choose a FIT or ride-data export.');
     if (request.context.platform !== 'web')
       throw new ExportError('unsupported', 'This browser can export only its own rides.');
-    const selection = request.distanceSource ?? 'auto';
-    if (!Object.hasOwn(DISTANCE_SOURCE_LABELS, selection))
-      throw new ExportError('unsupported', 'Choose an available distance source.');
     const record = await stored(() => browserRideStore.find(request.rideId));
     if (!record) throw deleted();
-    if (record.phase !== 'completed' || record.endedAt === undefined)
+    if (
+      request.distanceSource != null &&
+      !['auto', 'controller', 'gps:phone', 'gps:watch'].includes(request.distanceSource)
+    )
+      throw new ExportError('unsupported', 'Unsupported distance source');
+    const selection = record.distanceSource;
+    if (!completionOpenExport(JSON.stringify(metadataOf(record)), record.id, record.revision))
       throw new ExportError('gate', 'Save the ride before exporting it.');
     let distance: BrowserDistanceHandle | null = null;
     if (request.kind === 'fit') {
@@ -300,11 +324,14 @@ export class BrowserExportSource implements ExportSource {
       } catch (error) {
         if (!(await stored(() => browserRideStore.find(record.id)))) throw deleted();
         if (error instanceof DOMException) throw error;
-        // Unreadable distance data leaves the FIT export without distance.
       }
       if (handle && handle.record.revision !== record.revision) throw changed();
-      if (handle?.info.selected?.source === 'controller') distance = handle;
+      if (handle?.info.selected) distance = handle;
     }
+    const pinned = await stored(() => browserRideStore.find(record.id));
+    if (!pinned) throw deleted();
+    if (pinned.revision !== record.revision) throw changed();
+    if (!completionOpenExport(JSON.stringify(metadataOf(pinned)), record.id, record.revision)) throw changed();
     const token = crypto.randomUUID();
     this.sessions.set(token, {
       token,
@@ -316,10 +343,15 @@ export class BrowserExportSource implements ExportSource {
     });
     return {
       session: token,
-      metadata: exportMetadata(record, record.endedAt),
+      metadata: exportMetadata(record, record.endedAt!),
       elapsedEnd: record.elapsedSeconds,
-      producers: { gps: [], health: [] },
-      distanceProfile: distance ? { source: 'controller', kind: 'controller' } : null,
+      producers: { gps: record.locationCount ? ['phone'] : [], health: [] },
+      distanceProfile:
+        distance?.info.selected?.source === 'gps:phone'
+          ? { source: 'gps:phone', kind: 'gps', producer: 'phone' }
+          : distance?.info.selected?.source === 'controller'
+            ? { source: 'controller', kind: 'controller' }
+            : null,
     };
   }
 
@@ -332,14 +364,16 @@ export class BrowserExportSource implements ExportSource {
       throw new ExportError('unsupported', "Browser rides can't provide this export data.");
     let page: ExportPage;
     if (projection === 'telemetry') page = await this.telemetry(session, request.after);
+    else if (projection === 'gps' || projection === 'gpsDiscovery')
+      page = await this.paged(session, this.gps(session, projection), request.after);
     else if (projection === 'lifecycle') page = await this.paged(session, this.lifecycle(session), request.after);
     else if (projection === 'distance' && session.distance)
       page = await this.paged(session, this.distance(session, session.distance), request.after);
     else {
-      this.pin(session, await stored(() => browserRideStore.find(session.id)));
       const plan = projection === 'distance' ? PLANS.distance[session.kind] : NO_COLUMNS;
       page = { rows: 0, last: null, done: true, columns: columnsOf(plan, []) };
     }
+    this.pin(session, await stored(() => browserRideStore.find(session.id)));
     return page as ExportPage<P>;
   }
 
@@ -350,7 +384,11 @@ export class BrowserExportSource implements ExportSource {
   private pin(session: Session, record: BrowserRide | undefined): void {
     if (this.sessions.get(session.token) !== session) throw closed();
     if (!record) throw deleted();
-    if (record.revision !== session.revision) throw changed();
+    if (
+      record.revision !== session.revision ||
+      !completionOpenExport(JSON.stringify(metadataOf(record)), session.id, session.revision)
+    )
+      throw changed();
   }
 
   private async telemetry(session: Session, after: ExportCursor | null): Promise<ExportPage> {
@@ -378,7 +416,7 @@ export class BrowserExportSource implements ExportSource {
       known.add(row.connectionEpoch);
       connections.push({
         token: row.connectionEpoch,
-        vendor: 'cyc',
+        vendor: 'controller',
         model: row.controllerModel ?? null,
         firmware: row.firmwareLabel ?? null,
         protocol: row.controllerProtocol ?? null,
@@ -400,25 +438,56 @@ export class BrowserExportSource implements ExportSource {
         return result.rows;
       },
       row: value => lifecycleRow(value, session.id),
-      cursor: row => [row.revision],
+      cursor: row => [Number(row.revision)],
     };
   }
 
+  private gps(session: Session, projection: 'gps' | 'gpsDiscovery'): Stream<RideLocationRow> {
+    return {
+      plan: PLANS[projection][session.kind],
+      width: 2,
+      read: async (cursor, count) => {
+        const result = await stored(() =>
+          browserRideStore.locationsAfter(
+            session.id,
+            cursor ? [String(cursor[0]), 'browser', String(cursor[1])] : null,
+            count,
+          ),
+        );
+        this.pin(session, result.record);
+        return result.rows;
+      },
+      row: value => {
+        const row = validateLocation(value as RideLocationRow);
+        if (row.recordingId !== session.id) throw unreadable();
+        return row;
+      },
+      cursor: row => [Number(row.elapsedUs), Number(row.producerSequence)],
+    };
+  }
   private distance(session: Session, handle: BrowserDistanceHandle): Stream<BrowserDistanceInterval> {
     return {
       plan: PLANS.distance[session.kind],
       width: 2,
       read: async (cursor, count) => {
-        const rows = await stored(() => browserDistanceIntervals(handle, cursor as [number, number] | null, count));
-        if (rows) {
-          this.pin(session, handle.record);
-          return rows;
-        }
+        if (cursor && !cursor.every(value => Number.isSafeInteger(value) && value >= 0))
+          throw new ExportError('cursor', 'The distance cursor exceeds the supported range.');
         this.pin(session, await stored(() => browserRideStore.find(session.id)));
-        throw changed();
+        const current = await stored(() => browserDistanceCurrent(handle));
+        const rows = current
+          ? await stored(() => browserDistanceIntervals(handle, cursor as [number, number] | null, count))
+          : undefined;
+        this.pin(session, await stored(() => browserRideStore.find(session.id)));
+        if (!rows) throw changed();
+        return rows;
       },
       row: distanceRow,
-      cursor: row => [row.end, row.sequence],
+      cursor: row => {
+        const endUs = Number(row.endUs);
+        if (!Number.isSafeInteger(endUs) || !Number.isSafeInteger(row.sequence))
+          throw new ExportError('cursor', 'The distance cursor exceeds the supported range.');
+        return [endUs, row.sequence];
+      },
     };
   }
 
@@ -427,7 +496,6 @@ export class BrowserExportSource implements ExportSource {
     return { rows: rows.length, last, done, columns: columnsOf(stream.plan, rows) };
   }
 
-  /** Bounded reads with a one-row lookahead, so a page reports `done` without a trailing empty page. */
   private async collect<R>(
     session: Session,
     stream: Stream<R>,

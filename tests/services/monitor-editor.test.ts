@@ -32,10 +32,16 @@ describe('monitor editor choices', () => {
     expect(reorderMonitorMetric(chosen, 'cadenceRpm', NaN)).toEqual(chosen);
     expect(toggleMonitorMetric(chosen, 'unknown')).toEqual(chosen);
   });
-  it('searches the complete catalog by label, group and unit', () => {
-    expect(searchMonitorMetrics('')).toHaveLength(27);
+  it('searches the selectable catalog by label, group and unit', () => {
+    expect(searchMonitorMetrics('')).toHaveLength(31);
+    expect(searchMonitorMetrics('Resting energy')).toEqual([]);
     expect(searchMonitorMetrics('temperature').map(metric => metric.id)).toEqual(['motorTempC', 'controllerTempC']);
-    expect(searchMonitorMetrics('  BATTERY current ').map(metric => metric.id)).toEqual(['batteryCurrentA']);
+    expect(searchMonitorMetrics('  BATTERY current ').map(metric => metric.id)).toEqual([
+      'batteryCurrentA',
+      'motorInputPowerW',
+      'calculatedEnergyWh',
+      'calculatedChargeAh',
+    ]);
     expect(searchMonitorMetrics('°C').map(metric => metric.id)).toEqual(['motorTempC', 'controllerTempC']);
     expect(searchMonitorMetrics('not-a-metric')).toEqual([]);
   });

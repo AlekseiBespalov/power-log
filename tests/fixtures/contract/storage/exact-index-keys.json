@@ -1,0 +1,35 @@
+{
+  "fixture": "F29",
+  "provenance": {
+    "status": "requiredDelta",
+    "decisions": ["C9", "C15", "B3.4"],
+    "reference": [
+      "modules/power-log-bridge/ios/PowerLogStore.swift:855",
+      "modules/power-log-bridge/ios/PowerLogStore.swift:1253",
+      "src/services/browser-ride-store.ts:95"
+    ]
+  },
+  "encoding": "signedInt64Bias9223372036854775808Pad20",
+  "cases": [
+    { "input": "-9223372036854775808", "expectedKey": "00000000000000000000" },
+    { "input": "-1", "expectedKey": "09223372036854775807" },
+    { "input": "0", "expectedKey": "09223372036854775808" },
+    { "input": "2", "expectedKey": "09223372036854775810" },
+    { "input": "10", "expectedKey": "09223372036854775818" },
+    { "input": "125000", "expectedKey": "09223372036854900808" },
+    { "input": "9223372036854775807", "expectedKey": "18446744073709551615" }
+  ],
+  "range": {
+    "insertionOrderUs": ["125000", "10", "2", "0", "-1"],
+    "lowerUsInclusive": "2",
+    "upperUsInclusive": "10",
+    "expectedUs": ["2", "10"],
+    "expectedPredecessorUs": "0",
+    "expectedSuccessorUs": "125000"
+  },
+  "producerOrder": {
+    "insertionOrder": ["130", "10", "2"],
+    "expectedOrder": ["2", "10", "130"]
+  },
+  "invalidInputs": ["+1", "01", "-0", "1.0", "9223372036854775808", "-9223372036854775809"]
+}

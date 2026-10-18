@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Device, NativeState } from '../core/types';
+import { presentFailure } from '../core/failures';
 import type { TelemetryDisplay } from '../core/telemetry-display';
 import type { TelemetryAdapter } from './adapter';
 import { deviceAdapter } from './device';
@@ -90,7 +91,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           })
           .catch(cause => {
             if (!disposed && generation === refreshGeneration && events === stateEvents)
-              dispatchError({ type: 'native', error: cause instanceof Error ? cause.message : String(cause) });
+              dispatchError({ type: 'native', error: presentFailure(cause).text });
           });
     };
     visibility(appIsForeground());
@@ -108,7 +109,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       await action();
     } catch (cause) {
-      dispatchError({ type: 'operation', error: cause instanceof Error ? cause.message : String(cause) });
+      dispatchError({ type: 'operation', error: cause });
     } finally {
       setBusy(false);
     }

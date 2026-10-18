@@ -1,0 +1,199 @@
+{
+  "fixtures": [
+    "F09",
+    "F18"
+  ],
+  "cases": [
+    {
+      "name": "no health or GPS",
+      "health": false,
+      "gps": false,
+      "watch": false,
+      "status": null,
+      "action": "none",
+      "label": ""
+    },
+    {
+      "name": "unknown",
+      "health": true,
+      "gps": true,
+      "watch": false,
+      "status": null,
+      "action": "check",
+      "label": "Check permissions"
+    },
+    {
+      "name": "watch permissions",
+      "health": true,
+      "gps": true,
+      "watch": true,
+      "status": null,
+      "action": "check",
+      "label": "Check permissions"
+    },
+    {
+      "name": "unavailable",
+      "health": true,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": false,
+        "provider": "appleHealth",
+        "writes": {},
+        "location": "authorizedAlways",
+        "services": true,
+        "accuracy": "full"
+      },
+      "action": "unavailable",
+      "label": "Health unavailable"
+    },
+    {
+      "name": "request health",
+      "health": true,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": true,
+        "provider": "appleHealth",
+        "writes": {},
+        "location": "denied",
+        "services": true,
+        "accuracy": "full"
+      },
+      "action": "request",
+      "label": "Set up permissions"
+    },
+    {
+      "name": "GPS only denied",
+      "health": false,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": false,
+        "provider": null,
+        "writes": {},
+        "location": "denied",
+        "services": true,
+        "accuracy": "full"
+      },
+      "action": "settings",
+      "label": "Location settings"
+    },
+    {
+      "name": "GPS only request",
+      "health": false,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": false,
+        "provider": null,
+        "writes": {},
+        "location": "notDetermined",
+        "services": true,
+        "accuracy": "full"
+      },
+      "action": "request",
+      "label": "Allow location"
+    },
+    {
+      "name": "GPS only reduced",
+      "health": false,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": false,
+        "provider": null,
+        "writes": {},
+        "location": "authorizedWhenInUse",
+        "services": true,
+        "accuracy": "reduced"
+      },
+      "action": "settings",
+      "label": "Precise location"
+    },
+    {
+      "name": "GPS only ready",
+      "health": false,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": false,
+        "provider": null,
+        "writes": {},
+        "location": "authorizedWhenInUse",
+        "services": true,
+        "accuracy": "full"
+      },
+      "action": "none",
+      "label": ""
+    },
+    {
+      "name": "health denied",
+      "health": true,
+      "gps": false,
+      "watch": false,
+      "status": {
+        "available": true,
+        "provider": "appleHealth",
+        "writes": {
+          "workout": "denied"
+        },
+        "location": "authorizedAlways",
+        "services": true,
+        "accuracy": "full"
+      },
+      "action": "settings",
+      "label": "Review Health access"
+    },
+    {
+      "name": "HC optional writes missing",
+      "health": true,
+      "gps": false,
+      "watch": false,
+      "status": {
+        "available": true,
+        "provider": "healthConnect",
+        "writes": {
+          "workout": "authorized"
+        },
+        "location": "authorizedAlways",
+        "services": true,
+        "accuracy": "full"
+      },
+      "action": "request",
+      "label": "Set up permissions"
+    },
+    {
+      "name": "GPS services off",
+      "health": false,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": false,
+        "provider": null,
+        "writes": {},
+        "location": "authorizedAlways",
+        "services": false,
+        "accuracy": "full"
+      },
+      "action": "settings",
+      "label": "Location settings"
+    },
+    {
+      "name": "GPS unknown",
+      "health": false,
+      "gps": true,
+      "watch": false,
+      "status": {
+        "available": false,
+        "provider": null,
+        "writes": {},
+        "location": "unknown",
+        "services": true,
+        "accuracy": "unknown"
+      },
+      "action": "check",
+      "label": "Check permissions"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+expression -l Swift -- { $drLock.lock(); defer { $drLock.unlock() }; print("pages", $drPages, "sampledPeakPhysFootprintBytes", $drFootprints.max() ?? 0, "postRequestPhysFootprintBytes", $drFootprint()) }()
+expression -l Swift -- print(MonitorDataStore.shared.projectionDiagnostics())

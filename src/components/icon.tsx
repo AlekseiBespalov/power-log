@@ -17,9 +17,11 @@ export function Icon({ name, color = colors.muted, size = 20 }: { name: IconName
     >
       {name === 'bike' && (
         <>
-          <Circle cx={5} cy={17} r={4} />
-          <Circle cx={19} cy={17} r={4} />
-          <Path d="M5 17l5-10 5 10H5m5-10h6l3 10M8 7h4m4 0V4h3" />
+          <Circle cx={4.8} cy={17.2} r={3.8} />
+          <Circle cx={19.2} cy={17.2} r={3.8} />
+          <Path d="m4.8 17.2 4-5.5 7.6-1.8-4.9 7.3H4.8m6.7 0L8 9.5M6.5 9.5h3m9.7 7.7L15.6 7h2.8" />
+          <Path d="m12.5 15.7 2.7-4" strokeWidth={2.8} />
+          <Path d="m11.3 1.5-3 4h2.2L9.4 8.2l4.3-4.4h-2.4l1.1-2.3Z" fill={color} stroke="none" />
         </>
       )}
       {name === 'watch' && (

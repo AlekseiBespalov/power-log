@@ -14,8 +14,8 @@ DEVELOPER_FIELDS = {
     "motor_temperature": (5, SINT16, "C"),
     "controller_temperature": (6, SINT16, "C"),
     "pedal_torque": (7, FLOAT32, "Nm"),
-    "consumed_energy": (8, FLOAT32, "Wh"),
-    "consumed_charge": (9, FLOAT32, "Ah"),
+    "energy_used_controller": (8, FLOAT32, "Wh"),
+    "charge_used_controller": (9, FLOAT32, "Ah"),
 }
 
 
@@ -51,14 +51,15 @@ def developer_names(messages):
     names = {}
     for description in messages["field_description_mesgs"]:
         name = description["field_name"]
-        number, base_type, units = DEVELOPER_FIELDS[name]
+        canonical = name.replace("_calc", "_controller")
+        number, base_type, units = DEVELOPER_FIELDS[canonical]
         assert description["developer_data_index"] == 0, description
         assert description["field_definition_number"] == number, description
         assert description["fit_base_type_id"] == base_type, description
         assert description["units"] == units, description
         assert not {"scale", "offset", "native_mesg_num", "native_field_num"} & set(description), description
         names[description["key"]] = name
-    assert sorted(names.values()) == sorted(DEVELOPER_FIELDS), names
+    assert sorted(name.replace("_calc", "_controller") for name in names.values()) == sorted(DEVELOPER_FIELDS), names
     native = {field["name"] for field in Profile["messages"][20]["fields"].values()}
     assert not native & set(names.values()), native & set(names.values())
     return names

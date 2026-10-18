@@ -1,0 +1,72 @@
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+
+group = 'app.powerlog.bridge'
+version = '0.3.0'
+
+android {
+    namespace 'app.powerlog.bridge'
+    defaultConfig {
+        versionCode 1
+        versionName '0.3.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    sourceSets.test.java.srcDir "src/testSupport/java"
+    sourceSets.androidTest.java.srcDir "src/testSupport/java"
+    sourceSets.androidTest.assets.srcDir layout.buildDirectory.dir("generated/crash-test-assets")
+    sourceSets.androidTest.assets.srcDir new File(projectDir, '../../../tests/fixtures/contract')
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            maxParallelForks = Math.max(1, Runtime.runtime.availableProcessors().intdiv(4))
+            if (project.hasProperty('powerLogEveryday')) filter.excludeTestsMatching('*VolumeTest')
+            systemProperty 'user.home', layout.buildDirectory.dir('test-home').get().asFile.absolutePath
+            systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+            inputs.dir(new File(projectDir, '../../../tests/fixtures'))
+                .withPropertyName('fixtures')
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+            inputs.files(
+                new File(projectDir, '../../../scripts/expand-contract-fixtures.py'),
+                new File(projectDir, '../../../shared/scripts/protocol_fixtures.py'))
+                .withPropertyName('fixtureExpansion')
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+            inputs.property('environment',
+                System.getenv().findAll { it.key.startsWith('POWER_LOG_') && it.key != 'POWER_LOG_CONTRACT_FIXTURES' })
+            doFirst { layout.buildDirectory.dir('test-home').get().asFile.mkdirs() }
+        }
+    }
+}
+
+dependencies {
+    implementation 'app.powerlog:power-log-core:0.3.0'
+    implementation 'androidx.core:core-ktx:1.17.0'
+    implementation 'androidx.core:core-location-altitude:1.0.0'
+    implementation 'androidx.health.connect:connect-client:1.1.0'
+    implementation 'androidx.work:work-runtime-ktx:2.10.1'
+    testImplementation 'androidx.work:work-testing:2.10.1'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+    androidTestImplementation 'androidx.work:work-testing:2.10.1'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+}
+
+tasks.register('powerLogCoreVersions') {
+    doLast {
+        def kotlinPlugin = project.plugins.getPlugin('org.jetbrains.kotlin.android')
+        println "Power Log app Kotlin Gradle plugin: ${kotlinPlugin.class.protectionDomain.codeSource.location}"
+        println "Power Log app Kotlin compiler: ${org.jetbrains.kotlin.config.KotlinCompilerVersion.VERSION}"
+        configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll {
+            it.moduleVersion.id.group == 'org.jetbrains.kotlin' && it.name.startsWith('kotlin-stdlib')
+        }.each { println "Power Log app stdlib: ${it.moduleVersion.id}" }
+    }
+}
+
+tasks.register('prepareCrashTestAssets', Exec) {
+    workingDir new File(projectDir, '../../..')
+    commandLine 'node', 'scripts/prepare-android-crash-tests.mjs'
+}
+
+tasks.matching { it.name == 'preDebugAndroidTestBuild' }.configureEach {
+    dependsOn tasks.named('prepareCrashTestAssets')
+}

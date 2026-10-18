@@ -14,7 +14,7 @@ import zipfile
 import zlib
 
 FOLDER = "PowerLog-original/"
-ENTRIES = ["telemetry.csv", "gps.csv", "health.csv", "events.csv", "datapackage.json"]
+ENTRIES = ["telemetry.csv", "battery-consumption.csv", "gps.csv", "health.csv", "events.csv", "datapackage.json"]
 LIMIT = 0xFFFFFFFF
 UTF8_NAMES = 0x0800
 DEFLATED = 8
@@ -70,7 +70,7 @@ def verify(path):
     with zipfile.ZipFile(path) as archive:
         infos = archive.infolist()
         names = [info.filename for info in infos]
-        check(names == [FOLDER + name for name in ENTRIES], "the entries are not the five ride files in order")
+        check(names == [FOLDER + name for name in ENTRIES], "the entries are not the six ride files in order")
         check(end["entries"] == len(infos), "the end record counts the wrong number of entries")
         check(archive.testzip() is None, "an entry fails its CRC-32")
         expected_offset = 0
@@ -129,8 +129,8 @@ def verify(path):
         check(end["offset"] == expected_offset, "the central directory does not follow the last entry")
     descriptor = json.loads(entries[-1]["text"])
     resources = {resource["path"]: resource for resource in descriptor["resources"]}
-    check([resource["path"] for resource in descriptor["resources"]] == ENTRIES[:4], "the descriptor resources")
-    for entry in entries[:4]:
+    check([resource["path"] for resource in descriptor["resources"]] == ENTRIES[:-1], "the descriptor resources")
+    for entry in entries[:-1]:
         resource = resources[entry["name"][len(FOLDER) :]]
         rows = list(csv.reader(io.StringIO(entry["text"], newline=""), strict=True))
         names = [field["name"] for field in resource["schema"]["fields"]]

@@ -44,6 +44,83 @@ export function monitorHitScene(
   };
 }
 
+/** Every lane follows the UI cursor, including lanes that did not receive the touch. */
+export function monitorHitTargets(scene: MonitorHitScene | null, seconds: number | null, snap: MonitorSnap | null) {
+  'worklet';
+  const targets: { key: string; id: string; seconds: number; value: number }[] = [];
+  if (!scene || seconds === null || !Number.isFinite(seconds)) return targets;
+  for (const series of scene.series) {
+    const points = series.points;
+    let low = 0,
+      high = points.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (points[mid]!.elapsedSeconds < seconds) low = mid + 1;
+      else high = mid;
+    }
+    const next = points[low],
+      previous = points[low - 1];
+    let point: MonitorPoint | undefined;
+    if (snap?.key === scene.key && snap.metric === series.metric && snap.point.elapsedSeconds === seconds) {
+      point = snap.point;
+    } else if (next?.elapsedSeconds === seconds) {
+      point = next;
+    } else if (previous && next && !next.startsSegment) {
+      point = seconds - previous.elapsedSeconds <= next.elapsedSeconds - seconds ? previous : next;
+    }
+    if (point)
+      targets.push({
+        key: scene.key,
+        id: series.metric,
+        seconds: point.elapsedSeconds,
+        value: point.value * series.scale,
+      });
+  }
+  return targets;
+}
+
+/** Away from a line, inspect by time without extending a segment across a gap. */
+function horizontalMonitorHit(
+  scene: MonitorHitScene,
+  view: ChartViewport,
+  time: number,
+  y: number,
+): MonitorSnap | null {
+  'worklet';
+  let best: MonitorSnap | null = null,
+    bestTime = Infinity,
+    bestY = Infinity;
+  for (const series of scene.series) {
+    const points = series.points;
+    let low = 0,
+      high = points.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (points[mid]!.elapsedSeconds < time) low = mid + 1;
+      else high = mid;
+    }
+    const next = points[low],
+      previous = points[low - 1];
+    if (next?.elapsedSeconds !== time && (!previous || !next || next.startsSegment)) continue;
+    let start = next?.elapsedSeconds === time ? low : low - 1;
+    while (start > 0 && points[start - 1]!.elapsedSeconds === points[start]!.elapsedSeconds) start--;
+    for (let index = start; index < points.length; index++) {
+      const point = points[index]!;
+      if (point.elapsedSeconds > next!.elapsedSeconds) break;
+      if (point.elapsedSeconds < view.start || point.elapsedSeconds > view.end) continue;
+      const dt = Math.abs(point.elapsedSeconds - time);
+      const py = 8 + ((scene.max - point.value * series.scale) / (scene.max - scene.min)) * (scene.height - 34);
+      const dy = Math.abs(py - y);
+      if (dt < bestTime || (dt === bestTime && dy < bestY)) {
+        bestTime = dt;
+        bestY = dy;
+        best = { key: scene.key, sourceId: scene.sourceId, revision: scene.revision, metric: series.metric, point };
+      }
+    }
+  }
+  return best;
+}
+
 /** Small physical hit targets make subpixel original extrema selectable without inventing values. */
 export function hitMonitorScene(
   scene: MonitorHitScene | null,
@@ -106,7 +183,7 @@ export function hitMonitorScene(
       if (heldDistance <= releaseRadius && (!best || bestDistance + 6 >= heldDistance)) return previous;
     }
   }
-  return best;
+  return best ?? horizontalMonitorHit(scene, view, time, y);
 }
 
 export type MonitorRasterReady = {

@@ -36,11 +36,11 @@ describe('workout permission actions', () => {
     value.health.writeAuthorization.HKWorkoutTypeIdentifier = 'notDetermined';
     expect(workoutPermissionAction(value, phone).action).toBe('request');
   });
-  it('ignores phone GPS for a Watch-owned route', () => {
+  it('requires phone GPS permission for a Watch-assisted ride', () => {
     const value = status();
     value.location = 'denied';
     value.locationServicesEnabled = false;
-    expect(workoutPermissionAction(value, watch).action).toBe('none');
+    expect(workoutPermissionAction(value, watch).action).toBe('settings');
   });
   it('ignores GPS and route-write permissions for an indoor phone ride', () => {
     const value = status();
@@ -87,11 +87,11 @@ describe('workout permission actions', () => {
     expect(workoutPermissionAction(revoked, phone).action).toBe('settings');
     expect(workoutPermissionAction(status(), phone).action).toBe('none');
   });
-  it('shows a precise-location Settings action only for the phone route owner', () => {
+  it('requires precise phone location for both phone and Watch-assisted rides', () => {
     const value = status();
     value.locationAccuracyAuthorization = 'reduced';
     expect(workoutPermissionAction(value, phone)).toMatchObject({ action: 'settings', settingsTarget: 'app' });
-    expect(workoutPermissionAction(value, watch).action).toBe('none');
+    expect(workoutPermissionAction(value, watch).action).toBe('settings');
     expect(workoutPermissionAction(value, { ...phone, indoor: true }).action).toBe('none');
   });
   it('can record locally without requesting Health or location, even when both are unavailable', () => {
@@ -135,8 +135,8 @@ describe('workout permission actions', () => {
     value.health.available = false;
     value.health.writeAuthorization = {};
     value.location = 'denied';
-    expect(workoutPermissionAction(value, { ...watch, saveToHealth }).action).toBe('none');
-    expect(workoutPermissionAction(null, { ...watch, saveToHealth }).action).toBe('none');
+    expect(workoutPermissionAction(value, { ...watch, saveToHealth }).action).toBe('settings');
+    expect(workoutPermissionAction(null, { ...watch, saveToHealth }).action).toBe('check');
   });
   it('treats HealthKit unavailability separately from a permission prompt', () => {
     const value = status();

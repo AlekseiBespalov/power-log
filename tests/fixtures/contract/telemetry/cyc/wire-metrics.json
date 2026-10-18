@@ -1,0 +1,24 @@
+{
+  "expected": {
+    "assistLevel": 254,
+    "batteryCurrentA": -1.23,
+    "batteryVoltageV": 12.300000000000001,
+    "cadenceRpm": 123.4567,
+    "consumedAh": 12345.678900000001,
+    "consumedWh": -12345.678900000001,
+    "controllerTempC": -3276.8000000000002,
+    "faultCode": 255,
+    "humanPowerW": 32767,
+    "motorCurrentA": -21474836.48,
+    "motorInputPowerW": -15.129,
+    "motorRpm": 2147483647,
+    "motorTempC": 3276.6999999999998,
+    "pedalTorqueNm": 23.449999999999999,
+    "raceMode": 255,
+    "speedRaw": 3.6000000000000001,
+    "throttleVoltageV": -1234.5599999999999
+  },
+  "fixture": "F05",
+  "payloadHex": "3203c0fb8f80007fff80000000ffffff857fffffff007b075bcd15f8a432eb0012d687fffe1dc000000929ff00007fff00000168fffe",
+  "source": "CycProtocol.swift selected layout and M06 arithmetic; generated synthetic extrema"
+}

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { presentationFailure } from '../../shared/js';
 import { MonotonicClock } from '../../src/services/monotonic-clock';
 import { MonitorReadController } from '../../src/features/monitor/monitor-read-controller';
 import { TelemetryMonitor } from '../../src/core/monitor-data';
@@ -72,7 +73,7 @@ describe('independent monitor reads', () => {
           monitorTailSeconds(
             point,
             state.nowSeconds,
-            6,
+            metricById('humanPowerW')!,
             state.liveAcquiredAt.humanPowerW,
             state.monotonicAt,
             point,
@@ -281,7 +282,7 @@ describe('independent monitor reads', () => {
           svg: monitorTailSeconds(
             point,
             state.nowSeconds,
-            6,
+            metricById('humanPowerW')!,
             state.liveAcquiredAt.humanPowerW,
             state.monotonicAt,
             point,
@@ -540,7 +541,7 @@ describe('independent monitor reads', () => {
           data = intermediate.data!;
         if (order === 'plot first') {
           expect(data.metricSources?.distanceMeters?.source).toBe('controller');
-          expect(monitorSelection(data, metricById('distanceMeters')!, 1)).toBeNull();
+          expect(monitorSelection(data, metricById('distanceMeters')!, 1)?.value).toBe(201);
           expect(monitorSelection(data, metricById('distanceMeters')!, 0, 'reference')).toBeNull();
           expect(data.statistics.distanceMeters).toBeUndefined();
           expect(intermediate.intervalStatistics.distanceMeters).toBeUndefined();
@@ -649,7 +650,7 @@ describe('independent monitor reads', () => {
       releaseDescription();
       await settle();
       expect(controller.getSnapshot().data?.metricSources?.distanceMeters?.source).toBe('controller');
-      expect(monitorSelection(controller.getSnapshot().data!, metricById('distanceMeters')!, 1)).toBeNull();
+      expect(monitorSelection(controller.getSnapshot().data!, metricById('distanceMeters')!, 1)?.value).toBe(200);
       expect(anchors.length).toBeGreaterThan(0);
       expect(anchors.every(anchor => anchor === undefined)).toBe(true);
       releaseInspect();
@@ -765,8 +766,11 @@ describe('independent monitor reads', () => {
     controller.inspect(10);
     await settle();
     const inspect = vi.spyOn(source, 'inspectAt');
-    for (const message of ['Storage work queue is full. Retry the pending operation.', 'Read failed']) {
-      inspect.mockRejectedValueOnce(new Error(message));
+    for (const error of [
+      Object.assign(new Error('Storage is busy. Retry the pending operation.'), { code: 'ERR_STORAGE_BUSY' }),
+      new Error('Read failed'),
+    ]) {
+      inspect.mockRejectedValueOnce(error);
       controller.inspect(20);
       await settle();
       expect(controller.getSnapshot().data!.selectionPending).toBe(true);
@@ -799,6 +803,7 @@ describe('independent monitor reads', () => {
     await settle();
     expect(snapshots.every(state => state.data?.selection?.humanPowerW?.elapsedSeconds === 10)).toBe(true);
     expect(controller.getSnapshot().data!.selectionPending).toBe(true);
+    expect(monitorSelection(controller.getSnapshot().data!, metricById('humanPowerW')!, 20)?.elapsedSeconds).toBe(20);
     release();
     await settle();
     expect(controller.getSnapshot().data!.selection!.humanPowerW!.elapsedSeconds).toBe(20);
@@ -861,7 +866,7 @@ describe('independent monitor reads', () => {
       const statistics = vi.spyOn(source, 'rangeStats');
       source.append(sample(31));
       controller.refresh();
-      await settle(); // arms the two-second cadence
+      await settle();
       expect(statistics).not.toHaveBeenCalled();
       for (let i = 0; i < 50; i++) {
         controller.changeViewport({ start: i / 10, end: 20 + i / 10 }, true);
@@ -1062,7 +1067,7 @@ describe('independent monitor reads', () => {
       expect(statistics).toHaveBeenCalledTimes(1);
       controller.changeViewport({ start: 0, end: 20 });
       await settle();
-      expect(statistics).toHaveBeenCalledTimes(2); // deliberate gesture gets prompt exact statistics
+      expect(statistics).toHaveBeenCalledTimes(2);
     } finally {
       controller.dispose();
       vi.useRealTimers();
@@ -1124,13 +1129,15 @@ describe('independent monitor reads', () => {
     const { source, controller } = setup();
     await settle();
     const original = source.readPlot.bind(source);
-    vi.spyOn(source, 'readPlot').mockRejectedValueOnce(new Error('MONITOR_ADMISSION_PLOT'));
+    vi.spyOn(source, 'readPlot').mockRejectedValueOnce(
+      Object.assign(new Error('Read capacity is temporarily occupied.'), { code: 'ERR_READ_DEFERRED' }),
+    );
     controller.changeViewport({ start: 0, end: 20 });
     await settle();
     expect(controller.getSnapshot().errors.plot).toBeUndefined();
     expect(controller.getSnapshot().deferred.plot).toBe(true);
     source.readPlot = async () => {
-      throw new Error('Damaged chart metadata');
+      throw new Error('BridgeException: Damaged chart metadata (at PowerLogBridge/MonitorData.swift:402)');
     };
     controller.changeViewport({ start: 0, end: 21 });
     await settle();
@@ -1138,7 +1145,8 @@ describe('independent monitor reads', () => {
     controller.subscribe(state => visible.push(state.errors.plot));
     controller.refresh();
     await settle();
-    expect(visible.every(error => error === 'Damaged chart metadata')).toBe(true);
+    expect(visible.length).toBeGreaterThan(0);
+    expect(visible.every(error => error === presentationFailure('unknown').text)).toBe(true);
     source.readPlot = original;
     controller.refresh();
     await settle();
@@ -1150,8 +1158,12 @@ describe('independent monitor reads', () => {
     await settle();
     controller.inspect(5);
     await settle();
-    vi.spyOn(source, 'readPlot').mockRejectedValueOnce(new Error('MONITOR_CACHE_PLOT'));
-    vi.spyOn(source, 'inspectAt').mockRejectedValueOnce(new Error('MONITOR_ADMISSION_FAST'));
+    vi.spyOn(source, 'readPlot').mockRejectedValueOnce(
+      Object.assign(new Error('Recording changed during the read.'), { code: 'ERR_READ_CONTENTION' }),
+    );
+    vi.spyOn(source, 'inspectAt').mockRejectedValueOnce(
+      Object.assign(new Error('Read capacity is temporarily occupied.'), { code: 'ERR_READ_DEFERRED' }),
+    );
     controller.configure(['humanPowerW', 'batteryVoltageV'], 'all');
     await settle();
     expect(controller.getSnapshot().deferred).toMatchObject({ plot: true, cursor: true });
@@ -1416,7 +1428,7 @@ describe('independent monitor reads', () => {
         return monitorTailSeconds(
           state.data?.series.humanPowerW?.at(-1),
           state.nowSeconds,
-          6,
+          metricById('humanPowerW')!,
           state.liveAcquiredAt.humanPowerW,
           state.monotonicAt,
           state.latest?.humanPowerW,
@@ -1539,13 +1551,15 @@ describe('independent monitor reads', () => {
   });
   it('renders available geometry even when the independent statistics read fails', async () => {
     const source = new TelemetryMonitor('partial', false, [sample(0), sample(1)]);
-    vi.spyOn(source, 'rangeStats').mockRejectedValue(new Error('Summary storage read failed'));
+    vi.spyOn(source, 'rangeStats').mockRejectedValue(
+      Object.assign(new Error('SQLITE_FULL: database or disk is full'), { code: 'storageFull' }),
+    );
     const controller = new MonitorReadController(source);
     controller.configure(['humanPowerW'], 'all');
     controller.refresh();
     await settle();
     expect(controller.getSnapshot().data!.series.humanPowerW).toHaveLength(2);
-    expect(controller.getSnapshot().errors.statistics).toBe('Summary storage read failed');
+    expect(controller.getSnapshot().errors.statistics).toBe(presentationFailure('storageFull').text);
     expect(controller.getSnapshot().errors.plot).toBeUndefined();
     controller.dispose();
   });

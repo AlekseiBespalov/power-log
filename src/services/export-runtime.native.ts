@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
-import bridge, { type CycBridge } from '../../modules/cyc-bridge';
+import bridge, { type PowerLogBridge } from '../../modules/power-log-bridge';
 import { fromNativePage } from '../core/export/pages';
+import { presentFailure } from '../core/failures';
 import {
   EXPORT_ERROR_CODES,
   ExportError,
@@ -19,28 +20,29 @@ const FAILURES: Record<CallSite, string> = {
   page: 'Power Log could not read this ride for export.',
   sink: 'Power Log could not write the export file.',
 };
-const CAUSE = '\n→ Caused by: ';
-// iOS Expo rejections carry each exception of the cause chain as `Name: reason (at File.swift:line)`.
-const DECORATED = /^[A-Za-z_][\w.]*(?:<[^>]*>)?: ([\s\S]*) \(at [^\s()]+:\d+\)$/;
-
-function nativeMessage(error: unknown): string {
-  const message = typeof error === 'object' && error !== null && 'message' in error ? error.message : error;
-  const text = typeof message === 'string' ? message : '';
-  const cause = text.lastIndexOf(CAUSE);
-  const last = cause < 0 ? text : text.slice(cause + CAUSE.length);
-  return (DECORATED.exec(last)?.[1] ?? last).trim();
-}
+const NATIVE_FAILURES: Record<ExportErrorCode, string> = {
+  gate: "This ride isn't ready to export yet.",
+  changed: 'This ride changed while it was exporting. Export it again.',
+  deleted: "This ride no longer exists, so it can't be exported.",
+  cursor: 'The export lost its place in the ride. Export it again.',
+  limit: 'The ride is too large for a FIT file.',
+  noRecords: 'This ride has no recorded data to export.',
+  cancelled: 'The export was cancelled.',
+  sink: FAILURES.sink,
+  unsupported: 'Install the current Power Log build to export rides.',
+  page: FAILURES.page,
+};
 
 function exportFailure(error: unknown, site: CallSite): ExportError {
   if (error instanceof ExportError) return error;
   const code: unknown = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-  const message = nativeMessage(error);
   if ((EXPORT_ERROR_CODES as readonly unknown[]).includes(code))
-    return new ExportError(code as ExportErrorCode, message || FAILURES[site]);
-  return new ExportError(site, message ? `${FAILURES[site]} ${message}` : FAILURES[site]);
+    return new ExportError(code as ExportErrorCode, NATIVE_FAILURES[code as ExportErrorCode]);
+  const failure = presentFailure(error);
+  return new ExportError(site, failure.code === 'unknown' ? FAILURES[site] : `${FAILURES[site]} ${failure.text}`);
 }
 
-async function call<T>(site: CallSite, operation: (native: CycBridge) => Promise<T>): Promise<T> {
+async function call<T>(site: CallSite, operation: (native: PowerLogBridge) => Promise<T>): Promise<T> {
   if (!bridge) throw new ExportError('unsupported', 'Install the current Power Log build to export rides.');
   try {
     return await operation(bridge);
@@ -68,7 +70,7 @@ const source: ExportSource = {
 
 function nativeSink(id: string): ExportSink {
   let previous: Promise<unknown> = Promise.resolve();
-  const queued = <T>(operation: (native: CycBridge) => Promise<T>): Promise<T> => {
+  const queued = <T>(operation: (native: PowerLogBridge) => Promise<T>): Promise<T> => {
     const next = previous.then(() => call('sink', operation));
     previous = next.catch(() => undefined);
     return next;

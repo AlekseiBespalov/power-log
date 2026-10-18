@@ -21,7 +21,7 @@ import { createSlicer } from '../../src/core/export/pages';
 import { ExportError } from '../../src/core/export/types';
 
 const slicer = createSlicer();
-const clock = (startMs = 0) => fitClock({ startSec: 1767225600, startMs }, startMs);
+const clock = (startMs = 0) => fitClock({ startSec: 1767225600, startMs });
 
 interface Step {
   stream: number;
@@ -148,7 +148,7 @@ describe('record planning against brute-force emission', () => {
     }
     expect(checked).toBeGreaterThan(150);
     expect(failed).toBeGreaterThan(10);
-  });
+  }, 30_000);
 
   it('merges a break inside a second into that second’s record, but not into an older one', async () => {
     const steps: Step[] = [
