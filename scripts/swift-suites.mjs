@@ -193,6 +193,7 @@ export const swiftUnits = [
     ],
     {
       main: 'tests/lab-apple/sdk-bootstrap/main.swift',
+      framework: 'host',
       command: () => ['sh', 'scripts/test-apple-sdk-bootstrap.sh'],
     },
   ),

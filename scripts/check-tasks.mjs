@@ -210,6 +210,7 @@ export function checkTasks({ root, env = process.env }) {
     }),
     task('js:generated', 'Checked-in Kotlin/JS output matches its recorded inputs', {
       groups: ['check', 'core'],
+      needs: ['deps'],
       inputs: [
         'shared/src/commonMain/**',
         'shared/src/jsMain/**',

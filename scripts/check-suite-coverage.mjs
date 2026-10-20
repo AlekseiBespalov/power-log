@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +10,7 @@ export function swiftSuiteInventory(root = '.') {
     'tests/lab-apple',
   ];
   return directories
+    .filter(directory => existsSync(resolve(root, directory)))
     .flatMap(directory =>
       readdirSync(resolve(root, directory), { recursive: true })
         .filter(

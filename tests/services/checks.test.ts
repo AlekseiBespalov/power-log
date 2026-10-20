@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runChecks } from '../../scripts/checks.mjs';
 import { checkTasks } from '../../scripts/check-tasks.mjs';
-import { gateSwiftCoverage } from '../../scripts/check-suite-coverage.mjs';
+import { gateSwiftCoverage, swiftSuiteInventory } from '../../scripts/check-suite-coverage.mjs';
 import { checkBundle, releaseText } from '../../scripts/check-apple-release-surface.mjs';
 import { checkTestResults } from '../../shared/scripts/check-test-results.mjs';
 
@@ -217,6 +217,14 @@ describe('gate checkers', () => {
     expect(gateSwiftCoverage([check('swift:a', { entrypoints: [inventory[0]!] })], inventory)).toEqual([
       'modules/power-log-bridge/ios/Tests/B/main.swift has no gate check',
     ]);
+  });
+
+  it('inventories a clean checkout without empty test directories', () => {
+    const root = temporary();
+    const suite = 'modules/power-log-bridge/ios/Tests/A/main.swift';
+    write(join(root, suite), '');
+    expect(swiftSuiteInventory(root)).toEqual([suite]);
+    expect(gateSwiftCoverage([], swiftSuiteInventory(root))).toEqual([`${suite} has no gate check`]);
   });
 
   it('rejects Lab code in a shipping Apple bundle and in release branches of Lab conditionals', () => {
