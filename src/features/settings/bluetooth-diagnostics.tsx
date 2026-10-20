@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { Link } from 'expo-router';
-import { Button, colors, type } from '../../components/ui';
+import { Button, colors, type, lineHeight, MIN_TOUCH_TARGET } from '../../components/ui';
 import { APP_VERSION } from '../../core/app-info';
 import type { BluetoothTraceStatus } from '../../core/bluetooth-diagnostics';
 import { deviceAdapter } from '../../services/device';
@@ -117,7 +117,16 @@ export function BluetoothDiagnosticsControls() {
           {state?.eventCount ? 'New capture' : 'Start capture'}
         </Button>
       )}
-      <Link href="/" style={{ color: colors.accent, fontSize: type.body, paddingVertical: 12 }}>
+      <Link
+        href="/"
+        style={{
+          color: colors.accent,
+          fontSize: type.body,
+          lineHeight: lineHeight.body,
+          paddingVertical: 12,
+          minHeight: MIN_TOUCH_TARGET,
+        }}
+      >
         Back to ride
       </Link>
       <View style={{ flexDirection: 'row', gap: 12 }}>
