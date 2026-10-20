@@ -8,6 +8,15 @@ function native() {
 }
 export const deviceAdapter: TelemetryAdapter = {
   kind: bridge ? 'native' : 'unavailable',
+  bluetoothDiagnostics: bridge
+    ? {
+        getBluetoothTrace: () => native().getBluetoothTrace(),
+        startBluetoothTrace: () => native().startBluetoothTrace(),
+        stopBluetoothTrace: () => native().stopBluetoothTrace(),
+        clearBluetoothTrace: () => native().clearBluetoothTrace(),
+        readBluetoothTrace: () => native().readBluetoothTrace(),
+      }
+    : undefined,
   subscribe(events) {
     if (!bridge) return () => {};
     const unsubscribeClock = subscribeNativeClock();

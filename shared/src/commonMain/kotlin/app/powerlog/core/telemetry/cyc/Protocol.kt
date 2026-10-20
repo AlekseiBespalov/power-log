@@ -67,7 +67,9 @@ object CycProtocol {
             CycField(TelemetryMetric.raceMode, 24, 1, 1.0, false),
             CycField(TelemetryMetric.assistLevel, 25, 1, 1.0, false),
         )
-    private val identityPattern = Regex("X(6|12)([A-Za-z_][A-Za-z0-9_]{0,29})? +[0-9]{6,8}[A-Z]{0,8}")
+    private val modelPattern = Regex("[Xx](6|12)([A-Za-z_.+-][A-Za-z0-9_.+-]{0,29})?")
+    private val firmwarePattern = Regex("[A-Za-z0-9][A-Za-z0-9_.+-]{0,31}")
+    private val identityPattern = Regex("(${modelPattern.pattern}) +(${firmwarePattern.pattern})")
     private val protocolPattern = Regex("(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})")
     internal var identityCheckObserverForTesting: (() -> Unit)? = null
 
@@ -79,9 +81,8 @@ object CycProtocol {
     ): ControllerIdentity {
         identityCheckObserverForTesting?.invoke()
         if (
-            !identityPattern.matches("$controllerModel $firmwareLabel") ||
-                controllerModel.contains(' ') ||
-                firmwareLabel.contains(' ') ||
+            !modelPattern.matches(controllerModel) ||
+                !firmwarePattern.matches(firmwareLabel) ||
                 !protocolPattern.matches(controllerProtocol)
         )
             throw CycException(CycRejection.identity)
@@ -179,9 +180,21 @@ object CycProtocol {
                 .takeWhile { (it.toInt() and 255) in 0x20..0x7e }
                 .map { (it.toInt() and 255).toChar() }
                 .joinToString("")
-        val prefix = identityPattern.find(ascii)?.takeIf { it.range.first == 0 }?.value ?: reject()
-        val boundary = 3 + prefix.length
-        if (boundary != end && payload[boundary] != 0x20.toByte()) reject()
+        val modelEnd = ascii.indexOf(' ').takeIf { it > 0 } ?: reject()
+        val firmwareStart = (modelEnd until ascii.length).firstOrNull { ascii[it] != ' ' } ?: reject()
+        // A blank padded firmware field must not promote private serial bytes into the public label.
+        if (modelEnd < 10 && firmwareStart > 10) reject()
+        val firmwareEnd = ascii.indexOf(' ', firmwareStart).takeIf { it >= 0 } ?: ascii.length
+        // CYC app_control.c concatenates HW_NAME and the private serial without adding a separator:
+        // https://github.com/CYC-MOTOR/CYC-firmware/blob/d97bb381d11a7f7a0d2d93f2fc1612887ba59bc1/bldc-release_5_03-controller%20v2.7z
+        // Inspected X12 builds use ten bytes for the padded model and ten for the firmware label, including MX/UL.
+        // Require padding beyond a single separator so a compact nine-character variant keeps its whole label.
+        val fixedHeader = modelEnd < 9 && firmwareStart == 10 && firmwareEnd >= 20
+        val publicEnd = if (fixedHeader) 20 else firmwareEnd
+        val prefix = ascii.substring(0, publicEnd)
+        if (!identityPattern.matches(prefix)) reject()
+        val boundary = 3 + publicEnd
+        if (!fixedHeader && boundary != end && payload[boundary] != 0x20.toByte()) reject()
         val parts = prefix.split(' ').filter { it.isNotEmpty() }
         return restoreIdentity(parts[0], parts[1], "${payload[1].toInt() and 255}.${payload[2].toInt() and 255}")
     }

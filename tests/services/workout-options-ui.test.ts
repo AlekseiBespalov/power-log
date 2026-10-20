@@ -19,6 +19,8 @@ import { RideActionBar, RideControlsProvider, RideStatus } from '../../src/featu
 import { ConnectionSettings } from '../../src/features/dashboard/connection-settings';
 import { DashboardScreen } from '../../src/features/dashboard/dashboard-screen';
 import { WorkoutActions, type WorkoutActionFlight } from '../../src/services/workout-actions';
+vi.mock('../../src/services/device', () => ({ deviceAdapter: {} }));
+vi.mock('../../src/services/files', () => ({}));
 
 // Static renders retain hook cells only for tests that drive captured button handlers.
 const localState = vi.hoisted(() => ({

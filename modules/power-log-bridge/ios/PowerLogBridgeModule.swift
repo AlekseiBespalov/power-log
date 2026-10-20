@@ -213,6 +213,11 @@ public final class PowerLogBridgeModule: Module {
 
     AsyncFunction("getState") { () -> [String: Any] in engine.state() }.runOnQueue(engine.queue)
     AsyncFunction("getDiagnostics") { () -> [String: Any] in engine.diagnostics() }.runOnQueue(engine.queue)
+    AsyncFunction("getBluetoothTrace") { () -> [String: Any] in engine.bluetoothTraceState() }.runOnQueue(engine.queue)
+    AsyncFunction("startBluetoothTrace") { engine.startBluetoothTrace() }.runOnQueue(engine.queue)
+    AsyncFunction("stopBluetoothTrace") { engine.stopBluetoothTrace() }.runOnQueue(engine.queue)
+    AsyncFunction("clearBluetoothTrace") { engine.clearBluetoothTrace() }.runOnQueue(engine.queue)
+    AsyncFunction("readBluetoothTrace") { () -> String in engine.readBluetoothTrace() }.runOnQueue(engine.queue)
     AsyncFunction("startScan") { () throws in try bridged(stage: "bike") { try engine.startScan() } }.runOnQueue(
       engine.queue)
     AsyncFunction("stopScan") { () in engine.stopScan() }.runOnQueue(engine.queue)

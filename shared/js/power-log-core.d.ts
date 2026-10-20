@@ -763,6 +763,35 @@ export declare namespace AnalyticsHeartRateOrigins {
 }
 export declare function analyticsCollectionAvailable(collectionUs: string): boolean;
 export declare function distanceResolveAtStart(selection: string, recordGPS: boolean, indoor: boolean): string;
+export declare class BluetoothTrace {
+    constructor();
+    start(now: number): void;
+    stop(): void;
+    clear(): void;
+    record(now: number, event: string, detail: string, bytes: Nullable<Int8Array>): void;
+    status(now: number): BluetoothTraceStatus;
+    exportJson(now: number): string;
+}
+export declare namespace BluetoothTrace {
+    /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
+    namespace $metadata$ {
+        const constructor: abstract new () => BluetoothTrace;
+    }
+}
+export declare class BluetoothTraceStatus {
+    private constructor();
+    get capturing(): boolean;
+    get eventCount(): number;
+    get byteCount(): number;
+    get stopReason(): Nullable<string>;
+    get lastEvent(): Nullable<string>;
+}
+export declare namespace BluetoothTraceStatus {
+    /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
+    namespace $metadata$ {
+        const constructor: abstract new () => BluetoothTraceStatus;
+    }
+}
 export declare class CoreExportColumn {
     private constructor();
     get name(): string;

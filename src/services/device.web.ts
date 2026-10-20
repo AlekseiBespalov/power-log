@@ -1,4 +1,5 @@
 import {
+  BluetoothTrace,
   controllerProtocol,
   TelemetryDiscoveryWindow,
   TelemetryTransportSession,
@@ -66,6 +67,29 @@ const connectionErrorText = (error: unknown) =>
 
 export class BrowserAdapter implements TelemetryAdapter {
   readonly kind = 'web' as const;
+  private readonly bluetoothTrace = new BluetoothTrace();
+  readonly bluetoothDiagnostics = {
+    getBluetoothTrace: async () => {
+      const state = this.bluetoothTrace.status(this.now());
+      return {
+        capturing: state.capturing,
+        eventCount: state.eventCount,
+        byteCount: state.byteCount,
+        stopReason: state.stopReason ?? null,
+        lastEvent: state.lastEvent ?? null,
+      };
+    },
+    startBluetoothTrace: async () => {
+      this.bluetoothTrace.start(this.now());
+      this.trace('capture_started', `platform=web; status=${this.state.status}; requests=111,50`);
+    },
+    stopBluetoothTrace: async () => this.bluetoothTrace.stop(),
+    clearBluetoothTrace: async () => this.bluetoothTrace.clear(),
+    readBluetoothTrace: async () => this.bluetoothTrace.exportJson(this.now()),
+  };
+  private trace(event: string, detail: string, bytes: Int8Array | null = null) {
+    this.bluetoothTrace.record(this.now(), event, detail, bytes);
+  }
   private state = idleState();
   private connectionEpoch?: string;
   private listeners = new Set<AdapterEvents>();
@@ -98,11 +122,13 @@ export class BrowserAdapter implements TelemetryAdapter {
       throw new Error('Finish the ride before changing its bike.');
   }
   private update(patch: Partial<NativeState>) {
+    if (patch.status || patch.error) this.trace('state', `${patch.status ?? this.state.status}; ${patch.error ?? ''}`);
     if (patch.status === 'connected' && this.state.status !== 'connected') this.connectionEpoch = crypto.randomUUID();
     this.state = { ...this.state, ...patch };
     this.listeners.forEach(listener => listener.state({ ...this.state }));
   }
   private discovered(device: Device) {
+    this.trace('discovered', `name=${device.name}; rssi=${device.rssi}`);
     this.listeners.forEach(listener => listener.device(device));
   }
   private publish(sample: TelemetrySample, acquiredAt: number) {
@@ -271,7 +297,13 @@ export class BrowserAdapter implements TelemetryAdapter {
     if (!this.current(connection) || event.target !== connection.reader) return;
     const pending = connection.pending;
     const view = connection.reader?.value;
-    if (!pending || !view) return;
+    if (!view) return;
+    this.trace(
+      'notification',
+      `characteristic=${UART_NOTIFY}; request=${pending?.kind ?? 'none'}`,
+      new Int8Array(view.buffer, view.byteOffset, view.byteLength),
+    );
+    if (!pending) return;
     if (view.byteLength > MAX_NOTIFICATION_BYTES) {
       this.failed(connection, new ConnectionError('Bike reply exceeds the supported size.'));
       return;
@@ -285,6 +317,13 @@ export class BrowserAdapter implements TelemetryAdapter {
       pending.sentAt,
       acquiredAt,
     );
+    this.trace(
+      'decoder',
+      `action=${decision.action}; discardedBytes=${decision.discardedBytes}; pendingBytes=${decision.pendingBytes}`,
+    );
+    for (const reply of decision.replies) {
+      if (reply.rejectionReason) this.trace('rejected', `request=${reply.kind}; reason=${reply.rejectionReason}`);
+    }
     if (decision.action === 'replyAccepted') {
       const reply = decision.replies[0]!;
       pending.received = true;
@@ -409,6 +448,11 @@ export class BrowserAdapter implements TelemetryAdapter {
     void deadline.catch(() => {});
     try {
       const bytes = new Uint8Array(this.transport.requestFrame(kind));
+      this.trace(
+        'write',
+        `request=${kind}; characteristic=${UART_WRITE}; withoutResponse=${writer.properties.writeWithoutResponse}`,
+        new Int8Array(bytes),
+      );
       const write = this.operation(connection, () =>
         writer.properties.writeWithoutResponse
           ? writer.writeValueWithoutResponse(bytes)
@@ -500,13 +544,22 @@ export class BrowserAdapter implements TelemetryAdapter {
       );
       this.advance(connection, 'connecting', 'services');
       const service = await this.setupStep(connection, () => server.getPrimaryService(UART_SERVICE));
+      this.trace('service', UART_SERVICE);
       this.advance(connection, 'services', 'characteristics');
       connection.writer = await this.setupStep(connection, () => service.getCharacteristic(UART_WRITE));
       const reader = await this.setupStep(connection, () => service.getCharacteristic(UART_NOTIFY));
       connection.reader = reader;
+      for (const characteristic of [connection.writer, reader]) {
+        const properties = characteristic.properties;
+        this.trace(
+          'characteristic',
+          `uuid=${characteristic.uuid}; read=${properties.read}; write=${properties.write}; writeWithoutResponse=${properties.writeWithoutResponse}; notify=${properties.notify}; indicate=${properties.indicate}`,
+        );
+      }
       this.advance(connection, 'characteristics', 'notifications');
       reader.addEventListener('characteristicvaluechanged', connection.onValue);
       await this.setupStep(connection, () => reader.startNotifications());
+      this.trace('subscription', `characteristic=${UART_NOTIFY}; enabled=true`);
       this.advance(connection, 'notifications', 'identity');
       const { reply } = await this.request(connection, 'identity');
       this.advance(connection, 'identity', 'ready');

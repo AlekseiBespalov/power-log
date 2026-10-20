@@ -3,6 +3,29 @@ import { defaultMonitorPreferences, monitorPreferencesJson, type MonitorPreferen
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 import { syntheticBike } from '../fixtures/browser-bike';
+import { readFile } from 'node:fs/promises';
+
+test('Bluetooth diagnostics require explicit capture and export and can be deleted', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/settings');
+  const panel = page.getByTestId('bluetooth-diagnostics');
+  await expect(panel.getByText('No capture', { exact: false })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Export log' })).toBeDisabled();
+  await panel.getByRole('button', { name: 'Start capture', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Stop capture' })).toBeEnabled();
+  await panel.getByRole('button', { name: 'Stop capture' }).click();
+  const download = page.waitForEvent('download');
+  await panel.getByRole('button', { name: 'Export log' }).click();
+  const file = await download;
+  const report = JSON.parse(await readFile((await file.path())!, 'utf8'));
+  expect(report.expectedContract.identityRequestHex).toBe('02016f9d4903');
+  expect(report.trace.capturing).toBe(false);
+  expect(report.trace.events[0].event).toBe('capture_started');
+  await panel.getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Start capture', exact: true })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Export log' })).toBeDisabled();
+  await page.screenshot({ path: 'test-results/bluetooth-diagnostics-settings.png', fullPage: true });
+});
 
 async function settingsLayout(page: Page) {
   return page.evaluate(() => {

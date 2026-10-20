@@ -50,6 +50,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   private var recoveryErrorMessage: String?
   private var storeError: String?
   private var diagnosticLog: TelemetryDiagnosticLog?
+  private let bluetoothTrace = BluetoothTrace()
   private var diagnosticMetrics = TelemetryDiagnosticMetrics()
   private let diagnosticStarted = ProcessInfo.processInfo.systemUptime
   private var notificationErrors = 0
@@ -134,6 +135,29 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     ]
   }
 
+  func bluetoothTraceState() -> [String: Any] {
+    let state = bluetoothTrace.status(now: now)
+    return [
+      "capturing": state.capturing, "eventCount": state.eventCount, "byteCount": state.byteCount,
+      "stopReason": state.stopReason as Any? ?? NSNull(), "lastEvent": state.lastEvent as Any? ?? NSNull(),
+    ]
+  }
+
+  func startBluetoothTrace() {
+    bluetoothTrace.start(now: now)
+    trace("capture_started", "platform=ios; status=\(status); requests=111,50")
+  }
+
+  func stopBluetoothTrace() { bluetoothTrace.stop() }
+  func clearBluetoothTrace() { bluetoothTrace.clear() }
+  func readBluetoothTrace() -> String { bluetoothTrace.exportJson(now: now) }
+
+  private func trace(_ event: String, _ detail: String, bytes: Data? = nil) {
+    guard bluetoothTrace.status(now: now).capturing else { return }
+    bluetoothTrace.record(
+      now: now, event: event, detail: detail, bytes: bytes.map { WorkoutCoreCodec.bytes($0) })
+  }
+
   private func note(
     _ event: TelemetryDiagnosticEvent, reason: TelemetryDiagnosticReason? = nil, error: Error? = nil,
     fields: [String: Any] = [:]
@@ -156,6 +180,10 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     if let reason { data["reason"] = reason.rawValue }
     data.merge(TelemetryDiagnosticLog.errorFields(error)) { _, value in value }
     data.merge(fields) { _, value in value }
+    trace(
+      event.rawValue,
+      "stage=\(connectionAttempt.stage.name); reason=\(reason?.rawValue ?? "none"); "
+        + "rejection=\(fields["rejection"] ?? "none"); error=\((error as NSError?)?.code ?? 0)")
     diagnosticLog?.append(event, elapsedSeconds: max(0, current - diagnosticStarted), fields: data)
   }
 
@@ -638,6 +666,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     let sent = now
     pending = (request, sent)
     nextPoll = sent + 1 / hz
+    trace("write", "request=\(request.name); characteristic=\(writer.uuid.uuidString); withoutResponse", bytes: frame)
     selected.writeValue(frame, for: writer, type: .withoutResponse)
   }
 
@@ -700,6 +729,10 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
         || name.uppercased().contains("X12")
     else { return }
     devices[peripheral.identifier] = peripheral
+    trace(
+      "advertisement",
+      "name=\(name); rssi=\(RSSI); services=\(services.map { $0.uuidString }.joined(separator: ","))",
+      bytes: advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data)
     deviceRSSI[peripheral.identifier] = RSSI.intValue
     emitDevice(peripheral, name: name)
   }
@@ -734,7 +767,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     diagnosticMetrics.connected(at: now)
     note(.linkConnected)
     peripheral.delegate = self
-    peripheral.discoverServices([Self.uart])
+    peripheral.discoverServices(bluetoothTrace.status(now: now).capturing ? nil : [Self.uart])
   }
 
   func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -823,13 +856,20 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     guard peripheral === selected, peripheral.state == .connected, shouldConnect, reconnectDue == nil,
       connectionAttempt.stage == .services
     else { return }
+    for service in peripheral.services ?? [] {
+      trace("service", service.uuid.uuidString)
+      if bluetoothTrace.status(now: now).capturing && service.uuid != Self.uart {
+        peripheral.discoverCharacteristics(nil, for: service)
+      }
+    }
     guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == Self.uart }) else {
       discoveryFailed(peripheral, reason: .serviceDiscovery, error: error)
       return
     }
     guard advance(from: .services, to: .characteristics) else { return }
     note(.transportStage)
-    peripheral.discoverCharacteristics([Self.writeUUID, Self.notifyUUID], for: service)
+    peripheral.discoverCharacteristics(
+      bluetoothTrace.status(now: now).capturing ? nil : [Self.writeUUID, Self.notifyUUID], for: service)
   }
 
   func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
@@ -841,6 +881,14 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   }
 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+    if peripheral === selected {
+      for characteristic in service.characteristics ?? [] {
+        trace(
+          "characteristic",
+          "service=\(service.uuid.uuidString); uuid=\(characteristic.uuid.uuidString); "
+            + "properties=\(characteristic.properties.rawValue)")
+      }
+    }
     guard peripheral === selected, peripheral.state == .connected, shouldConnect, reconnectDue == nil,
       connectionAttempt.stage == .characteristics, service.uuid == Self.uart,
       peripheral.services?.contains(where: { $0 === service }) == true
@@ -885,6 +933,13 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
   func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
     defer { scheduleNextTick() }
+    if peripheral === selected {
+      trace(
+        "notification",
+        "characteristic=\(characteristic.uuid.uuidString); stage=\(connectionAttempt.stage.name); "
+          + "request=\(pending?.request.name ?? "none"); error=\((error as NSError?)?.code ?? 0)",
+        bytes: characteristic.value)
+    }
     guard peripheral === selected, peripheral.state == .connected, characteristic === notifier,
       shouldConnect, reconnectDue == nil, !connectionAttempt.cancellationPending,
       connectionAttempt.stage == .identity || connectionAttempt.stage == .ready
@@ -900,6 +955,10 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     let decision = try! session.receive(
       data, generation: connectionAttempt.generation, request: outstanding.request, sentAt: outstanding.sent,
       now: current)
+    trace(
+      "decoder",
+      "action=\(decision.action.name); discardedBytes=\(decision.discardedBytes); pendingBytes=\(decision.pendingBytes)"
+    )
     if decision.action == .replyrejected, let rejection = decision.replies.first as? ControllerRejectedReply {
       note(.transportError, fields: ["rejection": rejection.reason])
       fail(

@@ -1194,6 +1194,23 @@ private constructor(
                     val batch = LifecycleCapture.committed(captureBatch, attempted, true).batch
                     val ack = batch.fault?.let { LifecycleStorage.acknowledged(next, batch, it.faultId, true) }
                     if (ack != null) store.persistStorage(ack.state, ack.batch)
+                    if (preview && rows.isNotEmpty()) {
+                        val cutoff = rows.last().second.time - 60.0
+                        val removed =
+                            store.writableDatabase.delete(
+                                "observations",
+                                "ride=? AND time<?",
+                                arrayOf(live, cutoff.toString()),
+                            )
+                        if (removed > 0) {
+                            store.writableDatabase.delete(
+                                "distance_intervals",
+                                "ride=? AND end_us<?",
+                                arrayOf(live, elapsedUs(cutoff).toString()),
+                            )
+                            store.analytics.trimBefore(live, cutoff)
+                        }
+                    }
                     rows
                 }
             } catch (error: Exception) {
@@ -1208,19 +1225,6 @@ private constructor(
             adoptLifecycle(ack.state)
         } else adoptLifecycle(next)
         pending.clear()
-        if (preview && committed.isNotEmpty()) {
-            val cutoff = committed.last().second.time - 60.0
-            store.transaction {
-                store.writableDatabase.delete("observations", "ride=? AND time<?", arrayOf(live, cutoff.toString()))
-                store.writableDatabase.delete(
-                    "distance_intervals",
-                    "ride=? AND end_us<?",
-                    arrayOf(live, elapsedUs(cutoff).toString()),
-                )
-                store.writableDatabase.delete("analytics", "ride=?", arrayOf(live))
-                store.writableDatabase.delete("analytics_plot_blocks", "ride=?", arrayOf(live))
-            }
-        }
         committed.forEach { (row, p, metrics) ->
             p.telemetry?.let { (if (preview) previewCapture else telemetryCapture).committed(it) }
             monitor.committedLiveObservation(p.ride, row, p.acquiredAt, metrics)

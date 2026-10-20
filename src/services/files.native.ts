@@ -84,3 +84,21 @@ export async function shareExport(uri: string): Promise<void> {
   if (Platform.OS === 'android' && bridge?.shareFile) await bridge.shareFile(uri);
   else await Share.share({ url: uri });
 }
+
+// Kept under the existing, restricted export FileProvider root on Android.
+function diagnosticFile(): File {
+  return new File(Paths.document, 'exports', 'bluetooth-diagnostics', 'PowerLog-Bluetooth.json');
+}
+
+export async function shareDiagnosticLog(text: string): Promise<void> {
+  const directory = new Directory(Paths.document, 'exports', 'bluetooth-diagnostics');
+  directory.create({ intermediates: true, idempotent: true });
+  const file = diagnosticFile();
+  file.write(text);
+  await shareExport(file.uri);
+}
+
+export async function deleteDiagnosticLog(): Promise<void> {
+  const file = diagnosticFile();
+  if (file.exists) file.delete();
+}

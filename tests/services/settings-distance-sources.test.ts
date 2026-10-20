@@ -13,6 +13,8 @@ vi.mock('../../src/components/ui', () => ({}));
 vi.mock('../../src/services/monitor-preferences', () => ({}));
 vi.mock('../../src/services/workout-context', () => ({}));
 vi.mock('../../src/services/workouts', () => ({}));
+vi.mock('../../src/services/device', () => ({ deviceAdapter: {} }));
+vi.mock('../../src/services/files', () => ({}));
 
 describe('settings distance sources', () => {
   it('offers browser GPS alongside Auto and controller distance', () => {

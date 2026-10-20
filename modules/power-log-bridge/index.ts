@@ -1,4 +1,5 @@
 import type { CatalogRequest } from '../../src/core/catalog';
+import type { BluetoothTraceStatus } from '../../src/core/bluetooth-diagnostics';
 import { requireOptionalNativeModule, NativeModule } from 'expo-modules-core';
 import type {
   ConnectionDiagnostics,
@@ -82,6 +83,11 @@ export declare class PowerLogBridge extends NativeModule<Events> {
   cancelMonitorRead?(cancellationId: string): Promise<void>;
   getState(): Promise<NativeState>;
   getDiagnostics(): Promise<ConnectionDiagnostics>;
+  getBluetoothTrace(): Promise<BluetoothTraceStatus>;
+  startBluetoothTrace(): Promise<void>;
+  stopBluetoothTrace(): Promise<void>;
+  clearBluetoothTrace(): Promise<void>;
+  readBluetoothTrace(): Promise<string>;
   startScan(): Promise<void>;
   stopScan(): Promise<void>;
   connect(options: ConnectionOptions): Promise<void>;

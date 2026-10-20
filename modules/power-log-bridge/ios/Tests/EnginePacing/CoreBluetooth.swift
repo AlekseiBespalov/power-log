@@ -13,11 +13,13 @@ public let CBConnectPeripheralOptionEnableAutoReconnect = "reconnect"
 public let CBAdvertisementDataLocalNameKey = "name"
 public let CBAdvertisementDataServiceUUIDsKey = "services"
 public let CBAdvertisementDataOverflowServiceUUIDsKey = "overflow"
+public let CBAdvertisementDataManufacturerDataKey = "manufacturer"
 public let CBCentralManagerRestoredStatePeripheralsKey = "peripherals"
 
 public final class CBUUID: NSObject {
   private let value: String
   public init(string: String) { value = string }
+  public var uuidString: String { value }
   public override func isEqual(_ object: Any?) -> Bool { (object as? CBUUID)?.value == value }
   public override var hash: Int { value.hashValue }
 }
@@ -62,8 +64,8 @@ public final class CBPeripheral {
   public func writeValue(_ data: Data, for characteristic: CBCharacteristic, type: CBCharacteristicWriteType) {
     onWrite?(data)
   }
-  public func discoverServices(_ services: [CBUUID]) {}
-  public func discoverCharacteristics(_ characteristics: [CBUUID], for service: CBService) {}
+  public func discoverServices(_ services: [CBUUID]?) {}
+  public func discoverCharacteristics(_ characteristics: [CBUUID]?, for service: CBService) {}
   public func setNotifyValue(_ enabled: Bool, for characteristic: CBCharacteristic) {}
 }
 

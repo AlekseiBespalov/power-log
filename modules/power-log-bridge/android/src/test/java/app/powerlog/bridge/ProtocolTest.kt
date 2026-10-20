@@ -18,6 +18,31 @@ class ProtocolTest {
     private fun bytes(hex: String) = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     @Test
+    fun explicitTraceRetainsRejectedIdentityThroughGattWithoutAdmittingReadings() {
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val readings = mutableListOf<TelemetryReading>()
+        ControllerAdapterFixture(handler, readings::add).use { adapter ->
+            adapter.bluetooth.startBluetoothTrace()
+            val malformed = byteArrayOf(111, 5, 3, 88, 49, 0)
+            adapter.identity(malformed)
+            adapter.bluetooth.stopBluetoothTrace()
+            val report = JSONObject(adapter.bluetooth.readBluetoothTrace())
+            val events = report.getJSONArray("events")
+            val rows = (0 until events.length()).map { events.getJSONObject(it) }
+            assertTrue(
+                rows.any { it.getString("event") == "notification" && it.getString("hex").contains("6f0503583100") }
+            )
+            assertTrue(
+                rows.any { it.getString("event") == "rejected" && it.getString("detail").contains("reason=identity") }
+            )
+            assertTrue(readings.isEmpty())
+            assertEquals("error", adapter.bluetooth.state["status"])
+            adapter.bluetooth.clearBluetoothTrace()
+            assertEquals(0, JSONObject(adapter.bluetooth.readBluetoothTrace()).getJSONArray("events").length())
+        }
+    }
+
+    @Test
     fun contractIdentityAndSignedMetricsUseGattCallbacksAndTheSession() {
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         val identities = telemetryFixture("cyc/identity").getJSONArray("cases")

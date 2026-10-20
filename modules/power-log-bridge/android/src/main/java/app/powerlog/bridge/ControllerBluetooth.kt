@@ -31,6 +31,7 @@ internal class ControllerBluetooth(
 ) {
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val session = TelemetrySession(CycControllerDecoder())
+    private val bluetoothTrace = BluetoothTrace()
     private var gatt: BluetoothGatt? = null
     private var established = false
     private var writer: BluetoothGattCharacteristic? = null
@@ -95,6 +96,31 @@ internal class ControllerBluetooth(
 
     private fun now() = SystemClock.elapsedRealtime() / 1000.0
 
+    fun bluetoothTraceState(): Payload {
+        val state = bluetoothTrace.status(now())
+        return mapOf(
+            "capturing" to state.capturing,
+            "eventCount" to state.eventCount,
+            "byteCount" to state.byteCount,
+            "stopReason" to state.stopReason,
+            "lastEvent" to state.lastEvent,
+        )
+    }
+
+    fun startBluetoothTrace() {
+        bluetoothTrace.start(now())
+        trace("capture_started", "platform=android; status=${state["status"]}; requests=111,50")
+    }
+
+    fun stopBluetoothTrace() = bluetoothTrace.stop()
+
+    fun clearBluetoothTrace() = bluetoothTrace.clear()
+
+    fun readBluetoothTrace(): String = bluetoothTrace.exportJson(now())
+
+    private fun trace(event: String, detail: String, bytes: ByteArray? = null) =
+        bluetoothTrace.record(now(), event, detail, bytes)
+
     fun setHz(value: Int) {
         BridgeInputs.sampleHz(value)
         nextPollAt =
@@ -124,6 +150,11 @@ internal class ControllerBluetooth(
                         )
                             return@post
                         val device = result.device
+                        trace(
+                            "advertisement",
+                            "name=${result.scanRecord?.deviceName}; rssi=${result.rssi}; services=${result.scanRecord?.serviceUuids}",
+                            result.scanRecord?.bytes,
+                        )
                         devices[device.address] = device
                         emit(
                             "onDevice",
@@ -285,6 +316,15 @@ internal class ControllerBluetooth(
 
                         override fun onServicesDiscovered(connection: BluetoothGatt, status: Int) =
                             event(connection) {
+                                for (service in connection.services) {
+                                    trace("service", service.uuid.toString())
+                                    for (characteristic in service.characteristics) {
+                                        trace(
+                                            "characteristic",
+                                            "service=${service.uuid}; uuid=${characteristic.uuid}; properties=${characteristic.properties}",
+                                        )
+                                    }
+                                }
                                 if (session.state.stage != TelemetryStage.services) return@event
                                 if (status != BluetoothGatt.GATT_SUCCESS) {
                                     failed("Bike service discovery failed ($status).")
@@ -386,6 +426,8 @@ internal class ControllerBluetooth(
     }
 
     private fun handle(action: TelemetryTransportAction): Boolean {
+        if (action != TelemetryTransportAction.none)
+            trace("transport", "action=${action.name}; stage=${session.state.stage.name}")
         val message =
             when (action) {
                 TelemetryTransportAction.attemptTimeout -> "Controller connection or identity handshake timed out."
@@ -422,6 +464,7 @@ internal class ControllerBluetooth(
             else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         try {
             val bytes = session.request(read)
+            trace("write", "request=${read.name}; characteristic=${characteristic.uuid}; writeType=$type", bytes)
             val owner = ControllerRequestOwnership(session.state.generation, read, sentAt)
             // A notification can arrive before the native write call returns.
             requestOwnership = owner
@@ -453,9 +496,22 @@ internal class ControllerBluetooth(
     }
 
     private fun receive(bytes: ByteArray, receipt: RecordingClockReading, owner: ControllerRequestOwnership?) {
+        trace(
+            "notification",
+            "characteristic=${ControllerGatt.NOTIFY}; stage=${session.state.stage.name}; request=${owner?.role?.name}",
+            bytes,
+        )
         if (owner == null || owner !== requestOwnership) return
         val receivedAt = receipt.monotonicMillis
         val decision = session.notifications(owner.generation, owner.role, bytes, owner.sentAt, receivedAt / 1000.0)
+        trace(
+            "decoder",
+            "action=${decision.action.name}; discardedBytes=${decision.discardedBytes}; pendingBytes=${decision.pendingBytes}",
+        )
+        for (reply in decision.replies.filterIsInstance<ControllerRejectedReply>()) trace(
+            "rejected",
+            "request=${reply.kind.name}; reason=${reply.reason}",
+        )
         if (handle(decision.action)) return
         if (decision.action != TelemetryTransportAction.replyAccepted) return
         requestOwnership = null
@@ -505,6 +561,7 @@ internal class ControllerBluetooth(
     }
 
     private fun failed(message: String, peer: Boolean = false, terminal: Boolean = false) {
+        trace("error", message)
         val at = now()
         if (!established) {
             gatt?.let(::release)

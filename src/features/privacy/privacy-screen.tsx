@@ -44,9 +44,9 @@ export function PrivacyPolicy() {
         </Body>
         <Body>
           iPhone and Android keep recorded rides in local databases and pre-Start previews in bounded memory, settings
-          in app files, and temporary imports and exports in app storage. An exported file stays there for at least 24
-          hours so the app you share it with can read it; Power Log deletes it the next time it starts or exports after
-          that. iPhone also remembers the selected Bluetooth device and the identifiers, model and firmware of
+          in app files, and temporary imports and exports in app storage. An exported ride file stays there for at least
+          24 hours so the app you share it with can read it; Power Log deletes it the next time it starts or exports
+          after that. iPhone also remembers the selected Bluetooth device and the identifiers, model and firmware of
           controllers it has recognized (disconnecting does not clear that list), and keeps bounded connection logs.
           Apple Watch keeps recording settings and a bounded in-memory buffer of observations for its paired iPhone. The
           phone keeps the ride archive; interrupted rides retain only committed data. Native apps also write operational
@@ -74,6 +74,14 @@ export function PrivacyPolicy() {
           Bluetooth permission lets iPhone, Android or a compatible browser find and connect to your CYC controller.
           Power Log reads nearby device names and identifiers, then requests controller identity and measurements. It
           cannot change motor settings. Apple Watch receives bike measurements from iPhone.
+        </Body>
+        <Body>
+          Bluetooth diagnostics in Settings is an optional, temporary raw capture of Power Log’s own connection. It can
+          include device names, advertisements, services, requests and replies, including controller serial numbers. It
+          does not include GPS or Health records. Recording stops after two minutes or at its size limit; the capture
+          remains in memory until deleted or the app exits. Export log saves a separate JSON file and opens sharing or a
+          browser download. On phones, Clear also removes that local export copy; starting a new capture replaces it.
+          Copies you shared or downloaded remain where you saved them.
         </Body>
         <Body>
           Android asks for Nearby devices permission on newer versions. Older Android versions also require location

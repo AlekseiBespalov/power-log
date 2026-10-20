@@ -38,6 +38,9 @@ decision record; N labels are the analytics rules that tests cite.
 
 - **Only requests 111 (identity) and 50 (selective telemetry).** No drive, configuration, calibration, firmware,
   full-values or keepalive command, and no general Bluetooth write API.
+- **Raw Bluetooth diagnostics require an explicit capture.** Retain rejected packets before decoding in bounded,
+  temporary memory, separately from rides and routine connection logs. Export is a rider action with notice that raw
+  bytes can include serials. Diagnostic capture never bypasses ride admission or adds controller commands.
 - **C33, C35: names follow roles.** CYC appears only in its decoder, identity rules, GATT UUIDs and product labels. A
   new controller adds a decoder, fixtures and capabilities behind `ControllerProtocol`, registered in
   `TelemetryRestoration`; telemetry keeps requiring rider power and cadence until a controller lacks them.

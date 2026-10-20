@@ -229,6 +229,30 @@ class PowerLogBridgeModule internal constructor(private val engineProvider: (() 
         AsyncFunction("getDiagnostics") { promise: Promise ->
             submit(promise, "read") { engine.bluetooth.diagnostics() }
         }
+        AsyncFunction("getBluetoothTrace") { promise: Promise ->
+            submit(promise, "read") { engine.bluetooth.bluetoothTraceState() }
+        }
+        AsyncFunction("startBluetoothTrace") { promise: Promise ->
+            submit(promise, "read") {
+                engine.bluetooth.startBluetoothTrace()
+                null
+            }
+        }
+        AsyncFunction("stopBluetoothTrace") { promise: Promise ->
+            submit(promise, "read") {
+                engine.bluetooth.stopBluetoothTrace()
+                null
+            }
+        }
+        AsyncFunction("clearBluetoothTrace") { promise: Promise ->
+            submit(promise, "read") {
+                engine.bluetooth.clearBluetoothTrace()
+                null
+            }
+        }
+        AsyncFunction("readBluetoothTrace") { promise: Promise ->
+            submit(promise, "read") { engine.bluetooth.readBluetoothTrace() }
+        }
         AsyncFunction("startScan") { promise: Promise ->
             permissions(false, false, promise, "bike") {
                 engine.bluetooth.startScan()

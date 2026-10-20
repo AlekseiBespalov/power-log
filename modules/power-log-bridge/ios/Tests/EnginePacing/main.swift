@@ -139,6 +139,29 @@ let deadlinesURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath
   .appendingPathComponent("tests/fixtures/contract/telemetry/deadlines.json")
 let deadlines = try JSONSerialization.jsonObject(with: Data(contentsOf: deadlinesURL)) as! [String: Any]
 
+let traced = EngineHarness()
+try traced.engine.queue.sync {
+  traced.respond = false
+  traced.engine.startBluetoothTrace()
+  try traced.connect()
+  let rejected = framed([111, 5, 3] + Array("X1 20260618".utf8) + [0])
+  traced.notify(rejected.prefix(4))
+  traced.notify(rejected.dropFirst(4))
+  traced.engine.stopBluetoothTrace()
+  let report = try JSONSerialization.jsonObject(with: Data(traced.engine.readBluetoothTrace().utf8)) as! [String: Any]
+  let events = report["events"] as! [[String: Any]]
+  let hex = events.filter { $0["event"] as? String == "notification" }.map { $0["hex"] as! String }.joined()
+  check(hex == rejected.map { String(format: "%02x", $0) }.joined(), "trace preserves rejected raw fragments")
+  check(
+    events.contains { ($0["detail"] as? String)?.contains("rejection=identity") == true },
+    "trace records the identity rejection before disconnect")
+  check(traced.engine.state()["status"] as? String == "error", "diagnostics never bypass identity validation")
+  check(traced.sent.isEmpty, "a rejected identity cannot trigger telemetry reads")
+  traced.engine.clearBluetoothTrace()
+  check(traced.engine.bluetoothTraceState()["eventCount"] as? Int32 == 0, "clear deletes the raw capture")
+  try traced.finish()
+}
+
 let lateDiscovery = EngineHarness()
 try lateDiscovery.engine.queue.sync {
   CBCentralManager.peripherals = [lateDiscovery.peripheral]

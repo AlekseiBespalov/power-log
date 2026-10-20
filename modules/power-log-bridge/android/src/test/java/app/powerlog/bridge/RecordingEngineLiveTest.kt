@@ -22,6 +22,80 @@ import org.robolectric.shadows.ShadowSystemClock
 
 class RecordingEngineLiveTest : RecordingEngineTestBase() {
     @Test
+    fun liveSourceExposesPreviewNumbersAndPlotsAfterConnectingWithoutStartingARide() = command {
+        fun query(operation: MonitorOperation, options: Payload = emptyMap()): Payload =
+            engine.monitorQuery(
+                BridgeInputs.monitor(
+                    operation,
+                    mapOf("source" to "live", "generation" to 0, "metrics" to listOf("humanPowerW")) + options,
+                )
+            )
+        val before = query(MonitorOperation.Describe)
+        engine.connect(BridgeInputs.connect(mapOf("deviceId" to "02:00:00:00:00:01", "hz" to 2))) {}
+        val connected = query(MonitorOperation.Describe)
+        assertNotEquals(before["sourceId"], connected["sourceId"])
+        repeat(4) {
+            ShadowSystemClock.advanceBy(Duration.ofMillis(500))
+            telemetry(power = 0.0)
+            engine.flush()
+        }
+        val description = query(MonitorOperation.Describe)
+        assertTrue((description["availableMetrics"] as List<*>).contains("humanPowerW"))
+        val latest = query(MonitorOperation.Latest)
+        val point = (latest["points"] as Map<*, *>)["humanPowerW"] as Map<*, *>
+        assertEquals(0.0, point["value"])
+        assertNotNull((latest["liveAcquiredAt"] as Map<*, *>)["humanPowerW"])
+        val plot =
+            query(
+                MonitorOperation.Plot,
+                mapOf(
+                    "expectedRevision" to description["revision"],
+                    "startSeconds" to 0.0,
+                    "endSeconds" to 10.0,
+                    "buckets" to 100,
+                ),
+            )
+        assertEquals("ok", plot["status"])
+        assertFalse(((plot["series"] as Map<*, *>)["humanPowerW"] as List<*>).isEmpty())
+        assertEquals("idle", engine.state()["phase"])
+    }
+
+    @Test
+    fun previewPlotsKeepTheRecentWindowWhenOldSamplesAreTrimmed() = command {
+        val live = engine.source(MonitorTarget.Live)
+        repeat(80) { index ->
+            ShadowSystemClock.advanceBy(Duration.ofSeconds(5))
+            telemetry(power = if (index < 67) 900.0 else 100.0)
+            engine.flush()
+        }
+        assertEquals((340..400 step 5).map(Int::toDouble), times(live))
+        for (buckets in listOf(1, 100)) {
+            val plot =
+                engine.monitorQuery(
+                    BridgeInputs.monitor(
+                        MonitorOperation.Plot,
+                        mapOf(
+                            "source" to "live",
+                            "generation" to 0,
+                            "expectedRevision" to recordStore(live).revision(live).toString(),
+                            "metrics" to listOf("humanPowerW"),
+                            "startSeconds" to 0.0,
+                            "endSeconds" to 400.0,
+                            "buckets" to buckets,
+                        ),
+                    )
+                )
+            assertEquals("ok", plot["status"])
+            val points = ((plot["series"] as Map<*, *>)["humanPowerW"] as List<*>).map { it as Map<*, *> }
+            assertFalse(points.isEmpty())
+            assertTrue(points.all { (it["elapsedSeconds"] as Double) >= 340.0 })
+            assertTrue(points.all { it["value"] == 100.0 })
+            assertEquals(400.0, points.last()["elapsedSeconds"])
+        }
+        assertFalse(engine.store.exists(live))
+    }
+
+    @Test
     fun liveMonitorEvidenceWaitsForCommitAndDuplicateCaptureKeepsTheOriginal() = command {
         val id = start(true)
         val request =

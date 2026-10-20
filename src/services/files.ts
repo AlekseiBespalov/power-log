@@ -1,1 +1,1 @@
-export { importRecording, shareExport } from './files.native';
+export { importRecording, shareExport, shareDiagnosticLog, deleteDiagnosticLog } from './files.native';

@@ -6,6 +6,7 @@ import type {
   SampleDelivery,
   TelemetrySample,
 } from '../core/types';
+import type { BluetoothDiagnostics } from '../core/bluetooth-diagnostics';
 
 export interface AdapterEvents {
   device: (device: Device) => void;
@@ -14,6 +15,7 @@ export interface AdapterEvents {
 }
 export interface TelemetryAdapter {
   readonly kind: 'native' | 'web' | 'unavailable';
+  readonly bluetoothDiagnostics?: BluetoothDiagnostics;
   subscribe(events: AdapterEvents): () => void;
   getState(): Promise<NativeState>;
   getDiagnostics?(): Promise<ConnectionDiagnostics>;

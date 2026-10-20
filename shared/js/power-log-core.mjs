@@ -181,6 +181,8 @@ import {
   toInt5qdj874w69jh as toInt_0,
   toString1h6jjoch8cjt8 as toString_3,
   isLowSurrogateujxcv7hjn4ma as isLowSurrogate,
+  take2da4iy543adpz as take_1,
+  dropLastlqc2oyv04br0 as dropLast,
   listOfvhqybd2zx248 as listOf_0,
   defineProp3ur6h3slcvq4x as defineProp,
   toULongOrNullojoyxi0i9tgj as toULongOrNull,
@@ -189,7 +191,6 @@ import {
   reversed3umwqsxpi431x as reversed,
   get_lastIndex39yh45l433u1k as get_lastIndex_1,
   reversedizg98zf9rhv2 as reversed_0,
-  dropLastlqc2oyv04br0 as dropLast,
   get_lastIndexs7k9rno5ux20 as get_lastIndex_2,
   Char__plus_impl_qi7pgj12gj4qbkhmj1y as Char__plus_impl_qi7pgj,
   toULong266mnyksbttkw as toULong_0,
@@ -491,6 +492,8 @@ initMetadataForClass(sam$kotlin_Comparator$0_9, 'sam$kotlin_Comparator$0', VOID,
 initMetadataForObject(JsonCodec, 'JsonCodec');
 initMetadataForClass(ProtocolTimestamp, 'ProtocolTimestamp');
 initMetadataForObject(Timestamps, 'Timestamps');
+initMetadataForClass(BluetoothTraceStatus, 'BluetoothTraceStatus');
+initMetadataForClass(BluetoothTrace, 'BluetoothTrace', BluetoothTrace);
 initMetadataForClass(ControllerRequest, 'ControllerRequest', VOID, Enum);
 initMetadataForClass(ControllerDecodeResult, 'ControllerDecodeResult');
 initMetadataForClass(ControllerReply, 'ControllerReply');
@@ -567,6 +570,8 @@ initMetadataForClass(AnalyticsCoverage, 'AnalyticsCoverage');
 initMetadataForClass(AnalyticsEnergyOrigins, 'AnalyticsEnergyOrigins');
 initMetadataForClass(AnalyticsControllerKernel, 'AnalyticsControllerKernel', AnalyticsControllerKernel);
 initMetadataForClass(AnalyticsHeartRateOrigins, 'AnalyticsHeartRateOrigins');
+initMetadataForClass(BluetoothTrace_0, 'BluetoothTrace', BluetoothTrace_0);
+initMetadataForClass(BluetoothTraceStatus_0, 'BluetoothTraceStatus');
 initMetadataForClass(CoreExportColumn, 'CoreExportColumn');
 initMetadataForClass(CoreExportProjection, 'CoreExportProjection');
 initMetadataForClass(CoreExportField, 'CoreExportField');
@@ -20031,6 +20036,158 @@ function Timestamps_getInstance() {
     new Timestamps();
   return Timestamps_instance;
 }
+function BluetoothTraceStatus(capturing, eventCount, byteCount, stopReason, lastEvent) {
+  this.capturing_1 = capturing;
+  this.eventCount_1 = eventCount;
+  this.byteCount_1 = byteCount;
+  this.stopReason_1 = stopReason;
+  this.lastEvent_1 = lastEvent;
+}
+function BluetoothTrace$record$lambda(it) {
+  return padStart(toString_3(it & 255, 16), 2, _Char___init__impl__6a9atx(48));
+}
+function BluetoothTrace() {
+  var tmp = this;
+  // Inline function 'kotlin.collections.mutableListOf' call
+  tmp.entries_1 = ArrayList_init_$Create$_0();
+  this.started_1 = null;
+  this.capturing_1 = false;
+  this.byteCount_1 = 0;
+  this.stopReason_1 = null;
+  this.lastEvent_1 = null;
+}
+protoOf(BluetoothTrace).start_txuis4_k$ = function (now) {
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!isFinite(now)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  this.clear_j9egeb_k$();
+  this.started_1 = now;
+  this.capturing_1 = true;
+};
+protoOf(BluetoothTrace).stop_pnug4y_k$ = function () {
+  if (this.capturing_1)
+    this.stopReason_1 = 'manual';
+  this.capturing_1 = false;
+};
+protoOf(BluetoothTrace).clear_j9egeb_k$ = function () {
+  this.entries_1.clear_j9egeb_k$();
+  this.started_1 = null;
+  this.capturing_1 = false;
+  this.byteCount_1 = 0;
+  this.stopReason_1 = null;
+  this.lastEvent_1 = null;
+};
+protoOf(BluetoothTrace).status_tbdycs_k$ = function (now) {
+  var tmp;
+  if (this.capturing_1) {
+    var tmp_0;
+    if (!isFinite(now)) {
+      tmp_0 = true;
+    } else {
+      // Inline function 'kotlin.checkNotNull' call
+      var tmp0 = this.started_1;
+      var tmp$ret$1;
+      $l$block: {
+        // Inline function 'kotlin.checkNotNull' call
+        if (tmp0 == null) {
+          var message = 'Required value was null.';
+          throw IllegalStateException_init_$Create$(toString_0(message));
+        } else {
+          tmp$ret$1 = tmp0;
+          break $l$block;
+        }
+      }
+      tmp_0 = now - tmp$ret$1 >= 120;
+    }
+    tmp = tmp_0;
+  } else {
+    tmp = false;
+  }
+  if (tmp) {
+    this.capturing_1 = false;
+    this.stopReason_1 = 'timeLimit';
+  }
+  return new BluetoothTraceStatus(this.capturing_1, this.entries_1.get_size_woubt6_k$(), this.byteCount_1, this.stopReason_1, this.lastEvent_1);
+};
+protoOf(BluetoothTrace).record_92vt5q_k$ = function (now, event, detail, bytes) {
+  if (!this.status_tbdycs_k$(now).capturing_1)
+    return Unit_instance;
+  var captured = bytes == null ? null : take_1(bytes, 4096);
+  // Inline function 'kotlin.checkNotNull' call
+  var tmp0 = this.started_1;
+  var tmp$ret$1;
+  $l$block: {
+    // Inline function 'kotlin.checkNotNull' call
+    if (tmp0 == null) {
+      var message = 'Required value was null.';
+      throw IllegalStateException_init_$Create$(toString_0(message));
+    } else {
+      tmp$ret$1 = tmp0;
+      break $l$block;
+    }
+  }
+  // Inline function 'kotlin.comparisons.maxOf' call
+  var b = now - tmp$ret$1;
+  var tmp$ret$3 = Math.max(0.0, b);
+  var fields = linkedMapOf([to('elapsedSeconds', new Num(tmp$ret$3)), to('event', new Str(take_0(event, 64))), to('detail', new Str(take_0(detail, 2048)))]);
+  if (!(bytes == null)) {
+    var tmp2 = 'byteLength';
+    // Inline function 'kotlin.collections.set' call
+    var value = new Num(bytes.length);
+    fields.put_4fpzoq_k$(tmp2, value);
+    var tmp2_0 = 'capturedBytes';
+    // Inline function 'kotlin.checkNotNull' call
+    var tmp$ret$6;
+    $l$block_0: {
+      // Inline function 'kotlin.checkNotNull' call
+      if (captured == null) {
+        var message_0 = 'Required value was null.';
+        throw IllegalStateException_init_$Create$(toString_0(message_0));
+      } else {
+        tmp$ret$6 = captured;
+        break $l$block_0;
+      }
+    }
+    var tmp$ret$5 = tmp$ret$6;
+    // Inline function 'kotlin.collections.set' call
+    var value_0 = new Num(tmp$ret$5.get_size_woubt6_k$());
+    fields.put_4fpzoq_k$(tmp2_0, value_0);
+    // Inline function 'kotlin.collections.set' call
+    var value_1 = new Str(joinToString_0(captured, '', VOID, VOID, VOID, VOID, BluetoothTrace$record$lambda));
+    fields.put_4fpzoq_k$('hex', value_1);
+  }
+  var line = JsonCodec_instance.encode_mr1ssb_k$(new Obj(fields));
+  var size = encodeToByteArray(line).length + 1 | 0;
+  if (this.entries_1.get_size_woubt6_k$() >= 4000 || (this.byteCount_1 + size | 0) > 1048576) {
+    this.capturing_1 = false;
+    this.stopReason_1 = 'sizeLimit';
+    return Unit_instance;
+  }
+  this.entries_1.add_utx5q5_k$(line);
+  this.byteCount_1 = this.byteCount_1 + size | 0;
+  this.lastEvent_1 = event + ': ' + take_0(detail, 256);
+};
+protoOf(BluetoothTrace).exportJson_nx59ai_k$ = function (now) {
+  var state = this.status_tbdycs_k$(now);
+  var tmp = JsonCodec_instance;
+  var tmp_0 = to('format', new Str('power-log-bluetooth-trace'));
+  var tmp_1 = to('version', new Num(1.0));
+  var tmp_2 = to('capturing', new Bool(state.capturing_1));
+  var tmp0_safe_receiver = state.stopReason_1;
+  var tmp_3;
+  if (tmp0_safe_receiver == null) {
+    tmp_3 = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp_3 = new Str(tmp0_safe_receiver);
+  }
+  var tmp1_elvis_lhs = tmp_3;
+  var metadata = tmp.encode_mr1ssb_k$(new Obj(mapOf([tmp_0, tmp_1, tmp_2, to('stopReason', tmp1_elvis_lhs == null ? Nil_getInstance() : tmp1_elvis_lhs), to('eventCount', new Num(state.eventCount_1)), to('byteCount', new Num(state.byteCount_1)), to('notice', new Str('Raw Bluetooth data may contain identifiers. Share only intentionally. No GPS or Health data.'))])));
+  return dropLast(metadata, 1) + ',"events":[' + joinToString_0(this.entries_1, ',') + ']}';
+};
 var static_init_called_20;
 function static_init_20() {
   if (static_init_called_20)
@@ -22907,7 +23064,9 @@ function CycProtocol() {
   this.selectedMask_1 = 62978959;
   this.telemetryPayloadBytes_1 = 54;
   this.layout_1 = listOf([new CycField(TelemetryMetric_controllerTempC_getInstance(), 0, 2, 10.0, true), new CycField(TelemetryMetric_motorTempC_getInstance(), 1, 2, 10.0, true), new CycField(TelemetryMetric_motorCurrentA_getInstance(), 2, 4, 100.0, true), new CycField(TelemetryMetric_batteryCurrentA_getInstance(), 3, 4, 100.0, true), new CycField(TelemetryMetric_motorRpm_getInstance(), 7, 4, 1.0, true), new CycField(TelemetryMetric_batteryVoltageV_getInstance(), 8, 2, 10.0, true), new CycField(TelemetryMetric_consumedAh_getInstance(), 9, 4, 10000.0, true), new CycField(TelemetryMetric_consumedWh_getInstance(), 11, 4, 10000.0, true), new CycField(TelemetryMetric_cadenceRpm_getInstance(), 12, 4, 10000.0, true), new CycField(TelemetryMetric_throttleVoltageV_getInstance(), 13, 4, 100.0, true), new CycField(TelemetryMetric_pedalTorqueNm_getInstance(), 14, 4, 100.0, true), new CycField(TelemetryMetric_faultCode_getInstance(), 15, 1, 1.0, false), new CycField(TelemetryMetric_humanPowerW_getInstance(), 22, 4, 1.0, true), new CycField(TelemetryMetric_speedRaw_getInstance(), 23, 4, 100.0, true), new CycField(TelemetryMetric_raceMode_getInstance(), 24, 1, 1.0, false), new CycField(TelemetryMetric_assistLevel_getInstance(), 25, 1, 1.0, false)]);
-  this.identityPattern_1 = Regex_init_$Create$('X(6|12)([A-Za-z_][A-Za-z0-9_]{0,29})? +[0-9]{6,8}[A-Z]{0,8}');
+  this.modelPattern_1 = Regex_init_$Create$('[Xx](6|12)([A-Za-z_.+-][A-Za-z0-9_.+-]{0,29})?');
+  this.firmwarePattern_1 = Regex_init_$Create$('[A-Za-z0-9][A-Za-z0-9_.+-]{0,31}');
+  this.identityPattern_1 = Regex_init_$Create$('(' + this.modelPattern_1.pattern_1 + ') +(' + this.firmwarePattern_1.pattern_1 + ')');
   this.protocolPattern_1 = Regex_init_$Create$('(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})');
   this.identityCheckObserverForTesting_1 = null;
 }
@@ -22920,7 +23079,7 @@ protoOf(CycProtocol).restoreIdentity_6y4x5a_k$ = function (controllerModel, firm
     null;
   else
     tmp0_safe_receiver();
-  if (!this.identityPattern_1.matches_evli6i_k$(controllerModel + ' ' + firmwareLabel) || contains_1(controllerModel, _Char___init__impl__6a9atx(32)) || contains_1(firmwareLabel, _Char___init__impl__6a9atx(32)) || !this.protocolPattern_1.matches_evli6i_k$(controllerProtocol))
+  if (!this.modelPattern_1.matches_evli6i_k$(controllerModel) || !this.firmwarePattern_1.matches_evli6i_k$(firmwareLabel) || !this.protocolPattern_1.matches_evli6i_k$(controllerProtocol))
     throw new CycException(CycRejection_identity_getInstance());
   // Inline function 'kotlin.collections.map' call
   var this_0 = split(controllerProtocol, charArrayOf([_Char___init__impl__6a9atx(46)]));
@@ -23189,43 +23348,82 @@ protoOf(CycProtocol).identity_9rj9ni_k$ = function (payload) {
     destination.add_utx5q5_k$(tmp$ret$6);
   }
   var ascii = joinToString_0(destination, '');
-  var tmp1_safe_receiver = this.identityPattern_1.find$default_xakyli_k$(ascii);
+  // Inline function 'kotlin.takeIf' call
+  var this_1 = indexOf(ascii, _Char___init__impl__6a9atx(32));
   var tmp_1;
-  if (tmp1_safe_receiver == null) {
-    tmp_1 = null;
+  if (this_1 > 0) {
+    tmp_1 = this_1;
   } else {
-    // Inline function 'kotlin.takeIf' call
-    var tmp_2;
-    if (tmp1_safe_receiver.get_range_ixu978_k$().first_1 === 0) {
-      tmp_2 = tmp1_safe_receiver;
-    } else {
-      tmp_2 = null;
-    }
-    tmp_1 = tmp_2;
+    tmp_1 = null;
   }
-  var tmp2_safe_receiver = tmp_1;
-  var tmp3_elvis_lhs = tmp2_safe_receiver == null ? null : tmp2_safe_receiver.get_value_j01efc_k$();
-  var tmp_3;
-  if (tmp3_elvis_lhs == null) {
+  var tmp1_elvis_lhs = tmp_1;
+  var tmp_2;
+  if (tmp1_elvis_lhs == null) {
     identity$reject();
   } else {
-    tmp_3 = tmp3_elvis_lhs;
+    tmp_2 = tmp1_elvis_lhs;
   }
-  var prefix = tmp_3;
-  var boundary = 3 + prefix.length | 0;
-  if (!(boundary === end) && !(payload[boundary] === 32)) {
+  var modelEnd = tmp_2;
+  var tmp0_0 = until(modelEnd, ascii.length);
+  var tmp$ret$9;
+  $l$block_0: {
+    // Inline function 'kotlin.collections.firstOrNull' call
+    var inductionVariable_1 = tmp0_0.first_1;
+    var last_1 = tmp0_0.last_1;
+    if (inductionVariable_1 <= last_1)
+      do {
+        var element_0 = inductionVariable_1;
+        inductionVariable_1 = inductionVariable_1 + 1 | 0;
+        var it = element_0;
+        if (!(charCodeAt(ascii, it) === _Char___init__impl__6a9atx(32))) {
+          tmp$ret$9 = element_0;
+          break $l$block_0;
+        }
+      }
+       while (!(element_0 === last_1));
+    tmp$ret$9 = null;
+  }
+  var tmp2_elvis_lhs = tmp$ret$9;
+  var tmp_3;
+  if (tmp2_elvis_lhs == null) {
+    identity$reject();
+  } else {
+    tmp_3 = tmp2_elvis_lhs;
+  }
+  var firmwareStart = tmp_3;
+  if (modelEnd < 10 && firmwareStart > 10) {
+    identity$reject();
+  }
+  // Inline function 'kotlin.takeIf' call
+  var this_2 = indexOf(ascii, _Char___init__impl__6a9atx(32), firmwareStart);
+  var tmp_4;
+  if (this_2 >= 0) {
+    tmp_4 = this_2;
+  } else {
+    tmp_4 = null;
+  }
+  var tmp3_elvis_lhs = tmp_4;
+  var firmwareEnd = tmp3_elvis_lhs == null ? ascii.length : tmp3_elvis_lhs;
+  var fixedHeader = modelEnd < 9 && firmwareStart === 10 && firmwareEnd >= 20;
+  var publicEnd = fixedHeader ? 20 : firmwareEnd;
+  var prefix = substring(ascii, 0, publicEnd);
+  if (!this.identityPattern_1.matches_evli6i_k$(prefix)) {
+    identity$reject();
+  }
+  var boundary = 3 + publicEnd | 0;
+  if (!fixedHeader && !(boundary === end) && !(payload[boundary] === 32)) {
     identity$reject();
   }
   // Inline function 'kotlin.collections.filter' call
-  var tmp0_0 = split(prefix, charArrayOf([_Char___init__impl__6a9atx(32)]));
+  var tmp0_1 = split(prefix, charArrayOf([_Char___init__impl__6a9atx(32)]));
   // Inline function 'kotlin.collections.filterTo' call
   var destination_0 = ArrayList_init_$Create$_0();
-  var _iterator__ex2g4s_0 = tmp0_0.iterator_jk1svi_k$();
+  var _iterator__ex2g4s_0 = tmp0_1.iterator_jk1svi_k$();
   while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
-    var element_0 = _iterator__ex2g4s_0.next_20eer_k$();
+    var element_1 = _iterator__ex2g4s_0.next_20eer_k$();
     // Inline function 'kotlin.text.isNotEmpty' call
-    if (charSequenceLength(element_0) > 0) {
-      destination_0.add_utx5q5_k$(element_0);
+    if (charSequenceLength(element_1) > 0) {
+      destination_0.add_utx5q5_k$(element_1);
     }
   }
   var parts = destination_0;
@@ -24835,6 +25033,49 @@ function analyticsProfile(source, range, timerUs, sources) {
 function originalAnchor(item, value) {
   return new Original(item.observationId_1, item.eventId_1, item.timestamp_1, item.collectionElapsedSeconds_1, new Real64(value), item.originalElapsedSeconds_1);
 }
+function BluetoothTrace_0() {
+  this.core_1 = new BluetoothTrace();
+}
+protoOf(BluetoothTrace_0).start = function (now) {
+  return this.core_1.start_txuis4_k$(now);
+};
+protoOf(BluetoothTrace_0).stop = function () {
+  return this.core_1.stop_pnug4y_k$();
+};
+protoOf(BluetoothTrace_0).clear = function () {
+  return this.core_1.clear_j9egeb_k$();
+};
+protoOf(BluetoothTrace_0).record = function (now, event, detail, bytes) {
+  return this.core_1.record_92vt5q_k$(now, event, detail, bytes);
+};
+protoOf(BluetoothTrace_0).status = function (now) {
+  return new BluetoothTraceStatus_0(this.core_1.status_tbdycs_k$(now));
+};
+protoOf(BluetoothTrace_0).exportJson = function (now) {
+  return this.core_1.exportJson_nx59ai_k$(now);
+};
+function BluetoothTraceStatus_0(state) {
+  this.capturing = state.capturing_1;
+  this.eventCount = state.eventCount_1;
+  this.byteCount = state.byteCount_1;
+  this.stopReason = state.stopReason_1;
+  this.lastEvent = state.lastEvent_1;
+}
+protoOf(BluetoothTraceStatus_0).get_capturing_gzdo9y_k$ = function () {
+  return this.capturing;
+};
+protoOf(BluetoothTraceStatus_0).get_eventCount_4bnz6q_k$ = function () {
+  return this.eventCount;
+};
+protoOf(BluetoothTraceStatus_0).get_byteCount_pu5ghu_k$ = function () {
+  return this.byteCount;
+};
+protoOf(BluetoothTraceStatus_0).get_stopReason_ru2hyn_k$ = function () {
+  return this.stopReason;
+};
+protoOf(BluetoothTraceStatus_0).get_lastEvent_tm6i9x_k$ = function () {
+  return this.lastEvent;
+};
 function CoreExportColumn(core) {
   this.name = core.name_1;
   this.type = core.type_1;
@@ -27722,6 +27963,8 @@ export {
   AnalyticsSource as AnalyticsSource,
   AnalyticsStatistics as AnalyticsStatistics,
   AnalyticsTimeline as AnalyticsTimeline,
+  BluetoothTraceStatus_0 as BluetoothTraceStatus,
+  BluetoothTrace_0 as BluetoothTrace,
   CompletionSnapshotFields as CompletionSnapshotFields,
   CompletionUpdateCursor as CompletionUpdateCursor,
   ControllerCapabilities_0 as ControllerCapabilities,

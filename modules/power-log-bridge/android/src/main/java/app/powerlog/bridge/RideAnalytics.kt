@@ -68,6 +68,20 @@ internal class RideAnalytics(private val store: RideStore) {
         dirty.getOrPut(id to bucket + 1) { mutableSetOf() }.addAll(selected)
     }
 
+    fun trimBefore(id: String, cutoff: Double) {
+        check(id.startsWith("live-") && store.writableDatabase.inTransaction())
+        val bucket = floor(cutoff / BLOCK).toLong()
+        store.writableDatabase.delete("analytics", "ride=? AND bucket<?", arrayOf(id, bucket.toString()))
+        store.writableDatabase.delete(
+            "analytics_plot_blocks",
+            "ride=? AND bucket<?",
+            arrayOf(id, Math.floorDiv(bucket, PLOT_BUCKETS).toString()),
+        )
+        dirty.keys.removeAll { it.first == id && it.second < bucket }
+        // Rebuild the partially retained boundary before committing the same preview revision.
+        changed(id, cutoff, store.available(id))
+    }
+
     fun clear() = changes.remove()
 
     fun flush() {

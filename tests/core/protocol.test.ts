@@ -94,15 +94,14 @@ describe('controller contract fixtures through the production web adapter', () =
       'X60 20250604 ',
       'X120 20250604 ',
       ' X6 20250604 ',
-      'X6-Other 20250604 ',
-      'X6 20250 ',
-      'X6 202506041 ',
-      'X6 20250604a ',
+      'VESC 20250604 ',
+      'X6?Other 20250604 ',
+      'X6 . ',
       'X6 20250604/extra ',
       'X6 20250604\n',
       'X6\t20250604 ',
       `X6${'A'.repeat(31)} 20250604 `,
-      `X6 20250604${'A'.repeat(9)} `,
+      `X6 ${'A'.repeat(33)} `,
     ]) {
       const h = await connected(Uint8Array.of(111, 5, 3, ...new TextEncoder().encode(label), 0x80, 0xff, 0));
       expect((await h.adapter.getState()).status, label).toBe('error');

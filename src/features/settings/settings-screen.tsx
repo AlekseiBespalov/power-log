@@ -20,6 +20,7 @@ import { effectiveWorkoutOptions, sampleRates, type StoragePersistence } from '.
 import { presentFailure } from '../../core/failures';
 import { workoutHealthPresentation } from '../../core/workout-presentation';
 import { workouts } from '../../services/workouts';
+import { BluetoothDiagnosticsControls } from './bluetooth-diagnostics';
 
 const persistenceLabels: Record<StoragePersistence, string> = {
   persisted: 'Protected from automatic browser cleanup',
@@ -78,7 +79,7 @@ function SettingsGroup({
   children,
 }: {
   title: string;
-  caption: string;
+  caption?: string;
   testID: string;
   children: ReactNode;
 }) {
@@ -102,7 +103,7 @@ function SettingsGroup({
         >
           {title}
         </Text>
-        <Text style={{ fontSize: type.caption, color: colors.muted }}>{caption}</Text>
+        {caption && <Text style={{ fontSize: type.caption, color: colors.muted }}>{caption}</Text>}
       </View>
       {children}
     </View>
@@ -325,6 +326,9 @@ export function SettingsScreen() {
                 <Text style={{ color: colors.text, fontSize: type.body }}>{persistenceLabels[persistence]}</Text>
               </SettingsGroup>
             )}
+            <SettingsGroup title="Bluetooth diagnostics" testID="settings-bluetooth">
+              <BluetoothDiagnosticsControls />
+            </SettingsGroup>
             {__DEV__ && workouts.addExampleRides && (
               <SettingsGroup title="Developer" caption="Development builds only" testID="settings-developer">
                 <Button

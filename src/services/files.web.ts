@@ -54,3 +54,9 @@ export function downloadFile(url: string, name: string): void {
 
 // The browser export sink starts the download when it commits.
 export async function shareExport(_uri: string): Promise<void> {}
+
+export async function shareDiagnosticLog(text: string): Promise<void> {
+  downloadFile(URL.createObjectURL(new Blob([text], { type: 'application/json' })), 'PowerLog-Bluetooth.json');
+}
+
+export async function deleteDiagnosticLog(): Promise<void> {}

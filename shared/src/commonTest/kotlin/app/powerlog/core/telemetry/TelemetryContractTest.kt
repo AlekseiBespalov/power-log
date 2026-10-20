@@ -456,14 +456,24 @@ class TelemetryContractTest {
             assertEquals(case["model"].text(), identity.controllerModel)
             assertEquals(case["firmware"].text(), identity.firmwareLabel)
             assertEquals(case["knownSpeed"].bool(), identity.hasKnownSpeedUnit)
+            assertEquals(
+                identity,
+                CycProtocol.restoreIdentity(
+                    identity.controllerModel,
+                    identity.firmwareLabel,
+                    identity.controllerProtocol,
+                ),
+            )
             val raw = hex(telemetryFixture("wire-metrics")["payloadHex"].text())
             val sample = CycProtocol.withIdentity(CycProtocol.telemetry(raw), identity)
             assertEquals(case["speedRaw"].double(), sample.value(TelemetryMetric.speedRaw))
             assertEquals(case["speedMps"].optionalDouble(), sample.value(TelemetryMetric.controllerSpeedMps))
         }
         val tailCases =
-            telemetryFixture("identity")["cases"].list().filter { it["valid"].bool() && it["model"].text() == "X6" }
-        val opaque = tailCases.takeLast(2).map { CycProtocol.identity(hex(it["payloadHex"].text())) }
+            telemetryFixture("identity")["cases"].list().filter {
+                it["id"].optionalText()?.startsWith("opaque-tail-") == true
+            }
+        val opaque = tailCases.map { CycProtocol.identity(hex(it["payloadHex"].text())) }
         assertEquals(opaque[0], opaque[1])
         assertNull(
             CycProtocol.withIdentity(
@@ -485,6 +495,24 @@ class TelemetryContractTest {
                     ByteArray(130) { 255.toByte() } +
                     byteArrayOf(0),
             )) assertFailsWith<CycException> { CycProtocol.identity(bad) }
+    }
+
+    @Test
+    fun fixedIdentityHeaderNeverExposesItsPrivateTail() {
+        for (firmware in listOf("20250604MX", "20250811UL", "20260618  ", "v5.3.1-mx2")) {
+            val header = "X12       $firmware".encodeToByteArray()
+            assertEquals(20, header.size)
+            val expected = CycProtocol.restoreIdentity("X12", firmware.trimEnd(), "5.3")
+            for (firstByte in 0..255) {
+                val payload =
+                    byteArrayOf(111, 5, 3) +
+                        header +
+                        byteArrayOf(firstByte.toByte()) +
+                        "SYNTHETIC-PRIVATE-TAIL".encodeToByteArray() +
+                        byteArrayOf(0)
+                assertEquals(expected, CycProtocol.identity(payload), "$firmware tail $firstByte")
+            }
+        }
     }
 
     @Test
