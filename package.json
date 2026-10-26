@@ -74,10 +74,10 @@
     "@types/web-bluetooth": "^0.0.21",
     "eslint": "^9.39.0",
     "eslint-config-expo": "~57.0.2",
+    "patch-package": "8.0.1",
     "prettier": "^3.9.6",
     "typescript": "~6.0.3",
-    "vitest": "^4.0.18",
-    "patch-package": "8.0.1"
+    "vitest": "^4.1.12"
   },
   "license": "Apache-2.0",
   "repository": {

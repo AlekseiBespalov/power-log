@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 const accepted = new Map([
   ['GHSA-vfj7-8cjw-p6xm', 'braces only expands the project’s own file patterns in Metro'],
   ['GHSA-86w9-cpqp-85rv', 'node-forge only verifies Expo Updates code signing, which Power Log does not use'],
+  ['GHSA-mrhx-c7xc-m3w5', 'zod 3 only validates Expo CLI input at build time and has no fixed release'],
 ]);
 const report = JSON.parse(spawnSync('npm', ['audit', '--json'], { encoding: 'utf8' }).stdout);
 if (!report.vulnerabilities) {
