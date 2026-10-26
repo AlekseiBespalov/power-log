@@ -1,0 +1,146 @@
+{
+  "status": "local preparation only; publication deferred by owner",
+  "version": "0.4.0",
+  "bundleIdentifier": "app.powerlog.mobile",
+  "primaryLocale": "en-US",
+  "listing": {
+    "name": "Power Log",
+    "subtitle": "Bike telemetry & ride analysis",
+    "promotionalText": "See rider effort, battery use and heart rate together. Record detailed CYC bike telemetry, inspect your ride and share a FIT activity.",
+    "description": "Power Log records detailed rides from compatible CYC X6 and X12 e-bike controllers. Compare rider power and cadence with battery input power, battery use, GPS and available heart-rate readings.\n\nRECORD YOUR RIDE\nConnect your controller and record on iPhone at 2, 4 or 8 readings per second. Optional GPS records your route. The Apple Watch companion supplies available heart-rate readings and ride controls; your iPhone remains required. Native recording continues with the screen locked.\n\nEXAMINE THE DETAILS\nCustomize your Numbers and Graphs layouts. Inspect individual observations, zoom into changes and compare metrics over the ride. View both GPS and controller-derived distance, raw controller counters, ride-relative controller consumption and calculated Ah/Wh consumption.\n\nSAVE AND SHARE\nKeep completed rides in local History. Optionally save cycling workouts to Apple Health. Export a FIT activity for compatible fitness apps, including manual upload to Strava, or export the original ride data as a ZIP. Apple Health saving is best effort and does not block local saving or export.\n\nPRIVATE BY DESIGN\nNo Power Log account, advertising, usage analytics or ride-upload server. Rides stay in the app until you choose to share them or enable saving to Apple Health. Device backups follow your system settings.\n\nREQUIREMENTS\nNew recordings require a compatible CYC X6 or X12 controller and a Bluetooth connection. Controller speed and derived distance require protocol 5.3. iPhone requires iOS 26 or later. The optional Apple Watch companion requires watchOS 10 or later and a paired iPhone running Power Log. This app reads controller measurements; it does not change drive settings or firmware.\n\nPower Log is an independent, open-source project and is not affiliated with CYC or Strava. Measurements and calculated values depend on the controller, sensors and available data.",
+    "keywords": "ebike,cycling,battery,cadence,telemetry,FIT,workout,heart rate,graphs,ride",
+    "primaryCategory": "HEALTH_AND_FITNESS",
+    "secondaryCategory": "SPORTS",
+    "price": "FREE",
+    "privacyPolicyURL": "https://alekseibespalov.github.io/power-log/privacy",
+    "supportURL": "https://github.com/AlekseiBespalov/power-log/issues",
+    "marketingURL": "https://github.com/AlekseiBespalov/power-log",
+    "copyright": "2026 Aleksei Bespalov"
+  },
+  "review": {
+    "signInRequired": false,
+    "notes": "Power Log is a controller-specific cycling recorder. New recording requires a connected CYC X6/X12 controller; this is deliberate. No Power Log account or subscription is required.\n\nWith compatible hardware: allow Bluetooth, choose Find bike, select the controller, open Ride setup, adjust optional GPS/Apple Health/Watch preferences in Settings and start the ride. The paired iPhone records controller telemetry and GPS. Apple Watch is a phone-required sensor/display/control companion. A Watch-assisted ride uses the Watch as the Health writer; other Apple rides use iPhone. Finish saves the local ride independently of Health availability. Open History to inspect charts and export FIT or the original-data ZIP.\n\nThe standard FIT power field uses rider power by default. An explicit export preference can instead use battery input power for compatibility. Apple Health always retains rider-power semantics. Power Log sends only controller identity and selective-telemetry requests and cannot alter controller configuration or firmware.\n\nGPS and Health are optional. Health permissions are requested for cycling workouts and associated exercise measurements. There is no tracking, advertising or developer-operated data collection. Export opens the system share sheet; opening Strava upload opens its website without uploading a ride.\n\nThe review video must show the actual iPhone, Watch and controller workflow. Fictional screenshot examples demonstrate analysis only and do not establish hardware operation.",
+    "demoVideoURL": null,
+    "demoVideoSequence": [
+      "Show Power Log on the iPhone and paired Watch, and identify the compatible controller without revealing its serial number.",
+      "Connect to the controller and show changing power/cadence readings on a stationary bike in a safe setup.",
+      "Start a short Watch-assisted ride, show heart-rate readings and the phone/Watch recording states, then pause and resume.",
+      "Finish, open the newly saved ride, inspect a graph and demonstrate the FIT share sheet without sending the file.",
+      "Show only that test workout in Apple Health; avoid unrelated Health records, personal routes, notifications and account details."
+    ],
+    "contact": null
+  },
+  "privacy": {
+    "proposedAnswer": "DATA_NOT_COLLECTED",
+    "tracking": false,
+    "basis": "The developer and third-party SDK providers receive no ride, Health, location, usage or crash data from the native app. Local processing, paired-device transfers and rider-directed Health/export actions are described in the privacy policy. Recheck against the final distribution binary and App Store Connect questions before submitting.",
+    "backupPolicy": "Local rides are currently eligible for user-managed device backups. The app does not use CloudKit or iCloud document storage. Whether guideline 5.1.3(ii) requires excluding local Health-containing ride archives from automatic device backup remains to be resolved; no backup behavior has been changed."
+  },
+  "compatibilityBaseline": {
+    "candidateSourceCommit": "8d491061cceea2ad91d73a58f8051a7e235eceed",
+    "status": "Freeze the exact approved public build at release; this candidate is not an established public-store baseline yet.",
+    "policy": "Preserve rides and settings through subsequent public updates. Format changes require a forward migration or disposable-cache invalidation. Development-build incompatibility is not permission to reset public users' data."
+  },
+  "pending": [
+    "Enroll in the paid Apple Developer Program and confirm the distribution team.",
+    "Sign in to App Store Connect; supply private App Review contact details there.",
+    "Confirm the proposed copyright and free pricing.",
+    "Resolve the Health-containing device-backup policy.",
+    "Before any future submission, refresh changed screens and verify the selected screenshot dimensions against current store requirements.",
+    "Provide a real-device controller/Watch demonstration video for review without personal ride data.",
+    "Create the App Store Connect record and complete age rating, availability and required account declarations.",
+    "Validate and upload the distribution archive, then verify the processed build through TestFlight.",
+    "Finalize the public format baseline from the actual submitted build."
+  ],
+  "localArtifacts": {
+    "archive": {
+      "path": "artifacts/builds/apple/PowerLog-0.4.0-400.xcarchive",
+      "version": "0.4.0",
+      "build": "400",
+      "status": "Built unsigned; bundle dependency and Lab exclusion checks passed. Apple distribution signing, upload validation and TestFlight processing have not been performed."
+    },
+    "screenshots": {
+      "status": "17 selected native simulator captures, visually reviewed and verified as opaque RGB with unchanged decoded pixels.",
+      "iphone": {
+        "path": "artifacts/builds/apple/presentation/media/iphone",
+        "count": 11,
+        "width": 1206,
+        "height": 2622
+      },
+      "ipad": {
+        "path": "artifacts/builds/apple/presentation/media/ipad",
+        "count": 4,
+        "width": 2064,
+        "height": 2752
+      },
+      "watch": {
+        "path": "artifacts/builds/apple/presentation/media/watch",
+        "count": 2,
+        "width": 422,
+        "height": 514
+      },
+      "appVersion": "0.4.0",
+      "simulatorBuild": "1",
+      "fictionalData": true
+    },
+    "demonstration": {
+      "path": "artifacts/builds/apple/presentation/media/PowerLog-demo.mp4",
+      "durationSeconds": 51.8,
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "audio": false,
+      "status": "Local captioned walkthrough, using native still captures and recorded simulator UI interactions. Fully decoded and chapter frames reviewed. This is not the future physical-hardware App Review demonstration."
+    },
+    "gallery": "artifacts/builds/apple/presentation/media/gallery.html",
+    "mediaArchive": "artifacts/builds/apple/presentation/PowerLog-media.zip",
+    "liveDemonstration": {
+      "path": "artifacts/builds/apple/presentation/media/PowerLog-live-ride.mp4",
+      "durationSeconds": 139.2,
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "audio": false,
+      "bundleIdentifier": "app.powerlog.lab",
+      "composition": "Continuous native recording at normal speed, startup trimmed, final captured frame held for 3 seconds. Simulator-only synthetic controller, normal recording and UI.",
+      "sha256": "7c27721910d12edd9a454196dd7901a087231fb69c3fc4e41628a9285a14f7bd",
+      "inspectionClip": "artifacts/builds/apple/presentation/media/PowerLog-chart-inspection.mp4",
+      "verification": "artifacts/builds/apple/live-demo/verification.json"
+    },
+    "fastDemonstration": {
+      "path": "artifacts/builds/apple/presentation/media/PowerLog-live-ride-fast.mp4",
+      "created": "2026-10-20",
+      "durationSeconds": 56.266667,
+      "width": 1206,
+      "height": 2622,
+      "fps": 30,
+      "audio": false,
+      "fictionalData": true,
+      "composition": "Full native app frame only. Variable playback speed from 1x to 5x, startup and repeated scrolling removed, all workflow steps retained, final frame held for 2.5 seconds. No titles, captions, borders or audio.",
+      "sha256": "0edca2c4e361a110b065d2d90802665dcbd6999dfa2e7080aaf9aa23e5402255",
+      "editPlan": "artifacts/builds/apple/live-demo/dynamic-video-plan.json"
+    },
+    "allMetricsDemonstration": {
+      "path": "artifacts/builds/apple/presentation/media/PowerLog-all-metrics.mp4",
+      "created": "2026-10-20",
+      "durationSeconds": 63.3,
+      "width": 1206,
+      "height": 2622,
+      "fps": 30,
+      "audio": false,
+      "fictionalData": true,
+      "selectableMetrics": 31,
+      "chartCards": 23,
+      "composition": "Every selectable metric enabled in Numbers and Graphs before Start. Continuous top-to-bottom scroll while recording, then handle inspection, zoom, Lap, Pause/Resume, Finish, History and FIT export. Full native frame only; accelerated sections and waits removed; no added titles, captions or borders.",
+      "sha256": "db75e8961869044ccc07904037e49d4d3bf398f8067990e7f9648fdc29d3e35c",
+      "editPlan": "artifacts/builds/apple/all-metrics-demo/edit-plan.json",
+      "verification": "artifacts/builds/apple/all-metrics-demo/verification.json"
+    }
+  },
+  "confirmations": {
+    "appleDeveloperProgram": "Not enrolled, confirmed by the owner on 2026-10-19.",
+    "publicSupportContact": "Use the existing GitHub Issues page, confirmed by the owner on 2026-10-19.",
+    "publication": "Owner deferred enrollment and publishing on 2026-10-19; prepare screenshots and demonstration video locally."
+  },
+  "pendingStatus": "Deferred until the owner resumes publication; these are not current implementation tasks."
+}

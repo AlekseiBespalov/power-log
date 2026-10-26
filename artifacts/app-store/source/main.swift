@@ -38,6 +38,10 @@ func verifiedReports(archive: WorkoutArchive, reports: [[String: Any]]) throws -
     guard summary.averageHeartRateBpm != nil, summary.heartRateCoveredSeconds > 0,
       summary.activeEnergyKcal != nil, summary.basalEnergyKcal != nil
     else { throw WorkoutDataError.invalid("Example Health observations must contribute heart rate and energy: \(id)") }
+    guard let battery = summary.batteryConsumption,
+      let energy = battery["energyWh"]?.number, energy > 0,
+      let charge = battery["chargeAh"]?.number, charge > 0
+    else { throw WorkoutDataError.invalid("Example controller observations must contribute ride consumption: \(id)") }
     guard metadata.example == true, metadata.watchEnabled, !metadata.saveToHealth,
       completion.phase == "completed", completion.endedAt != nil,
       completion.healthOutcome == .notrequested, metadata.healthKitUUID == nil, metadata.healthReason == nil,

@@ -9,7 +9,9 @@ final class PowerLogLabSceneDelegate: ExpoAppSceneDelegate {
     _ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions
   ) {
     guard PowerLogLab.isRequested else {
+      if PowerLogLiveDemo.enabled { PowerLogLiveDemo.prepare() }
       super.scene(scene, willConnectTo: session, options: connectionOptions)
+      if PowerLogLiveDemo.enabled { PowerLogLiveDemo.start() }
       return
     }
     guard let scene = scene as? UIWindowScene else { return }

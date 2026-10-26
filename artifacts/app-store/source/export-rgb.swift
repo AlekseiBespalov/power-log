@@ -21,7 +21,6 @@ for path in CommandLine.arguments.dropFirst() {
   let url = URL(fileURLWithPath: path)
   let source = CGImageSourceCreateWithURL(url as CFURL, nil)!
   let image = CGImageSourceCreateImageAtIndex(source, 0, nil)!
-  precondition(image.width == 1320 && image.height == 2868)
   let original = pixels(image)
   precondition(stride(from: 3, to: original.count, by: 4).allSatisfy { original[$0] == 255 }, "Unexpected transparency")
   let rgb = CGImage(
@@ -35,7 +34,8 @@ for path in CommandLine.arguments.dropFirst() {
   CGImageDestinationAddImage(destination, rgb, nil)
   precondition(CGImageDestinationFinalize(destination))
   let check = CGImageSourceCreateImageAtIndex(CGImageSourceCreateWithData(encoded, nil)!, 0, nil)!
+  precondition(check.width == image.width && check.height == image.height, "Export changed image dimensions")
   precondition(pixels(check) == original, "Export changed rendered pixels")
   try (encoded as Data).write(to: url, options: .atomic)
-  print("RGB export verified: \(url.lastPathComponent)")
+  print("RGB export verified: \(url.lastPathComponent), \(image.width) × \(image.height)")
 }

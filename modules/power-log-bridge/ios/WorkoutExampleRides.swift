@@ -98,6 +98,10 @@ enum WorkoutExampleRides {
             "consumedWh": .number(wh),
             "throttleVoltageV": .number(0.83), "faultCode": .integer(0), "assistLevel": .integer(hill > 0.55 ? 3 : 2),
             "raceMode": .integer(0), "speedRaw": .number(speed * 3.6), "exampleData": .bool(true),
+            "controllerSpeedMps": .number(speed), "controllerModel": .string("X6"),
+            "controllerProtocol": .string("5.3"), "captureSessionID": .string(id),
+            "connectionEpoch": .string("example-connection"), "clockEpoch": .string("example-clock"),
+            "observationSequence": .string(String(index + 1)), "monotonicSeconds": .number(t),
           ]
           batch.append(
             try WorkoutEvent(

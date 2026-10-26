@@ -1072,6 +1072,9 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       sessionStarted = now
       captureClock = TelemetryCaptureClock(origin: sessionStarted)
       sessionSamples = 0
+      MonitorDataStore.shared.beginLive(
+        startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted,
+        id: captureClock.sessionID)
     }
     func labReceive(_ reading: TelemetryReading) {
       receive(reading, at: now, responseSeconds: 0)
