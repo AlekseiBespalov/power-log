@@ -42,6 +42,13 @@ func points(_ result: [String: Any], metric: String = "humanPowerW") -> [[String
   (result["series"] as? [String: [[String: Any]]])?[metric] ?? []
 }
 func clearPersistedPlots() throws { _ = try db.transaction { try $0.execute("DELETE FROM derived_cache") } }
+// A later reading of another channel moves the data end, so reads ending at a channel's newest original are zoomed.
+func appendDistantHeartRate(_ id: String) throws {
+  try archive.append(
+    WorkoutEvent(
+      workoutId: id, kind: "health", source: "watch", timestamp: origin.addingTimeInterval(100_000),
+      elapsedSeconds: 100_000, payload: ["heartRateBpm": .number(120), "representation": .string("rawQuantity")]))
+}
 func counter(_ name: String, _ reader: MonitorDataStore = reader) -> Int { reader.projectionDiagnostics()[name] ?? 0 }
 for offset in stride(from: 0, to: 4_096, by: 256) {
   _ = try db.appendBatch((offset..<(offset + 256)).map { try event(Double($0) / 8, value: .number(Double($0 % 200))) })
@@ -72,7 +79,8 @@ check(
   "Retained hydration performs observation lookups instead of a full pinned-history scan")
 check(points(cold).count <= 256, "plot geometry remains pixel bounded")
 check(
-  counter("scannedPoints") == 8_192 && counter("points") == 8_192, "cold read stores only selected numeric projections")
+  counter("scannedPoints") == 8_192 && counter("points") == 0 && counter("summaryEntries") == 2,
+  "cold whole-range read keeps one slot summary per selected channel instead of projections")
 check(counter("hydratedPoints") < 1_024, "cold projection hydrates retained originals only")
 var windowCountScans = 0
 try db.read { sql in
@@ -95,21 +103,24 @@ scanned = counter("scannedPoints")
 _ = try reader.rangeStats(query(start: 10.01, end: 11.99))
 check(counter("scannedPoints") == scanned, "warm statistics reuse their own numeric projection")
 check(counter("hydratedPoints") - hydratedBeforeStats <= 8, "statistics hydrate only final original extrema")
+_ = try reader.readPlot(query(start: 0, end: 511, buckets: 17))
+scanned = counter("scannedPoints")
+let hitsBeforePan = counter("projectionHits")
 _ = try reader.readPlot(query(start: 100.01, end: 130.99, buckets: 17))
 check(
-  counter("scannedPoints") == scanned && counter("projectionHits") == 6,
+  counter("scannedPoints") == scanned && counter("projectionHits") == hitsBeforePan + 2,
   "pan seeks existing numeric projection without rereading history")
 _ = try db.appendBatch((4_096..<4_112).map { try event(Double($0) / 8, value: .number(Double($0 % 200))) })
 _ = try reader.readPlot(query(buckets: 65))
 check(
-  counter("scannedPoints") - scanned == 32 && counter("appendedPoints") == 32,
-  "tail append reads only new projected values for both metrics")
-let beforeLate = counter("invalidations")
+  counter("scannedPoints") - scanned == 32 && counter("summaryAppendedPoints") == 32,
+  "tail append reads only new values into both slot summaries")
+let beforeLate = counter("summaryInvalidations")
 try archive.append(event(100.00000004, value: .number(-500)))
 let repaired = try reader.readPlot(query(buckets: 66))
 check(
-  counter("invalidations") > beforeLate && points(repaired).contains { $0["value"] as? Double == -500 },
-  "late submicrosecond point invalidates affected projection and preserves exact extremum")
+  counter("summaryInvalidations") > beforeLate && points(repaired).contains { $0["value"] as? Double == -500 },
+  "late submicrosecond point invalidates affected slot summary and preserves exact extremum")
 check(
   points(repaired).contains { $0["elapsedSeconds"] as? Double == 100.00000004 },
   "numeric cache retains unquantized source time")
@@ -219,23 +230,24 @@ check(
   scalarOrder(2, 2, 1.9, nil) > 0 && scalarOrder(-2, -2, -1.9, nil) < 0,
   "mixed truncated fractions retain order")
 _ = try reader.readPlot(query(buckets: 67))
-let journalBefore = counter("invalidations")
+let invalidationsBeforeLongTail = counter("invalidations")
+let scansBeforeLongTail = counter("scannedPoints")
 for offset in stride(from: 0, to: 768, by: 256) {
   _ = try db.appendBatch((offset..<(offset + 256)).map { try event(1_000 + Double($0), value: .number(50)) })
 }
 _ = try reader.readPlot(query(buckets: 68))
 check(
-  counter("invalidations") >= journalBefore + 2,
-  "journal overflow invalidates cache rather than guessing append-only history")
+  counter("invalidations") == invalidationsBeforeLongTail && counter("scannedPoints") - scansBeforeLongTail == 2 * 768,
+  "an append-only tail longer than the change journal extends both slot summaries without rereading history")
 
 try clearPersistedPlots()
 let bounded = MonitorDataStore(root: root, projectionCacheBytes: 40_000)
-let streamed = try bounded.readPlot(query(buckets: 69))
+let streamed = try bounded.readPlot(query(start: 0, end: 1_700, buckets: 69))
 check(
   counter("streamingFallbacks", bounded) == 2 && counter("nativeAdapterBytes", bounded) == 0,
   "oversized channels skip cache admission")
 try clearPersistedPlots()
-let cachedEquivalent = try reader.readPlot(query(buckets: 69))
+let cachedEquivalent = try reader.readPlot(query(start: 0, end: 1_700, buckets: 69))
 check(
   try JSONSerialization.data(withJSONObject: streamed["series"]!, options: [.sortedKeys])
     == JSONSerialization.data(withJSONObject: cachedEquivalent["series"]!, options: [.sortedKeys]),
@@ -250,9 +262,10 @@ _ = try db.appendBatch(
       elapsedSeconds: Double(i),
       payload: ["humanPowerW": .number(Double(i)), "cadenceRpm": .number(75), "batteryVoltageV": .number(52)])
   })
-let evicting = MonitorDataStore(root: root, projectionCacheBytes: 180_000)
+let evicting = MonitorDataStore(root: root, projectionCacheBytes: 36_000)
 let smallQuery = MonitorRequest(
-  source: "workout", id: smallRide.id, metrics: ["humanPowerW", "cadenceRpm", "batteryVoltageV"], buckets: 3)
+  source: "workout", id: smallRide.id, startSeconds: 0, endSeconds: 298,
+  metrics: ["humanPowerW", "cadenceRpm", "batteryVoltageV"], buckets: 3)
 _ = try evicting.readPlot(smallQuery)
 let allocated = evicting.projectionDiagnostics()
 check(
@@ -275,17 +288,20 @@ func growingEvent(_ i: Int) throws -> WorkoutEvent {
 for offset in stride(from: 0, to: 1_000, by: 250) {
   _ = try db.appendBatch((offset..<(offset + 250)).map(growingEvent))
 }
-let growing = MonitorDataStore(root: root, projectionCacheBytes: 100_000)
-var growingQuery = MonitorRequest(source: "workout", id: growingRide.id, metrics: ["humanPowerW"], buckets: 5)
+try appendDistantHeartRate(growingRide.id)
+let growing = MonitorDataStore(root: root, projectionCacheBytes: 24_000)
+var growingQuery = MonitorRequest(
+  source: "workout", id: growingRide.id, startSeconds: 0, endSeconds: 999, metrics: ["humanPowerW"], buckets: 5)
 _ = try growing.readPlot(growingQuery)
 _ = try db.appendBatch((1_000..<1_030).map(growingEvent))
+growingQuery.endSeconds = 1_029
 growingQuery.buckets = 6
 let grown = try growing.readPlot(growingQuery)
 check(
   counter("nativeAdapterBytes", growing) == 0 && counter("scannedPoints", growing) == 1_030,
   "append exhaustion streams only suffix and drops retained prefix")
 check(
-  counter("peakNativeAdapterBytes", growing) <= 50_000 && points(grown).last?["value"] as? Double == 1_029,
+  counter("peakNativeAdapterBytes", growing) <= 60_000 && points(grown).last?["value"] as? Double == 1_029,
   "budget exhaustion preserves final geometry under hard allocation cap")
 
 // A writer advances revision while the production reader scans fixed-revision pages.
@@ -630,7 +646,8 @@ for (time, value) in [(0.0, 100.0), (0.5, nil), (1.0, 110.0), (1.5, nil), (2.0, 
       timestamp: origin.addingTimeInterval(time), elapsedSeconds: time, payload: payload))
 }
 let boundaryReader = MonitorDataStore(root: root)
-var boundaryQuery = MonitorRequest(source: "workout", id: boundaryRide.id, metrics: ["heartRateBpm"], buckets: 1)
+var boundaryQuery = MonitorRequest(
+  source: "workout", id: boundaryRide.id, startSeconds: 0, endSeconds: 9, metrics: ["heartRateBpm"], buckets: 1)
 _ = try boundaryReader.readPlot(boundaryQuery)
 let boundaryScans = boundaryReader.projectionDiagnostics()["scannedPoints"]
 boundaryQuery.startSeconds = 0.75
@@ -664,8 +681,9 @@ for offset in stride(from: 0, to: 20_000, by: 256) {
 }
 let windows = MonitorDataStore(root: root, projectionCacheBytes: 2 * 1024 * 1024)
 var windowQuery = MonitorRequest(
-  source: "workout", id: windowRide.id,
+  source: "workout", id: windowRide.id, startSeconds: 0.5,
   metrics: ["humanPowerW", "cadenceRpm", "motorInputPowerW", "batteryVoltageV"], buckets: 64)
+let wideWindow = windowQuery
 _ = try windows.readPlot(windowQuery)
 check(windows.projectionDiagnostics()["pyramidEntries"] == 4, "Four long channels fit in the reduced cache budget")
 windowQuery.startSeconds = 100
@@ -720,4 +738,452 @@ do {
 } catch {
   check(error.localizedDescription == "invalidEvidence", "An embedded NUL remains rejected by capture admission")
 }
+func latestChangeKind(_ id: String) throws -> String? {
+  try db.read {
+    try $0.rows(
+      "SELECT kind FROM collection_changes WHERE collection_id=? ORDER BY revision DESC LIMIT 1", [.text(id)], limit: 1
+    ).first?.string("kind")
+  }
+}
+func windowChanges(since revision: Int64) throws -> [[String: Any]] {
+  var request = MonitorRequest(source: "workout", id: windowRide.id)
+  request.sinceRevision = String(revision)
+  let result = try windows.changesSince(request)
+  check(result["resetRequired"] as? Bool == false, "Change journal stays continuous across metadata saves")
+  return result["changes"] as! [[String: Any]]
+}
+var wholeWindow = windowQuery
+wholeWindow.startSeconds = nil
+wholeWindow.endSeconds = nil
+func readWindows() throws -> [String: Int] {
+  _ = try windows.readPlot(wholeWindow)
+  _ = try windows.readPlot(wideWindow)
+  _ = try windows.readPlot(windowQuery)
+  _ = try windows.rangeStats(windowQuery)
+  return windows.projectionDiagnostics()
+}
+let untimed = try readWindows()
+let beforeCheckpoint = try archive.revision(id: windowRide.id)
+let checkpoint = try WorkoutOwnerTiming(
+  timestamp: WorkoutCoding.timestamp(origin.addingTimeInterval(2_505)), elapsedSeconds: 2_505, timerSeconds: 2_505)
+_ = try archive.update(
+  id: windowRide.id, phase: "running", ownerTiming: checkpoint, elapsedSeconds: 2_505, onlyIfChanged: true)
+check(try latestChangeKind(windowRide.id) == "timing", "A running timing checkpoint is journaled as timing")
+let timed = try readWindows()
+check(
+  [
+    "invalidations", "pyramidInvalidations", "pyramidBuilds", "pyramidOriginalPoints", "summaryInvalidations",
+    "summaryRebuilds",
+  ].allSatisfy {
+    timed[$0] == untimed[$0]
+  }, "Timing checkpoints keep numeric projections, pyramids and slot summaries")
+check(try windowChanges(since: beforeCheckpoint).isEmpty, "Timing checkpoints are not reported as chart changes")
+let beforePause = try archive.revision(id: windowRide.id)
+let pause = try WorkoutOwnerTiming(
+  timestamp: WorkoutCoding.timestamp(origin.addingTimeInterval(2_510)), elapsedSeconds: 2_510, timerSeconds: 2_510)
+_ = try archive.update(id: windowRide.id, phase: "paused", ownerTiming: pause, elapsedSeconds: 2_510)
+check(try latestChangeKind(windowRide.id) == "metadata", "A phase change with its timing is journaled as metadata")
+let paused = try readWindows()
+check(
+  (paused["invalidations"] ?? 0) > (timed["invalidations"] ?? 0)
+    && (paused["pyramidInvalidations"] ?? 0) > (timed["pyramidInvalidations"] ?? 0)
+    && (paused["summaryInvalidations"] ?? 0) > (timed["summaryInvalidations"] ?? 0),
+  "Metadata changes still rebuild numeric projections, pyramids and slot summaries")
+let pauseChanges = try windowChanges(since: beforePause)
+check(
+  pauseChanges.count == 1 && pauseChanges[0]["kind"] as? String == "semantics"
+    && (pauseChanges[0]["metrics"] as? [String])?.isEmpty == true,
+  "Metadata changes are still reported as broad chart semantics")
+
+let beyondJournal = PowerLogStorageLimits.changeRows + 88
+var tailFrames: [String: Int] = [:]
+func tailFrame(_ id: String, _ index: Int, value: Double? = nil, extra: [String: WorkoutJSON] = [:]) throws
+  -> WorkoutEvent
+{
+  var payload: [String: WorkoutJSON] = [
+    "humanPowerW": .number(value ?? Double(index % 200)), "cadenceRpm": .number(80),
+  ]
+  payload.merge(extra) { _, new in new }
+  return try WorkoutEvent(
+    workoutId: id, kind: "telemetry", source: "controller", timestamp: origin.addingTimeInterval(Double(index) / 8),
+    elapsedSeconds: Double(index) / 8, payload: payload)
+}
+func appendTail(_ id: String, _ count: Int, spikes: [Int: Double] = [:]) throws {
+  let first = tailFrames[id, default: 0]
+  for offset in stride(from: first, to: first + count, by: 256) {
+    _ = try db.appendBatch(
+      try (offset..<min(first + count, offset + 256)).map { try tailFrame(id, $0, value: spikes[$0]) })
+  }
+  tailFrames[id] = first + count
+}
+func tailTime(_ id: String) -> Double { Double(tailFrames[id, default: 0]) / 8 }
+func timingOnly(_ id: String, _ count: Int) throws {
+  let end = tailTime(id)
+  for step in 0..<count {
+    let elapsed = end - 1 + Double(step) / 1_000
+    _ = try archive.update(
+      id: id,
+      ownerTiming: WorkoutOwnerTiming(
+        timestamp: WorkoutCoding.timestamp(origin.addingTimeInterval(elapsed)), elapsedSeconds: elapsed,
+        timerSeconds: elapsed), elapsedSeconds: elapsed, onlyIfChanged: true)
+  }
+}
+func energySample(_ id: String) throws {
+  try archive.append(
+    WorkoutEvent(
+      workoutId: id, kind: "health", source: "phone", timestamp: origin.addingTimeInterval(1), elapsedSeconds: 1,
+      payload: ["activeEnergyKcal": .number(1), "representation": .string("rawQuantity")]))
+}
+func markRevision(_ id: String, metric: String, kind: String) throws -> Int64? {
+  try db.read {
+    try $0.scalarInt(
+      "SELECT revision FROM collection_change_marks WHERE collection_id=? AND metric=? AND kind=?",
+      [.text(id), .text(metric), .text(kind)])
+  }
+}
+struct CounterDelta {
+  let before: [String: Int]
+  let after: [String: Int]
+  subscript(_ name: String) -> Int { (after[name] ?? 0) - (before[name] ?? 0) }
+}
+func delta(_ reader: MonitorDataStore, _ body: () throws -> Void) rethrows -> CounterDelta {
+  let before = reader.projectionDiagnostics()
+  try body()
+  return CounterDelta(before: before, after: reader.projectionDiagnostics())
+}
+
+let tailRide = try archive.create(
+  startedAt: origin, indoor: true, watchEnabled: false, saveToHealth: true, recordGPS: false, sampleHz: 8
+).id
+try appendTail(tailRide, 2_000, spikes: [100: -100, 200: -200])
+try appendDistantHeartRate(tailRide)
+let tails = MonitorDataStore(root: root)
+func tailValues() throws -> [Double] {
+  let request = MonitorRequest(
+    source: "workout", id: tailRide, startSeconds: 0, endSeconds: tailTime(tailRide) - 0.125,
+    metrics: ["humanPowerW"], buckets: 64)
+  return points(try tails.readPlot(request)).compactMap { $0["value"] as? Double }
+}
+check(try tailValues().contains(-100), "the cached projection holds its early spikes")
+var change = try delta(tails) { _ = try tailValues() }
+check(change["invalidations"] == 0 && change["scannedPoints"] == 0, "a repeated read reuses its projection")
+try appendTail(tailRide, beyondJournal)
+change = try delta(tails) { _ = try tailValues() }
+check(
+  change["invalidations"] == 0 && change["projectionHits"] == 1 && change["scannedPoints"] == beyondJournal,
+  "a projection reads only its tail after more append-only revisions than the change journal keeps")
+try timingOnly(tailRide, beyondJournal)
+change = try delta(tails) { _ = try tailValues() }
+check(
+  change["invalidations"] == 0 && change["projectionHits"] == 1 && change["scannedPoints"] == 0,
+  "timing-only revisions beyond the change journal never invalidate a projection")
+let energyMarkBefore = try markRevision(tailRide, metric: "activeEnergyKcal", kind: "semantics")
+try energySample(tailRide)
+check(
+  try markRevision(tailRide, metric: "activeEnergyKcal", kind: "semantics") ?? 0 > energyMarkBefore ?? 0,
+  "an energy sample marks a semantics change for its own metric")
+try appendTail(tailRide, beyondJournal)
+change = try delta(tails) { _ = try tailValues() }
+check(
+  change["invalidations"] == 0 && change["scannedPoints"] == beyondJournal,
+  "a semantics change of another metric leaves a telemetry projection valid")
+let tailTarget = try db.read {
+  try $0.rows(
+    "SELECT event_id FROM collection_memberships WHERE collection_id=? AND elapsed_seconds=12.5", [.text(tailRide)],
+    limit: 1
+  ).first!.string("event_id")!
+}
+try archive.append(
+  tailFrame(
+    tailRide, tailFrames[tailRide]!, value: 50, extra: ["supersedesEventId": .string(tailTarget)]))
+tailFrames[tailRide]! += 1
+try appendTail(tailRide, beyondJournal)
+var values: [Double] = []
+change = try delta(tails) { values = try tailValues() }
+check(
+  change["invalidations"] == 1 && !values.contains(-100),
+  "a correction older than the change journal rebuilds the projection even when its replacement follows the tail")
+let deletedTarget = try db.read {
+  try $0.rows(
+    "SELECT event_id FROM collection_memberships WHERE collection_id=? AND elapsed_seconds=25", [.text(tailRide)],
+    limit: 1
+  ).first!.string("event_id")!
+}
+try archive.append(
+  tailFrame(
+    tailRide, 200, value: -200,
+    extra: ["supersedesEventId": .string(deletedTarget), "deleted": .bool(true)]))
+try appendTail(tailRide, beyondJournal)
+change = try delta(tails) { values = try tailValues() }
+check(
+  change["invalidations"] == 1 && !values.contains(-200),
+  "a deletion older than the change journal rebuilds the projection without the deleted original")
+try archive.append(
+  WorkoutEvent(
+    workoutId: tailRide, kind: "lifecycle", source: "phone", timestamp: origin.addingTimeInterval(30),
+    elapsedSeconds: 30, payload: ["action": .string("pause")]))
+try appendTail(tailRide, beyondJournal)
+change = try delta(tails) { _ = try tailValues() }
+check(change["invalidations"] == 1, "a lifecycle event older than the change journal rebuilds the projection")
+_ = try archive.update(id: tailRide, phase: "paused")
+try appendTail(tailRide, beyondJournal)
+change = try delta(tails) { _ = try tailValues() }
+check(change["invalidations"] == 1, "a metadata change older than the change journal rebuilds the projection")
+
+let previewReader = MonitorDataStore(root: root)
+let previewID = UUID().uuidString.lowercased()
+previewReader.beginLive(startedAt: WorkoutCoding.timestamp(origin), monotonic: 0, id: previewID)
+var previewFrames = 0
+func appendPreview(_ count: Int, first: Double? = nil) throws {
+  for _ in 0..<count {
+    let seconds = Double(previewFrames) / 8
+    try previewReader.appendLive(
+      [
+        "timestamp": WorkoutCoding.timestamp(origin.addingTimeInterval(seconds)),
+        "humanPowerW": previewFrames == 0 ? first ?? 0 : Double(previewFrames % 200), "cadenceRpm": 80.0,
+      ], elapsedSeconds: seconds)
+    previewFrames += 1
+  }
+}
+try appendPreview(400, first: -300)
+let previewQuery = MonitorRequest(
+  source: "live", startSeconds: 0, endSeconds: 49, metrics: ["humanPowerW"], buckets: 64)
+func previewValues() throws -> [Double] {
+  points(try previewReader.readPlot(previewQuery)).compactMap { $0["value"] as? Double }
+}
+check(try previewValues().contains(-300), "the preview projection holds its first reading")
+try db.prunePreview(id: previewID, retaining: 300)
+try appendPreview(beyondJournal)
+change = try delta(previewReader) { values = try previewValues() }
+check(
+  change["invalidations"] == 1 && !values.contains(-300),
+  "a preview prune older than the change journal rebuilds the projection without pruned readings")
+
+let pyramidRide = try archive.create(
+  startedAt: origin, indoor: true, watchEnabled: false, saveToHealth: true, recordGPS: false, sampleHz: 8
+).id
+try appendTail(pyramidRide, 16_400, spikes: [100: -100])
+let pyramids = MonitorDataStore(root: root)
+let pyramidQuery = MonitorRequest(
+  source: "workout", id: pyramidRide, startSeconds: 0.0625, metrics: ["humanPowerW"], buckets: 64)
+func pyramidValues() throws -> [Double] {
+  points(try pyramids.readPlot(pyramidQuery)).compactMap { $0["value"] as? Double }
+}
+change = try delta(pyramids) { values = try pyramidValues() }
+check(change["pyramidBuilds"] == 1 && values.contains(-100), "a long whole-ride read builds one pyramid")
+try appendTail(pyramidRide, beyondJournal)
+change = try delta(pyramids) { _ = try pyramidValues() }
+check(
+  change["pyramidInvalidations"] == 0 && change["pyramidBuilds"] == 0
+    && change["pyramidOriginalPoints"] == beyondJournal,
+  "a pyramid summarizes only its tail after more append-only revisions than the change journal keeps")
+try timingOnly(pyramidRide, beyondJournal)
+change = try delta(pyramids) { _ = try pyramidValues() }
+check(
+  change["pyramidInvalidations"] == 0 && change["pyramidBuilds"] == 0 && change["pyramidOriginalPoints"] == 0,
+  "timing-only revisions beyond the change journal never invalidate a pyramid")
+try energySample(pyramidRide)
+try appendTail(pyramidRide, beyondJournal)
+change = try delta(pyramids) { _ = try pyramidValues() }
+check(
+  change["pyramidInvalidations"] == 0 && change["pyramidOriginalPoints"] == beyondJournal,
+  "a semantics change of another metric leaves a pyramid valid")
+let pyramidTarget = try db.read {
+  try $0.rows(
+    "SELECT event_id FROM collection_memberships WHERE collection_id=? AND elapsed_seconds=12.5",
+    [.text(pyramidRide)], limit: 1
+  ).first!.string("event_id")!
+}
+try archive.append(
+  tailFrame(
+    pyramidRide, tailFrames[pyramidRide]!, value: 50, extra: ["supersedesEventId": .string(pyramidTarget)]))
+tailFrames[pyramidRide]! += 1
+try appendTail(pyramidRide, beyondJournal)
+change = try delta(pyramids) { values = try pyramidValues() }
+check(
+  change["pyramidInvalidations"] == 1 && !values.contains(-100),
+  "a correction older than the change journal rebuilds the pyramid")
+_ = try archive.update(id: pyramidRide, phase: "paused")
+try appendTail(pyramidRide, beyondJournal)
+change = try delta(pyramids) { _ = try pyramidValues() }
+check(change["pyramidInvalidations"] == 1, "a metadata change older than the change journal rebuilds the pyramid")
+
+func appendVoltage(_ id: String, _ count: Int, spikes: [Int: Double]) throws {
+  let first = tailFrames[id, default: 0]
+  for offset in stride(from: first, to: first + count, by: 256) {
+    _ = try db.appendBatch(
+      try (offset..<min(first + count, offset + 256)).map {
+        try tailFrame(id, $0, extra: ["batteryVoltageV": .number(spikes[$0] ?? 52)])
+      })
+  }
+  tailFrames[id] = first + count
+}
+func replace(_ id: String, frame: Int, deleted: Bool = false) throws {
+  let target = try db.read {
+    try $0.rows(
+      "SELECT event_id FROM collection_memberships WHERE collection_id=? AND elapsed_seconds=?",
+      [.text(id), .real(Double(frame) / 8)], limit: 1
+    ).first!.string("event_id")!
+  }
+  var extra: [String: WorkoutJSON] = ["supersedesEventId": .string(target)]
+  if deleted { extra["deleted"] = .bool(true) }
+  try archive.append(tailFrame(id, tailFrames[id]!, extra: extra))
+  tailFrames[id]! += 1
+}
+func canonical(_ value: Any) throws -> Data {
+  try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+}
+func holds(_ points: [[String: Any]], _ value: Double) -> Bool { points.contains { $0["value"] as? Double == value } }
+let replacedRide = try archive.create(
+  startedAt: origin, indoor: true, watchEnabled: false, saveToHealth: true, recordGPS: false, sampleHz: 8
+).id
+try appendVoltage(replacedRide, 2_000, spikes: [100: 30.5, 200: 70.25])
+try appendDistantHeartRate(replacedRide)
+let replacedReader = MonitorDataStore(root: root)
+func replacedWindow() -> MonitorRequest {
+  MonitorRequest(
+    source: "workout", id: replacedRide, startSeconds: 0, endSeconds: tailTime(replacedRide) - 0.125,
+    metrics: ["batteryVoltageV"], buckets: 64)
+}
+func replacedPlot(_ reader: MonitorDataStore = replacedReader) throws -> [[String: Any]] {
+  points(try reader.readPlot(replacedWindow()), metric: "batteryVoltageV")
+}
+func replacedStats(_ reader: MonitorDataStore = replacedReader) throws -> [String: Any] {
+  (try reader.rangeStats(replacedWindow())["statistics"] as! [String: [String: Any]])["batteryVoltageV"]!
+}
+func maximum(_ stats: [String: Any]) -> Double? { (stats["max"] as? [String: Any])?["value"] as? Double }
+check(
+  try holds(replacedPlot(), 30.5) && maximum(try replacedStats()) == 70.25,
+  "the voltage projections hold the originals that later readings without voltage replace")
+let beforeReplacement = try archive.revision(id: replacedRide)
+try replace(replacedRide, frame: 100)
+var plotted: [[String: Any]] = []
+change = try delta(replacedReader) { plotted = try replacedPlot() }
+var fresh = try canonical(replacedPlot(MonitorDataStore(root: root, projectionCacheBytes: 0)))
+check(
+  try change["invalidations"] == 1 && !holds(plotted, 30.5) && canonical(plotted) == fresh,
+  "a correction without voltage rebuilds the voltage projection without the original it replaces")
+var replacementFeed = MonitorRequest(source: "workout", id: replacedRide)
+replacementFeed.sinceRevision = String(beforeReplacement)
+let replacementChanges = try replacedReader.changesSince(replacementFeed)["changes"] as! [[String: Any]]
+check(
+  replacementChanges.count == 1
+    && (replacementChanges[0]["metrics"] as? [String])?.contains("batteryVoltageV") == true,
+  "the change feed reports a correction without voltage as a change of the voltage it replaces")
+try replace(replacedRide, frame: 200, deleted: true)
+var replacedStatistics: [String: Any] = [:]
+change = try delta(replacedReader) {
+  plotted = try replacedPlot()
+  replacedStatistics = try replacedStats()
+}
+fresh = try canonical(replacedPlot(MonitorDataStore(root: root, projectionCacheBytes: 0)))
+check(
+  try change["invalidations"] == 2 && !holds(plotted, 70.25) && canonical(plotted) == fresh,
+  "a deletion without voltage rebuilds the voltage projections without the deleted original")
+fresh = try canonical(replacedStats(MonitorDataStore(root: root, projectionCacheBytes: 0)))
+check(
+  try maximum(replacedStatistics) != 70.25 && canonical(replacedStatistics) == fresh,
+  "voltage statistics exclude an original deleted by a reading without voltage")
+let replacedPyramidRide = try archive.create(
+  startedAt: origin, indoor: true, watchEnabled: false, saveToHealth: true, recordGPS: false, sampleHz: 8
+).id
+try appendVoltage(replacedPyramidRide, 16_400, spikes: [100: 30.5])
+let replacedPyramids = MonitorDataStore(root: root)
+let replacedPyramidQuery = MonitorRequest(
+  source: "workout", id: replacedPyramidRide, startSeconds: 0.0625, metrics: ["batteryVoltageV"], buckets: 64)
+func replacedPyramidPlot(_ reader: MonitorDataStore = replacedPyramids) throws -> [[String: Any]] {
+  points(try reader.readPlot(replacedPyramidQuery), metric: "batteryVoltageV")
+}
+change = try delta(replacedPyramids) { plotted = try replacedPyramidPlot() }
+check(
+  change["pyramidBuilds"] == 1 && holds(plotted, 30.5),
+  "the voltage pyramid holds the original that a later reading without voltage replaces")
+try replace(replacedPyramidRide, frame: 100)
+change = try delta(replacedPyramids) { plotted = try replacedPyramidPlot() }
+check(
+  change["pyramidInvalidations"] == 1 && !holds(plotted, 30.5),
+  "a correction without voltage rebuilds the voltage pyramid without the original it replaces")
+try clearPersistedPlots()
+fresh = try canonical(replacedPyramidPlot(MonitorDataStore(root: root)))
+check(try canonical(plotted) == fresh, "the rebuilt voltage pyramid equals a pyramid built from the corrected ride")
+
+let wideRide = try archive.create(
+  startedAt: origin, indoor: true, watchEnabled: false, saveToHealth: true, recordGPS: false, sampleHz: 8
+).id
+let wideMetrics = PowerLogStore.telemetryColumns
+func wideFrames(_ range: Range<Int>) throws -> [WorkoutEvent] {
+  try range.map { index in
+    try WorkoutEvent(
+      workoutId: wideRide, kind: "telemetry", source: "controller",
+      timestamp: origin.addingTimeInterval(Double(index) / 8), elapsedSeconds: Double(index) / 8,
+      payload: Dictionary(uniqueKeysWithValues: wideMetrics.map { ($0, .number(Double(index % 7))) }))
+  }
+}
+_ = try db.appendBatch(wideFrames(0..<240))
+let wideReader = MonitorDataStore(root: root)
+let widePlot = MonitorRequest(source: "workout", id: wideRide, metrics: wideMetrics, buckets: 64)
+let wideStatistics = MonitorRequest(
+  source: "workout", id: wideRide, startSeconds: 0, endSeconds: 120, metrics: wideMetrics)
+_ = try wideReader.readPlot(widePlot)
+_ = try wideReader.rangeStats(wideStatistics)
+check(
+  wideMetrics.count == 18 && counter("entries", wideReader) == 2 * wideMetrics.count,
+  "every channel of an 18-channel whole-ride view keeps its plot and statistics projection")
+_ = try db.appendBatch(wideFrames(240..<248))
+change = try delta(wideReader) {
+  _ = try wideReader.readPlot(widePlot)
+  _ = try wideReader.rangeStats(wideStatistics)
+}
+check(
+  change["projectionHits"] == 2 * wideMetrics.count && change["evictions"] == 0
+    && change["scannedPoints"] == 2 * 8 * wideMetrics.count,
+  "a repeated 18-channel whole-ride read hits every projection and scans only the tail")
+
+let energyRide = try archive.create(
+  startedAt: origin, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 8,
+  distanceSource: "controller"
+).id
+_ = try db.appendBatch(
+  (0..<80).map { index in
+    try WorkoutEvent(
+      workoutId: energyRide, kind: "telemetry", source: "controller",
+      timestamp: origin.addingTimeInterval(Double(index) / 8), elapsedSeconds: Double(index) / 8,
+      payload: [
+        "humanPowerW": .number(180), "motorInputPowerW": .number(400), "controllerSpeedMps": .number(6),
+        "cadenceRpm": .number(80),
+      ])
+  })
+let energyGate = PageGate()
+let energyReader = MonitorDataStore(root: root)
+let wholeEnergyDone = DispatchSemaphore(value: 0)
+let wholeEnergy = ReadResultBox()
+WorkoutDistanceStore.jobObserverForTesting = { _ in energyGate.visit() }
+check(
+  energyReader.submit(
+    .energyPerDistance,
+    request: MonitorRequest(source: "workout", id: energyRide, startSeconds: 0, endSeconds: 10, metrics: [])
+  ) {
+    wholeEnergy.put($0)
+    wholeEnergyDone.signal()
+  }, "a whole-ride Wh/km read is admitted")
+check(
+  energyGate.entered.wait(timeout: .now() + 5) == .success, "the whole-ride Wh/km read is held in its distance build")
+var currentEnergyRequest = MonitorRequest(
+  source: "workout", id: energyRide, startSeconds: 9.875, endSeconds: 9.875, metrics: [])
+currentEnergyRequest.energyCurrent = true
+currentEnergyRequest.energyTotals = false
+let currentEnergyDone = DispatchSemaphore(value: 0)
+let currentEnergy = ReadResultBox()
+check(
+  energyReader.submit(.energyPerDistance, request: currentEnergyRequest) {
+    currentEnergy.put($0)
+    currentEnergyDone.signal()
+  }, "a current Wh/km reading is admitted while a whole-ride Wh/km read is held")
+let currentCompleted = currentEnergyDone.wait(timeout: .now() + 5) == .success
+energyGate.release.signal()
+check(currentCompleted, "a current Wh/km reading completes while a whole-ride Wh/km read is held")
+check(try currentEnergy.get()["status"] as? String == "ok", "the current Wh/km reading succeeds")
+check(wholeEnergyDone.wait(timeout: .now() + 5) == .success, "the held whole-ride Wh/km read settles once released")
+WorkoutDistanceStore.jobObserverForTesting = nil
+check(try wholeEnergy.get()["status"] as? String == "ok", "the held whole-ride Wh/km read succeeds")
 print("Native projection cache, statistics, scheduling and admitted snapshots: \(assertions) assertions passed")

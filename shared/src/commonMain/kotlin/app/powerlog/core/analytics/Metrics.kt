@@ -33,6 +33,8 @@ object Metrics {
                 MetricPolicy("controllerChargeAh", 1000000, 0.0, suppressed = true),
                 MetricPolicy("calculatedEnergyWh", 1000000, 0.0, suppressed = true),
                 MetricPolicy("calculatedChargeAh", 1000000, 0.0, suppressed = true),
+                MetricPolicy("batteryWhPerKm", 1000000, 0.0, suppressed = true),
+                MetricPolicy("riderWhPerKm", 1000000, 0.0, suppressed = true),
                 MetricPolicy("altitudeMeters", 1000, -500.0, 20000.0, 10000000),
                 MetricPolicy("horizontalAccuracyM", 1000, 0.0, 50.0, 10000000),
                 MetricPolicy("verticalAccuracyM", 1000, 0.0, 20.0, 10000000),

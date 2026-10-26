@@ -21,6 +21,7 @@ import { DashboardScreen } from '../../src/features/dashboard/dashboard-screen';
 import { WorkoutActions, type WorkoutActionFlight } from '../../src/services/workout-actions';
 vi.mock('../../src/services/device', () => ({ deviceAdapter: {} }));
 vi.mock('../../src/services/files', () => ({}));
+vi.mock('../../src/services/diagnostics-export', () => ({}));
 
 // Static renders retain hook cells only for tests that drive captured button handlers.
 const localState = vi.hoisted(() => ({
@@ -95,6 +96,7 @@ vi.mock('react-native', () => ({
       return platformState.os;
     },
   },
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => undefined }) },
   View: container,
   Text: container,
   Pressable: ({
@@ -119,7 +121,7 @@ vi.mock('react-native', () => ({
   useWindowDimensions: () => ({ width: 400, fontScale: 1 }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
-vi.mock('expo-router', () => ({ Link: container }));
+vi.mock('expo-router', () => ({ Link: container, useFocusEffect: () => undefined }));
 vi.mock('../../src/components/app-shell', () => ({ AppShell: container }));
 vi.mock('../../src/components/modal-dialog', () => ({
   ModalDialog: (props: { children?: ReactNode; visible?: boolean }) =>

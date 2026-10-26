@@ -102,7 +102,7 @@ class RecordingServiceTest {
         val clock = PresentationClock("process", 105000000, 105000000)
         val missing = RideNotificationAdapter.project(snapshot("running"), 1, live(false), clock)
         assertNull(missing.bikeExpiresAtUs)
-        assertEquals(115000000L, missing.staleDateUs)
+        assertEquals(130000000L, missing.staleDateUs)
         assertEquals("—", missing.render(clock.utcUs, false).bike.text)
         val restarted = RideNotificationAdapter.project(snapshot("running"), 2, live(), clock.copy(epoch = "restart"))
         assertNull(restarted.staleDateUs)
@@ -182,7 +182,7 @@ class RecordingServiceTest {
             assertTrue(pending.isImmutable)
         }
         assertEquals("finish", RideNotificationAdapter.request(shadowOf(finish).savedIntent)?.action)
-        val expired = service.notification(projection, 115000000)
+        val expired = service.notification(projection, 130000000)
         assertEquals("— W · — bpm", expired.extras.getCharSequence(Notification.EXTRA_TEXT))
         val paused =
             service.notification(RideNotificationAdapter.project(snapshot("paused"), 2, live(), clock), clock.utcUs)

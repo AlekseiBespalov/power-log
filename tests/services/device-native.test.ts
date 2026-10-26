@@ -42,6 +42,7 @@ describe('native telemetry delivery', () => {
   it('invalidates retained connection evidence throughout foreground resync after Android sleep', async () => {
     vi.useFakeTimers();
     native.getMonotonicSeconds.mockResolvedValue(1000);
+    native.describeMonitorSource.mockResolvedValue({ availableMetrics: [] });
     const presentation = new SessionPresentation();
     presentation.setActive(true);
     presentation.receiveState({ status: 'connected' });
@@ -133,7 +134,7 @@ describe('native telemetry delivery', () => {
       expect(source.mapMonotonicSeconds!(2061)).toBe(60);
       native.listeners.get('onSample')!({ ...syntheticSample(1, 1), acquiredAtMonotonic: 2061 });
       expect(samplePresentationTime(sample.mock.calls.at(-1)![1])).toBe(60);
-      const response = { nowSeconds: 10, monotonicAt: 2061 };
+      const response = { nowSeconds: 10, monotonicAt: 2061, availableMetrics: [] };
       native.describeMonitorSource.mockResolvedValue(response);
       expect(await source.describeSource({ generation: 1 })).toBe(response);
     } finally {

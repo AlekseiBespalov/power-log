@@ -6,6 +6,11 @@ export interface BluetoothTraceStatus {
   lastEvent: string | null;
 }
 
+export interface ConnectionLogExport {
+  readonly log: string;
+  readonly device: Readonly<Record<string, string | number | boolean | null>>;
+}
+
 export interface BluetoothDiagnostics {
   getBluetoothTrace(): Promise<BluetoothTraceStatus>;
   startBluetoothTrace(): Promise<void>;

@@ -113,27 +113,28 @@ func runtimeChecks() async throws {
     "An older forced publication cannot replace the newer delivered presentation")
 
   presenter.setForeground(true, sequence: 1)
-  presenter.publish(try content(105, sequence: 1), sequence: 1, force: false)
+  kit.clock = 120
+  presenter.publish(try content(120, sequence: 1), sequence: 1, force: false)
   await presenter.flush()
   kit.delayed = true
-  kit.clock = 106
-  presenter.publish(try content(106, sequence: 2), sequence: 2, force: true)
+  kit.clock = 121
+  presenter.publish(try content(121, sequence: 2, acquired: 121), sequence: 2, force: true)
   for _ in 0..<100 { await Task.yield() }
   check(kit.pending != nil, "Deadline enters the real presenter update")
-  kit.clock = 107
-  presenter.publish(try content(107, sequence: 3, acquired: 107), sequence: 3, force: false)
-  kit.complete(at: 107.1)
+  kit.clock = 122
+  presenter.publish(try content(122, sequence: 3, acquired: 122), sequence: 3, force: false)
+  kit.complete(at: 122.1)
   for _ in 0..<100 { await Task.yield() }
-  check(kit.pending == nil && kit.starts == [105, 106], "One forced deadline cannot propagate into ordinary updates")
-  for second in 108...120 {
+  check(kit.pending == nil && kit.starts == [120, 121], "One forced deadline cannot propagate into ordinary updates")
+  for second in 123...155 {
     if kit.pending != nil && kit.starts.last! + 1.1 < Double(second) {
       kit.complete(at: kit.starts.last! + 1.1)
       for _ in 0..<100 { await Task.yield() }
     }
     kit.clock = Double(second)
     presenter.publish(
-      try content(Double(second), sequence: Int64(second - 104), acquired: Double(second)),
-      sequence: Int64(second - 104), force: false)
+      try content(Double(second), sequence: Int64(second - 119), acquired: Double(second)),
+      sequence: Int64(second - 119), force: false)
     for _ in 0..<100 { await Task.yield() }
   }
   if kit.pending != nil {
@@ -142,7 +143,9 @@ func runtimeChecks() async throws {
   }
   check(kit.starts.count >= 3, "Continuous observations still publish after throttle")
   for pair in zip(kit.starts.dropFirst(2), kit.starts.dropFirst()) {
-    check(pair.0 - pair.1 >= 6.1 - 0.000001, "Updates taking 1.1 seconds retain five-second throttle after completion")
+    check(
+      pair.0 - pair.1 >= ActivityPresentations.shared.refreshSeconds + 1.1 - 0.000001,
+      "Updates taking 1.1 seconds retain the 15-second throttle after completion")
   }
   kit.delayed = false
   await presenter.flush()
@@ -155,13 +158,14 @@ func runtimeChecks() async throws {
       kit: delayedKit, defaults: delayedDefaults,
       now: { Date(timeIntervalSince1970: delayedKit.clock) }, uptime: { delayedKit.clock }, didPublish: { _, _ in })
     delayedPresenter.setForeground(true, sequence: 1)
-    delayedPresenter.publish(try content(105, sequence: 1), sequence: 1, force: false)
+    delayedKit.clock = 120
+    delayedPresenter.publish(try content(120, sequence: 1), sequence: 1, force: false)
     await delayedPresenter.flush()
     delayedKit.delayed = true
-    delayedKit.clock = 106
-    delayedPresenter.publish(try content(106, sequence: 2), sequence: 2, force: true)
+    delayedKit.clock = 121
+    delayedPresenter.publish(try content(121, sequence: 2), sequence: 2, force: true)
     for _ in 0..<100 { await Task.yield() }
-    let nextTime = controlChanged ? 107.0 : 115.0
+    let nextTime = controlChanged ? 122.0 : 130.0
     let input = try activitySnapshot(
       rideID: ride, token: token, phase: controlChanged ? "paused" : "running",
       now: Int64(nextTime * 1_000_000), bike: 100_000_000, heart: 100_000_000)
@@ -172,7 +176,7 @@ func runtimeChecks() async throws {
     delayedKit.complete(at: nextTime + 0.1)
     for _ in 0..<100 { await Task.yield() }
     check(
-      delayedKit.pending != nil && delayedKit.starts == [105, 106, nextTime + 0.1],
+      delayedKit.pending != nil && delayedKit.starts == [120, 121, nextTime + 0.1],
       controlChanged
         ? "Current controls independently bypass throttle after a superseded update"
         : "Delivered expiry independently bypasses throttle after a superseded update")
@@ -181,7 +185,7 @@ func runtimeChecks() async throws {
     await delayedPresenter.flush()
   }
 
-  var now = 105.0
+  var now = 120.0
   let timer = TestTimer()
   var advanceOnRead = false
   let coordinator = WorkoutActivityCoordinator(
@@ -189,7 +193,7 @@ func runtimeChecks() async throws {
     now: {
       let date = Date(timeIntervalSince1970: now)
       if advanceOnRead {
-        now = 106
+        now = 121
         advanceOnRead = false
       }
       return date
@@ -200,24 +204,24 @@ func runtimeChecks() async throws {
   coordinator.publish(try snapshot(now))
   check(timer.delay == 1, "Production coordinator arms actual supplied bike deadline")
   let oldHandler = timer.handler!
-  now = 105.5
+  now = 120.5
   oldHandler()
   check(outputs.count == 1 && timer.delay == 0.5, "An early timer wake rearms without consuming the expiry")
-  now = 105.999999
+  now = 120.999999
   advanceOnRead = true
   timer.handler!()
   check(outputs.count == 1 && timer.delay == 0, "Crossing the deadline during rearm retains an immediate callback")
-  now = 106
+  now = 121
   oldHandler()
   check(outputs.count == 2 && outputs.last!.1, "Production timer handler refreshes and forces the deadline")
   check(
-    timer.delay == 9 && outputs.last!.0!.staleDate == Date(timeIntervalSince1970: 115),
+    timer.delay == 9 && outputs.last!.0!.staleDate == Date(timeIntervalSince1970: 130),
     "Handler schedules the next HR deadline")
-  now = 107
-  coordinator.publish(try snapshot(now, acquired: 107))
+  now = 122
+  coordinator.publish(try snapshot(now, acquired: 122))
   let count = outputs.count
   oldHandler()
-  check(outputs.count == count && timer.delay == 6, "Changed observation rejects the old timer callback")
+  check(outputs.count == count && timer.delay == 21, "Changed observation rejects the old timer callback")
   let cancelledHandler = timer.handler!
   coordinator.publish(
     WorkoutActivitySnapshot(
@@ -290,7 +294,7 @@ func runtimeChecks() async throws {
   }
   check(
     endingKit.starts.count == afterExpiry,
-    "expired pending deadlines cannot bypass the five-second Activity update gate on every publication")
+    "expired pending deadlines cannot bypass the Activity update gate on every publication")
   endingCoordinator.publish(
     WorkoutActivitySnapshot(
       rideID: nil, phase: "idle", pendingAction: nil, timerSeconds: 0,
@@ -334,6 +338,9 @@ func runtimeChecks() async throws {
   }
   let everyPublication = try await liveActivityUpdates(gated: false)
   let shownPublications = try await liveActivityUpdates(gated: true)
+  check(
+    everyPublication.starts == [300, 315, 321],
+    "Live Activity updates follow the 15-second refresh and bypass it for control changes")
   check(
     shownPublications.starts == everyPublication.starts && shownPublications.phases == everyPublication.phases,
     "Building Live Activity projections only when the presenter acts keeps every Activity update")

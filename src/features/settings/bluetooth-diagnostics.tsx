@@ -5,7 +5,9 @@ import { Button, colors, type, lineHeight, MIN_TOUCH_TARGET } from '../../compon
 import { APP_VERSION } from '../../core/app-info';
 import type { BluetoothTraceStatus } from '../../core/bluetooth-diagnostics';
 import { deviceAdapter } from '../../services/device';
+import { shareConnectionDiagnostics } from '../../services/diagnostics-export';
 import { deleteDiagnosticLog, shareDiagnosticLog } from '../../services/files';
+import { useForegroundActivity } from '../../services/use-foreground-activity';
 import { controllerProtocol, controllerSelectedMask, controllerWireFields } from '../../../shared/js';
 import { UART_SERVICE, UART_WRITE, UART_NOTIFY } from '../../services/controller-gatt';
 
@@ -14,8 +16,9 @@ export function BluetoothDiagnosticsControls() {
   const [state, setState] = useState<BluetoothTraceStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const active = useForegroundActivity();
   useEffect(() => {
-    if (!diagnostics) return;
+    if (!diagnostics || !active) return;
     let alive = true;
     let running = false;
     const refresh = async () => {
@@ -36,7 +39,7 @@ export function BluetoothDiagnosticsControls() {
       alive = false;
       clearInterval(timer);
     };
-  }, [diagnostics]);
+  }, [diagnostics, active]);
 
   if (!diagnostics) return <Text style={{ color: colors.muted }}>Bluetooth diagnostics are unavailable here.</Text>;
   const run = async (work: () => Promise<void>) => {
@@ -88,6 +91,20 @@ export function BluetoothDiagnosticsControls() {
   const status = state?.capturing ? 'Capturing' : state?.eventCount ? 'Capture stopped' : 'No capture';
   return (
     <View style={{ gap: 12 }} testID="bluetooth-diagnostics">
+      {deviceAdapter.readConnectionDiagnostics && (
+        <>
+          <Text style={{ color: colors.muted, fontSize: type.body }}>
+            If your bike keeps disconnecting, share diagnostics when you report it.
+          </Text>
+          <Text style={{ color: colors.muted, fontSize: type.caption }}>
+            A ZIP of connection events from at least the last 10 hours of riding, with phone model and app version. No
+            locations, ride measurements or device names.
+          </Text>
+          <Button secondary disabled={busy} onPress={() => void run(shareConnectionDiagnostics)}>
+            Share diagnostics
+          </Button>
+        </>
+      )}
       <Text style={{ color: colors.muted, fontSize: type.body }}>
         Start capture, reconnect your bike, then export the log.
       </Text>

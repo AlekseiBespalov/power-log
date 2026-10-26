@@ -46,7 +46,8 @@
       "group": "Rider",
       "kind": null,
       "zero": null,
-      "semantics": null
+      "semantics": null,
+      "plotGapSeconds": 30.0
     },
     {
       "label": "Pedal torque",
@@ -330,7 +331,7 @@
       "unit": "Wh",
       "color": "#f3c260",
       "decimals": 2,
-      "gapSeconds": 2.5,
+      "gapSeconds": 6.0,
       "scale": 1.0,
       "text": "1.00",
       "group": "Battery",
@@ -346,7 +347,7 @@
       "unit": "Ah",
       "color": "#e0b36a",
       "decimals": 3,
-      "gapSeconds": 2.5,
+      "gapSeconds": 6.0,
       "scale": 1.0,
       "text": "1.000",
       "group": "Battery",
@@ -362,7 +363,7 @@
       "unit": "Wh",
       "color": "#8dbfdf",
       "decimals": 2,
-      "gapSeconds": 2.5,
+      "gapSeconds": 6.0,
       "scale": 1.0,
       "text": "1.00",
       "group": "Battery",
@@ -378,7 +379,7 @@
       "unit": "Ah",
       "color": "#9eafd9",
       "decimals": 3,
-      "gapSeconds": 2.5,
+      "gapSeconds": 6.0,
       "scale": 1.0,
       "text": "1.000",
       "group": "Battery",
@@ -386,6 +387,38 @@
       "zero": true,
       "semantics": "cumulative",
       "description": "Calculated by Power Log by integrating positive battery current during this ride."
+    },
+    {
+      "label": "Battery consumption",
+      "unit": "Wh/km",
+      "color": "#3d8bfd",
+      "decimals": 1,
+      "gapSeconds": 6.0,
+      "scale": 1.0,
+      "text": "1.0",
+      "id": "batteryWhPerKm",
+      "shortLabel": "Battery consumption",
+      "group": "Battery",
+      "kind": null,
+      "zero": true,
+      "semantics": "ratio",
+      "description": "Battery power divided by speed; ride average uses the selected battery energy and distance."
+    },
+    {
+      "label": "Rider contribution",
+      "unit": "Wh/km",
+      "color": "#ff8735",
+      "decimals": 1,
+      "gapSeconds": 6.0,
+      "scale": 1.0,
+      "text": "1.0",
+      "id": "riderWhPerKm",
+      "shortLabel": "Rider contribution",
+      "group": "Rider",
+      "kind": null,
+      "zero": true,
+      "semantics": "ratio",
+      "description": "Rider power divided by speed; ride average uses accumulated pedalling work and distance."
     },
     {
       "label": "Altitude",
@@ -530,7 +563,7 @@
       "id": "batteryVoltageV"
     },
     {
-      "value": 1e+21,
+      "value": 1e21,
       "expected": "1e+21",
       "id": "batteryVoltageV"
     }

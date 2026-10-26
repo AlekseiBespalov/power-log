@@ -6,7 +6,7 @@ import type {
   SampleDelivery,
   TelemetrySample,
 } from '../core/types';
-import type { BluetoothDiagnostics } from '../core/bluetooth-diagnostics';
+import type { BluetoothDiagnostics, ConnectionLogExport } from '../core/bluetooth-diagnostics';
 
 export interface AdapterEvents {
   device: (device: Device) => void;
@@ -19,6 +19,7 @@ export interface TelemetryAdapter {
   subscribe(events: AdapterEvents): () => void;
   getState(): Promise<NativeState>;
   getDiagnostics?(): Promise<ConnectionDiagnostics>;
+  readConnectionDiagnostics?(): Promise<ConnectionLogExport>;
   startScan(): Promise<void>;
   stopScan(): Promise<void>;
   connect(options: ConnectionOptions): Promise<void>;

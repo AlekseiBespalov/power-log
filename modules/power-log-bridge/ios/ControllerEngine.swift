@@ -152,6 +152,19 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   func clearBluetoothTrace() { bluetoothTrace.clear() }
   func readBluetoothTrace() -> String { bluetoothTrace.exportJson(now: now) }
 
+  func readDiagnosticLog(_ completion: @escaping (Result<String, Error>) -> Void) {
+    queue.async {
+      let log = self.diagnosticLog
+      DispatchQueue.global(qos: .utility).async {
+        completion(
+          Result {
+            guard let log else { throw ControllerIOError.invalid("Private diagnostic storage is unavailable.") }
+            return try log.read()
+          })
+      }
+    }
+  }
+
   private func trace(_ event: String, _ detail: String, bytes: Data? = nil) {
     guard bluetoothTrace.status(now: now).capturing else { return }
     bluetoothTrace.record(

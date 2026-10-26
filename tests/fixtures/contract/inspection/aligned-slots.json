@@ -1,0 +1,256 @@
+{
+  "slots": [
+    {
+      "id": "empty-range-uses-exact-width",
+      "startUs": "0",
+      "endUs": "0",
+      "buckets": 1,
+      "slotUs": null
+    },
+    {
+      "id": "just-below-one-second-per-bucket",
+      "startUs": "0",
+      "endUs": "999999",
+      "buckets": 1,
+      "slotUs": null
+    },
+    {
+      "id": "one-second-per-bucket-is-aligned",
+      "startUs": "0",
+      "endUs": "1000000",
+      "buckets": 1,
+      "slotUs": "1000000"
+    },
+    {
+      "id": "one-microsecond-past-one-second",
+      "startUs": "0",
+      "endUs": "1000001",
+      "buckets": 1,
+      "slotUs": "2000000"
+    },
+    {
+      "id": "two-seconds-exactly",
+      "startUs": "0",
+      "endUs": "2000000",
+      "buckets": 1,
+      "slotUs": "2000000"
+    },
+    {
+      "id": "one-microsecond-past-two-seconds",
+      "startUs": "0",
+      "endUs": "2000001",
+      "buckets": 1,
+      "slotUs": "4000000"
+    },
+    {
+      "id": "three-buckets-at-one-second",
+      "startUs": "0",
+      "endUs": "3000000",
+      "buckets": 3,
+      "slotUs": "1000000"
+    },
+    {
+      "id": "three-buckets-just-over-one-second",
+      "startUs": "0",
+      "endUs": "3000001",
+      "buckets": 3,
+      "slotUs": "2000000"
+    },
+    {
+      "id": "seven-buckets-just-below-one-second",
+      "startUs": "0",
+      "endUs": "6999999",
+      "buckets": 7,
+      "slotUs": null
+    },
+    {
+      "id": "maximum-buckets-just-below-one-second",
+      "startUs": "0",
+      "endUs": "511999999",
+      "buckets": 512,
+      "slotUs": null
+    },
+    {
+      "id": "maximum-buckets-at-one-second",
+      "startUs": "0",
+      "endUs": "512000000",
+      "buckets": 512,
+      "slotUs": "1000000"
+    },
+    {
+      "id": "maximum-buckets-just-over-one-second",
+      "startUs": "0",
+      "endUs": "512000001",
+      "buckets": 512,
+      "slotUs": "2000000"
+    },
+    {
+      "id": "maximum-buckets-at-two-seconds",
+      "startUs": "0",
+      "endUs": "1024000000",
+      "buckets": 512,
+      "slotUs": "2000000"
+    },
+    {
+      "id": "maximum-buckets-just-over-two-seconds",
+      "startUs": "0",
+      "endUs": "1024000001",
+      "buckets": 512,
+      "slotUs": "4000000"
+    },
+    {
+      "id": "ten-minutes-at-maximum-buckets",
+      "startUs": "0",
+      "endUs": "600000000",
+      "buckets": 512,
+      "slotUs": "2000000"
+    },
+    {
+      "id": "offset-start-uses-the-span",
+      "startUs": "5000000",
+      "endUs": "133000000",
+      "buckets": 128,
+      "slotUs": "1000000"
+    },
+    {
+      "id": "offset-start-just-below-one-second",
+      "startUs": "5000000",
+      "endUs": "132999999",
+      "buckets": 128,
+      "slotUs": null
+    },
+    {
+      "id": "negative-start-uses-the-span",
+      "startUs": "-3000000",
+      "endUs": "1000000",
+      "buckets": 4,
+      "slotUs": "1000000"
+    },
+    {
+      "id": "thirty-minutes-at-161-buckets",
+      "startUs": "0",
+      "endUs": "1800000000",
+      "buckets": 161,
+      "slotUs": "16000000"
+    },
+    {
+      "id": "four-hours-at-400-buckets",
+      "startUs": "0",
+      "endUs": "14400000000",
+      "buckets": 400,
+      "slotUs": "64000000"
+    },
+    {
+      "id": "sixteen-hours-at-161-buckets",
+      "startUs": "0",
+      "endUs": "57600000000",
+      "buckets": 161,
+      "slotUs": "512000000"
+    },
+    {
+      "id": "sixteen-hours-in-one-bucket",
+      "startUs": "0",
+      "endUs": "57600000000",
+      "buckets": 1,
+      "slotUs": "65536000000"
+    },
+    {
+      "id": "2-to-the-40-microseconds-at-maximum-buckets",
+      "startUs": "0",
+      "endUs": "1099511627776",
+      "buckets": 512,
+      "slotUs": "4096000000"
+    },
+    {
+      "id": "zero-buckets-are-invalid",
+      "startUs": "0",
+      "endUs": "1000000",
+      "buckets": 0,
+      "invalid": true
+    },
+    {
+      "id": "more-than-512-buckets-are-invalid",
+      "startUs": "0",
+      "endUs": "1000000000",
+      "buckets": 513,
+      "invalid": true
+    }
+  ],
+  "budgets": [
+    {
+      "id": "one-metric-keeps-the-request",
+      "requested": 128,
+      "metrics": 1,
+      "buckets": 128,
+      "pointLimit": 16384
+    },
+    {
+      "id": "one-metric-at-maximum-buckets",
+      "requested": 512,
+      "metrics": 1,
+      "buckets": 512,
+      "pointLimit": 16384
+    },
+    {
+      "id": "eight-metrics-cap-at-510",
+      "requested": 512,
+      "metrics": 8,
+      "buckets": 510,
+      "pointLimit": 2048
+    },
+    {
+      "id": "owner-view-25-metrics",
+      "requested": 400,
+      "metrics": 25,
+      "buckets": 161,
+      "pointLimit": 655
+    },
+    {
+      "id": "26-metrics-cap-at-155",
+      "requested": 512,
+      "metrics": 26,
+      "buckets": 155,
+      "pointLimit": 630
+    },
+    {
+      "id": "26-metrics-keep-a-smaller-request",
+      "requested": 100,
+      "metrics": 26,
+      "buckets": 100,
+      "pointLimit": 630
+    },
+    {
+      "id": "33-metrics-cap-at-122",
+      "requested": 400,
+      "metrics": 33,
+      "buckets": 122,
+      "pointLimit": 496
+    },
+    {
+      "id": "no-metrics-count-as-one",
+      "requested": 1,
+      "metrics": 0,
+      "buckets": 1,
+      "pointLimit": 16384
+    },
+    {
+      "id": "many-metrics-keep-one-bucket",
+      "requested": 300,
+      "metrics": 2000,
+      "buckets": 1,
+      "pointLimit": 8
+    },
+    {
+      "id": "zero-requested-buckets-are-invalid",
+      "requested": 0,
+      "metrics": 1,
+      "invalid": true
+    },
+    {
+      "id": "more-than-512-requested-buckets-are-invalid",
+      "requested": 513,
+      "metrics": 1,
+      "invalid": true
+    }
+  ]
+}

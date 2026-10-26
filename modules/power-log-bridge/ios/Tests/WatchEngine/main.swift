@@ -218,6 +218,35 @@ func exercise() async throws {
   check(
     !(String(data: try request.message.encoded(), encoding: .utf8)!.contains("sampleHz")),
     "Watch requests no capture rate")
+  do {
+    let transport = Transport()
+    let health = Health()
+    let engine = WatchWorkoutEngine(transport: transport, health: health, schedule: { _, _ in })
+    let ride = UUID().uuidString
+    await start(transport, id: ride)
+    func heartSends() -> [Transport.Sent] {
+      transport.sent.filter { $0.message.kind == .measurements && $0.message.readings?["heartRateBpm"] != nil }
+    }
+    health.liveReadings?(ride, ["heartRateBpm": 131], Date())
+    await settle()
+    transport.changed?()
+    await settle()
+    check(
+      engine.phase == "running" && heartSends().count == 1 && heartSends()[0].message.observations?.isEmpty == true,
+      "a new heart rate is sent without buffered observations")
+    heartSends()[0].completion?(.failure(WorkoutCompanionError.invalid("Transport failed.")))
+    await settle()
+    try await Task.sleep(nanoseconds: 1_050_000_000)
+    transport.changed?()
+    await settle()
+    check(heartSends().count == 2, "an undelivered heart rate is sent again")
+    heartSends()[1].reply(WorkoutCompanionMessage(kind: .acknowledgement, rideID: ride))
+    await settle()
+    try await Task.sleep(nanoseconds: 1_050_000_000)
+    transport.changed?()
+    await settle()
+    check(heartSends().count == 2, "a delivered heart rate is not sent again without new data")
+  }
   print(
     "Production Watch callbacks: stale replies/ACKs/status, Start correlation, ordering, timeouts and Discard passed")
 }

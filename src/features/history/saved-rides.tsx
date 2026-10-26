@@ -270,6 +270,13 @@ export function SavedRides({ detail }: { detail: boolean }) {
                 <Button
                   secondary
                   disabled={pending(recordKey(record.id)) || !ready}
+                  onPress={action(recordKey(record.id), () => exportRide('csv', record.id, distanceSource))}
+                >
+                  Export CSV
+                </Button>
+                <Button
+                  secondary
+                  disabled={pending(recordKey(record.id)) || !ready}
                   onPress={action(recordKey(record.id), () => exportRide('zip', record.id))}
                 >
                   Export ZIP

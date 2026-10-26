@@ -944,8 +944,10 @@ private constructor(
         try {
             if (pending.count { current == null || it.ride != live } >= 8) flush()
         } catch (error: Exception) {
-            captureFailed(error)
-            return
+            if (!storageBusy(error)) {
+                captureFailed(error)
+                return
+            }
         }
         val now = SystemClock.elapsedRealtime()
         if (now - lastSampleEvent >= 250) {
@@ -1247,6 +1249,8 @@ private constructor(
         )
 
     private fun captureFailed(error: Exception, kind: LifecycleStorageError) {
+        android.util.Log.w("PowerLog", "Capture failed ($kind)", error)
+        handler.post { bluetooth.recordingFailed() }
         val fault =
             captureBatch.fault
                 ?: CaptureFault(

@@ -123,6 +123,8 @@ describe('controller speed provenance and units', () => {
     ).toEqual(['controllerSpeedMps', 'humanPowerW']);
     const ids = ['controllerSpeedMps', 'speedMps'];
     expect(monitorQueryMetrics(ids)).toEqual(['controllerSpeedMps', 'speedRaw', 'speedMps']);
+    expect(monitorQueryMetrics(ids, ['speedRaw', 'speedMps'])).toEqual(['controllerSpeedMps', 'speedRaw', 'speedMps']);
+    expect(monitorQueryMetrics(ids, ['speedRaw', 'controllerSpeedMps'])).toEqual(ids);
     expect(resolveMonitorMetrics(ids, ['speedRaw'])).toEqual(['speedRaw', 'speedMps']);
     expect(resolveMonitorMetrics(ids, ['speedRaw', 'controllerSpeedMps'])).toEqual(ids);
     expect(resolveMonitorMetrics(ids)).toEqual(ids);

@@ -132,6 +132,7 @@ export const swiftUnits = [
   suite('activity-runtime', entry('ActivityRuntime')),
   suite('monitor', entry('Monitor')),
   suite('monitor-distance', entry('MonitorDistance'), [`${support}/DistanceFixtures.swift`]),
+  suite('energy-per-distance', entry('EnergyPerDistance')),
   suite('example-rides', entry('ExampleRides'), bridgeFiles(['WorkoutExampleRides'])),
   command(
     'screenshot-examples',
@@ -169,6 +170,8 @@ export const swiftUnits = [
   suite('distance', entry('WorkoutDistance'), [`${support}/DistanceFixtures.swift`]),
   suite('distance-build', entry('DistanceBuild'), [`${support}/DistanceFixtures.swift`]),
   suite('projection-cache', entry('ProjectionCache')),
+  suite('plot-summary', entry('PlotSummary')),
+  suite('range-statistics', entry('RangeStatistics')),
   suite('level-of-detail', entry('LevelOfDetail')),
   suite(
     'raster',
@@ -220,6 +223,7 @@ export const swiftUnits = [
     command: typecheck('watchos', null, 'arm64-apple-watchos10.0', watchTypecheckSources),
   }),
   suite('live-ride-soak', entry('LiveRideSoak'), [exportSource], { optimize: true, long: true, estimate: 150 }),
+  suite('whole-ride', entry('WholeRide'), [], { optimize: true, long: true, estimate: 300 }),
 ];
 
 const unitById = id => {

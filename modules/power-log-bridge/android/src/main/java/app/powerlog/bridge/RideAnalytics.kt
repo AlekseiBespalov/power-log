@@ -27,6 +27,7 @@ internal class RideAnalytics(private val store: RideStore) {
         }
     }
 
+    val summaries = RidePlotSummaries(store, this)
     private val decoded = mutableMapOf<String, CachedNode>()
     private var decodedRevision = ""
 
@@ -40,18 +41,20 @@ internal class RideAnalytics(private val store: RideStore) {
         span: Long = 1,
     ): CachedNode {
         val revision = "$id:$readRevision"
-        if (decodedRevision != revision) {
-            decoded.clear()
-            decodedRevision = revision
-        }
         val key = "$metric:$bucket:$plotOnly:$span"
-        decoded[key]
-            ?.takeIf { it.payload == payload }
-            ?.let {
-                return it
+        synchronized(decoded) {
+            if (decodedRevision != revision) {
+                decoded.clear()
+                decodedRevision = revision
             }
-        val range = AnalysisRange(bucket * span * 16000000, (bucket + 1) * span * 16000000)
-        return CachedNode(payload, metric, range, plotOnly).also { decoded[key] = it }
+            decoded[key]
+                ?.takeIf { it.payload == payload }
+                ?.let {
+                    return it
+                }
+            val range = AnalysisRange(bucket * span * 16000000, (bucket + 1) * span * 16000000)
+            return CachedNode(payload, metric, range, plotOnly).also { decoded[key] = it }
+        }
     }
 
     private val healthMetrics = listOf("heartRateBpm", "activeEnergyKcal")
@@ -63,9 +66,15 @@ internal class RideAnalytics(private val store: RideStore) {
 
     fun changed(id: String, time: Double, metrics: Collection<String>) {
         val bucket = floor(time / BLOCK).toLong()
+        changedBlocks(id, bucket, bucket, metrics)
+    }
+
+    fun intervalChanged(id: String, startUs: Long, endUs: Long, metrics: Collection<String>) =
+        changedBlocks(id, Math.floorDiv(startUs, 16000000L), Math.floorDiv(endUs, 16000000L), metrics)
+
+    private fun changedBlocks(id: String, first: Long, last: Long, metrics: Collection<String>) {
         val selected = metrics.filter { it !in listOf("latitude", "longitude") }
-        dirty.getOrPut(id to bucket) { mutableSetOf() }.addAll(selected)
-        dirty.getOrPut(id to bucket + 1) { mutableSetOf() }.addAll(selected)
+        for (bucket in first..last + 1) dirty.getOrPut(id to bucket) { mutableSetOf() }.addAll(selected)
     }
 
     fun trimBefore(id: String, cutoff: Double) {
@@ -125,9 +134,14 @@ internal class RideAnalytics(private val store: RideStore) {
                 buckets.forEach { dirty.getOrPut(id to it) { mutableSetOf() }.add(metric) }
             }
         }
+        val queries = mutableMapOf<Pair<String, String>, String>()
+        val timelines = mutableMapOf<String, ActiveTimeline>()
+        val revisions = mutableMapOf<String, Long>()
         dirty.entries.sortedWith(compareBy({ it.key.first }, { it.key.second })).forEach { (key, metrics) ->
             val (id, bucket) = key
             val start = bucket * BLOCK
+            val raws = mutableMapOf<String, List<Observation>>()
+            val predecessors = mutableMapOf<String, Observation?>()
             metrics.forEach { metric ->
                 val measure =
                     when (metric) {
@@ -136,9 +150,11 @@ internal class RideAnalytics(private val store: RideStore) {
                         else -> null
                     }
                 val origin = healthOrigins[id]?.get(measure)
-                val raw = rawRows(id, metric, start, start + BLOCK)
+                val query = queries.getOrPut(id to metric) { store.metricQuery(id, metric, elapsedOrder = true) }
+                val raw = raws.getOrPut(query) { rawRows(id, query, start, start + BLOCK) }
                 val range = AnalysisRange(elapsedUs(start), elapsedUs(start + BLOCK))
                 val plotMetric = if (metric.endsWith("DistanceMeters")) "distanceMeters" else metric
+                val timeline = timelines.getOrPut(id) { RideAnalysis(store).timeline(id) }
                 val plot =
                     try {
                         val reducer = InspectionPlotReducer(plotMetric, range, 1, owned = true)
@@ -147,14 +163,21 @@ internal class RideAnalytics(private val store: RideStore) {
                                 .boundaries(id, metric, range.startUs, range.endUs)
                                 .forEach(reducer::appendDistance)
                         else {
-                            val cutoffs = RideAnalysis(store).timeline(id).interruptions.map { it.cutoffUs }.toSet()
+                            val cutoffs = timeline.interruptions.map { it.cutoffUs }.toSet()
                             raw.forEach { reducer.append(item(it), interruptionBoundary = it.elapsedUs in cutoffs) }
                         }
                         MetricCache.encodePlot(reducer.aggregate())
                     } catch (_: InspectionCapacityException) {
                         null
                     }
-                val checkpoint = if (projectedMetric(metric)) null else reduceBucket(id, metric, start, raw)
+                val checkpoint =
+                    if (projectedMetric(metric)) null
+                    else {
+                        val predecessor =
+                            if (query in predecessors) predecessors[query]
+                            else neighbor(id, query, range.startUs, true).also { predecessors[query] = it }
+                        reduceBucket(metric, start, raw, timeline, predecessor)
+                    }
                 val payload =
                     json(
                         mapOf(
@@ -169,7 +192,7 @@ internal class RideAnalytics(private val store: RideStore) {
                         id,
                         metric,
                         bucket,
-                        store.revision(id),
+                        revisions.getOrPut(id) { store.revision(id) },
                         raw.firstOrNull()?.time ?: start,
                         raw.lastOrNull()?.time ?: start,
                         payload.toString(),
@@ -271,7 +294,12 @@ internal class RideAnalytics(private val store: RideStore) {
             val intervalPredicate =
                 "ride=? AND metric=? AND end_us>=? AND end_us<? AND revision<=$revision AND (retired_revision IS NULL OR retired_revision>$revision)"
             val bounds =
-                listOf(id, metric, low * 16000000, (high + 1) * 16000000 + DistancePolicy.maximumControllerIntervalUs)
+                listOf(
+                    id,
+                    metric,
+                    low * 16000000,
+                    (high + 1) * 16000000 + BatteryConsumptionPolicy.maximumCounterEdgeUs,
+                )
             while (true) {
                 check(!Thread.currentThread().isInterrupted) { "Analysis cancelled" }
                 val rows =
@@ -333,7 +361,7 @@ internal class RideAnalytics(private val store: RideStore) {
         return "SELECT a.* FROM $table a WHERE a.revision<=${revision} AND a.revision=(SELECT max(b.revision) FROM $table b WHERE b.ride=a.ride AND b.metric=a.metric AND b.bucket=a.bucket AND b.revision<=${revision})"
     }
 
-    private fun item(row: Observation, statistics: Boolean = false): AnalysisItem =
+    fun item(row: Observation, statistics: Boolean = false): AnalysisItem =
         row.analysisItem().let {
             it.copy(
                 continuity = row.displayContinuity().copy(connectionEpoch = row.epoch),
@@ -464,26 +492,68 @@ internal class RideAnalytics(private val store: RideStore) {
         return query.result().selection
     }
 
-    fun plot(id: String, metric: String, start: Double, end: Double, buckets: Int): List<Payload> =
+    fun plot(
+        id: String,
+        metric: String,
+        start: Double,
+        end: Double,
+        buckets: Int,
+        pointLimit: Int = InspectionPlotSlots.maximumPoints,
+    ): List<Payload> = charted {
+        var slotUs = 16000000L
+        while (slotUs * buckets < elapsedUs(end) - elapsedUs(start)) slotUs *= 2
+        val aligned = slotUs.takeIf { elapsedUs(end) - elapsedUs(start) >= 16000000L * buckets }
+        plotRange(id, metric, start, end, buckets, pointLimit, aligned)
+    }
+
+    fun wholePlot(
+        id: String,
+        columns: Collection<String>,
+        end: Double,
+        buckets: Int,
+        pointLimit: Int,
+    ): Map<String, List<Payload>> {
+        val range = AnalysisRange(0, elapsedUs(end))
+        val slotUs = InspectionPlotSlots.alignedSlotUs(range, buckets)
+        val cutoffs = cutoffs(id)
+        val recording =
+            slotUs != null && !id.startsWith("live-") && store.metadata(id).str("phase") in listOf("running", "paused")
+        if (recording) summaries.feed(id, columns, range.endUs, cutoffs)
+        return columns.associateWith { column ->
+            charted {
+                if (recording) {
+                    val reducer =
+                        InspectionPlotReducer(plotMetric(column), range, buckets, pointLimit, alignedSlotUs = slotUs)
+                    appendBefore(id, column, 0.0, reducer, cutoffs)
+                    if (summaries.reduce(id, column, reducer, cutoffs)) {
+                        appendAfter(id, column, end, reducer, cutoffs)
+                        return@charted payloads(id, reducer.result())
+                    }
+                    summaries.fallbacks.incrementAndGet()
+                }
+                plotRange(id, column, 0.0, end, buckets, pointLimit, slotUs)
+            }
+        }
+    }
+
+    private inline fun charted(read: () -> List<Payload>): List<Payload> =
         try {
-            plotRange(id, metric, start, end, buckets)
+            read()
         } catch (error: InspectionCapacityException) {
             throw expo.modules.kotlin.exception.CodedException("ERR_CHART_CAPACITY", "Choose a smaller range.", error)
         }
 
-    private fun plotRange(id: String, metric: String, start: Double, end: Double, buckets: Int): List<Payload> {
-        val revision = store.readRevision(id)
-        val plotMetric = if (metric.endsWith("DistanceMeters")) "distanceMeters" else metric
-        var slotUs = 16000000L
-        while (slotUs * buckets < elapsedUs(end) - elapsedUs(start)) slotUs *= 2
-        val reducer =
-            InspectionPlotReducer(
-                plotMetric,
-                AnalysisRange(elapsedUs(start), elapsedUs(end)),
-                buckets,
-                alignedSlotUs = slotUs.takeIf { elapsedUs(end) - elapsedUs(start) >= 16000000L * buckets },
-            )
-        val cutoffs = RideAnalysis(store).timeline(id).interruptions.map { it.cutoffUs }.toSet()
+    private fun plotMetric(metric: String) = if (metric.endsWith("DistanceMeters")) "distanceMeters" else metric
+
+    private fun cutoffs(id: String) = RideAnalysis(store).timeline(id).interruptions.map { it.cutoffUs }.toSet()
+
+    private fun appendBefore(
+        id: String,
+        metric: String,
+        start: Double,
+        reducer: InspectionPlotReducer,
+        cutoffs: Set<Long>,
+    ) {
         if (projectedMetric(metric))
             RideDistanceInspection(store)
                 .boundaries(id, metric, elapsedUs(start), elapsedUs(start))
@@ -493,6 +563,56 @@ internal class RideAnalytics(private val store: RideStore) {
             atTime(id, metric, plotNeighbor(id, metric, start, true)).forEach {
                 reducer.append(item(it), interruptionBoundary = it.elapsedUs in cutoffs)
             }
+    }
+
+    private fun appendAfter(
+        id: String,
+        metric: String,
+        end: Double,
+        reducer: InspectionPlotReducer,
+        cutoffs: Set<Long>,
+    ) {
+        if (projectedMetric(metric))
+            RideDistanceInspection(store)
+                .boundaries(id, metric, elapsedUs(end), elapsedUs(end))
+                .filter { it.point.timeUs > elapsedUs(end) }
+                .forEach(reducer::appendDistance)
+        else
+            atTime(id, metric, plotNeighbor(id, metric, end, false)).forEach {
+                reducer.append(item(it), interruptionBoundary = it.elapsedUs in cutoffs)
+            }
+    }
+
+    private fun payloads(id: String, points: List<InspectionPlotPoint>): List<Payload> {
+        var segment: Int? = null
+        val identities = hydrate(id, points.map { it.point.original })
+        return points.map { point ->
+            val starts = segment != point.segment
+            segment = point.segment
+            payload(id, point.point.original, identities) + mapOf("startsSegment" to starts)
+        }
+    }
+
+    fun plotRange(
+        id: String,
+        metric: String,
+        start: Double,
+        end: Double,
+        buckets: Int,
+        pointLimit: Int,
+        slotUs: Long?,
+    ): List<Payload> {
+        val revision = store.readRevision(id)
+        val reducer =
+            InspectionPlotReducer(
+                plotMetric(metric),
+                AnalysisRange(elapsedUs(start), elapsedUs(end)),
+                buckets,
+                pointLimit,
+                alignedSlotUs = slotUs,
+            )
+        val cutoffs = cutoffs(id)
+        appendBefore(id, metric, start, reducer, cutoffs)
         val low = floor(start / BLOCK).toLong()
         val high = floor(end / BLOCK).toLong()
         fun append(bucket: Long, payload: String?) {
@@ -519,7 +639,8 @@ internal class RideAnalytics(private val store: RideStore) {
                     reducer.append(item(it), interruptionBoundary = it.elapsedUs in cutoffs)
                 }
         }
-        val span = if (!projectedMetric(metric) && slotUs >= PLOT_BUCKETS * 16000000) PLOT_BUCKETS else 1L
+        val span =
+            if (!projectedMetric(metric) && slotUs != null && slotUs >= PLOT_BUCKETS * 16000000) PLOT_BUCKETS else 1L
         plotNodes(id, metric, low, high, revision, span) { bucket, payload ->
             if (span == 1L) append(bucket, payload)
             else {
@@ -536,23 +657,8 @@ internal class RideAnalytics(private val store: RideStore) {
                     )
             }
         }
-        if (projectedMetric(metric))
-            RideDistanceInspection(store)
-                .boundaries(id, metric, elapsedUs(end), elapsedUs(end))
-                .filter { it.point.timeUs > elapsedUs(end) }
-                .forEach(reducer::appendDistance)
-        else
-            atTime(id, metric, plotNeighbor(id, metric, end, false)).forEach {
-                reducer.append(item(it), interruptionBoundary = it.elapsedUs in cutoffs)
-            }
-        var segment: Int? = null
-        val points = reducer.result()
-        val identities = hydrate(id, points.map { it.point.original })
-        return points.map { point ->
-            val starts = segment != point.segment
-            segment = point.segment
-            payload(id, point.point.original, identities) + mapOf("startsSegment" to starts)
-        }
+        appendAfter(id, metric, end, reducer, cutoffs)
+        return payloads(id, reducer.result())
     }
 
     fun rowId(id: String, original: Original): Long =
@@ -587,11 +693,10 @@ internal class RideAnalytics(private val store: RideStore) {
             "value" to original.value.real(),
         )
 
-    private fun eachRaw(id: String, metric: String, start: Double, end: Double, body: (Observation) -> Unit) =
-        eachRawUs(id, metric, elapsedUs(start), elapsedUs(end), body)
+    private fun eachRawUs(id: String, metric: String, startUs: Long, endUs: Long, body: (Observation) -> Unit) =
+        eachRawQuery(id, store.metricQuery(id, metric, elapsedOrder = true), startUs, endUs, body)
 
-    private fun eachRawUs(id: String, metric: String, startUs: Long, endUs: Long, body: (Observation) -> Unit) {
-        val query = store.metricQuery(id, metric, elapsedOrder = true)
+    fun eachRawQuery(id: String, query: String, startUs: Long, endUs: Long, body: (Observation) -> Unit) {
         var after: Observation? = null
         while (true) {
             check(!Thread.currentThread().isInterrupted) { "Analysis cancelled" }
@@ -615,8 +720,8 @@ internal class RideAnalytics(private val store: RideStore) {
         }
     }
 
-    private fun rawRows(id: String, metric: String, start: Double, end: Double): List<Observation> = buildList {
-        eachRaw(id, metric, start, end, ::add)
+    private fun rawRows(id: String, query: String, start: Double, end: Double): List<Observation> = buildList {
+        eachRawQuery(id, query, elapsedUs(start), elapsedUs(end), ::add)
     }
 
     private fun rawNeighbor(
@@ -624,26 +729,34 @@ internal class RideAnalytics(private val store: RideStore) {
         metric: String,
         timeUs: Long,
         before: Boolean,
-    ): Observation? {
+    ): Observation? = neighbor(id, store.metricQuery(id, metric, elapsedOrder = true), timeUs, before)
+
+    private fun neighbor(id: String, query: String, timeUs: Long, before: Boolean): Observation? {
         val order = if (before) "DESC" else "ASC"
         val op = if (before) "<" else ">"
         return store.select(
-            "SELECT * FROM (${store.metricQuery(id, metric, elapsedOrder = true)}) WHERE elapsed_us$op? ORDER BY elapsed_us $order,producer $order,producer_sequence $order,id $order LIMIT 1",
+            "SELECT * FROM ($query) WHERE elapsed_us$op? ORDER BY elapsed_us $order,producer $order,producer_sequence $order,id $order LIMIT 1",
             arrayOf(id, timeUs),
         ) { c ->
             if (c.moveToFirst()) with(store) { c.observation() } else null
         }
     }
 
-    private fun reduceBucket(id: String, metric: String, start: Double, rows: List<Observation>): MetricCheckpoint? {
+    private fun reduceBucket(
+        metric: String,
+        start: Double,
+        rows: List<Observation>,
+        timeline: ActiveTimeline,
+        predecessor: Observation?,
+    ): MetricCheckpoint? {
         val range = AnalysisRange(elapsedUs(start), elapsedUs(start + BLOCK))
         val query =
             InspectionQuery(
                 metric,
                 range,
-                RideAnalysis(store).timeline(id),
+                timeline,
                 bucket = true,
-                predecessor = rawNeighbor(id, metric, range.startUs, true)?.let { item(it, true) },
+                predecessor = predecessor?.let { item(it, true) },
             )
         rows.forEach { query.append(item(it, true)) }
         return query.checkpoint()

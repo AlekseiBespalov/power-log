@@ -18,7 +18,7 @@ enum ControllerErrorPresentation {
   }
 }
 
-enum TelemetryDiagnosticEvent: String {
+enum TelemetryDiagnosticEvent: String, CaseIterable {
   case engineStarted = "engine_started"
   case connectRequested = "connect_requested"
   case connectionAttempt = "connection_attempt"
@@ -40,12 +40,13 @@ enum TelemetryDiagnosticEvent: String {
   case resumed
 }
 
-enum TelemetryDiagnosticReason: String {
+enum TelemetryDiagnosticReason: String, CaseIterable {
   case manualDisconnect = "manual_disconnect"
   case connectionDeadline = "connection_deadline"
   case responseTimeout = "response_timeout"
   case expiredReply = "expired_reply"
   case writeReadyTimeout = "write_ready_timeout"
+  case writeFailed = "write_failed"
   case linkDisconnected = "link_disconnected"
   case connectionFailed = "connection_failed"
   case notificationSetup = "notification_setup"
@@ -59,6 +60,7 @@ enum TelemetryDiagnosticReason: String {
   case retryLimit = "retry_limit"
   case cancellationDeadline = "cancellation_deadline"
   case bluetoothUnavailable = "bluetooth_unavailable"
+  case platformError = "platform_error"
   case unexpectedConnection = "unexpected_connection"
   case pendingReconnect = "pending_reconnect"
   case restorationCleanup = "restoration_cleanup"
@@ -208,7 +210,7 @@ struct TelemetryDiagnosticMetrics {
 
 /// Bounded, private JSONL. The serial log queue avoids making diagnostics part of BLE latency.
 final class TelemetryDiagnosticLog {
-  static let maximumFileBytes = 256 * 1024
+  static let maximumFileBytes = 4 * 1024 * 1024
   private let queue = DispatchQueue(label: "app.powerlog.controller.diagnostics", qos: .utility)
   private let directory: URL
   private let currentURL: URL
@@ -237,23 +239,43 @@ final class TelemetryDiagnosticLog {
     var values = URLResourceValues()
     values.isExcludedFromBackup = true
     try resourceURL.setResourceValues(values)
-    // Recover only bounded complete lines after a process interruption.
-    let recovered = try readBounded(currentURL)
-    try recovered.write(to: currentURL, options: .atomic)
-    let previous = try readBounded(previousURL)
-    if FileManager.default.fileExists(atPath: previousURL.path) {
-      try previous.write(to: previousURL, options: .atomic)
+    try recover(previousURL)
+    if FileManager.default.fileExists(atPath: currentURL.path) {
+      try recover(currentURL)
+    } else {
+      try Data().write(to: currentURL, options: .atomic)
     }
-    currentBytes = recovered.count
     handle = try FileHandle(forWritingTo: currentURL)
-    try handle?.seekToEnd()
+    currentBytes = Int(try handle?.seekToEnd() ?? 0)
   }
 
+  static let numberFields: Set<String> = [
+    "requestedHz", "sampleCount", "connectionAttempts", "reconnects", "requestTimeouts",
+    "decoderDiscardedBytes", "lastSampleAgeSeconds", "gapSeconds", "linkSamples", "connectionSeconds",
+    "sampleAgeSeconds",
+    "cancellationCallbackSeconds", "connectionSecondsAtCancel", "sampleAgeSecondsAtCancel", "requestAgeSeconds",
+    "writeBlockedSeconds", "retryAttempt", "retryDelaySeconds", "errorCode", "recentSampleHz", "latencyMeanMs",
+    "latencyMaxMs",
+    "notificationErrors", "pendingBytes", "queueDelaySeconds", "storageWriteMs",
+    "connectionGeneration", "cpuSeconds", "thermalState", "thermalStatus",
+  ]
+  static let booleanFields: Set<String> = [
+    "background", "systemReconnect", "recordingFailed", "interactive", "powerSave", "deviceIdle",
+  ]
+  static let stringFields: [String: Set<String>] = [
+    "initiator": ["app", "peer_or_system"],
+    "request": ["identity", "telemetry"],
+    "manager": ["central"],
+    "status": ["idle", "scanning", "connecting", "connected", "reconnecting", "error"],
+    "bluetoothState": ["unknown", "resetting", "unsupported", "unauthorized", "poweredOff", "poweredOn"],
+  ]
+  static let errorDomains: Set<String> = [
+    "CBErrorDomain", "CBATTErrorDomain", "NSCocoaErrorDomain", "NSPOSIXErrorDomain", "NSOSStatusErrorDomain",
+    "AndroidGattStatus", "AndroidBluetoothStatus",
+  ]
+
   static func safeErrorDomain(_ domain: String) -> String {
-    let allowed: Set<String> = [
-      "CBErrorDomain", "CBATTErrorDomain", "NSCocoaErrorDomain", "NSPOSIXErrorDomain", "NSOSStatusErrorDomain",
-    ]
-    return allowed.contains(domain) ? domain : "OtherErrorDomain"
+    errorDomains.contains(domain) ? domain : "OtherErrorDomain"
   }
 
   static func errorFields(_ error: Error?) -> [String: Any] {
@@ -306,6 +328,21 @@ final class TelemetryDiagnosticLog {
     currentBytes = 0
   }
 
+  // Recover only bounded complete lines after a process interruption.
+  private func recover(_ url: URL) throws {
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    let reader = try FileHandle(forReadingFrom: url)
+    let size = try reader.seekToEnd()
+    var complete = size == 0
+    if size > 0 {
+      try reader.seek(toOffset: size - 1)
+      complete = try reader.read(upToCount: 1) == Data([10])
+    }
+    try reader.close()
+    if complete, size <= UInt64(byteLimit) { return }
+    try readBounded(url).write(to: url, options: .atomic)
+  }
+
   private func readBounded(_ url: URL) throws -> Data {
     guard FileManager.default.fileExists(atPath: url.path) else { return Data() }
     let reader = try FileHandle(forReadingFrom: url)
@@ -326,21 +363,11 @@ final class TelemetryDiagnosticLog {
   }
 
   private static func sanitized(_ fields: [String: Any]) -> [String: Any] {
-    let numbers: Set<String> = [
-      "requestedHz", "sampleCount", "connectionAttempts", "reconnects", "requestTimeouts",
-      "decoderDiscardedBytes", "lastSampleAgeSeconds", "gapSeconds", "linkSamples", "connectionSeconds",
-      "sampleAgeSeconds",
-      "cancellationCallbackSeconds", "connectionSecondsAtCancel", "sampleAgeSecondsAtCancel", "requestAgeSeconds",
-      "writeBlockedSeconds", "retryAttempt", "retryDelaySeconds", "errorCode", "recentSampleHz", "latencyMeanMs",
-      "latencyMaxMs",
-      "notificationErrors", "pendingBytes", "queueDelaySeconds", "storageWriteMs",
-      "connectionGeneration", "cpuSeconds", "thermalState",
-    ]
     var safe: [String: Any] = [:]
     for (key, value) in fields {
-      if numbers.contains(key), let number = value as? NSNumber, number.doubleValue.isFinite {
+      if numberFields.contains(key), let number = value as? NSNumber, number.doubleValue.isFinite {
         safe[key] = number
-      } else if ["background", "systemReconnect", "recordingFailed"].contains(key), let value = value as? Bool {
+      } else if booleanFields.contains(key), let value = value as? Bool {
         safe[key] = value
       } else if key == "transportStage", let value = value as? String,
         WorkoutCoreCodec.values(TelemetryStage.values()).contains(where: { $0.name == value })
@@ -350,23 +377,11 @@ final class TelemetryDiagnosticLog {
         safe[key] = value
       } else if key == "errorDomain", let value = value as? String {
         safe[key] = safeErrorDomain(value)
-      } else if key == "initiator", let value = value as? String, ["app", "peer_or_system"].contains(value) {
-        safe[key] = value
       } else if key == "rejection", let value = value as? String,
         WorkoutCoreCodec.values(CycRejection.values()).contains(where: { $0.name == value })
       {
         safe[key] = value
-      } else if key == "request", let value = value as? String, ["identity", "telemetry"].contains(value) {
-        safe[key] = value
-      } else if key == "manager", let value = value as? String, value == "central" {
-        safe[key] = value
-      } else if key == "status", let value = value as? String,
-        ["idle", "scanning", "connecting", "connected", "reconnecting", "error"].contains(value)
-      {
-        safe[key] = value
-      } else if key == "bluetoothState", let value = value as? String,
-        ["unknown", "resetting", "unsupported", "unauthorized", "poweredOff", "poweredOn"].contains(value)
-      {
+      } else if let value = value as? String, stringFields[key]?.contains(value) == true {
         safe[key] = value
       }
     }

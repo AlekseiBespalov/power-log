@@ -261,9 +261,12 @@ let old = try service.snapshot(id: restart)
 for from in stride(from: 2, through: 601, by: 100) {
   try archive.appendBatch((from..<min(from + 100, 602)).map { try controller(restart, Double($0)) })
 }
-let rebuilt = try WorkoutDistanceStore(store: store).snapshot(id: restart)
-check(rebuilt.generation != old.generation, "missing 512-entry dependency history forces rebuild")
-near(rebuilt.totalMeters, 2404, "restart rebuild retains long controller total")
+let inputsBeforeLongTail = inputRows
+let extended = try WorkoutDistanceStore(store: store).snapshot(id: restart)
+check(
+  extended.generation == old.generation && inputRows - inputsBeforeLongTail == 600,
+  "an append-only tail longer than the change journal extends the generation from its new originals")
+near(extended.totalMeters, 2404, "the extended generation retains the long controller total")
 check(largestInputPage <= 128, "every original input page is bounded")
 
 let legacy = try ride(saves: true)
@@ -377,6 +380,55 @@ check(!reuseJobs.contains { $0.name.hasPrefix("reuse:") }, "changed active timel
 check(
   afterPauseReuse.sources.first { $0.source == "gps:phone" }?.distanceMeters != beforeGPS.distanceMeters,
   "pause invalidates the formerly reusable profile")
+
+let longReuseID = try ride(watch: false)
+let longReuseController = try (0..<160).map { try controller(longReuseID, Double($0) / 8) }
+try archive.appendBatch(longReuseController)
+try archive.appendBatch((0..<20).map { try gps(longReuseID, Double($0), source: "phone") })
+let beforeLongReuse = try service.snapshot(id: longReuseID)
+try archive.append(
+  controller(longReuseID, 0.125, speed: 2, extra: ["supersedesEventId": .string(longReuseController[1].eventId)]))
+for from in stride(from: 0, to: 600, by: 200) {
+  try archive.appendBatch(
+    (from..<(from + 200)).map {
+      try event(
+        longReuseID, "health", "watch", Double($0) / 32,
+        ["heartRateBpm": .number(120), "representation": .string("rawQuantity")])
+    })
+}
+reuseJobs = []
+WorkoutDistanceStore.jobObserverForTesting = { reuseJobs.append($0) }
+let afterLongReuse = try service.snapshot(id: longReuseID)
+WorkoutDistanceStore.jobObserverForTesting = nil
+check(
+  afterLongReuse.generation != beforeLongReuse.generation && reuseJobs.contains { $0.name == "reuse:gps:phone" }
+    && !reuseJobs.contains { $0.name == "gps:phone" },
+  "a correction followed by more revisions than the change journal keeps still copies the unchanged GPS profile")
+try store.transaction { db in
+  try db.execute(
+    "DELETE FROM distance_points WHERE generation_id IN (SELECT storage_id FROM distance_generations WHERE collection_id=?)",
+    [.text(longReuseID)])
+  try db.execute("DELETE FROM distance_snapshots WHERE collection_id=?", [.text(longReuseID)])
+  try db.execute("DELETE FROM distance_generations WHERE collection_id=?", [.text(longReuseID)])
+}
+let longRebuild = try service.snapshot(id: longReuseID)
+check(
+  try WorkoutCoding.encoder().encode(afterLongReuse.sources) == WorkoutCoding.encoder().encode(longRebuild.sources),
+  "profiles reused across the change journal equal a full rebuild")
+try archive.append(
+  controller(longReuseID, 0.25, speed: 3, extra: ["supersedesEventId": .string(longReuseController[2].eventId)]))
+_ = try archive.update(
+  id: longReuseID,
+  ownerTiming: WorkoutOwnerTiming(
+    timestamp: WorkoutCoding.timestamp(start.addingTimeInterval(10)), elapsedSeconds: 10, timerSeconds: 10),
+  elapsedSeconds: 10, onlyIfChanged: true)
+reuseJobs = []
+WorkoutDistanceStore.jobObserverForTesting = { reuseJobs.append($0) }
+let afterTimedCorrection = try service.snapshot(id: longReuseID)
+WorkoutDistanceStore.jobObserverForTesting = nil
+check(
+  afterTimedCorrection.endSeconds == longRebuild.endSeconds && !reuseJobs.contains { $0.name.hasPrefix("reuse:") },
+  "a timing revision since the previous build still prevents profile reuse")
 
 print(
   "Workout distance: \(assertions) assertions passed. cold=\(coldSeconds)s warm100=\(warmSeconds)s append=\(appendSeconds)s maxInputPage=\(largestInputPage)"

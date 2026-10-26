@@ -15,4 +15,5 @@ export type MonitorRasterProps = {
   cursor: number | null;
   reference: number | null;
   tailTime?: number;
+  snappable: boolean;
 };

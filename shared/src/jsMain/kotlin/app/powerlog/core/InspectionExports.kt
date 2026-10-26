@@ -366,7 +366,7 @@ class InspectionPlotQuery(
     pointLimit: Int,
     alignedSlotUs: String? = null,
 ) {
-    private val reducer =
+    internal val reducer =
         InspectionPlotReducer(
             metric,
             AnalysisRange(startUs.toLong(), endUs.toLong()),
@@ -385,6 +385,52 @@ class InspectionPlotQuery(
     fun merge(aggregate: InspectionPlotCache) = reducer.merge(aggregate.core)
 
     fun result(): Array<InspectionPlotOriginal> = reducer.result().map(::InspectionPlotOriginal).toTypedArray()
+}
+
+@JsExport
+fun inspectionPlotSlotUs(startUs: String, endUs: String, buckets: Int): String? =
+    InspectionPlotSlots.alignedSlotUs(AnalysisRange(startUs.toLong(), endUs.toLong()), buckets)?.toString()
+
+@JsExport fun inspectionPlotBuckets(requested: Int, metrics: Int): Int = InspectionPlotSlots.buckets(requested, metrics)
+
+@JsExport fun inspectionPlotPointLimit(metrics: Int): Int = InspectionPlotSlots.pointLimit(metrics)
+
+@JsExport
+class InspectionPlotSlotSummary(
+    metric: String,
+    maximumSlots: Int = 512,
+    pointBudget: Int = InspectionPlotSlots.maximumPoints,
+) {
+    private val summary = InspectionPlotSummary(metric, maximumSlots, pointBudget)
+    val slotUs: String
+        get() = summary.slotUs.toString()
+
+    val firstRawUs: String?
+        get() = summary.firstRawUs?.toString()
+
+    val lastRawUs: String?
+        get() = summary.lastRawUs?.toString()
+
+    val rawInputs: String
+        get() = summary.rawInputs.toString()
+
+    val retainedPoints: Int
+        get() = summary.retainedPoints
+
+    val overflowed: Boolean
+        get() = summary.overflowed
+
+    fun append(item: AnalyticsItem, selected: Boolean, interruptionBoundary: Boolean = false) =
+        summary.append(item.core(), selected, interruptionBoundary)
+
+    fun appendOriginal(item: InspectionOriginalInput, selected: Boolean, interruptionBoundary: Boolean = false) =
+        summary.append(item.core, selected, interruptionBoundary)
+
+    fun appendDistance(point: InspectionDistanceBoundary) = summary.appendDistance(point.point)
+
+    fun canMergeInto(query: InspectionPlotQuery): Boolean = summary.canMergeInto(query.reducer)
+
+    fun mergeInto(query: InspectionPlotQuery) = summary.mergeInto(query.reducer)
 }
 
 @JsExport

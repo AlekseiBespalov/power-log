@@ -56,6 +56,7 @@ internal enum class MonitorOperation {
     Inspect,
     Stats,
     Changes,
+    EnergyPerDistance,
 }
 
 internal enum class DistanceSource(val wire: String) {
@@ -83,6 +84,9 @@ internal data class MonitorInput(
     val anchor: MonitorAnchor? = null,
     val startAnchor: MonitorAnchor? = null,
     val endAnchor: MonitorAnchor? = null,
+    val energySmoothingSeconds: Int = 0,
+    val energyTotals: Boolean = true,
+    val energyCurrent: Boolean = false,
 )
 
 internal object BridgeInputs {
@@ -162,7 +166,15 @@ internal object BridgeInputs {
             }
         val expected = optional(input, "expectedRevision", ::revision)
         val since = optional(input, "sinceRevision", ::revision)
-        if (operation in listOf(MonitorOperation.Plot, MonitorOperation.Inspect, MonitorOperation.Stats))
+        if (
+            operation in
+                listOf(
+                    MonitorOperation.Plot,
+                    MonitorOperation.Inspect,
+                    MonitorOperation.Stats,
+                    MonitorOperation.EnergyPerDistance,
+                )
+        )
             require(expected != null) { "expectedRevision is required." }
         if (operation == MonitorOperation.Changes) require(since != null) { "sinceRevision is required." }
         val start = optional(input, "startSeconds", ::nonnegative)
@@ -206,6 +218,15 @@ internal object BridgeInputs {
             anchor("anchor", seconds),
             anchor("startAnchor", start),
             anchor("endAnchor", end),
+            optional(input, "energySmoothingSeconds") { value, field ->
+                integer(value, field, 0, 60).also {
+                    require(app.powerlog.core.analytics.EnergyPerDistancePolicy.validSmoothing(it)) {
+                        "Invalid smoothing duration."
+                    }
+                }
+            } ?: 0,
+            optional(input, "energyTotals", ::boolean) ?: true,
+            optional(input, "energyCurrent", ::boolean) ?: false,
         )
     }
 

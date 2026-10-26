@@ -241,6 +241,28 @@ class BridgeInputsTest {
     }
 
     @Test
+    fun smoothingDurationAndTotalsAreValidated() {
+        for (seconds in listOf(0, 5, 30, 60)) {
+            assertEquals(
+                seconds,
+                BridgeInputs.monitor(MonitorOperation.EnergyPerDistance, plot + ("energySmoothingSeconds" to seconds))
+                    .energySmoothingSeconds,
+            )
+        }
+        for (value in listOf(true, "5", 5.5, -1, 10, 61)) {
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+                BridgeInputs.monitor(MonitorOperation.EnergyPerDistance, plot + ("energySmoothingSeconds" to value))
+            }
+        }
+        rejects("energyTotals") {
+            BridgeInputs.monitor(MonitorOperation.EnergyPerDistance, plot + ("energyTotals" to "false"))
+        }
+        assertFalse(
+            BridgeInputs.monitor(MonitorOperation.EnergyPerDistance, plot + ("energyTotals" to false)).energyTotals
+        )
+    }
+
+    @Test
     fun monitorRangesBucketsAndEndpointFlagsAreStrict() {
         val input = stats + ("seconds" to 0)
         for (field in listOf("startSeconds", "endSeconds", "seconds", "pixelWidth")) for (value in

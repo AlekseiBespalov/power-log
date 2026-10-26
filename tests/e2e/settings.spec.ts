@@ -10,6 +10,7 @@ test('Bluetooth diagnostics require explicit capture and export and can be delet
   await page.goto('/settings');
   const panel = page.getByTestId('bluetooth-diagnostics');
   await expect(panel.getByText('No capture', { exact: false })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Share diagnostics' })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Export log' })).toBeDisabled();
   await panel.getByRole('button', { name: 'Start capture', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Stop capture' })).toBeEnabled();

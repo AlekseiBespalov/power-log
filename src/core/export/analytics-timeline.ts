@@ -11,13 +11,13 @@ export async function readAnalyticsTimeline(
   session: string,
   end: number,
   reads: ExportReads,
-  options = { fitLimits: true },
+  options: { readonly fitLimits: boolean; readonly file?: string } = { fitLimits: true },
 ): Promise<Timeline> {
   if (!Number.isFinite(end) || end < 0) throw new ExportError('gate', 'The ride has no valid elapsed time.');
   if (options.fitLimits && end > FIT_MAX_RIDE_SECONDS)
     throw new ExportError(
       'limit',
-      'A FIT file cannot hold a ride longer than 31 days. The ride-data ZIP is still available.',
+      `A ${options.file ?? 'FIT file'} cannot hold a ride longer than 31 days. The ride-data ZIP is still available.`,
     );
   const lifecycle: AnalyticsItem[] = [];
   let unavailable: string | undefined;
@@ -26,7 +26,7 @@ export async function readAnalyticsTimeline(
     if (options.fitLimits && lifecycle.length + page.rows > FIT_MAX_LIFECYCLE_EVENTS)
       throw new ExportError(
         'limit',
-        'A FIT file cannot hold more than 10,000 start, pause, resume, lap or stop events. The ride-data ZIP is still available.',
+        `A ${options.file ?? 'FIT file'} cannot hold more than 10,000 start, pause, resume, lap or stop events. The ride-data ZIP is still available.`,
       );
     const c = page.columns;
     for (let i = 0; i < page.rows; i++) {

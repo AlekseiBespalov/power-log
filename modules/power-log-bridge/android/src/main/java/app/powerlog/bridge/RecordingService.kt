@@ -11,6 +11,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import app.powerlog.core.presentation.ActivityPresentation
+import app.powerlog.core.presentation.ActivityPresentations
 import kotlin.math.ceil
 import kotlin.math.pow
 
@@ -241,7 +242,7 @@ class RecordingService : Service() {
     companion object {
         internal const val FOREGROUND_REQUEST = "foregroundCaptureRequest"
         private const val CHANNEL = "rides"
-        private const val ROUTINE_INTERVAL_MS = 1000L
+        private const val ROUTINE_INTERVAL_MS = (ActivityPresentations.refreshSeconds * 1000).toLong()
         private const val NOTIFICATION = 4101
         @Volatile private var active: RecordingService? = null
 

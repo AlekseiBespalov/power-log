@@ -281,6 +281,7 @@ class CoreMetricDeclaration internal constructor(core: MetricDeclaration) {
     val zero: Boolean? = core.zero
     val semantics: String? = core.semantics?.name
     val description: String? = core.description
+    val plotGapSeconds: Double? = core.plotGapSeconds
 }
 
 @JsExport

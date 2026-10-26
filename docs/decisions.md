@@ -41,6 +41,11 @@ decision record; N labels are the analytics rules that tests cite.
 - **Raw Bluetooth diagnostics require an explicit capture.** Retain rejected packets before decoding in bounded,
   temporary memory, separately from rides and routine connection logs. Export is a rider action with notice that raw
   bytes can include serials. Diagnostic capture never bypasses ride admission or adds controller commands.
+- **Routine connection logs are always on, identical on iPhone and Android.** One event vocabulary and field
+  whitelist (`tests/fixtures/contract/telemetry/diagnostic-log.json`): events, reasons, timings, counters and
+  platform error codes, never names, identifiers, payloads or ride measurements. Two 4 MiB JSONL files hold at least
+  ten hours of riding. Share diagnostics zips the log with the phone model, system version and app version; nothing
+  leaves the phone unless the rider shares the file.
 - **C33, C35: names follow roles.** CYC appears only in its decoder, identity rules, GATT UUIDs and product labels. A
   new controller adds a decoder, fixtures and capabilities behind `ControllerProtocol`, registered in
   `TelemetryRestoration`; telemetry keeps requiring rider power and cadence until a controller lacks them.
@@ -55,20 +60,34 @@ decision record; N labels are the analytics rules that tests cite.
   accepted ride, normal connection appearance; pre-ride setup shows the actual connection state. At six seconds
   current-value tiles become unavailable and the reconnect error shows. Chart headers keep
   the last recorded value; original sample times appear during inspection. Holds and chart continuity are
-  rendering only, never samples, Health data or exports; longer gaps stay visible. A metric with no samples is
-  unavailable, never zero.
-- **Separate timing policies.** GPS age admission (15 s), GPS freshness (10 s), heart-rate display (15 s) and
-  integration (10 s), controller integration (2.5 s) and controller display and plot continuity (6 s) stay independent.
+  rendering only, never samples, Health data or exports; longer gaps stay visible. Energy, charge and Wh/km lines
+  join across the same short controller gaps, although totals and averages still exclude the gap. A metric with no
+  samples is unavailable, never zero.
+- **Separate timing policies.** GPS age admission (15 s), GPS freshness (10 s), heart-rate display (15 s), plot
+  continuity (30 s) and integration (10 s), controller integration (2.5 s) and controller display and plot continuity
+  (6 s) stay independent.
 - **Live freshness uses monotonic acquisition time;** replays, retries and backfill never renew it, and backfill keeps
   its original time.
-- **O6: the Live Activity evaluates no policy.** The app supplies core-computed expiry instants (bike +6 s, heart rate
-  +15 s) and the staleDate; the extension only compares the clock with them.
+- **O6: the Live Activity evaluates no policy.** It and the Android ride notification take new readings at most every
+  15 s; control and phase changes and expiries update them at once. The app supplies core-computed expiry instants
+  (bike +21 s, heart rate +30 s: the display holds plus one refresh) and the staleDate; the extension only compares the
+  clock with them.
 - **Charts.** Plots keep each bucket's original first, minimum, maximum and last observations; cursor, extrema and A–B
-  readings are exact originals with their original times. Different units use aligned lanes. Every platform draws
-  charts, empty ones included, in dark bordered cards with the same metric colors and labels, and summary readings sit
-  directly on their panel. Monitoring presets are independent and keep the whole ride.
+  readings are exact originals with their original times. A whole-ride plot, from the ride start to its data end, keeps
+  exact-width buckets while they are shorter than one second; from then on its buckets are the smallest power-of-two
+  second slots, aligned to ride time, that cover it within the bucket budget, so it shows between half and all of its
+  buckets. Different units use aligned lanes. Every platform draws charts, empty ones included, in dark bordered cards
+  with the same metric colors and labels, and summary readings sit directly on their panel. Monitoring presets are
+  independent and keep the whole ride.
   Horizontal inspection works anywhere in the plot; touching a short peak can still select its exact original.
   Metric displays omit repeated source, quality and freshness captions; names identify the source where needed.
+  While following a live ride, range statistics are read only for the voltage minimums they display: plotted bucket
+  extrema already contain every statistics extremum that scales an axis.
+- **Only visible charts are read and redrawn.** Plots and range statistics cover the charts on screen and within half
+  a screen above or below, as one snapshot. A chart that leaves keeps its last drawing; one that enters shows it, or
+  Loading… until its read lands, and offers snapping only once its drawing belongs to the latest snapshot. Off-screen
+  charts do not re-render, except one with keyboard focus, which counts as on screen. Number tiles, cursor, A–B and
+  comparisons always cover every selected metric.
 
 ## Lifecycle
 
@@ -162,20 +181,41 @@ decision record; N labels are the analytics rules that tests cite.
 - **Battery consumption is ride-relative.** **Energy used (controller)** and **Charge used (controller)** accumulate
   positive counter deltas; **Energy used (calc)** and **Charge used (calc)** independently integrate positive V × A
   and current. Each starts at the first valid reading, retaining supported totals across resets, pauses, reconnects
-  and gaps without counting the unknown interval. Calculated intervals use the controller integration limit and
-  clip zero crossings; this measures consumption, not net regeneration. Range queries exclude clipped counter deltas
-  and mark them partial. Counter increments use the controller's 1e-4 precision; electrical integration uses double
-  precision for clipped areas. No metric is manufactured from missing inputs.
+  and gaps without counting the unknown interval. The controller keeps counting through a Bluetooth loss, so a
+  counter increase across a loss shorter than the six-second hold, within one active interval, without a reset and
+  within what a supported controller could draw (200 A, 25 kW), counts as one indivisible delta. Calculated intervals
+  use the controller integration limit and clip zero crossings; this measures consumption, not net regeneration.
+  Range queries exclude clipped counter deltas and mark them partial. Counter increments use the controller's 1e-4
+  precision; electrical integration uses double precision for clipped areas. No metric is manufactured from missing
+  inputs.
 - **One battery-consumption preference** chooses the Ah/Wh pair for ride summaries and FIT, defaulting to Controller,
   and freezes at Start. Both methods remain selectable in charts. Raw **Energy counter (controller)** and **Charge
   counter (controller)** stay unchanged in recordings and the ZIP; a separate ZIP table contains the ride totals.
   Electrical Wh/Ah never enter Health as human energy.
+- **Energy per distance.** Number tiles show whole-ride matched Wh / km; battery energy and distance follow the
+  choices frozen at Start, and rider work integrates rider power. Graphs overlay battery and rider on one Wh/km
+  axis, using current nonnegative power / selected-source speed at each telemetry observation. Zero or missing
+  speed is unavailable; there is no time or distance minimum. Optional 5-, 30- or 60-second smoothing affects only the plot
+  and its cursor values, resets across gaps, and defaults off. GPS speed must be valid, in the same active interval
+  and no older than 10 seconds; controller speed comes from the same telemetry frame. Summaries and A–B remain
+  matched energy / distance, never means of graph values, and include supported stationary energy. Missing
+  distance excludes its energy too; missing energy excludes its distance. GPS chords are allocated uniformly for
+  summary matching, and counter edges remain indivisible. These describe electrical consumption and mechanical
+  pedalling work, not motor efficiency or Health calories. Before Start, graphs use controller speed from preview
+  telemetry; whole-ride averages begin only with a recorded ride. Live number tiles refresh their whole-ride
+  averages every 2 seconds in the first minute, 5 seconds until 10 minutes, 15 seconds until an hour, then 30 seconds.
+  That total is read separately from current readings, which keep the previous average until it completes.
+  Current graph readings use bounded context independently. History and A–B calculate the exact requested range.
 - **Derived data is disposable.** An unreadable original is an error; an unreadable cache is recomputed.
 
 ## Sharing
 
-- **Exports.** Every platform writes one FIT activity and one ride-data ZIP with the shared TypeScript exporter. The
-  ZIP is a vendor-neutral Data Package: `datapackage.json` with telemetry, derived battery totals, GPS, Health and events CSV.
+- **Exports.** Every platform writes one FIT activity, one ride CSV and one ride-data ZIP with the shared TypeScript
+  exporter. The ZIP is the complete original: a vendor-neutral Data Package, `datapackage.json` with telemetry, derived
+  battery totals, GPS, Health and events CSV, each source at its own rate. The ride CSV is one table for overlay and
+  spreadsheet tools: FIT's per-second records, never widened for long rides, with every value as a named column and
+  the ride totals of the frozen consumption source. Values without a reading in that second stay empty; nothing is
+  interpolated.
   Unsupported derived analysis never blocks raw ZIP export; its metadata records why the derived table is unavailable. FIT has a record
   per second, or the smallest wider interval within Garmin Connect's point limit, and writes battery power as
   `motor_power`. The export-time **FIT power source** setting defaults to Rider power; Battery input power

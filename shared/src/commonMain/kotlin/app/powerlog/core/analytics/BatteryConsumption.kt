@@ -6,6 +6,13 @@ object BatteryConsumptionPolicy {
     val metrics: List<String> =
         listOf("controllerChargeAh", "controllerEnergyWh", "calculatedChargeAh", "calculatedEnergyWh")
 
+    // The controller keeps counting while its Bluetooth link drops, so a counter increase across a loss
+    // shorter than the six-second hold is one indivisible edge. The counter base cannot be confirmed across
+    // a loss, so the increase must also stay within what any supported controller could draw.
+    const val maximumCounterEdgeUs = 6000000L
+    const val maximumCounterCurrentA = 200.0
+    const val maximumCounterPowerW = 25000.0
+
     fun isMetric(metric: String): Boolean = metric in metrics
 
     fun validSource(source: String): Boolean = source == "controller" || source == "calculated"
@@ -30,7 +37,12 @@ data class BatteryConsumptionInterval(
         require(startUs >= 0 && endUs >= startUs && segment >= 0 && activeInterval >= 0)
         require(startValue.isFinite() && endValue.isFinite() && startValue >= 0 && endValue >= startValue)
         require(baseline == (startUs == endUs))
-        require(baseline || endUs - startUs <= DistancePolicy.maximumControllerIntervalUs)
+        require(
+            baseline ||
+                endUs - startUs <=
+                    if (indivisible) BatteryConsumptionPolicy.maximumCounterEdgeUs
+                    else DistancePolicy.maximumControllerIntervalUs
+        )
         require((rate0 == null) == (rate1 == null))
         require(rate0?.isFinite() != false && rate1?.isFinite() != false)
         require(indivisible || baseline || rate0 != null)
@@ -257,12 +269,21 @@ class BatteryConsumptionKernel @Throws(IllegalArgumentException::class) construc
                 return@mapIndexedNotNull null
             }
             lane.previous = next
+            val same =
+                old != null && dt <= DistancePolicy.maximumControllerIntervalUs && old.continuity == continuityIdentity
+            val limit =
+                if (index == 0) BatteryConsumptionPolicy.maximumCounterCurrentA
+                else BatteryConsumptionPolicy.maximumCounterPowerW
+            val bridged =
+                counter &&
+                    old != null &&
+                    dt < BatteryConsumptionPolicy.maximumCounterEdgeUs &&
+                    (value - old.value) * 3600000000.0 <= limit * dt
             val connects =
                 old != null &&
-                    dt <= DistancePolicy.maximumControllerIntervalUs &&
                     old.activeInterval == activeInterval &&
-                    old.continuity == continuityIdentity &&
-                    (!counter || value >= old.value)
+                    (!counter || value >= old.value) &&
+                    (same || bridged)
             if (!connects) {
                 if (old != null) lane.segment++
                 return@mapIndexedNotNull BatteryConsumptionInterval(
@@ -305,7 +326,7 @@ class BatteryConsumptionKernel @Throws(IllegalArgumentException::class) construc
 }
 
 /** Integrates only the positive triangle/trapezoid of a linearly interpolated original rate. */
-private fun positiveArea(first: Double, last: Double, durationUs: Long): Double {
+internal fun positiveArea(first: Double, last: Double, durationUs: Long): Double {
     val rateArea =
         when {
             first <= 0 && last <= 0 -> 0.0

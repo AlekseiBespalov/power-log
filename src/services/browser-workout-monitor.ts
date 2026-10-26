@@ -1,15 +1,19 @@
 import {
   InspectionPlotQuery,
   InspectionPlotCache,
+  InspectionPlotSlotSummary,
   InspectionMetricQuery,
   InspectionMetricPolicy,
   InspectionTargetInput,
   InspectionOriginalInput,
   inspectionHeldTail,
+  inspectionPlotBuckets,
+  inspectionPlotPointLimit,
+  inspectionPlotSlotUs,
 } from '../../shared/js';
 import { inspectMonitorItems, inspectionPoint } from '../core/monitor-inspection';
 import { isChartCapacity } from '../core/failures';
-import { secondsUs } from './browser-storage-keys';
+import { int64, secondsUs } from './browser-storage-keys';
 import {
   browserStatistics,
   browserPageReader,
@@ -24,21 +28,27 @@ import {
   type MonitorSource,
   type MonitorPoint,
   type MonitorInspectRequest,
+  type MonitorPlotRequest,
   type MonitorStatsRequest,
   type MonitorStatistics,
 } from '../core/monitor';
 import { isDistanceMetric, type DistanceSource } from '../core/distance';
 import { isConsumptionMetric } from '../core/consumption';
+import { withEnergyPerDistance } from './energy-per-distance-monitor';
 const isDerivedMetric = (id: string) => isDistanceMetric(id) || isConsumptionMetric(id);
 import {
   browserRideStore,
   BROWSER_PAGE,
+  PLOT_SUMMARY_POINTS,
   TILE_SECONDS,
   rowPoint,
+  tileLevelWithin,
   type BrowserRideStore,
   type RideRow,
   type BrowserRide,
   type RideLocationRow,
+  type OriginalCursor,
+  type OriginalIdentity,
 } from './browser-ride-store';
 import {
   browserDerivedHandle,
@@ -53,15 +63,23 @@ import {
   inspectBrowserDistance,
   peekBrowserDistance,
   plotBrowserDistance,
+  browserEnergyPerDistance,
 } from './browser-distance-store';
 
 const yieldPage = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 const revision = (record: { revision: string }) => String(record.revision);
+const INT64_MIN = '-9223372036854775808',
+  INT64_MAX = '9223372036854775807';
+type PlotStream = 'samples' | 'ride-locations';
+type PlotSummaries = { revision: string; last?: OriginalIdentity; summaries: Map<string, InspectionPlotSlotSummary> };
 type AnalysisCache = {
   statistics: Map<string, Record<string, MonitorStatistics>>;
   plots: Map<string, Record<string, MonitorPoint[]>>;
   lifecycle?: { revision: string; items: import('../../shared/js').AnalyticsItem[] };
   originals: Map<string, InspectionOriginalInput>;
+  summaries: Partial<Record<PlotStream, PlotSummaries>>;
+  exhausted: Set<string>;
+  summaryWork: Promise<unknown>;
 };
 const sourceCaches = new WeakMap<BrowserRideStore, Map<string, AnalysisCache>>();
 type LiveTiming = { nowSeconds: number; monotonicAt: number };
@@ -90,7 +108,15 @@ function cacheFor(store: BrowserRideStore, id: string): AnalysisCache {
     sourceCaches.set(store, rides);
   }
   let cache = rides.get(id);
-  if (!cache) cache = { statistics: new Map(), plots: new Map(), originals: new Map() };
+  if (!cache)
+    cache = {
+      statistics: new Map(),
+      plots: new Map(),
+      originals: new Map(),
+      summaries: {},
+      exhausted: new Set(),
+      summaryWork: Promise.resolve(),
+    };
   rides.delete(id);
   rides.set(id, cache);
   if (rides.size > 4) rides.delete(rides.keys().next().value!);
@@ -100,6 +126,43 @@ const metricsFor = (metrics: string[]) => [...new Set(metrics)].filter(id => Boo
 function levelFor(span: number, maximum: number): number {
   const level = TILE_SECONDS.findIndex(size => Math.ceil(span / size) + 1 <= maximum);
   return level < 0 ? TILE_SECONDS.length - 1 : level;
+}
+export function browserPlotWindow(
+  request: Pick<MonitorPlotRequest, 'startSeconds' | 'endSeconds' | 'buckets' | 'pixelWidth'>,
+  elapsedSeconds: number,
+  metricCount: number,
+) {
+  const start = Math.max(0, request.startSeconds ?? 0),
+    domainEnd = Math.max(10, elapsedSeconds),
+    whole = start === 0 && (request.endSeconds ?? domainEnd) >= domainEnd,
+    end = whole ? domainEnd : Math.max(start, request.endSeconds ?? elapsedSeconds),
+    buckets = inspectionPlotBuckets(
+      Math.max(1, Math.min(512, Math.floor(request.buckets ?? request.pixelWidth ?? 240))),
+      metricCount,
+    );
+  return {
+    start,
+    end,
+    whole,
+    buckets,
+    pointLimit: inspectionPlotPointLimit(metricCount),
+    slotUs: whole ? (inspectionPlotSlotUs('0', secondsUs(end), buckets) ?? null) : null,
+  };
+}
+function compareOriginals(a: OriginalIdentity, b: OriginalIdentity): number {
+  const time = int64(a.elapsedUs) - int64(b.elapsedUs);
+  if (time !== 0n) return time < 0n ? -1 : 1;
+  if (a.producer !== b.producer) return a.producer < b.producer ? -1 : 1;
+  const sequence = int64(a.producerSequence) - int64(b.producerSequence);
+  return sequence === 0n ? 0 : sequence < 0n ? -1 : 1;
+}
+function plotted(reducer: InspectionPlotQuery): MonitorPoint[] {
+  let previous: number | undefined;
+  return reducer.result().map(value => {
+    const startsSegment = value.segment !== previous;
+    previous = value.segment;
+    return { ...inspectionPoint(value.original), startsSegment };
+  });
 }
 export function browserWorkoutMonitorSource(
   id: string,
@@ -172,6 +235,96 @@ export function browserWorkoutMonitorSource(
       after = [tail.elapsedSeconds, tail.sequence];
       await yieldPage();
     }
+  }
+  function feed(state: PlotSummaries, rows: (RideRow | RideLocationRow)[]) {
+    for (const row of rows) {
+      const input = new InspectionOriginalInput(browserInspectionItem(row));
+      for (const [metric, summary] of state.summaries)
+        try {
+          summary.appendOriginal(input, true, false);
+        } catch {
+          state.summaries.delete(metric);
+          cache.exhausted.add(metric);
+        }
+    }
+    state.last = rows.at(-1) ?? state.last;
+  }
+  async function liveSummaries(stream: PlotStream, metrics: string[], record: BrowserRide) {
+    let state = cache.summaries[stream];
+    if (state && int64(state.revision) > int64(record.revision)) return undefined;
+    if (state && state.revision !== record.revision) {
+      const rows: (RideRow | RideLocationRow)[] = [];
+      let after: OriginalCursor | null = null;
+      while (true) {
+        const page: ((RideRow | RideLocationRow) & { revision: string })[] = await store.originalsSince(
+          stream,
+          id,
+          state.revision,
+          record.revision,
+          after,
+        );
+        rows.push(...page);
+        if (page.length < BROWSER_PAGE) break;
+        const tail = page.at(-1)!;
+        after = [tail.revision, tail.producer, tail.producerSequence];
+      }
+      rows.sort(compareOriginals);
+      if (rows[0] && state.last && compareOriginals(rows[0], state.last) <= 0) state = undefined;
+      else {
+        feed(state, rows);
+        state.revision = record.revision;
+      }
+    }
+    const missing = metrics.filter(metric => !cache.exhausted.has(metric) && !state?.summaries.has(metric));
+    if (missing.length) {
+      const built: PlotSummaries = {
+        revision: record.revision,
+        summaries: new Map(
+          missing.map(metric => [metric, new InspectionPlotSlotSummary(metric, 512, PLOT_SUMMARY_POINTS)]),
+        ),
+      };
+      let after: OriginalCursor | null = null;
+      while (true) {
+        const rows: (RideRow | RideLocationRow)[] =
+          stream === 'samples'
+            ? await store.pageExact(id, INT64_MIN, INT64_MAX, after, BROWSER_PAGE, record.revision)
+            : await store.locationPage(id, INT64_MIN, INT64_MAX, after, record.revision);
+        feed(built, rows);
+        if (rows.length < BROWSER_PAGE) break;
+        const tail = rows.at(-1)!;
+        after = [tail.elapsedUs, tail.producer, tail.producerSequence];
+        await yieldPage();
+      }
+      if (state) for (const [metric, summary] of built.summaries) state.summaries.set(metric, summary);
+      else state = built;
+    }
+    cache.summaries[stream] = state;
+    return state?.summaries;
+  }
+  function summaryPlots(
+    stream: PlotStream,
+    metrics: string[],
+    record: BrowserRide,
+    endUs: string,
+    buckets: number,
+    pointLimit: number,
+    slotUs: string,
+  ): Promise<Record<string, MonitorPoint[]>> {
+    const work = cache.summaryWork.then(async () => {
+      const summaries = await liveSummaries(stream, metrics, record);
+      const series: Record<string, MonitorPoint[]> = {};
+      for (const metric of metrics) {
+        const summary = summaries?.get(metric);
+        if (!summary) continue;
+        const reducer = new InspectionPlotQuery(metric, '0', endUs, buckets, pointLimit, slotUs);
+        if (!summary.canMergeInto(reducer)) continue;
+        summary.mergeInto(reducer);
+        series[metric] = plotted(reducer);
+      }
+      return series;
+    });
+    cache.summaryWork = work.catch(() => {});
+    return work;
   }
   function inspectionPointFromRow(row: RideRow | RideLocationRow, metric: string): MonitorPoint | undefined {
     const value = (row as unknown as Record<string, unknown>)[metric];
@@ -430,129 +583,145 @@ export function browserWorkoutMonitorSource(
     }
   }
 
-  return {
-    key,
-    live,
-    semanticKey: 'distance:auto',
-    async describeSource({ generation }) {
-      const { record, envelope } = await context(generation);
-      const distance = await peekBrowserDistance(id, distanceSource);
-      const sources = distance ? browserDerivedSources(distance) : {};
-      const outcome =
-        record.telemetryCount || record.locationCount
-          ? record.interrupted
-            ? 'partial'
-            : 'available'
-          : live
-            ? 'pending'
-            : 'unavailable';
-      return {
-        ...envelope,
-        status: 'ok',
-        startedAt: record.startedAt,
-        domain: { start: 0, end: Math.max(10, record.elapsedSeconds) },
-        ...timing(record),
-        availableMetrics: [...record.availableMetrics, ...Object.keys(sources)],
-        metricSources: sources,
-        outcome,
-      };
-    },
-    async readLatest({ generation, metrics }) {
-      const { record, envelope } = await context(generation),
-        tail = metrics.some(metric => !isDerivedMetric(metric))
-          ? await store.neighbor(id, Infinity, 'prev')
-          : undefined;
-      const points = Object.fromEntries(
-        metricsFor(metrics).map(metric => [metric, tail ? (rowPoint(tail, metric) ?? null) : null]),
-      );
-      const location = metrics.some(metric => browserLocationMetrics.has(metric))
-        ? await store.locationNeighbor(id, Infinity, 'prev')
-        : undefined;
-      for (const metric of metrics)
-        if (browserLocationMetrics.has(metric))
-          points[metric] = location ? (locationPoint(location, metric) ?? null) : null;
-      let metricSources: Record<string, MetricSourceInfo> | undefined;
-      if (metrics.some(isDerivedMetric)) {
-        const handle = await ensureBrowserDistance(id, distanceSource);
-        for (const metric of metrics.filter(isDerivedMetric))
-          points[metric] = await browserDistanceLatest(browserDerivedHandle(handle, metric));
-        metricSources = browserDerivedSources(handle);
-        if (!(await browserDistanceCurrent(handle))) return { ...envelope, status: 'retry' };
-      }
-      if (!(await current(envelope.revision))) return { ...envelope, status: 'retry' };
-      const clock = timing(record);
-      const origin = liveClocks.get(store)?.origin;
-      const liveAcquiredAt =
-        clock.monotonicAt === undefined || origin === undefined
-          ? undefined
-          : Object.fromEntries(
-              metrics.map(metric => {
-                const point = points[metric];
-                const sequence = point?.observationId?.match(/:(\d+)(?::(?:start|end))?$/)?.[1];
-                return [
-                  metric,
-                  browserLocationMetrics.has(metric)
-                    ? location && BigInt(location.producerSequence) >= BigInt(liveClocks.get(store)!.firstGPSSequence)
-                      ? location.acquiredAtSeconds
-                      : null
-                    : point && sequence !== undefined && Number(sequence) >= liveClocks.get(store)!.firstSequence
-                      ? origin + point.elapsedSeconds
-                      : null,
-                ];
-              }),
-            );
-      return {
-        ...envelope,
-        status: 'ok',
-        points,
-        metricSources,
-        ...clock,
-        ...(liveAcquiredAt ? { liveAcquiredAt } : {}),
-      };
-    },
-    async readPlot(request) {
-      const { record, envelope } = await context(request.generation);
-      if (envelope.revision !== request.expectedRevision) return { ...envelope, status: 'retry' };
-      const start = Math.max(0, request.startSeconds ?? 0),
-        end = Math.max(start, request.endSeconds ?? record.elapsedSeconds);
-      const metrics = metricsFor(request.metrics),
-        budget = Math.max(
-          4,
-          Math.min(
-            256,
-            Math.floor(900 / Math.max(1, metrics.length)),
-            Math.floor(request.buckets ?? request.pixelWidth ?? 240),
-          ),
+  return withEnergyPerDistance(
+    {
+      key,
+      live,
+      semanticKey: 'distance:auto',
+      distanceSelection: 'auto',
+      async describeSource({ generation }) {
+        const { record, envelope } = await context(generation);
+        const distance = await peekBrowserDistance(id, distanceSource);
+        const sources = distance ? browserDerivedSources(distance) : {};
+        const outcome =
+          record.telemetryCount || record.locationCount
+            ? record.interrupted
+              ? 'partial'
+              : 'available'
+            : live
+              ? 'pending'
+              : 'unavailable';
+        return {
+          ...envelope,
+          status: 'ok',
+          startedAt: record.startedAt,
+          domain: { start: 0, end: Math.max(10, record.elapsedSeconds) },
+          ...timing(record),
+          availableMetrics: [...record.availableMetrics, ...Object.keys(sources)],
+          metricSources: sources,
+          outcome,
+        };
+      },
+      async readLatest({ generation, metrics }) {
+        const { record, envelope } = await context(generation),
+          tail = metrics.some(metric => !isDerivedMetric(metric))
+            ? await store.neighbor(id, Infinity, 'prev')
+            : undefined;
+        const points = Object.fromEntries(
+          metricsFor(metrics).map(metric => [metric, tail ? (rowPoint(tail, metric) ?? null) : null]),
         );
-      const rawMetrics = metrics.filter(
-        metric =>
-          !isDerivedMetric(metric) && !browserLocationMetrics.has(metric) && record.availableMetrics.includes(metric),
-      );
-      const cacheKey = JSON.stringify([revision(record), start, end, rawMetrics, budget]);
-      let series = plotCache.get(cacheKey);
-      if (!series && metrics.every(metric => isDerivedMetric(metric))) series = {};
-      if (!series) {
-        series = {};
-        const readPage = browserPageReader(store, id, record.revision);
-        for (const metric of rawMetrics) {
-          const level = levelFor(end - start, budget),
-            size = TILE_SECONDS[level]!;
-          const reducer = new InspectionPlotQuery(
-            metric,
-            secondsUs(start),
-            secondsUs(end),
-            budget,
-            16384,
-            end - start >= size ? secondsUs(size) : undefined,
+        const location = metrics.some(metric => browserLocationMetrics.has(metric))
+          ? await store.locationNeighbor(id, Infinity, 'prev')
+          : undefined;
+        for (const metric of metrics)
+          if (browserLocationMetrics.has(metric))
+            points[metric] = location ? (locationPoint(location, metric) ?? null) : null;
+        let metricSources: Record<string, MetricSourceInfo> | undefined;
+        if (metrics.some(isDerivedMetric)) {
+          const handle = await ensureBrowserDistance(id, distanceSource);
+          for (const metric of metrics.filter(isDerivedMetric))
+            points[metric] = await browserDistanceLatest(browserDerivedHandle(handle, metric));
+          metricSources = browserDerivedSources(handle);
+          if (!(await browserDistanceCurrent(handle))) return { ...envelope, status: 'retry' };
+        }
+        if (!(await current(envelope.revision))) return { ...envelope, status: 'retry' };
+        const clock = timing(record);
+        const origin = liveClocks.get(store)?.origin;
+        const liveAcquiredAt =
+          clock.monotonicAt === undefined || origin === undefined
+            ? undefined
+            : Object.fromEntries(
+                metrics.map(metric => {
+                  const point = points[metric];
+                  const sequence = point?.observationId?.match(/:(\d+)(?::(?:start|end))?$/)?.[1];
+                  return [
+                    metric,
+                    browserLocationMetrics.has(metric)
+                      ? location && BigInt(location.producerSequence) >= BigInt(liveClocks.get(store)!.firstGPSSequence)
+                        ? location.acquiredAtSeconds
+                        : null
+                      : point && sequence !== undefined && Number(sequence) >= liveClocks.get(store)!.firstSequence
+                        ? origin + point.elapsedSeconds
+                        : null,
+                  ];
+                }),
+              );
+        return {
+          ...envelope,
+          status: 'ok',
+          points,
+          metricSources,
+          ...clock,
+          ...(liveAcquiredAt ? { liveAcquiredAt } : {}),
+        };
+      },
+      async readPlot(request) {
+        const { record, envelope } = await context(request.generation);
+        if (envelope.revision !== request.expectedRevision) return { ...envelope, status: 'retry' };
+        const metrics = metricsFor(request.metrics);
+        const {
+          start,
+          end,
+          whole,
+          buckets: budget,
+          pointLimit,
+          slotUs: wholeSlot,
+        } = browserPlotWindow(request, record.elapsedSeconds, metrics.length);
+        const summarySlot = live && !record.endedAt ? wholeSlot : null;
+        if (record.endedAt) cache.summaries = {};
+        const rawMetrics = metrics.filter(
+          metric =>
+            !isDerivedMetric(metric) && !browserLocationMetrics.has(metric) && record.availableMetrics.includes(metric),
+        );
+        const cacheKey = JSON.stringify([revision(record), start, end, rawMetrics, budget, pointLimit]);
+        let series = plotCache.get(cacheKey);
+        if (!series && metrics.every(metric => isDerivedMetric(metric))) series = {};
+        if (!series) {
+          const built =
+            summarySlot === null || !rawMetrics.length
+              ? {}
+              : await summaryPlots('samples', rawMetrics, record, secondsUs(end), budget, pointLimit, summarySlot);
+          const pending = rawMetrics.filter(metric => !built[metric]);
+          const level = whole ? (wholeSlot === null ? -1 : tileLevelWithin(wholeSlot)) : levelFor(end - start, budget);
+          const slotUs = whole
+            ? (wholeSlot ?? undefined)
+            : end - start >= TILE_SECONDS[level]!
+              ? secondsUs(TILE_SECONDS[level]!)
+              : undefined;
+          const readPage = browserPageReader(store, id, record.revision);
+          const reducers = new Map(
+            pending.map(metric => [
+              metric,
+              new InspectionPlotQuery(metric, secondsUs(start), secondsUs(end), budget, pointLimit, slotUs),
+            ]),
           );
-          const before = await store.neighbor(id, start, 'prev', record.revision);
-          if (before && before.elapsedSeconds < start) reducer.append(browserInspectionItem(before), true, false);
-          const descend = async (level: number, first: number, last: number): Promise<void> => {
+          const appendRow = (row: RideRow) => {
+            const item = browserInspectionItem(row);
+            for (const reducer of reducers.values()) reducer.append(item, true, false);
+          };
+          const descend = async (
+            metric: string,
+            reducer: InspectionPlotQuery,
+            level: number,
+            first: number,
+            last: number,
+          ): Promise<void> => {
             const size = TILE_SECONDS[level]!;
-            const tiles = await store.tiles(id, level, first, last, record.revision);
+            const tiles = new Map(
+              (await store.tiles(id, level, first, last, record.revision)).map(tile => [tile.bucket, tile]),
+            );
             for (let bucket = first; bucket <= last; bucket++) {
-              const tile = tiles.find(tile => tile.bucket === bucket);
-              const payload = tile?.stats[metric];
+              const payload = tiles.get(bucket)?.stats[metric];
               let merged = false;
               if (payload?.plot) {
                 try {
@@ -571,6 +740,8 @@ export function browserWorkoutMonitorSource(
               if (level > 0) {
                 const childSize = TILE_SECONDS[level - 1]!;
                 await descend(
+                  metric,
+                  reducer,
                   level - 1,
                   Math.floor(Math.max(start, left) / childSize),
                   Math.min(
@@ -590,74 +761,134 @@ export function browserWorkoutMonitorSource(
                 );
             }
           };
-          await descend(level, Math.floor(start / size), Math.floor(Math.min(end, record.elapsedSeconds) / size));
-          const after = await store.neighbor(id, end, 'next', record.revision);
-          if (after && after.elapsedSeconds > end) reducer.append(browserInspectionItem(after), true, false);
-          let previous: number | undefined;
-          series[metric] = reducer.result().map(value => {
-            const startsSegment = value.segment !== previous;
-            previous = value.segment;
-            return { ...inspectionPoint(value.original), startsSegment };
-          });
+          if (pending.length) {
+            const before = await store.neighbor(id, start, 'prev', record.revision);
+            if (before && before.elapsedSeconds < start) appendRow(before);
+            if (level < 0) await scan(start, end, appendRow, record.revision, readPage);
+            else {
+              const size = TILE_SECONDS[level]!;
+              for (const [metric, reducer] of reducers)
+                await descend(
+                  metric,
+                  reducer,
+                  level,
+                  Math.floor(start / size),
+                  Math.floor(Math.min(end, record.elapsedSeconds) / size),
+                );
+            }
+            const after = await store.neighbor(id, end, 'next', record.revision);
+            if (after && after.elapsedSeconds > end) appendRow(after);
+          }
+          series = { ...built };
+          for (const [metric, reducer] of reducers) series[metric] = plotted(reducer);
+          if (!(await current(envelope.revision))) return { ...envelope, status: 'retry' };
+          if (plotCache.size >= 2) plotCache.delete(plotCache.keys().next().value!);
+          plotCache.set(cacheKey, series);
+        }
+        const locationMetrics = metrics.filter(
+          metric => browserLocationMetrics.has(metric) && record.availableMetrics.includes(metric),
+        );
+        if (locationMetrics.length) {
+          series = {
+            ...series,
+            ...(summarySlot === null
+              ? {}
+              : await summaryPlots(
+                  'ride-locations',
+                  locationMetrics,
+                  record,
+                  secondsUs(end),
+                  budget,
+                  pointLimit,
+                  summarySlot,
+                )),
+          };
+          const reducers = new Map(
+            locationMetrics
+              .filter(metric => !series![metric])
+              .map(metric => [
+                metric,
+                new InspectionPlotQuery(
+                  metric,
+                  secondsUs(start),
+                  secondsUs(end),
+                  budget,
+                  pointLimit,
+                  wholeSlot ?? undefined,
+                ),
+              ]),
+          );
+          if (reducers.size)
+            await scanBrowserLocations(record, store, start, end, (_item, row) => {
+              const item = browserInspectionItem(row);
+              for (const reducer of reducers.values()) reducer.append(item, true, false);
+            });
+          for (const [metric, reducer] of reducers) series[metric] = plotted(reducer);
+        }
+        let metricSources: Record<string, MetricSourceInfo> | undefined;
+        if (metrics.some(isDerivedMetric)) {
+          const handle = await ensureBrowserDistance(id, distanceSource);
+          metricSources = browserDerivedSources(handle);
+          series = { ...series };
+          for (const metric of metrics.filter(isDerivedMetric))
+            series[metric] = await plotBrowserDistance(
+              browserDerivedHandle(handle, metric),
+              start,
+              end,
+              budget,
+              wholeSlot ?? undefined,
+              summarySlot !== null,
+            );
+          if (!(await browserDistanceCurrent(handle))) return { ...envelope, status: 'retry' };
         }
         if (!(await current(envelope.revision))) return { ...envelope, status: 'retry' };
-        if (plotCache.size >= 2) plotCache.delete(plotCache.keys().next().value!);
-        plotCache.set(cacheKey, series);
-      }
-      const locationMetrics = metrics.filter(
-        metric => browserLocationMetrics.has(metric) && record.availableMetrics.includes(metric),
-      );
-      if (locationMetrics.length) {
-        const reducers = Object.fromEntries(
-          locationMetrics.map(metric => [
-            metric,
-            new InspectionPlotQuery(metric, secondsUs(start), secondsUs(end), budget, 16384),
-          ]),
-        );
-        await scanBrowserLocations(record, store, start, end, (_item, row) => {
-          for (const reducer of Object.values(reducers)) reducer.append(browserInspectionItem(row), true, false);
-        });
-        series = { ...series };
-        for (const metric of locationMetrics) {
-          let previous: number | undefined;
-          series[metric] = reducers[metric]!.result().map(value => {
-            const startsSegment = value.segment !== previous;
-            previous = value.segment;
-            return { ...inspectionPoint(value.original), startsSegment };
-          });
-        }
-      }
-      let metricSources: Record<string, MetricSourceInfo> | undefined;
-      if (metrics.some(isDerivedMetric)) {
-        const handle = await ensureBrowserDistance(id, distanceSource);
-        metricSources = browserDerivedSources(handle);
-        series = { ...series };
-        for (const metric of metrics.filter(isDerivedMetric))
-          series[metric] = await plotBrowserDistance(browserDerivedHandle(handle, metric), start, end, budget);
-        if (!(await browserDistanceCurrent(handle))) return { ...envelope, status: 'retry' };
-      }
-      if (!(await current(envelope.revision))) return { ...envelope, status: 'retry' };
-      return {
-        ...envelope,
-        status: 'ok',
-        series: Object.fromEntries(metrics.map(metric => [metric, series[metric] ?? []])),
-        metricSources,
-        resolution: 'reduced',
-      };
+        return {
+          ...envelope,
+          status: 'ok',
+          series: Object.fromEntries(metrics.map(metric => [metric, series[metric] ?? []])),
+          metricSources,
+          resolution: 'reduced',
+        };
+      },
+      inspectAt: inspection,
+      rangeStats: stats,
+      async changesSince(request) {
+        const { record, envelope } = await context(request.generation);
+        return {
+          ...envelope,
+          status: 'ok',
+          resetRequired: request.sinceRevision !== envelope.revision,
+          changes:
+            request.sinceRevision === envelope.revision
+              ? []
+              : [{ startSeconds: 0, endSeconds: record.elapsedSeconds, kind: 'semantics' }],
+        };
+      },
     },
-    inspectAt: inspection,
-    rangeStats: stats,
-    async changesSince(request) {
+    async request => {
       const { record, envelope } = await context(request.generation);
-      return {
-        ...envelope,
-        status: 'ok',
-        resetRequired: request.sinceRevision !== envelope.revision,
-        changes:
-          request.sinceRevision === envelope.revision
-            ? []
-            : [{ startSeconds: 0, endSeconds: record.elapsedSeconds, kind: 'semantics' }],
-      };
+      if (envelope.revision !== request.expectedRevision) return { ...envelope, status: 'retry' };
+      const end = request.endSeconds ?? record.elapsedSeconds;
+      const start = request.energyCurrent ? end : (request.startSeconds ?? end);
+      const handle = request.energyTotals === false ? null : await ensureBrowserDistance(id, distanceSource, record);
+      const buckets = handle || request.energyCurrent ? null : (request.buckets ?? 128);
+      const grid =
+        buckets === null
+          ? undefined
+          : browserPlotWindow({ startSeconds: start, endSeconds: end, buckets }, record.elapsedSeconds, 1);
+      const result = grid?.whole
+        ? await browserEnergyPerDistance(
+            record,
+            handle,
+            grid.start,
+            grid.end,
+            grid.buckets,
+            request.energySmoothingSeconds,
+            { slotUs: grid.slotUs, incremental: live && !record.endedAt },
+          )
+        : await browserEnergyPerDistance(record, handle, start, end, buckets, request.energySmoothingSeconds);
+      if (!(await current(envelope.revision))) return { ...envelope, status: 'retry' };
+      return { ...envelope, status: 'ok', ...result };
     },
-  };
+  );
 }

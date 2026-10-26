@@ -1,20 +1,25 @@
+import { energyAverageInterval, isEnergyPerDistanceMetric } from '../../core/energy-per-distance';
 import { InspectionRequestGate, InspectionRequestContext, inspectionContextsMatch } from '../../../shared/js';
 import type { MonitorSnap } from '../../core/monitor-hit-test';
+import { isVoltageMetric, reuseShallow } from '../../core/monitor-chart';
 import { presentFailure } from '../../core/failures';
 import { clampChartViewport, type ChartViewport } from '../../core/chart-viewport';
-import type {
-  MonitorData,
-  MonitorObservationAnchor,
-  MonitorDescribeResult,
-  MonitorEnvelope,
-  MonitorInspectResult,
-  MonitorLatestResult,
-  MonitorPoint,
-  MonitorPlotResult,
-  MonitorRange,
-  MonitorSource,
-  MonitorStatistics,
-  MonitorStatsResult,
+import {
+  monitorQueryMetrics,
+  type MonitorData,
+  type MonitorDrawing,
+  type MonitorObservationAnchor,
+  type MonitorDescribeResult,
+  type MonitorEnvelope,
+  type MonitorInspectResult,
+  type MonitorLatestResult,
+  type MonitorPoint,
+  type MonitorPlotResult,
+  type MonitorRange,
+  type MonitorSource,
+  type MonitorStatistics,
+  type MonitorStatisticsState,
+  type MonitorStatsResult,
 } from '../../core/monitor';
 import {
   ReadCancelled,
@@ -31,12 +36,36 @@ export function rangeViewport(domain: ChartViewport, range: MonitorRange): Chart
 
 const EMPTY_STATISTICS: Record<string, MonitorStatistics> = {};
 const EMPTY_POINTS = {};
-function reuseShallow<T extends object>(previous: T | undefined, next: T): T {
-  return previous &&
-    Object.keys(next).every(key => previous[key as keyof T] === next[key as keyof T]) &&
-    Object.keys(previous).length === Object.keys(next).length
-    ? previous
-    : next;
+const samePoint = (a: MonitorPoint | null | undefined, b: MonitorPoint | null | undefined) =>
+  a === b ||
+  (!!a &&
+    !!b &&
+    Object.is(a.elapsedSeconds, b.elapsedSeconds) &&
+    Object.is(a.value, b.value) &&
+    a.timestamp === b.timestamp &&
+    a.exactValue === b.exactValue &&
+    a.observationId === b.observationId &&
+    a.startsSegment === b.startsSegment &&
+    a.derived === b.derived);
+const sameSeries = (a: readonly MonitorPoint[], b: readonly MonitorPoint[]) =>
+  a === b || (a.length === b.length && a.every((point, index) => samePoint(point, b[index])));
+const sameStatistics = (a: MonitorStatistics, b: MonitorStatistics) =>
+  Object.keys(a).length === Object.keys(b).length &&
+  (Object.keys(a) as (keyof MonitorStatistics)[]).every(key =>
+    key === 'min' || key === 'max' ? samePoint(a[key], b[key]) : Object.is(a[key], b[key]),
+  );
+function sharePoints(
+  previous: Record<string, MonitorPoint | null> | undefined,
+  next: Record<string, MonitorPoint | null>,
+): Record<string, MonitorPoint | null> {
+  if (!previous) return next;
+  const shared = Object.fromEntries(
+    Object.entries(next).map(([metric, point]) => [
+      metric,
+      samePoint(previous[metric], point) ? previous[metric]! : point,
+    ]),
+  );
+  return reuseShallow(previous, shared);
 }
 type ReadKind = 'source' | 'latest' | 'changes' | 'plot' | 'cursor' | 'reference' | 'statistics' | 'comparison';
 const executionLane = (kind: ReadKind): ReadExecutionLane =>
@@ -76,6 +105,26 @@ class ReadLane {
 type Successful<T> = Extract<T, { status: 'ok' }>;
 type SemanticSnapshot<T> = T & { semanticKey?: string };
 type ViewStatistics = SemanticSnapshot<Successful<MonitorStatsResult>> & { viewport: ChartViewport; metrics: string };
+type PlotSnapshot = SemanticSnapshot<Successful<MonitorPlotResult>> & { metrics: string[] };
+/** `confirmed` is the newest plot revision at which these points are known to be unchanged. */
+type Drawing = {
+  points: MonitorPoint[];
+  revision: string;
+  generation: number;
+  viewport: ChartViewport;
+  confirmed: string;
+  semanticKey?: string;
+  sourceId: string;
+  presented?: MonitorDrawing;
+};
+type StatisticsEntry = {
+  value: MonitorStatistics;
+  revision: string;
+  viewport: ChartViewport;
+  semanticKey?: string;
+  sourceId: string;
+  presented?: MonitorStatisticsState;
+};
 export type MonitorReadState = {
   interactionVersion: number;
   description?: MonitorDescribeResult;
@@ -90,6 +139,7 @@ export type MonitorReadState = {
   referenceSeconds: number | null;
   intervalStatistics: Record<string, MonitorStatistics>;
   latest?: Record<string, MonitorPoint | null>;
+  averages?: Record<string, MonitorPoint | null>;
   latestRevision?: string;
   latestMetricSources?: MonitorEnvelope['metricSources'];
   deferred: Partial<Record<ReadKind, boolean>>;
@@ -100,18 +150,24 @@ export type MonitorReadState = {
 /** The UI owns selection; a committed source revision never owns or resets it. */
 export class MonitorReadController {
   private source: MonitorSource;
+  private configured: string[] = [];
   private metrics: string[] = [];
   private range: MonitorRange = 'all';
   private pixelWidth = 360;
   private manualView: ChartViewport | null = null;
-  private plot?: SemanticSnapshot<Successful<MonitorPlotResult>>;
+  private visible: string[] | null = null;
+  private plot?: PlotSnapshot;
+  private drawings: Record<string, Drawing> = {};
   private retainedSemanticData?: { data: MonitorData; intervalStatistics: Record<string, MonitorStatistics> };
   private statistics?: ViewStatistics;
+  private statisticsEntries: Record<string, StatisticsEntry> = {};
   private latest?: SemanticSnapshot<Successful<MonitorLatestResult>>;
   private comparison?: SemanticSnapshot<Successful<MonitorStatsResult>>;
   private comparisonTimer?: ReturnType<typeof setTimeout>;
   private catchupTimer?: ReturnType<typeof setTimeout>;
   private statisticsTimer?: ReturnType<typeof setTimeout>;
+  private averagesTimer?: ReturnType<typeof setTimeout>;
+  private visibleTimer?: ReturnType<typeof setTimeout>;
   private nextStatisticsAt = 0;
   private nextCatchupAt = 0;
   private unavailablePoints: Record<string, null> = {};
@@ -176,8 +232,12 @@ export class MonitorReadController {
     this.clearInteraction();
     if (this.catchupTimer) clearTimeout(this.catchupTimer);
     if (this.statisticsTimer) clearTimeout(this.statisticsTimer);
+    if (this.averagesTimer) clearTimeout(this.averagesTimer);
+    if (this.visibleTimer) clearTimeout(this.visibleTimer);
     this.statisticsTimer = undefined;
     this.catchupTimer = undefined;
+    this.averagesTimer = undefined;
+    this.visibleTimer = undefined;
     for (const lane of Object.values(this.lanes)) lane.invalidate();
     this.state = { ...this.state, loading: {} };
   }
@@ -209,8 +269,12 @@ export class MonitorReadController {
     this.clearInteraction();
     if (this.catchupTimer) clearTimeout(this.catchupTimer);
     if (this.statisticsTimer) clearTimeout(this.statisticsTimer);
+    if (this.averagesTimer) clearTimeout(this.averagesTimer);
+    if (this.visibleTimer) clearTimeout(this.visibleTimer);
     this.catchupTimer = undefined;
     this.statisticsTimer = undefined;
+    this.averagesTimer = undefined;
+    this.visibleTimer = undefined;
     this.nextCatchupAt = 0;
     this.nextStatisticsAt = 0;
     this.retryScheduled = false;
@@ -219,7 +283,9 @@ export class MonitorReadController {
     this.retainedSemanticData = undefined;
     this.manualView = null;
     this.plot = undefined;
+    this.drawings = {};
     this.statistics = undefined;
+    this.statisticsEntries = {};
     this.latest = undefined;
     this.selection = undefined;
     this.reference = undefined;
@@ -245,12 +311,9 @@ export class MonitorReadController {
   }
   configure(metrics: readonly string[], range: MonitorRange, pixelWidth = 360) {
     const changed =
-      metrics.join(',') !== this.metrics.join(',') || range !== this.range || pixelWidth !== this.pixelWidth;
-    if (metrics.join(',') !== this.metrics.join(','))
-      this.unavailablePoints = Object.fromEntries(metrics.map(id => [id, null]));
-    this.metrics = [...metrics];
-    if (this.cursorAnchor && !metrics.includes(this.cursorAnchor.metric)) this.cursorAnchor = undefined;
-    if (this.referenceAnchor && !metrics.includes(this.referenceAnchor.metric)) this.referenceAnchor = undefined;
+      metrics.join(',') !== this.configured.join(',') || range !== this.range || pixelWidth !== this.pixelWidth;
+    this.configured = [...metrics];
+    this.resolveMetrics(this.state.description);
     this.range = range;
     this.pixelWidth = pixelWidth;
     if (changed && this.state.description && this.active) {
@@ -261,6 +324,99 @@ export class MonitorReadController {
       this.readSelections(true);
     }
   }
+  private resolveMetrics(description: MonitorDescribeResult | undefined) {
+    const metrics = monitorQueryMetrics(this.configured, description?.availableMetrics);
+    if (metrics.join(',') === this.metrics.join(',')) return false;
+    this.unavailablePoints = Object.fromEntries(metrics.map(id => [id, null]));
+    this.metrics = metrics;
+    if (this.cursorAnchor && !metrics.includes(this.cursorAnchor.metric)) this.cursorAnchor = undefined;
+    if (this.referenceAnchor && !metrics.includes(this.referenceAnchor.metric)) this.referenceAnchor = undefined;
+    return true;
+  }
+  /** Plots and range statistics cover these metrics; `null` reads every selected metric. */
+  setVisibleMetrics(metrics: readonly string[] | null) {
+    const next = metrics && [...new Set(metrics)];
+    if ((next?.join(',') ?? null) === (this.visible?.join(',') ?? null)) return;
+    this.visible = next;
+    if (this.visibleTimer || !this.state.description || !this.active || this.disposed) return;
+    this.visibleTimer = setTimeout(() => {
+      this.visibleTimer = undefined;
+      this.readVisible();
+    }, 100);
+  }
+  private plotMetrics() {
+    return this.visible ? this.metrics.filter(id => this.visible!.includes(id)) : [...this.metrics];
+  }
+  private statisticsMetrics(metrics = this.plotMetrics()) {
+    return this.source.live && this.manualView === null ? metrics.filter(isVoltageMetric) : metrics;
+  }
+  private isCurrent(drawing: Drawing | undefined) {
+    return (
+      !!drawing &&
+      !!this.plot &&
+      drawing.confirmed === this.plot.revision &&
+      drawing.sourceId === this.plot.sourceId &&
+      drawing.semanticKey === this.source.semanticKey &&
+      this.sameView(drawing.viewport, this.plotView)
+    );
+  }
+  private covers() {
+    return this.plotMetrics().every(metric => this.isCurrent(this.drawings[metric]));
+  }
+  private statisticsCovered() {
+    const viewport = this.statistics?.viewport;
+    return this.statisticsMetrics().every(metric => {
+      const entry = this.statisticsEntries[metric];
+      return (
+        !!entry &&
+        entry.semanticKey === this.source.semanticKey &&
+        entry.revision === this.statistics?.revision &&
+        this.sameView(entry.viewport, viewport)
+      );
+    });
+  }
+  private readVisible() {
+    if (!this.active || this.disposed || this.interacting || !this.state.description) return;
+    if (this.plotMetrics().length && !this.covers()) this.readGeometry(false, false);
+    if (!this.statisticsCovered()) this.readStatistics(true);
+    this.emit();
+  }
+  private draw(snapshot: PlotSnapshot, view: ChartViewport) {
+    for (const metric of snapshot.metrics) {
+      const points = snapshot.series[metric] ?? [];
+      const previous = this.drawings[metric];
+      if (
+        previous &&
+        previous.sourceId === snapshot.sourceId &&
+        previous.semanticKey === snapshot.semanticKey &&
+        this.sameView(previous.viewport, view) &&
+        sameSeries(previous.points, points)
+      )
+        previous.confirmed = snapshot.revision;
+      else
+        this.drawings[metric] = {
+          points,
+          revision: snapshot.revision,
+          generation: snapshot.generation,
+          viewport: view,
+          confirmed: snapshot.revision,
+          semanticKey: snapshot.semanticKey,
+          sourceId: snapshot.sourceId,
+        };
+    }
+  }
+  private presentDrawing(drawing: Drawing) {
+    const current = this.isCurrent(drawing);
+    if (drawing.presented?.current !== current || drawing.presented.confirmed !== drawing.confirmed)
+      drawing.presented = {
+        revision: drawing.revision,
+        generation: drawing.generation,
+        viewport: drawing.viewport,
+        confirmed: drawing.confirmed,
+        current,
+      };
+    return drawing.presented;
+  }
   private emit(patch: Partial<MonitorReadState> = {}) {
     if (this.disposed) return;
     this.state = { ...this.state, ...patch };
@@ -268,21 +424,22 @@ export class MonitorReadController {
     for (const listener of this.listeners) listener(this.state);
   }
   private compose() {
-    const description = this.state.description,
-      revision = this.plot?.revision;
+    const description = this.state.description;
     this.state = {
       ...this.state,
       latest: this.latest?.points,
+      averages: this.latest?.averages,
       latestRevision: this.latest?.revision,
       latestMetricSources: this.latest?.metricSources,
     };
-    if (!description || !this.plot) {
+    const plotted = this.plotMetrics().length > 0;
+    if (!description || (plotted && !this.plot)) {
       this.state = { ...this.state, data: undefined };
       return;
     }
     // A preference change preserves the complete old drawing/readout snapshot until
     // replacement geometry arrives. Other lanes may complete in either order.
-    if (this.retainedSemanticData && this.plot.semanticKey !== this.source.semanticKey) {
+    if (this.retainedSemanticData && plotted && this.plot!.semanticKey !== this.source.semanticKey) {
       this.state = {
         ...this.state,
         data: this.retainedSemanticData.data,
@@ -291,15 +448,34 @@ export class MonitorReadController {
       return;
     }
     this.retainedSemanticData = undefined;
+    const semanticKey = this.plot ? this.plot.semanticKey : this.source.semanticKey;
     const sameSemantics = (result: { semanticKey?: string } | undefined) =>
-      !!result && result.semanticKey === this.plot!.semanticKey;
+      !!result && result.semanticKey === semanticKey;
     // Each exact operation keeps its admitted revision. A/B comparisons require one
     // common original snapshot; geometry can remain visible while a newer lookup finishes.
     const stats =
       sameSemantics(this.statistics) && this.statistics?.metrics === this.metrics.join(',')
         ? this.statistics
         : undefined;
-    const statistics = stats?.statistics ?? EMPTY_STATISTICS;
+    const series: Record<string, MonitorPoint[]> = {},
+      drawings: Record<string, MonitorDrawing> = {},
+      statistics: Record<string, MonitorStatistics> = {},
+      statisticsStates: Record<string, MonitorStatisticsState> = {};
+    for (const metric of this.metrics) {
+      const drawing = this.drawings[metric];
+      if (drawing && drawing.sourceId === description.sourceId) {
+        series[metric] = drawing.points;
+        drawings[metric] = this.presentDrawing(drawing);
+      }
+      const entry = this.statisticsEntries[metric];
+      if (entry && entry.sourceId === description.sourceId && sameSemantics(entry)) {
+        statistics[metric] = entry.value;
+        const pending = entry.revision !== description.revision || !this.sameView(entry.viewport, this.state.viewport);
+        if (entry.presented?.pending !== pending)
+          entry.presented = { revision: entry.revision, viewport: entry.viewport, pending };
+        statisticsStates[metric] = entry.presented;
+      }
+    }
     const unavailable = this.unavailablePoints;
     const selectionPending =
       this.state.cursorSeconds !== null && (!this.cursorResolved || !sameSemantics(this.selection));
@@ -331,9 +507,10 @@ export class MonitorReadController {
     const domain = this.sameView(this.state.data?.domain, description.domain)
       ? this.state.data!.domain
       : description.domain;
-    const data = reuseShallow(this.state.data, {
-      sourceId: this.plot.sourceId,
-      revision,
+    const previous = this.state.data;
+    const data = reuseShallow(previous, {
+      sourceId: this.plot?.sourceId ?? description.sourceId,
+      revision: this.plot?.revision,
       startedAt: description.startedAt,
       domain,
       nowSeconds: this.state.nowSeconds,
@@ -341,14 +518,16 @@ export class MonitorReadController {
       liveAcquiredAt: this.state.liveAcquiredAt,
       mapMonotonicSeconds: this.state.mapMonotonicSeconds,
       metricSources:
-        this.plot.metricSources ??
-        (this.plot.revision === description.revision ? description.metricSources : undefined),
-      series: this.plot.series,
+        this.plot?.metricSources ??
+        (!this.plot || this.plot.revision === description.revision ? description.metricSources : undefined),
+      series: reuseShallow(previous?.series, series),
+      drawings: reuseShallow(previous?.drawings, drawings),
       plotViewport: this.plotView,
-      plotGeneration: this.plot.generation,
+      plotGeneration: this.plot?.generation,
       latest: sameSemantics(this.latest) ? this.latest?.points : undefined,
       latestRevision: sameSemantics(this.latest) ? this.latest?.revision : undefined,
-      statistics,
+      statistics: reuseShallow(previous?.statistics, statistics),
+      statisticsStates: reuseShallow(previous?.statisticsStates, statisticsStates),
       statisticsRevision: stats?.revision,
       statisticsViewport: stats?.viewport,
       statisticsPending:
@@ -379,7 +558,7 @@ export class MonitorReadController {
       new InspectionRequestContext(
         this.state.description?.sourceId ?? this.source.key,
         this.state.description?.revision ?? 'unresolved',
-        this.source.semanticKey?.startsWith('distance:') ? this.source.semanticKey.slice(9) : 'auto',
+        this.source.distanceSelection ?? 'auto',
         String(this.state.interactionVersion),
         '0',
       ),
@@ -418,7 +597,7 @@ export class MonitorReadController {
       new InspectionRequestContext(
         sourceId,
         revision,
-        this.source.semanticKey?.startsWith('distance:') ? this.source.semanticKey.slice(9) : 'auto',
+        this.source.distanceSelection ?? 'auto',
         String(this.state.interactionVersion),
         '0',
       );
@@ -457,6 +636,7 @@ export class MonitorReadController {
   private scheduleCatchup() {
     if (this.disposed || !this.active || this.interacting || this.catchupTimer || !this.state.description) return;
     const geometryBehind =
+      this.plotMetrics().length > 0 &&
       !this.geometryBusy() &&
       !this.state.loading.changes &&
       !this.state.errors.plot &&
@@ -490,10 +670,16 @@ export class MonitorReadController {
         const replaced = previous !== undefined && previous.sourceId !== description.sourceId;
         if (replaced) this.resetSource(true);
         this.state = { ...this.state, description };
+        const resolved = this.resolveMetrics(description) && previous !== undefined && !replaced;
         this.receiveTiming(description);
         this.updateClock();
-        if (!this.latest) this.readLatest();
+        if (!this.latest || resolved) this.readLatest(resolved);
         if (this.interacting) return;
+        if (resolved) {
+          this.readGeometry(true);
+          this.readSelections(true);
+          return;
+        }
         // Capture progress never supersedes admitted scans. Each operation can advance
         // independently; a completed statistics snapshot keeps its explicit interval.
         if (!this.plot) this.readGeometry(false);
@@ -510,13 +696,14 @@ export class MonitorReadController {
                 this.plot !== previousPlot
               )
                 return;
-              const view = this.state.viewport;
+              const view = this.state.viewport,
+                visible = this.plotMetrics();
               const intersects =
                 changes.resetRequired ||
                 changes.changes.some(
                   change =>
                     change.kind === 'semantics' ||
-                    ((!change.metrics || change.metrics.some(id => this.metrics.includes(id))) &&
+                    ((!change.metrics || change.metrics.some(id => visible.includes(id))) &&
                       change.endSeconds >= view.start &&
                       change.startSeconds <= view.end),
                 );
@@ -525,10 +712,12 @@ export class MonitorReadController {
               if (
                 changes.revision !== this.state.description.revision ||
                 intersects ||
-                !this.sameView(this.plotView, view)
+                !this.sameView(this.plotView, view) ||
+                !this.covers()
               )
                 this.readGeometry(false);
               else {
+                for (const metric of visible) this.drawings[metric]!.confirmed = changes.revision;
                 this.plot = { ...previousPlot, revision: changes.revision };
                 this.readStatistics(false);
               }
@@ -537,7 +726,8 @@ export class MonitorReadController {
         } else if (
           !this.sameView(this.plotView, this.state.viewport) ||
           this.state.errors.plot ||
-          this.state.deferred.plot
+          this.state.deferred.plot ||
+          !this.covers()
         )
           this.readGeometry(false);
         if (
@@ -591,9 +781,14 @@ export class MonitorReadController {
           BigInt(result.revision) < BigInt(this.latest.revision)
         )
           return;
-        this.latest = { ...result, semanticKey };
+        this.latest = { ...result, semanticKey, points: sharePoints(this.latest?.points, result.points) };
         this.receiveTiming(result);
         this.updateClock();
+        if (result.averagesPending && !this.source.live && !this.averagesTimer)
+          this.averagesTimer = setTimeout(() => {
+            this.averagesTimer = undefined;
+            this.readLatest();
+          }, 500);
       },
     );
   }
@@ -669,29 +864,32 @@ export class MonitorReadController {
     }
     this.updateClock();
     const view = this.state.viewport,
-      metrics = [...this.metrics];
+      metrics = this.plotMetrics();
     let admitted = description;
-    this.request(
-      'plot',
-      (generation, signal) => {
-        admitted = this.state.description ?? description;
-        return this.source.readPlot({
-          generation,
-          signal,
-          expectedRevision: admitted.revision,
-          metrics,
-          startSeconds: view.start,
-          endSeconds: view.end,
-          pixelWidth: this.pixelWidth,
-          buckets: Math.max(1, Math.min(512, Math.round(this.pixelWidth))),
-        });
-      },
-      (result, semanticKey) => {
-        if (!this.current(result, admitted) || result.status !== 'ok') return;
-        this.plot = { ...result, semanticKey };
-        this.plotView = view;
-      },
-    );
+    if (metrics.length)
+      this.request(
+        'plot',
+        (generation, signal) => {
+          admitted = this.state.description ?? description;
+          return this.source.readPlot({
+            generation,
+            signal,
+            expectedRevision: admitted.revision,
+            metrics,
+            startSeconds: view.start,
+            endSeconds: view.end,
+            pixelWidth: this.pixelWidth,
+            buckets: Math.max(1, Math.min(512, Math.round(this.pixelWidth))),
+          });
+        },
+        (result, semanticKey) => {
+          if (!this.current(result, admitted) || result.status !== 'ok') return;
+          this.plot = { ...result, semanticKey, metrics };
+          this.plotView = view;
+          this.draw(this.plot, view);
+          if (!this.covers()) this.readGeometry(false);
+        },
+      );
     if (withStatistics) this.readStatistics(force, description, view);
   }
   private readStatistics(force: boolean, description = this.state.description, view = this.state.viewport) {
@@ -707,7 +905,55 @@ export class MonitorReadController {
     }
     if (this.statisticsTimer) clearTimeout(this.statisticsTimer);
     this.statisticsTimer = undefined;
-    const metrics = [...this.metrics];
+    const selected = this.metrics.join(','),
+      metrics = this.plotMetrics(),
+      requested = this.statisticsMetrics(metrics);
+    const complete = (result: Successful<MonitorStatsResult>, semanticKey?: string) => {
+      this.statistics = { ...result, semanticKey, viewport: view, metrics: selected };
+      for (const metric of metrics) {
+        const value = requested.includes(metric) ? result.statistics[metric] : undefined;
+        const previous = this.statisticsEntries[metric];
+        const same = !!previous && !!value && sameStatistics(previous.value, value);
+        if (!value) delete this.statisticsEntries[metric];
+        else if (
+          !same ||
+          previous!.revision !== result.revision ||
+          previous!.sourceId !== result.sourceId ||
+          previous!.semanticKey !== semanticKey ||
+          !this.sameView(previous!.viewport, view)
+        )
+          this.statisticsEntries[metric] = {
+            value: same ? previous!.value : value,
+            revision: result.revision,
+            viewport: view,
+            semanticKey,
+            sourceId: result.sourceId,
+          };
+      }
+      const interval =
+        this.source.live && this.metrics.some(isEnergyPerDistanceMetric)
+          ? energyAverageInterval(view.end - view.start)
+          : 2;
+      this.nextStatisticsAt = performance.now() + interval * 1000;
+      if (this.state.description?.revision !== result.revision || !this.sameView(this.state.viewport, view))
+        this.readStatistics(false);
+    };
+    if (!requested.length) {
+      this.lanes.statistics.invalidate();
+      const current = this.state.description ?? description;
+      this.state = {
+        ...this.state,
+        loading: { ...this.state.loading, statistics: false },
+        errors: { ...this.state.errors, statistics: undefined },
+        deferred: { ...this.state.deferred, statistics: false },
+      };
+      complete(
+        { status: 'ok', generation: 0, sourceId: current.sourceId, revision: current.revision, statistics: {} },
+        this.source.semanticKey,
+      );
+      this.emit();
+      return;
+    }
     let admitted = description;
     this.request(
       'statistics',
@@ -717,17 +963,14 @@ export class MonitorReadController {
           generation,
           signal,
           expectedRevision: admitted.revision,
-          metrics,
+          metrics: requested,
           startSeconds: view.start,
           endSeconds: view.end,
         });
       },
       (result, semanticKey) => {
         if (!this.current(result, admitted) || result.status !== 'ok') return;
-        this.statistics = { ...result, semanticKey, viewport: view, metrics: metrics.join(',') };
-        this.nextStatisticsAt = performance.now() + 2000;
-        if (this.state.description?.revision !== result.revision || !this.sameView(this.state.viewport, view))
-          this.readStatistics(false);
+        complete(result, semanticKey);
       },
     );
   }
@@ -830,11 +1073,17 @@ export class MonitorReadController {
     if (seconds !== null) this.manualView ??= this.state.viewport;
     // Retained geometry remains interactive by time while its replacement loads,
     // but its source-specific value and anchor cannot enter the new interpretation.
+    const drawing = snap ? this.drawings[snap.metric] : undefined;
     const validSnap =
       seconds !== null &&
       snap &&
-      this.plot?.semanticKey === this.source.semanticKey &&
-      snap.revision === this.plot?.revision &&
+      this.isCurrent(drawing) &&
+      drawing!.points.some(
+        point =>
+          point.observationId === snap.point.observationId &&
+          Object.is(point.elapsedSeconds, snap.point.elapsedSeconds) &&
+          Object.is(point.value, snap.point.value),
+      ) &&
       snap.sourceId === this.state.description?.sourceId &&
       snap.point.elapsedSeconds === seconds &&
       this.metrics.includes(snap.metric) &&
@@ -848,13 +1097,13 @@ export class MonitorReadController {
     if (seconds === null) this.selection = undefined;
     // A plotted candidate is itself an original. Preserve all original metadata
     // while native lookup verifies its identity against the admitted snapshot.
-    if (validSnap && validSnap.revision === this.state.description?.revision) {
+    if (validSnap && this.plot?.revision === this.state.description?.revision) {
       this.selection = {
         semanticKey: this.source.semanticKey,
         status: 'ok',
         generation: 0,
         sourceId: validSnap.sourceId,
-        revision: validSnap.revision,
+        revision: this.plot!.revision,
         seconds: validSnap.point.elapsedSeconds,
         points: {
           [validSnap.metric]: validSnap.point,

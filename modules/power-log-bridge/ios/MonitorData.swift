@@ -64,11 +64,15 @@ struct MonitorRequest {
   var startAnchor: MonitorObservationAnchor?
   var endAnchor: MonitorObservationAnchor?
   var distanceSource: String = "auto"
+  var energySmoothingSeconds: Int = 0
+  var energyTotals: Bool = true
+  var energyCurrent: Bool = false
   func validate() throws {
     guard ["live", "workout"].contains(source), generation >= 0,
       (1...512).contains(buckets), metrics.count <= MonitorDataStore.metrics.count,
       metrics.allSatisfy({ MonitorDataStore.metrics.contains($0) }),
-      DistancePolicy.shared.validSelection(selection: distanceSource)
+      DistancePolicy.shared.validSelection(selection: distanceSource),
+      EnergyPerDistancePolicy.shared.validSmoothing(seconds: Int32(energySmoothingSeconds))
     else { throw MonitorError.invalid("Invalid monitor request.") }
     for value in [startSeconds, endSeconds, seconds, pixelWidth].compactMap({ $0 }) {
       guard value.isFinite, value >= 0, value <= MonitorDataStore.maximumSeconds else {
@@ -96,14 +100,26 @@ private enum MonitorRevisionToken {
 }
 
 enum MonitorReadOperation {
-  case describe, plot, inspect, stats, changes, latest
+  case describe, plot, inspect, stats, changes, latest, energyPerDistance, currentEnergyPerDistance
   var analytical: Bool {
     switch self {
-    case .plot, .stats: return true
+    case .plot, .stats, .energyPerDistance: return true
     default: return false
     }
   }
-  var lane: String { self == .plot ? "plot" : self == .stats ? "statistics" : "fast" }
+  var lane: String {
+    switch self {
+    case .plot: return "plot"
+    case .stats: return "statistics"
+    case .energyPerDistance: return "energy"
+    case .currentEnergyPerDistance: return "currentEnergy"
+    default: return "fast"
+    }
+  }
+  func routed(_ request: MonitorRequest) -> Self {
+    guard self == .energyPerDistance || self == .currentEnergyPerDistance else { return self }
+    return request.energyCurrent && !request.energyTotals ? .currentEnergyPerDistance : .energyPerDistance
+  }
 }
 
 private struct MonitorOriginal {
@@ -251,16 +267,30 @@ private final class MonitorNumericPage {
   private var producers = [""]
   private let plot: InspectionPlotReducer?
   private let query: InspectionQuery?
+  private(set) var summary: InspectionPlotSummary?
+  private let identity: ((KotlinLong) -> String)?
   private let cache: MonitorWorkspace?
   init(plot: InspectionPlotReducer, cache: MonitorWorkspace? = nil) {
     self.cache = cache
     self.plot = plot
     query = nil
+    identity = nil
   }
   init(query: InspectionQuery, cache: MonitorWorkspace? = nil) {
     self.cache = cache
     self.query = query
     plot = nil
+    identity = nil
+  }
+  init(
+    plot: InspectionPlotReducer?, summary: InspectionPlotSummary, identity: @escaping (KotlinLong) -> String,
+    cache: MonitorWorkspace
+  ) {
+    self.cache = cache
+    self.plot = plot
+    self.summary = summary
+    self.identity = identity
+    query = nil
   }
   func append(_ point: MonitorProjectedPoint, distanceSegment: Int? = nil) throws {
     let packingBegan = MonitorDataStore.detailedTimings ? ProcessInfo.processInfo.systemUptime : 0
@@ -307,9 +337,19 @@ private final class MonitorNumericPage {
     let began = ProcessInfo.processInfo.systemUptime
     if let plot {
       try AppleInspectionPages.shared.plot(reducer: plot, data: data, evidence: evidence, producers: producers)
+      cache?.counters["reducedPoints", default: 0] += count
     }
     if let query {
       try AppleInspectionPages.shared.query(reducer: query, data: data, evidence: evidence, producers: producers)
+    }
+    if let summary, let identity {
+      do {
+        try AppleInspectionPages.shared.summary(
+          summary: summary, data: data, evidence: evidence, producers: producers, identity: identity)
+      } catch {
+        guard plot != nil else { throw error }
+        self.summary = nil
+      }
     }
     cache?.counters["compactReductionMicros", default: 0] += Int(
       (ProcessInfo.processInfo.systemUptime - began) * 1_000_000)
@@ -543,9 +583,53 @@ private final class MonitorPyramid {
   }
 }
 private struct MonitorPyramidCapacityExceeded: Error {}
+private protocol MonitorSummaryProgress: AnyObject {
+  var revision: Int64 { get }
+  var last: MonitorProjectedPoint? { get }
+  var generation: String { get }
+}
+private final class MonitorExhaustedSummary: MonitorSummaryProgress {
+  let generation: String
+  var revision: Int64
+  var last: MonitorProjectedPoint?
+  var used: UInt64
+  init(revision: Int64, last: MonitorProjectedPoint?, generation: String, used: UInt64) {
+    self.revision = revision
+    self.last = last
+    self.generation = generation
+    self.used = used
+  }
+}
+private final class MonitorPlotSummary: MonitorSummaryProgress {
+  // Kotlin heap per retained point measured with its slot bookkeeping at two to four points per slot.
+  static let pointBytes = 700
+  static let overheadBytes = 2_048
+  let key: String
+  let core: InspectionPlotSummary
+  let generation: String
+  var revision: Int64
+  var last: MonitorProjectedPoint?
+  var used: UInt64 = 0
+  var originals: [Int64: MonitorOriginal] = [:]
+  var points: [Int64: WorkoutDistancePoint] = [:]
+  private(set) var bytes = 0
+  init(key: String, metric: String, revision: Int64, generation: String = "") throws {
+    self.key = key
+    core = try InspectionPlotSummary(metric: metric)
+    self.revision = revision
+    self.generation = generation
+    measure()
+  }
+  func measure() {
+    bytes =
+      Self.overheadBytes + Int(core.retainedPoints) * Self.pointBytes + points.count * 512
+      + originals.values.reduce(0) { $0 + 192 + $1.identity.utf8.count + $1.timestamp.utf8.count }
+  }
+}
 private final class MonitorIdentityLookup {
   let store: PowerLogStore
   var identities: [Int64: String] = [:]
+  var known: [Int64: MonitorOriginal] = [:]
   var error: Error?
   private struct RunKey: Hashable {
     let clock: String?
@@ -580,7 +664,7 @@ private final class MonitorIdentityLookup {
   init(_ store: PowerLogStore) { self.store = store }
   func identity(_ reference: KotlinLong) -> String {
     let id = reference.int64Value
-    if let identity = identities[id] { return identity }
+    if let identity = identities[id] ?? known[id]?.identity { return identity }
     do {
       guard
         let identity = try store.read({ db in
@@ -598,6 +682,41 @@ private final class MonitorIdentityLookup {
   }
   func check() throws { if let error { throw error } }
 }
+private struct MonitorTimelinePrefix: Equatable {
+  let intervals: [ActiveInterval]
+  let interruptions: [InterruptionClose]
+  init(_ timeline: ActiveTimeline, before endUs: Int64) {
+    intervals = timeline.intervals.filter { $0.startUs < endUs }.map {
+      ActiveInterval(startUs: $0.startUs, endUs: min($0.endUs, endUs))
+    }
+    interruptions = timeline.interruptions.filter { $0.cutoffUs < endUs }
+  }
+  var bytes: Int { intervals.count * 48 + interruptions.count * 256 }
+}
+private final class MonitorStatisticsPrefix {
+  // A fixed allowance for the checkpoint's retained readings and the entry's bookkeeping.
+  static let overheadBytes = 2_048
+  let lookup: MonitorIdentityLookup
+  let endUs: Int64
+  let revision: Int64
+  let checkpoint: MetricCheckpoint?
+  let timeline: MonitorTimelinePrefix
+  var used: UInt64 = 0
+  init(
+    lookup: MonitorIdentityLookup, endUs: Int64, revision: Int64, checkpoint: MetricCheckpoint?,
+    timeline: MonitorTimelinePrefix
+  ) {
+    self.lookup = lookup
+    self.endUs = endUs
+    self.revision = revision
+    self.checkpoint = checkpoint
+    self.timeline = timeline
+  }
+  static func bytes(_ timeline: MonitorTimelinePrefix, identities: Int) -> Int {
+    overheadBytes + timeline.bytes + identities * 128
+  }
+  var bytes: Int { Self.bytes(timeline, identities: lookup.identities.count) }
+}
 
 /// Mutable caches never cross analytical executors. The two limits sum to one budget.
 private final class MonitorWorkspace {
@@ -605,6 +724,8 @@ private final class MonitorWorkspace {
   let byteLimit: Int
   var projections: [String: MonitorProjection] = [:]
   var pyramids: [String: MonitorPyramid] = [:]
+  var summaries: [String: MonitorPlotSummary] = [:]
+  var exhausted: [String: MonitorExhaustedSummary] = [:]
   var tick: UInt64 = 0
   var counters: [String: Int] = [:]
   var distanceHydrationPin = ""
@@ -614,11 +735,18 @@ private final class MonitorWorkspace {
   var hydrationOrder: [Int64] = []
   var hydrationCursor = 0
   var hydrationBytes = 0
+  var statisticsPrefixes: [String: MonitorStatisticsPrefix] = [:]
   var bytes: Int {
     projections.values.reduce(0) { $0 + $1.bytes } + pyramids.values.reduce(0) { $0 + $1.bytes } + hydrationBytes
-      + distanceHydrated.count * 512
+      + distanceHydrated.count * 512 + summaries.values.reduce(0) { $0 + $1.bytes }
+      + statisticsPrefixes.values.reduce(0) { $0 + $1.bytes }
   }
   init(byteLimit: Int) { self.byteLimit = byteLimit }
+  func timed<T>(_ counter: String, _ body: () throws -> T) rethrows -> T {
+    let began = PowerLogStore.threadCPUMilliseconds()
+    defer { counters[counter, default: 0] += Int((PowerLogStore.threadCPUMilliseconds() - began) * 1_000) }
+    return try body()
+  }
 }
 
 final class MonitorDataStore {
@@ -635,6 +763,7 @@ final class MonitorDataStore {
     "horizontalAccuracyM", "verticalAccuracyM", "courseDegrees",
   ])
   static let pageSize = 256
+  static let maximumProjections = 64
   static let maximumPlotPoints = 16_384
   static let maximumCachedBytes = 24 * 1024 * 1024
   // Estimates cover native adapter storage; retained core graphs and runtime heaps are excluded.
@@ -642,6 +771,8 @@ final class MonitorDataStore {
   static let maximumProjectionBytes = maximumCachedBytes - plotWorkingBytes
   private let queue = DispatchQueue(label: "app.powerlog.monitor.read", qos: .userInitiated)
   private let statisticsQueue = DispatchQueue(label: "app.powerlog.monitor.statistics", qos: .utility)
+  private let energyQueue = DispatchQueue(label: "app.powerlog.monitor.energy", qos: .utility)
+  private let currentEnergyQueue = DispatchQueue(label: "app.powerlog.monitor.energy.current", qos: .userInteractive)
   private let fastQueue = DispatchQueue(label: "app.powerlog.monitor.inspect", qos: .userInteractive)
   private let readAdmission = NSLock()
   private var readJobs: [String: Int] = [:]
@@ -683,7 +814,8 @@ final class MonitorDataStore {
       ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent(
         "PowerLog", isDirectory: true)
     let budget = max(0, min(Self.maximumProjectionBytes, projectionCacheBytes))
-    plotWorkspace = MonitorWorkspace(byteLimit: budget / 2)
+    // Holds 25 whole-range slot summaries of 512 slots with their originals, about 37 MB for continuous data.
+    plotWorkspace = MonitorWorkspace(byteLimit: budget / 2 + budget * 2)
     statisticsWorkspace = MonitorWorkspace(byteLimit: budget - budget / 2)
     self.projectionPageObserver = projectionPageObserver
     database = Result {
@@ -691,7 +823,7 @@ final class MonitorDataStore {
         ? PowerLogStore.memory()
         : PowerLogStore.shared(databaseURL: directory.appendingPathComponent("power-log.sqlite3"))
     }
-    for reads in [queue, statisticsQueue, fastQueue] {
+    for reads in [queue, statisticsQueue, fastQueue, energyQueue, currentEnergyQueue] {
       reads.setSpecific(key: PowerLogStore.interactiveQueue, value: true)
     }
   }
@@ -707,6 +839,7 @@ final class MonitorDataStore {
       completion(.failure(error))
       return false
     }
+    let operation = operation.routed(request)
     readAdmission.lock()
     let admitted =
       readJobs[operation.lane, default: 0] < (operation.analytical ? Self.maximumAnalyticalJobs : Self.maximumFastJobs)
@@ -735,7 +868,15 @@ final class MonitorDataStore {
       completion(.failure(error))
       return false
     }
-    (operation == .plot ? queue : operation == .stats ? statisticsQueue : fastQueue).async { [self] in
+    let executor: DispatchQueue
+    switch operation {
+    case .plot: executor = queue
+    case .stats: executor = statisticsQueue
+    case .energyPerDistance: executor = energyQueue
+    case .currentEnergyPerDistance: executor = currentEnergyQueue
+    default: executor = fastQueue
+    }
+    executor.async { [self] in
       defer {
         releaseReadSlot(operation)
         readLease.release()
@@ -750,6 +891,7 @@ final class MonitorDataStore {
             case .stats: return try rangeStats(request, source: source)
             case .changes: return try changesSince(request, source: source)
             case .latest: return try readLatest(request, source: source)
+            case .energyPerDistance, .currentEnergyPerDistance: return try energyPerDistance(request, source: source)
             }
           }
         })
@@ -1253,6 +1395,10 @@ final class MonitorDataStore {
       result["nativeAdapterByteLimit", default: 0] += cache.byteLimit
       result["nativePyramidBytes", default: 0] += cache.pyramids.values.reduce(0) { $0 + $1.bytes }
       result["pyramidEntries", default: 0] += cache.pyramids.count
+      result["summaryBytes", default: 0] += cache.summaries.values.reduce(0) { $0 + $1.bytes }
+      result["summaryEntries", default: 0] += cache.summaries.count
+      result["summaryPoints", default: 0] += cache.summaries.values.reduce(0) { $0 + Int($1.core.retainedPoints) }
+      result["summaryExhausted", default: 0] += cache.exhausted.count
       result["entries", default: 0] += cache.projections.count
       result["points", default: 0] += cache.projections.values.reduce(0) { $0 + $1.count }
     }
@@ -1276,8 +1422,11 @@ final class MonitorDataStore {
   }
   private func discardWorkout(id: String, from cache: MonitorWorkspace) {
     let prefix = "workout:\(id)|"
+    cache.statisticsPrefixes = cache.statisticsPrefixes.filter { !$0.key.hasPrefix(prefix) }
     cache.projections = cache.projections.filter { !$0.key.hasPrefix(prefix) }
     cache.pyramids = cache.pyramids.filter { !$0.key.hasPrefix(prefix) && !$0.key.hasPrefix("distance|" + prefix) }
+    cache.summaries = cache.summaries.filter { !$0.key.hasPrefix(prefix) && !$0.key.hasPrefix("distance|" + prefix) }
+    cache.exhausted = cache.exhausted.filter { !$0.key.hasPrefix(prefix) && !$0.key.hasPrefix("distance|" + prefix) }
     if cache.hydrationPin.hasPrefix(prefix) {
       cache.hydrated.removeAll(keepingCapacity: true)
       cache.hydrationOrder.removeAll(keepingCapacity: true)
@@ -1296,7 +1445,7 @@ final class MonitorDataStore {
     cache.lock.unlock()
   }
   private func makeProjectionRoom(
-    _ cache: MonitorWorkspace, _ bytes: Int, keeping key: String, evictPyramids: Bool = true
+    _ cache: MonitorWorkspace, _ bytes: Int, keeping key: String, evictPyramids: Bool = true, projection: Bool = true
   ) -> Bool {
     if cache.bytes + bytes > cache.byteLimit && (!cache.hydrated.isEmpty || !cache.distanceHydrated.isEmpty) {
       cache.hydrated.removeAll(keepingCapacity: true)
@@ -1306,10 +1455,23 @@ final class MonitorDataStore {
       cache.hydrationCursor = 0
     }
     guard bytes <= cache.byteLimit else { return false }
-    while cache.bytes + bytes > cache.byteLimit || (cache.projections[key] == nil && cache.projections.count >= 16) {
+    while cache.bytes + bytes > cache.byteLimit
+      || (projection && cache.projections[key] == nil && cache.projections.count >= Self.maximumProjections)
+    {
       let raw = cache.projections.values.filter({ $0.key != key }).min(by: { $0.used < $1.used })
       let reduced = evictPyramids ? cache.pyramids.values.filter({ $0.key != key }).min(by: { $0.used < $1.used }) : nil
-      if let raw, reduced == nil || raw.used <= reduced!.used {
+      let full = cache.bytes + bytes > cache.byteLimit
+      let summary = full ? cache.summaries.values.filter({ $0.key != key }).min(by: { $0.used < $1.used }) : nil
+      let prefix =
+        full ? cache.statisticsPrefixes.filter({ $0.key != key }).min(by: { $0.value.used < $1.value.used }) : nil
+      let oldest = [raw?.used, reduced?.used, summary?.used].compactMap({ $0 }).min()
+      if let prefix, oldest.map({ prefix.value.used < $0 }) ?? true {
+        cache.statisticsPrefixes.removeValue(forKey: prefix.key)
+      } else if let summary, raw.map({ summary.used < $0.used }) ?? true,
+        reduced.map({ summary.used < $0.used }) ?? true
+      {
+        cache.summaries.removeValue(forKey: summary.key)
+      } else if let raw, reduced == nil || raw.used <= reduced!.used {
         cache.projections.removeValue(forKey: raw.key)
       } else if let reduced {
         cache.pyramids.removeValue(forKey: reduced.key)
@@ -1340,47 +1502,42 @@ final class MonitorDataStore {
   private func projectionKey(_ c: MonitorChannel, _ source: MonitorDescription) -> String {
     [
       source.sourceID, c.column, c.source, c.rawHeart ? "raw" : "fallback",
+      (try? InspectionMetrics.shared.plotGapUs(metric: c.metric)).map(String.init) ?? "",
     ].joined(separator: "|")
+  }
+  private func semanticsChanged(_ c: MonitorChannel, _ source: MonitorDescription, after revision: Int64) throws
+    -> Bool
+  {
+    try store.read { db in
+      try db.scalarInt(
+        "SELECT 1 FROM collection_change_marks WHERE collection_id=? AND metric IN (?,'') AND kind NOT IN ('append','timing') AND revision>? LIMIT 1",
+        [.text(source.id), .text(c.column), .integer(revision)]) != nil
+    }
+  }
+  private func firstAppended(_ c: MonitorChannel, _ source: MonitorDescription, after revision: Int64) throws
+    -> Double?
+  {
+    try store.read { db in
+      try db.rows(
+        "SELECT min(m.elapsed_seconds) AS time FROM collection_memberships m INDEXED BY membership_snapshot JOIN \(c.table) h ON h.observation_id=m.observation_id WHERE \(baseWhere(c)) AND m.revision>?",
+        values(c, source) + [.integer(revision)], limit: 1
+      ).first?.double("time")
+    }
   }
   private func projectionStillValid(_ projection: MonitorProjection, _ c: MonitorChannel, _ source: MonitorDescription)
     throws -> Bool
   {
     if projection.revision == source.revision { return true }
-    guard projection.revision < source.revision else { return false }
-    let changes = try store.read { db in
-      try db.rows(
-        "SELECT revision,kind,metrics FROM collection_changes WHERE collection_id=? AND revision>? AND revision<=? ORDER BY revision LIMIT 512",
-        [.text(source.id), .integer(projection.revision), .integer(source.revision)], limit: 512)
+    guard projection.revision < source.revision, try !semanticsChanged(c, source, after: projection.revision) else {
+      return false
     }
-    guard changes.count == source.revision - projection.revision,
-      changes.first?.int("revision") == projection.revision + 1, changes.last?.int("revision") == source.revision
-    else { return false }
-    var changed = false
-    for row in changes {
-      guard let bytes = row.data("metrics"), let metrics = try? JSONDecoder().decode([String].self, from: bytes) else {
-        return false
-      }
-      guard metrics.isEmpty || metrics.contains(c.column) else { continue }
-      guard row.string("kind") == "append" else { return false }
-      changed = true
-    }
-    if changed {
-      // Change journal bounds include adjacent edges and are quantized conservatively.
-      // Refine new observations at original precision before deciding that this is a tail.
-      let firstNew = try store.read { db in
-        try db.rows(
-          "SELECT min(m.elapsed_seconds) AS time FROM collection_memberships m INDEXED BY membership_snapshot JOIN \(c.table) h ON h.observation_id=m.observation_id WHERE \(baseWhere(c)) AND m.revision>?",
-          values(c, source) + [.integer(projection.revision)], limit: 1
-        ).first?.double("time")
-      }
-      if let firstNew {
-        let last =
-          projection.count > 0
-          ? projection[projection.count - 1].timeUs : WorkoutDistancePolicy.timeUs(projection.start)
-        // Equal-time append can alter stable-identity ties, so rebuild it as a late insertion.
-        guard WorkoutDistancePolicy.timeUs(firstNew) > last else { return false }
-        projection.end = min(projection.end, firstNew.nextDown)
-      }
+    if let firstNew = try firstAppended(c, source, after: projection.revision) {
+      let last =
+        projection.count > 0
+        ? projection[projection.count - 1].timeUs : WorkoutDistancePolicy.timeUs(projection.start)
+      // Equal-time append can alter stable-identity ties, so rebuild it as a late insertion.
+      guard WorkoutDistancePolicy.timeUs(firstNew) > last else { return false }
+      projection.end = min(projection.end, firstNew.nextDown)
     }
     projection.revision = source.revision
     return true
@@ -1575,6 +1732,143 @@ final class MonitorDataStore {
       throw error
     }
   }
+  private func summaryStillValid(
+    _ summary: MonitorSummaryProgress, _ c: MonitorChannel, _ source: MonitorDescription
+  ) throws -> Bool {
+    guard summary.revision < source.revision else { return true }
+    guard try !semanticsChanged(c, source, after: summary.revision) else { return false }
+    guard let firstNew = try firstAppended(c, source, after: summary.revision), let last = summary.last else {
+      return true
+    }
+    // A row at the last summarized time may order before it, so only strictly later rows extend the summary.
+    return WorkoutDistancePolicy.timeUs(firstNew) > last.timeUs
+  }
+  private func extendSummary(
+    _ cache: MonitorWorkspace, _ summary: MonitorPlotSummary, revision: Int64,
+    identity: @escaping (KotlinLong) -> String,
+    scan: (MonitorProjectedPoint?, (MonitorProjectedPoint, Int?) throws -> Void) throws -> Void
+  ) throws -> Bool {
+    let input = MonitorNumericPage(plot: nil, summary: summary.core, identity: identity, cache: cache)
+    var appended = 0
+    do {
+      try cache.timed("summaryExtensionCPUMicros") {
+        try scan(summary.last) { point, segment in
+          try input.append(point, distanceSegment: segment)
+          summary.last = point
+          appended += 1
+        }
+        try input.flush()
+      }
+    } catch {
+      guard (error as NSError).kotlinException != nil else { throw error }
+      return false
+    }
+    summary.revision = revision
+    cache.counters["summaryAppendedPoints", default: 0] += appended
+    return true
+  }
+  /// `scan` feeds the originals of the whole range after the given one (all of them for nil) in plot order.
+  private func summarize(
+    _ cache: MonitorWorkspace, key: String, revision: Int64, slot: Int64, into reducer: InspectionPlotReducer,
+    identity: @escaping (KotlinLong) -> String, behind: (MonitorSummaryProgress) -> Bool,
+    reusable: (MonitorSummaryProgress) throws -> Bool, merging: (MonitorPlotSummary) -> Void = { _ in },
+    make: () throws -> MonitorPlotSummary,
+    scan: (MonitorProjectedPoint?, (MonitorProjectedPoint, Int?) throws -> Void) throws -> Void
+  ) throws -> MonitorPlotSummary? {
+    cache.tick &+= 1
+    if let exhausted = cache.exhausted[key] {
+      if behind(exhausted) {
+        cache.counters["summaryFallbacks", default: 0] += 1
+        _ = try reduceOriginals(cache, into: reducer, scan: scan)
+        return nil
+      }
+      if try reusable(exhausted) {
+        cache.counters["summaryFallbacks", default: 0] += 1
+        exhausted.last = try reduceOriginals(cache, into: reducer, scan: scan)
+        exhausted.revision = revision
+        exhausted.used = cache.tick
+        return nil
+      }
+      cache.exhausted.removeValue(forKey: key)
+    }
+    if let existing = cache.summaries[key] {
+      guard !behind(existing) else {
+        cache.counters["summaryFallbacks", default: 0] += 1
+        _ = try reduceOriginals(cache, into: reducer, scan: scan)
+        return nil
+      }
+      cache.summaries.removeValue(forKey: key)
+      if slot % existing.core.slotUs == 0, try reusable(existing) {
+        let extended = try extendSummary(cache, existing, revision: revision, identity: identity, scan: scan)
+        if extended, existing.core.canMergeInto(reducer: reducer) {
+          existing.used = cache.tick
+          cache.summaries[key] = existing
+          merging(existing)
+          try cache.timed("summaryMergeCPUMicros") { try existing.core.mergeInto(reducer: reducer) }
+          cache.counters["summaryMerges", default: 0] += 1
+          return existing
+        }
+        if extended || existing.core.overflowed {
+          cache.counters["summaryInvalidations", default: 0] += 1
+          cache.counters["summaryFallbacks", default: 0] += 1
+          exhaust(
+            cache, key: key, generation: existing.generation, revision: revision,
+            last: try reduceOriginals(cache, into: reducer, scan: scan))
+          return nil
+        }
+      }
+      cache.counters["summaryInvalidations", default: 0] += 1
+    }
+    let summary = try make()
+    let input = MonitorNumericPage(plot: reducer, summary: summary.core, identity: identity, cache: cache)
+    try scan(nil) { point, segment in
+      try input.append(point, distanceSegment: segment)
+      summary.last = point
+    }
+    try input.flush()
+    cache.counters["summaryRebuilds", default: 0] += 1
+    guard input.summary != nil else {
+      cache.counters["summaryFallbacks", default: 0] += 1
+      exhaust(cache, key: key, generation: summary.generation, revision: revision, last: summary.last)
+      return nil
+    }
+    summary.used = cache.tick
+    cache.summaries[key] = summary
+    return summary
+  }
+  private func reduceOriginals(
+    _ cache: MonitorWorkspace, into reducer: InspectionPlotReducer,
+    scan: (MonitorProjectedPoint?, (MonitorProjectedPoint, Int?) throws -> Void) throws -> Void
+  ) throws -> MonitorProjectedPoint? {
+    let input = MonitorNumericPage(plot: reducer, cache: cache)
+    var last: MonitorProjectedPoint?
+    try scan(nil) { point, segment in
+      try input.append(point, distanceSegment: segment)
+      last = point
+    }
+    try input.flush()
+    return last
+  }
+  private func exhaust(
+    _ cache: MonitorWorkspace, key: String, generation: String, revision: Int64, last: MonitorProjectedPoint?
+  ) {
+    if cache.exhausted.count >= Self.maximumProjections,
+      let oldest = cache.exhausted.min(by: { $0.value.used < $1.value.used })?.key
+    {
+      cache.exhausted.removeValue(forKey: oldest)
+    }
+    cache.exhausted[key] = MonitorExhaustedSummary(
+      revision: revision, last: last, generation: generation, used: cache.tick)
+  }
+  private func admitSummary(_ cache: MonitorWorkspace, _ summary: MonitorPlotSummary) {
+    summary.measure()
+    guard cache.summaries[summary.key] === summary else { return }
+    if !makeProjectionRoom(cache, 0, keeping: summary.key, projection: false) {
+      cache.summaries.removeValue(forKey: summary.key)
+      cache.counters["evictions", default: 0] += 1
+    }
+    cache.counters["peakNativeAdapterBytes"] = max(cache.counters["peakNativeAdapterBytes", default: 0], cache.bytes)
+  }
   static func retainedObservationSQL(_ count: Int) -> String {
     precondition((1...pageSize).contains(count))
     return
@@ -1608,8 +1902,59 @@ final class MonitorDataStore {
         missing.append(point)
       }
     }
-    for offset in stride(from: 0, to: missing.count, by: Self.pageSize) {
-      let page = Array(missing[offset..<min(missing.count, offset + Self.pageSize)])
+    try fetchOriginals(cache, missing, source: source) { original in
+      let id = original.id
+      result[id] = original
+      guard !cache.projections.isEmpty || !cache.pyramids.isEmpty else { return }
+      let bytes = 192 + original.identity.utf8.count + original.timestamp.utf8.count
+      if cache.hydrationOrder.count == 4096 {
+        let oldID = cache.hydrationOrder[cache.hydrationCursor]
+        if let old = cache.hydrated.removeValue(forKey: oldID) {
+          cache.hydrationBytes -= 192 + old.identity.utf8.count + old.timestamp.utf8.count
+        }
+        cache.hydrationOrder[cache.hydrationCursor] = id
+        cache.hydrationCursor = (cache.hydrationCursor + 1) % 4096
+      } else if cache.bytes + bytes <= cache.byteLimit {
+        cache.hydrationOrder.append(id)
+      }
+      if cache.bytes + bytes <= cache.byteLimit {
+        cache.hydrated[id] = original
+        cache.hydrationBytes += bytes
+      }
+    }
+    return result
+  }
+  private func hydrate(
+    _ cache: MonitorWorkspace, _ points: [MonitorProjectedPoint], source: MonitorDescription,
+    summary: MonitorPlotSummary
+  ) throws -> [Int64: MonitorOriginal] {
+    let began = ProcessInfo.processInfo.systemUptime
+    defer {
+      cache.counters["retainedHydrationMicros", default: 0] += Int(
+        (ProcessInfo.processInfo.systemUptime - began) * 1_000_000)
+    }
+    var result: [Int64: MonitorOriginal] = [:]
+    var missing: [MonitorProjectedPoint] = []
+    for point in points {
+      if let original = summary.originals[point.id] {
+        result[point.id] = MonitorOriginal(
+          id: point.id, identity: original.identity, time: original.time, timestamp: original.timestamp,
+          value: point.value, integer: point.integer)
+      } else {
+        missing.append(point)
+      }
+    }
+    cache.counters["hydrationHits", default: 0] += points.count - missing.count
+    try fetchOriginals(cache, missing, source: source) { result[$0.id] = $0 }
+    summary.originals = result
+    return result
+  }
+  private func fetchOriginals(
+    _ cache: MonitorWorkspace, _ points: [MonitorProjectedPoint], source: MonitorDescription,
+    _ body: (MonitorOriginal) -> Void
+  ) throws {
+    for offset in stride(from: 0, to: points.count, by: Self.pageSize) {
+      let page = Array(points[offset..<min(points.count, offset + Self.pageSize)])
       let rows = try store.read { db in
         try db.rows(
           Self.retainedObservationSQL(page.count),
@@ -1622,29 +1967,13 @@ final class MonitorDataStore {
         if let id = row.int("id"), let p = byID[id], let identity = row.string("physical_id"),
           let timestamp = row.string("original_timestamp")
         {
-          result[id] = MonitorOriginal(
-            id: id, identity: identity, time: row.double("elapsed_seconds")!, timestamp: timestamp, value: p.value,
-            integer: p.integer)
-          guard !cache.projections.isEmpty || !cache.pyramids.isEmpty else { continue }
-          let bytes = 192 + identity.utf8.count + timestamp.utf8.count
-          if cache.hydrationOrder.count == 4096 {
-            let oldID = cache.hydrationOrder[cache.hydrationCursor]
-            if let old = cache.hydrated.removeValue(forKey: oldID) {
-              cache.hydrationBytes -= 192 + old.identity.utf8.count + old.timestamp.utf8.count
-            }
-            cache.hydrationOrder[cache.hydrationCursor] = id
-            cache.hydrationCursor = (cache.hydrationCursor + 1) % 4096
-          } else if cache.bytes + bytes <= cache.byteLimit {
-            cache.hydrationOrder.append(id)
-          }
-          if cache.bytes + bytes <= cache.byteLimit {
-            cache.hydrated[id] = result[id]
-            cache.hydrationBytes += bytes
-          }
+          body(
+            MonitorOriginal(
+              id: id, identity: identity, time: row.double("elapsed_seconds")!, timestamp: timestamp, value: p.value,
+              integer: p.integer))
         }
       }
     }
-    return result
   }
   private func pyramidCacheKey(_ key: String) -> String { "lod|" + key }
   private func savePyramid(_ value: MonitorPyramid, _ source: MonitorDescription, cache: MonitorWorkspace) throws {
@@ -1787,33 +2116,13 @@ final class MonitorDataStore {
     let key = projectionKey(c, source)
     var existing = cache.pyramids[key]
     if let value = existing, value.revision != source.revision {
-      // Reuse only a complete append-only proof. Late/corrected samples and changed
+      // Reuse only an append-only proof. Late/corrected samples and changed
       // source semantics rebuild the tree; never silently keep stale extrema.
-      let changes = try store.read { db in
-        try db.rows(
-          "SELECT revision,kind,metrics FROM collection_changes WHERE collection_id=? AND revision>? AND revision<=? ORDER BY revision LIMIT 512",
-          [.text(source.id), .integer(value.revision), .integer(source.revision)], limit: 512)
-      }
-      var valid =
-        changes.count == source.revision - value.revision && changes.first?.int("revision") == value.revision + 1
-        && changes.last?.int("revision") == source.revision
-      for row in changes {
-        guard let data = row.data("metrics"), let metrics = try? JSONDecoder().decode([String].self, from: data) else {
-          valid = false
-          break
-        }
-        if (metrics.isEmpty || metrics.contains(c.column)) && row.string("kind") != "append" {
-          valid = false
-        }
-      }
-      if valid, let last = value.lastRead {
-        let firstNew = try store.read { db in
-          try db.rows(
-            "SELECT min(m.elapsed_seconds) AS time FROM collection_memberships m INDEXED BY membership_snapshot JOIN \(c.table) h ON h.observation_id=m.observation_id WHERE \(baseWhere(c)) AND m.revision>?",
-            values(c, source) + [.integer(value.revision)], limit: 1
-          ).first?.double("time")
-        }
-        if let firstNew, WorkoutDistancePolicy.timeUs(firstNew) <= last.timeUs { valid = false }
+      var valid = try value.revision < source.revision && !semanticsChanged(c, source, after: value.revision)
+      if valid, let last = value.lastRead, let firstNew = try firstAppended(c, source, after: value.revision),
+        WorkoutDistancePolicy.timeUs(firstNew) <= last.timeUs
+      {
+        valid = false
       }
       if !valid {
         cache.pyramids.removeValue(forKey: key)
@@ -2112,7 +2421,7 @@ final class MonitorDataStore {
   }
   private func distancePlot(
     _ cache: MonitorWorkspace, source: MonitorDescription, snapshot: WorkoutDistanceSnapshot, start: Double,
-    end: Double, count: Int, metric: String
+    end: Double, count: Int, metric: String, wholeRangeSlot: Int64?
   ) throws -> [[String: Any]] {
     guard start <= end else { return [] }
     let key =
@@ -2120,8 +2429,11 @@ final class MonitorDataStore {
       + String(snapshot.revision)
     let lookup = MonitorIdentityLookup(try store)
     let identity: (KotlinLong) -> String = { "distance:" + snapshot.generation + ":" + String($0.int64Value) }
-    func scan(_ start: Double, _ end: Double, _ body: (WorkoutDistanceStore.ChartReference) throws -> Void) throws {
-      var after: WorkoutDistanceCursor?
+    func scan(
+      _ start: Double, _ end: Double, after: WorkoutDistanceCursor? = nil,
+      _ body: (WorkoutDistanceStore.ChartReference) throws -> Void
+    ) throws {
+      var after = after
       while true {
         let began = ProcessInfo.processInfo.systemUptime
         let page = try distanceStore.chartPage(snapshot: snapshot, after: after, start: start, end: end) { steps in
@@ -2139,8 +2451,9 @@ final class MonitorDataStore {
     func numeric(_ point: WorkoutDistanceStore.ChartReference) -> MonitorProjectedPoint {
       MonitorProjectedPoint(id: point.pointID, time: point.seconds, value: point.value)
     }
-    var hierarchy = cache.pyramids[key]
-    if hierarchy == nil, (end - start) / Double(count) >= MonitorPyramid.seconds,
+    let before = try distanceStore.chartNeighbor(snapshot: snapshot, seconds: start, before: true)
+    var hierarchy = wholeRangeSlot == nil ? cache.pyramids[key] : nil
+    if wholeRangeSlot == nil, hierarchy == nil, (end - start) / Double(count) >= MonitorPyramid.seconds,
       makeProjectionRoom(cache, MonitorPyramid.estimate(source.end), keeping: key)
     {
       let pyramid =
@@ -2184,7 +2497,7 @@ final class MonitorDataStore {
         hierarchy = pyramid
       }
     }
-    var slot: Int64?
+    var slot = wholeRangeSlot
     if hierarchy != nil {
       var width: Int64 = 8_000_000
       while Double(width) < (end - start) / Double(count) * 1_000_000 { width *= 2 }
@@ -2194,11 +2507,34 @@ final class MonitorDataStore {
       metric: metric, start: WorkoutDistancePolicy.timeUs(start), end: WorkoutDistancePolicy.timeUs(end),
       buckets: count, slot: slot, identity: identity)
     let input = MonitorNumericPage(plot: reducer, cache: cache)
-    if let before = try distanceStore.chartNeighbor(snapshot: snapshot, seconds: start, before: true) {
+    if let before {
       try input.append(numeric(before), distanceSegment: before.plotSegment)
     }
     try input.flush()
-    if let hierarchy {
+    var summary: MonitorPlotSummary?
+    if let slot = wholeRangeSlot, before == nil, let physical = snapshot.source {
+      let generation = snapshot.generation + "|" + physical
+      let summaryKey = "distance|" + source.sourceID + "|" + metric + "|" + snapshot.selection
+      summary = try summarize(
+        cache, key: summaryKey, revision: source.revision, slot: slot, into: reducer, identity: identity,
+        behind: {
+          $0.generation == generation && (($0.last?.id ?? 0) > snapshot.maximumPointID || ($0.last?.time ?? 0) > end)
+        },
+        reusable: { summary in
+          guard summary.generation == generation else { return false }
+          guard let last = summary.last else { return true }
+          return try distanceStore.chartAppendsFollow(
+            snapshot: snapshot, after: WorkoutDistanceCursor(time: last.time, pointID: last.id))
+        },
+        make: {
+          try MonitorPlotSummary(key: summaryKey, metric: metric, revision: source.revision, generation: generation)
+        }
+      ) { after, body in
+        try scan(start, end, after: after.map { WorkoutDistanceCursor(time: $0.time, pointID: $0.id) }) {
+          try body(numeric($0), $0.plotSegment)
+        }
+      }
+    } else if let hierarchy {
       func collect(_ node: Int, lower: Int64, span: Int64) throws {
         let value = hierarchy.nodes[node]
         guard let first = value.firstRawUs, let last = value.lastRawUs, last >= reducer.range.startUs,
@@ -2228,29 +2564,43 @@ final class MonitorDataStore {
       try input.append(numeric(after), distanceSegment: after.plotSegment)
     }
     try input.flush()
-    let retained = try reducer.result()
+    let retained = try cache.timed("plotResultCPUMicros") { try reducer.result() }
     let hydrationBegan = ProcessInfo.processInfo.systemUptime
     defer {
       cache.counters["retainedHydrationMicros", default: 0] += Int(
         (ProcessInfo.processInfo.systemUptime - hydrationBegan) * 1_000_000)
     }
-    let pin = key
-    if cache.distanceHydrationPin != pin {
-      cache.distanceHydrationPin = pin
-      cache.distanceHydrated.removeAll(keepingCapacity: true)
-    }
     let ids = retained.map { $0.point.reference!.reference }
-    let missing = ids.filter { cache.distanceHydrated[$0] == nil }
-    var hydrated = cache.distanceHydrated
+    var hydrated: [Int64: WorkoutDistancePoint] = [:]
+    var missing: [Int64] = []
+    if let summary {
+      for id in ids {
+        if let point = summary.points[id] { hydrated[id] = point } else { missing.append(id) }
+      }
+      cache.counters["distanceHydrationHits", default: 0] += ids.count - missing.count
+    } else {
+      let pin = key
+      if cache.distanceHydrationPin != pin {
+        cache.distanceHydrationPin = pin
+        cache.distanceHydrated.removeAll(keepingCapacity: true)
+      }
+      missing = ids.filter { cache.distanceHydrated[$0] == nil }
+      hydrated = cache.distanceHydrated
+    }
     for offset in stride(from: 0, to: missing.count, by: 256) {
       let page = try distanceStore.chartPoints(
         snapshot: snapshot, ids: Array(missing[offset..<min(missing.count, offset + 256)]))
       cache.counters["distanceHydratedPoints", default: 0] += page.count
       for point in page { hydrated[point.pointID] = point }
     }
-    cache.distanceHydrated.removeAll(keepingCapacity: true)
-    let retainedLimit = min(2048, max(0, (cache.byteLimit - cache.bytes) / 512))
-    cache.distanceHydrated = Dictionary(uniqueKeysWithValues: ids.suffix(retainedLimit).map { ($0, hydrated[$0]!) })
+    if let summary {
+      summary.points = hydrated
+      admitSummary(cache, summary)
+    } else {
+      cache.distanceHydrated.removeAll(keepingCapacity: true)
+      let retainedLimit = min(2048, max(0, (cache.byteLimit - cache.bytes) / 512))
+      cache.distanceHydrated = Dictionary(uniqueKeysWithValues: ids.suffix(retainedLimit).map { ($0, hydrated[$0]!) })
+    }
     var previous: Int32?
     return try retained.map { point in
       guard let original = hydrated[point.point.reference!.reference] else {
@@ -2276,15 +2626,23 @@ final class MonitorDataStore {
     let start = request.startSeconds ?? 0
     let end = min(source.end, request.endSeconds ?? source.end)
     let metrics = Set(request.metrics).sorted()
-    let pointLimit = Self.maximumPlotPoints / max(1, metrics.count)
+    let pointLimit = Int(InspectionPlotSlots.shared.pointLimit(metrics: Int32(metrics.count)))
     let distance =
       !WorkoutDistanceStore.derivedMetrics.isDisjoint(with: metrics) ? try distanceSnapshot(source, build: true) : nil
-    let count = max(1, min(request.buckets, Self.maximumPlotPoints / max(1, metrics.count) / 4 - 2))
+    let count = Int(
+      try InspectionPlotSlots.shared.buckets(requested: Int32(request.buckets), metrics: Int32(metrics.count)))
+    let wholeRange = start == 0 && end == source.end
+    let wholeRangeSlot =
+      wholeRange
+      ? try InspectionPlotSlots.shared.alignedSlotUs(
+        range: AnalysisRange(startUs: 0, endUs: WorkoutDistancePolicy.timeUs(end)), buckets: Int32(count))?.int64Value
+      : nil
     let key = [
       source.id, String(source.revision), distance?.generation ?? "", distance?.selection ?? "", String(start),
-      String(end), String(count), metrics.joined(separator: ","),
+      String(end), String(count),
+      try metrics.map { $0 + "@" + String(try InspectionMetrics.shared.plotGapUs(metric: $0)) }.joined(separator: ","),
     ].joined(separator: "|")
-    let persistOverview = source.phase == "completed" && start == 0 && end == source.end
+    let persistOverview = source.phase == "completed" && wholeRange
     if persistOverview, let cached = try cachedPlot(key, source: source) {
       var result = cached
       result["generation"] = request.generation
@@ -2296,16 +2654,20 @@ final class MonitorDataStore {
       if WorkoutDistanceStore.derivedMetrics.contains(metric), let base = distance {
         let distance = try distanceStore.selecting(base, metric: metric, main: source.distanceSelection)
         series[metric] = try distancePlot(
-          cache, source: source, snapshot: distance, start: start, end: end, count: count, metric: metric)
+          cache, source: source, snapshot: distance, start: start, end: end, count: count, metric: metric,
+          wholeRangeSlot: wholeRangeSlot)
         continue
       }
       guard let c = try channel(metric, source: source) else { continue }
       guard start <= end else { continue }
       let lookup = MonitorIdentityLookup(try store)
+      let predecessor = try neighbor(c, source, time: start, before: true, strict: true)
+      let successor = try neighbor(c, source, time: end, before: false, strict: true)
+      let summarized = wholeRangeSlot != nil && predecessor == nil
       let width = (end - start) / Double(count)
-      let hierarchy = try pyramid(cache, c, source, width: width)
-      var slot: Int64?
-      if hierarchy != nil {
+      let hierarchy = summarized ? nil : try pyramid(cache, c, source, width: width)
+      var slot = wholeRangeSlot
+      if !wholeRange, hierarchy != nil {
         var span: Int64 = 8_000_000
         while Double(span) < width * 1_000_000 { span *= 2 }
         slot = span
@@ -2315,8 +2677,6 @@ final class MonitorDataStore {
         end: WorkoutDistancePolicy.timeUs(end), buckets: count, limit: pointLimit, slot: slot, identity: lookup.identity
       )
       let input = MonitorNumericPage(plot: reducer, cache: cache)
-      let predecessor = try neighbor(c, source, time: start, before: true, strict: true)
-      let successor = try neighbor(c, source, time: end, before: false, strict: true)
       if let predecessor {
         try plotBoundary(
           cache, c, source, start: predecessor.time,
@@ -2326,7 +2686,19 @@ final class MonitorDataStore {
         }
       }
       try input.flush()
-      if let hierarchy {
+      var summary: MonitorPlotSummary?
+      if summarized, let slot {
+        let summaryKey = projectionKey(c, source)
+        summary = try summarize(
+          cache, key: summaryKey, revision: source.revision, slot: slot, into: reducer, identity: lookup.identity,
+          behind: { $0.revision > source.revision || ($0.last?.time ?? 0) > end },
+          reusable: { try summaryStillValid($0, c, source) },
+          merging: { lookup.known = $0.originals },
+          make: { try MonitorPlotSummary(key: summaryKey, metric: metric, revision: source.revision) }
+        ) { after, body in
+          try scanProjected(cache, c, source, start: after?.time ?? start, end: end, after: after) { try body($0, nil) }
+        }
+      } else if let hierarchy {
         try reducePyramid(cache, hierarchy, c, source, start: start, end: end, reducer: reducer, lookup: lookup)
       } else {
         try project(cache, c, source, start: start, end: end) {
@@ -2343,18 +2715,25 @@ final class MonitorDataStore {
         }
       }
       try input.flush()
-      let retained = try reducer.result()
+      let retained = try cache.timed("plotResultCPUMicros") { try reducer.result() }
       try lookup.check()
-      let originals = try hydrate(cache, retained.map { .from($0.point) }, source: source)
+      let points = retained.map { MonitorProjectedPoint.from($0.point) }
+      let originals = try cache.timed("plotHydrationCPUMicros") {
+        try summary.map { try hydrate(cache, points, source: source, summary: $0) }
+          ?? hydrate(cache, points, source: source)
+      }
+      if let summary { admitSummary(cache, summary) }
       var previousSegment: Int32?
-      series[metric] = try retained.map { point in
-        guard let original = originals[point.point.reference!.reference] else {
-          throw MonitorError.invalid("A chart observation is unavailable.")
+      series[metric] = try cache.timed("plotRowCPUMicros") {
+        try retained.map { point in
+          guard let original = originals[point.point.reference!.reference] else {
+            throw MonitorError.invalid("A chart observation is unavailable.")
+          }
+          var row = original.dictionary
+          row["startsSegment"] = previousSegment == nil || previousSegment != point.segment
+          previousSegment = point.segment
+          return row
         }
-        var row = original.dictionary
-        row["startsSegment"] = previousSegment == nil || previousSegment != point.segment
-        previousSegment = point.segment
-        return row
       }
     }
     var result = envelope(request, source)
@@ -2431,21 +2810,28 @@ final class MonitorDataStore {
       }
       guard let c = try channel(metric, source: source) else { continue }
       let lookup = MonitorIdentityLookup(try store)
-      let reducer = try MonitorInspection.query(
-        metric: metric, start: WorkoutDistancePolicy.timeUs(start),
-        end: WorkoutDistancePolicy.timeUs(end), timeline: timeline, identity: lookup.identity)
-      let input = MonitorNumericPage(query: reducer, cache: cache)
       let boundaries = try interruptions(source)
-      for row in try inspectionRows(c, source, time: start, before: true, strict: true, admitted: false) {
-        try input.append(projected(row, boundaries: boundaries))
+      let reducer: InspectionQuery
+      if start == 0, end >= source.end,
+        let prefixed = try prefixedStatistics(cache, c, source, end: end, timeline: timeline, boundaries: boundaries)
+      {
+        reducer = prefixed
+      } else {
+        reducer = try MonitorInspection.query(
+          metric: metric, start: WorkoutDistancePolicy.timeUs(start),
+          end: WorkoutDistancePolicy.timeUs(end), timeline: timeline, identity: lookup.identity)
+        let input = MonitorNumericPage(query: reducer, cache: cache)
+        for row in try inspectionRows(c, source, time: start, before: true, strict: true, admitted: false) {
+          try input.append(projected(row, boundaries: boundaries))
+        }
+        try project(cache, c, source, start: start, end: end) {
+          try input.append($0)
+        }
+        for row in try inspectionRows(c, source, time: end, before: false, strict: true, admitted: false) {
+          try input.append(projected(row, boundaries: boundaries))
+        }
+        try input.flush()
       }
-      try project(cache, c, source, start: start, end: end) {
-        try input.append($0)
-      }
-      for row in try inspectionRows(c, source, time: end, before: false, strict: true, admitted: false) {
-        try input.append(projected(row, boundaries: boundaries))
-      }
-      try input.flush()
       let result = try reducer.result()
       try lookup.check()
       guard let outcome = result.statistics else { continue }
@@ -2485,6 +2871,629 @@ final class MonitorDataStore {
       result["endpoints"] = ["start": first, "end": last]
     }
     return try published(result, request: request, source: source)
+  }
+  static let statisticsPrefixBlockUs: Int64 = 16_000_000
+  // Watch heart rate is committed up to 60 s after it was measured, so live appends land after the prefix.
+  static let statisticsPrefixLagUs: Int64 = 64_000_000
+  static let maximumStatisticsPrefixes = 64
+  private func statisticsPrefixValid(
+    _ prefix: MonitorStatisticsPrefix, _ c: MonitorChannel, _ source: MonitorDescription, timeline: ActiveTimeline,
+    endUs: Int64
+  ) throws -> Bool {
+    guard prefix.revision <= source.revision, prefix.endUs <= min(endUs, timeline.endUs),
+      prefix.timeline == MonitorTimelinePrefix(timeline, before: prefix.endUs)
+    else { return false }
+    guard prefix.revision < source.revision else { return true }
+    guard try !semanticsChanged(c, source, after: prefix.revision) else { return false }
+    guard let firstNew = try firstAppended(c, source, after: prefix.revision) else { return true }
+    return WorkoutDistancePolicy.timeUs(firstNew) >= prefix.endUs
+  }
+  private func prefixedStatistics(
+    _ cache: MonitorWorkspace, _ c: MonitorChannel, _ source: MonitorDescription, end: Double,
+    timeline: ActiveTimeline, boundaries: [WorkoutInterruptionBoundary]
+  ) throws -> InspectionQuery? {
+    let key = projectionKey(c, source)
+    let endUs = WorkoutDistancePolicy.timeUs(end)
+    var reused = cache.statisticsPrefixes.removeValue(forKey: key)
+    if let prefix = reused, try !statisticsPrefixValid(prefix, c, source, timeline: timeline, endUs: endUs) {
+      reused = nil
+      cache.counters["statisticsPrefixInvalidations", default: 0] += 1
+    }
+    let settled =
+      (min(WorkoutDistancePolicy.timeUs(source.end), timeline.endUs) - Self.statisticsPrefixLagUs)
+      / Self.statisticsPrefixBlockUs
+    let foldStart = reused?.endUs ?? 0
+    let foldEnd = max(foldStart, max(0, settled) * Self.statisticsPrefixBlockUs)
+    guard foldEnd > 0 else { return nil }
+    let lookup = try reused?.lookup ?? MonitorIdentityLookup(store)
+    let signature = MonitorTimelinePrefix(timeline, before: foldEnd)
+    // The lookup holds at most one page of identities, and this read can fill it.
+    let entryBytes = MonitorStatisticsPrefix.bytes(signature, identities: Self.pageSize)
+    guard makeProjectionRoom(cache, entryBytes, keeping: key, evictPyramids: false, projection: false) else {
+      cache.counters["statisticsPrefixFallbacks", default: 0] += 1
+      return nil
+    }
+    do {
+      let readLookup = MonitorIdentityLookup(try store)
+      let query = try MonitorInspection.query(
+        metric: c.metric, start: 0, end: endUs, timeline: timeline, identity: readLookup.identity)
+      let input = MonitorNumericPage(query: query, cache: cache)
+      for row in try inspectionRows(c, source, time: 0, before: true, strict: true, admitted: false) {
+        try input.append(projected(row, boundaries: boundaries))
+      }
+      var checkpoint = reused?.checkpoint
+      var folding: (query: InspectionQuery, input: MonitorNumericPage)?
+      if foldEnd > foldStart {
+        let prefix = try MonitorInspection.query(
+          metric: c.metric, start: 0, end: foldEnd, timeline: timeline, bucket: true, identity: lookup.identity)
+        if let checkpoint { try prefix.mergeOwned(checkpoint: checkpoint) }
+        folding = (prefix, MonitorNumericPage(query: prefix, cache: cache))
+      }
+      var merged = false
+      var folded = 0
+      // Rows before zero are never active, so after the rows before the prefix end a direct reduction holds exactly
+      // the checkpoint's state; the query merges it after the predecessors and before the first later row.
+      func mergePrefix() throws {
+        if let folding {
+          try folding.input.flush()
+          checkpoint = folding.query.checkpoint()
+        }
+        try input.flush()
+        if let checkpoint { try query.mergeOwned(checkpoint: checkpoint) }
+        merged = true
+      }
+      try scanProjected(cache, c, source, start: WorkoutDistancePolicy.seconds(foldStart), end: end) { point in
+        if point.timeUs < foldEnd, let folding {
+          try folding.input.append(point)
+          folded += 1
+          return
+        }
+        if !merged { try mergePrefix() }
+        try input.append(point)
+      }
+      if !merged { try mergePrefix() }
+      cache.counters["statisticsPrefixFoldedPoints", default: 0] += folded
+      for row in try inspectionRows(c, source, time: end, before: false, strict: true, admitted: false) {
+        try input.append(projected(row, boundaries: boundaries))
+      }
+      try input.flush()
+      try lookup.check()
+      try readLookup.check()
+      if cache.statisticsPrefixes.count >= Self.maximumStatisticsPrefixes,
+        let oldest = cache.statisticsPrefixes.min(by: { $0.value.used < $1.value.used })
+      {
+        cache.statisticsPrefixes.removeValue(forKey: oldest.key)
+      }
+      let entry = MonitorStatisticsPrefix(
+        lookup: lookup, endUs: foldEnd, revision: source.revision, checkpoint: checkpoint, timeline: signature)
+      cache.tick &+= 1
+      entry.used = cache.tick
+      cache.statisticsPrefixes[key] = entry
+      cache.counters[reused == nil ? "statisticsPrefixBuilds" : "statisticsPrefixHits", default: 0] += 1
+      return query
+    } catch {
+      guard (error as NSError).kotlinException != nil else { throw error }
+      cache.counters["statisticsPrefixFallbacks", default: 0] += 1
+      return nil
+    }
+  }
+  enum EnergyInput: Equatable {
+    case distance(startUs: Int64, endUs: Int64, meters: Double, speed0: Double?, speed1: Double?)
+    case battery(
+      startUs: Int64, endUs: Int64, wattHours: Double, rate0: Double?, rate1: Double?, indivisible: Bool,
+      timestamp: String)
+    case speed(timeUs: Int64, mps: Double?, accuracy: Double?, activeInterval: KotlinInt?)
+    case telemetry(
+      timeUs: Int64, watts: Double?, batteryWatts: Double?, speedMps: Double?, activeInterval: KotlinInt?,
+      continuity: String, timestamp: String)
+  }
+  static var energyInputObserverForTesting: ((EnergyInput) -> Void)?
+  static var energySeriesPointBudgetForTesting: Int32?
+  private struct EnergyRow {
+    let channel: Int
+    let id: Int64
+    let time: Double
+    var start = 0.0
+    var end = 0.0
+    var amount = 0.0
+    var rate0: Double?
+    var rate1: Double?
+    var indivisible = false
+    var timestamp = ""
+    var producer = ""
+    var sequence: Int64 = 0
+    var clock: String?
+    var connection: String?
+    var watts: Double?
+    var power: Double?
+    var speed: Double?
+    var accuracy: Double?
+  }
+  private struct EnergyBranch {
+    let channel: Int
+    let sql: String
+    let values: [PowerLogSQLValue]
+    var rows: [EnergyRow] = []
+    var next = 0
+    var more = false
+  }
+  private struct EnergyTotalsKey: Hashable {
+    let id: String
+    let battery: String
+    let distance: String
+    let smoothing: Int32
+    let includeTotals: Bool
+    let controllerSpeed: Bool
+  }
+  /// The fold of every row at or before `cut`, read at `revision` with the generation's points through `pointID`.
+  private struct EnergyTotalsState {
+    var checkpoint: EnergyPerDistanceCheckpoint
+    var cut: Double
+    var revision: Int64
+    var generation: Int64
+    var pointID: Int64
+  }
+  private struct EnergySeriesKey: Hashable {
+    let id: String
+    let distance: String
+    let smoothing: Int32
+    let controllerSpeed: Bool
+  }
+  /// A whole-ride series holding every row earlier than `threshold` µs as read at `revision`: one microsecond after
+  /// the last row fed before its cut. Without a series it overflowed its summaries, and reads use a fresh aligned
+  /// query instead.
+  private struct EnergySeriesState {
+    let series: EnergyPerDistanceSeries?
+    let threshold: Int64
+    let revision: Int64
+  }
+  private final class EnergyStates {
+    private let lock = NSLock()
+    private var totals: [EnergyTotalsKey: (state: EnergyTotalsState, used: UInt64)] = [:]
+    private var series: [EnergySeriesKey: (state: EnergySeriesState, used: UInt64)] = [:]
+    private var tick: UInt64 = 0
+    private var counters: [String: Int] = [:]
+    func state(_ key: EnergyTotalsKey) -> EnergyTotalsState? {
+      lock.lock()
+      defer { lock.unlock() }
+      return totals[key]?.state
+    }
+    func save(_ state: EnergyTotalsState?, for key: EnergyTotalsKey) {
+      lock.lock()
+      defer { lock.unlock() }
+      guard let state else {
+        totals.removeValue(forKey: key)
+        return
+      }
+      keep(state, for: key, in: &totals, capacity: 8)
+    }
+    func takeSeries(_ key: EnergySeriesKey) -> EnergySeriesState? {
+      lock.lock()
+      defer { lock.unlock() }
+      return series.removeValue(forKey: key)?.state
+    }
+    func save(_ state: EnergySeriesState, for key: EnergySeriesKey) {
+      lock.lock()
+      defer { lock.unlock() }
+      keep(state, for: key, in: &series, capacity: 2)
+    }
+    private func keep<Key: Hashable, State>(
+      _ state: State, for key: Key, in states: inout [Key: (state: State, used: UInt64)], capacity: Int
+    ) {
+      tick += 1
+      states[key] = (state, tick)
+      if states.count > capacity, let oldest = states.min(by: { $0.value.used < $1.value.used })?.key {
+        states.removeValue(forKey: oldest)
+      }
+    }
+    func count(_ name: String, _ amount: Int = 1) {
+      lock.lock()
+      defer { lock.unlock() }
+      counters[name, default: 0] += amount
+    }
+    var diagnostics: [String: Int] {
+      lock.lock()
+      defer { lock.unlock() }
+      return counters
+    }
+  }
+  private let energyStates = EnergyStates()
+  private static let energyChunkSeconds = 16.0
+  private static let energyPageRows = 512
+  private static let energyEdgeSQL =
+    "SELECT point_id,elapsed_seconds,start_seconds,end_seconds,increment,start_speed,end_speed,indivisible,timestamp FROM distance_points INDEXED BY distance_point_time WHERE generation_id=? AND source=? AND point_id<=? AND elapsed_seconds>=? AND (elapsed_seconds,point_id)>(?,?) AND elapsed_seconds<=? ORDER BY elapsed_seconds,point_id LIMIT \(energyPageRows)"
+  private static let energyLocationSQL =
+    "SELECT m.observation_id,m.elapsed_seconds,m.producer,m.sequence,o.clock_epoch,CASE WHEN json_extract(o.extra,'$.distanceBarrier')=1 THEN NULL ELSE t.speedMps END,t.speedAccuracyMps FROM collection_memberships m INDEXED BY membership_stream_time JOIN observations o ON o.id=m.observation_id JOIN locations t ON t.observation_id=m.observation_id WHERE m.collection_id=? AND m.kind='location' AND m.source=? AND m.revision<=? AND \(PowerLogStore.selectedMembershipSQL) AND m.elapsed_seconds>=? AND (m.elapsed_seconds,m.observation_id)>(?,?) AND m.elapsed_seconds<=? ORDER BY m.elapsed_seconds,m.observation_id LIMIT \(energyPageRows)"
+  private static let energyTelemetrySQL =
+    "SELECT m.observation_id,m.elapsed_seconds,o.original_timestamp,m.producer,m.sequence,o.clock_epoch,json_extract(o.extra,'$.connectionEpoch'),t.humanPowerW,t.motorInputPowerW,t.controllerSpeedMps FROM collection_memberships m INDEXED BY membership_time JOIN observations o ON o.id=m.observation_id JOIN telemetry_frames t ON t.observation_id=m.observation_id WHERE m.collection_id=? AND m.kind='telemetry' AND m.revision<=? AND \(PowerLogStore.selectedMembershipSQL) AND m.elapsed_seconds>=? AND (m.elapsed_seconds,m.observation_id)>(?,?) AND m.elapsed_seconds<=? ORDER BY m.elapsed_seconds,m.observation_id LIMIT \(energyPageRows)"
+  private static let energyMarksSQL =
+    "SELECT 1 FROM collection_change_marks WHERE collection_id=? AND metric IN ('','humanPowerW','motorInputPowerW','controllerSpeedMps',?,?) AND kind NOT IN ('append','timing') AND revision>? LIMIT 1"
+  private static let energyCorrectionsSQL =
+    "SELECT 1 FROM collection_corrections WHERE collection_id=? AND revision>? AND revision<=? LIMIT 1"
+  private static let energyAppendedSQL =
+    "SELECT min(CASE WHEN kind='telemetry' THEN elapsed_seconds END) AS telemetry,min(CASE WHEN kind='location' AND source=? THEN elapsed_seconds END) AS location,max(kind='lifecycle') AS lifecycle FROM collection_memberships INDEXED BY membership_snapshot WHERE collection_id=? AND revision>? AND revision<=?"
+  private static let energyPointsSQL =
+    "SELECT min(elapsed_seconds) AS time FROM distance_points WHERE generation_id=? AND +source IN (?,?) AND point_id>? AND point_id<=?"
+  func energyDiagnostics() -> [String: Int] { energyStates.diagnostics }
+  func readEnergyPerDistance(_ request: MonitorRequest) throws -> [String: Any] {
+    if request.source == "live", let preview { return try preview.readEnergyPerDistance(request) }
+    let source = try description(request)
+    if let retry = mismatch(request, source) { return retry }
+    return try energyPerDistance(request, source: source)
+  }
+  private func energyPerDistance(_ request: MonitorRequest, source: MonitorDescription) throws -> [String: Any] {
+    let wholeSeries =
+      !request.energyTotals && !request.energyCurrent && request.startSeconds == 0
+      && (request.endSeconds ?? source.end) >= source.end
+    let end =
+      wholeSeries ? source.end : request.endSeconds ?? (source.metadata["elapsedSeconds"] as? Double ?? source.end)
+    let start = request.energyCurrent ? end : (request.startSeconds ?? end)
+    let timeline = try activeTimeline(source, sourceKind: request.source)
+    let startUs = WorkoutDistancePolicy.timeUs(start)
+    let endUs = WorkoutDistancePolicy.timeUs(end)
+    let timer = timeline.intervals.reduce(Int64(0)) { $0 + max(0, min(endUs, $1.endUs) - max(startUs, $1.startUs)) }
+    let controllerSpeed = request.source == "live" || source.distanceSelection == "controller"
+    let smoothing = Int32(request.energySmoothingSeconds)
+    // Preview has telemetry only. It can graph power / controller speed without accumulating ride totals.
+    let held =
+      request.source == "workout" && request.energyTotals
+      ? try distanceStore.leasedSnapshot(id: source.id, revision: source.revision, selection: source.distanceSelection)
+      : nil
+    defer { held?.lease.release() }
+    let distance = held?.snapshot.source ?? (request.source == "live" ? "controller" : source.distanceSelection)
+    let battery = (source.metadata["batteryConsumptionSource"] as? String ?? "controller") + "EnergyWh"
+    var branches: [EnergyBranch] = []
+    if let snapshot = held?.snapshot {
+      for (channel, name) in [(0, distance), (1, battery)] {
+        branches.append(
+          EnergyBranch(
+            channel: channel, sql: Self.energyEdgeSQL,
+            values: [.integer(snapshot.storageID), .text(name), .integer(snapshot.maximumPointID)]))
+      }
+    }
+    if distance.hasPrefix("gps:") {
+      branches.append(
+        EnergyBranch(
+          channel: 2, sql: Self.energyLocationSQL,
+          values: [
+            .text(source.id), .text(String(distance.dropFirst(4))), .integer(source.revision),
+            .integer(source.revision), .integer(source.revision),
+          ]))
+    }
+    branches.append(
+      EnergyBranch(
+        channel: 3, sql: Self.energyTelemetrySQL,
+        values: [.text(source.id), .integer(source.revision), .integer(source.revision), .integer(source.revision)]))
+    func result(_ json: String) throws -> [String: Any] {
+      let payload = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+      return try published(
+        envelope(request, source).merging(payload) { _, new in new }, request: request, source: source)
+    }
+    let from = max(0, start - Double(EnergyPerDistancePolicy.shared.contextSeconds(seconds: smoothing)))
+    let until = end + 10
+    guard request.energyTotals else {
+      guard wholeSeries else {
+        let query = try EnergyPerDistanceQuery(
+          startUs: startUs, endUs: endUs, buckets: Int32(request.buckets), timerUs: timer,
+          controllerSpeed: controllerSpeed, smoothingSeconds: smoothing, includeTotals: false)
+        try feedEnergy(query, &branches, timeline: timeline, from: from, until: until)
+        return try result(query.resultJson())
+      }
+      let buckets = Int32(request.buckets)
+      let slot = try InspectionPlotSlots.shared.alignedSlotUs(
+        range: AnalysisRange(startUs: 0, endUs: endUs), buckets: buckets)
+      func aligned() throws -> [String: Any] {
+        let query = try EnergyPerDistanceQuery(
+          startUs: 0, endUs: endUs, buckets: buckets, alignedSlotUs: slot, timerUs: timer,
+          controllerSpeed: controllerSpeed, smoothingSeconds: smoothing, includeTotals: false)
+        try feedEnergy(query, &branches, timeline: timeline, from: from, until: until)
+        return try result(query.resultJson())
+      }
+      guard request.source == "workout" else { return try aligned() }
+      let key = EnergySeriesKey(
+        id: source.id, distance: distance, smoothing: smoothing, controllerSpeed: controllerSpeed)
+      let margin = EnergyPerDistancePolicy.shared.checkpointMarginUs
+      let cutUs = min(endUs - margin, timeline.endUs)
+      func read(_ series: EnergyPerDistanceSeries, after threshold: Int64) throws -> String {
+        let session = try series.begin(endUs: endUs, timerUs: timer, buckets: buckets, alignedSlotUs: slot)
+        var last: Int64?
+        var committed: Int64?
+        func cut() throws {
+          guard committed == nil, cutUs > 0 else { return }
+          try session.cut()
+          committed = last.map { $0 + 1 } ?? threshold
+        }
+        try feedEnergy(
+          session, &branches, timeline: timeline,
+          from: threshold == .min ? from : WorkoutDistancePolicy.seconds(threshold - 1), until: until,
+          admit: {
+            guard $0 >= threshold else { return false }
+            if $0 >= cutUs { try cut() }
+            if committed == nil { last = $0 }
+            return true
+          })
+        try cut()
+        let json = try session.resultJson()
+        energyStates.save(
+          EnergySeriesState(
+            series: series.valid ? series : nil, threshold: committed ?? threshold, revision: source.revision),
+          for: key)
+        return json
+      }
+      if let saved = energyStates.takeSeries(key) {
+        // An overflowed series, or one that cannot begin a read this close to its cut, is kept and not read.
+        guard let series = saved.series, !series.valid || endUs - series.throughUs > margin else {
+          energyStates.save(saved, for: key)
+          energyStates.count("energySeriesFallbacks")
+          return try aligned()
+        }
+        if series.valid,
+          (try? energySeriesResumable(saved, source: source, distance: distance, timelineEndUs: timeline.endUs)) == true
+        {
+          do {
+            let json = try read(series, after: saved.threshold)
+            energyStates.count("energySeriesResumedReads")
+            return try result(json)
+          } catch let failure where (failure as NSError).kotlinException is InspectionCapacityException && series.valid
+          {
+            energyStates.save(saved, for: key)
+            throw failure
+          } catch {}
+        }
+        energyStates.count("energySeriesInvalidations")
+      }
+      let json = try read(
+        EnergyPerDistanceSeries(
+          controllerSpeed: controllerSpeed, smoothingSeconds: smoothing, includeTotals: false,
+          pointBudget: Self.energySeriesPointBudgetForTesting ?? InspectionPlotSlots.shared.maximumPoints),
+        after: .min)
+      energyStates.count("energySeriesBuilds")
+      return try result(json)
+    }
+    guard let snapshot = held?.snapshot, start == 0 else {
+      let query = try EnergyPerDistanceQuery(
+        startUs: startUs, endUs: endUs, timerUs: timer, controllerSpeed: controllerSpeed, smoothingSeconds: smoothing,
+        includeTotals: true)
+      try feedEnergy(query, &branches, timeline: timeline, from: from, until: until)
+      return try result(query.resultJson())
+    }
+    let key = EnergyTotalsKey(
+      id: source.id, battery: battery, distance: distance, smoothing: smoothing, includeTotals: true,
+      controllerSpeed: controllerSpeed)
+    let cut = Self.energyCut(endUs: endUs, timelineEndUs: timeline.endUs)
+    func resume(_ saved: EnergyTotalsState) throws -> EnergyPerDistanceQuery? {
+      guard
+        try energyResumable(
+          saved, source: source, snapshot: snapshot, distance: distance, battery: battery, endUs: endUs,
+          timelineEndUs: timeline.endUs)
+      else { return nil }
+      let query = try EnergyPerDistanceQuery(
+        checkpoint: saved.checkpoint, startUs: startUs, endUs: endUs, timerUs: timer, controllerSpeed: controllerSpeed,
+        smoothingSeconds: smoothing, includeTotals: true)
+      var next = saved
+      next.revision = source.revision
+      next.pointID = snapshot.maximumPointID
+      try feedEnergy(query, &branches, timeline: timeline, from: saved.cut, resuming: true, until: until) {
+        guard $0 == cut else { return }
+        next.checkpoint = try query.checkpoint()
+        next.cut = $0
+        energyStates.count("energyCheckpoints")
+      }
+      energyStates.save(next, for: key)
+      return query
+    }
+    if let saved = energyStates.state(key) {
+      if let query = try? resume(saved) {
+        energyStates.count("energyResumedReads")
+        return try result(query.resultJson())
+      }
+      energyStates.count("energyInvalidations")
+    }
+    let query = try EnergyPerDistanceQuery(
+      startUs: startUs, endUs: endUs, timerUs: timer, controllerSpeed: controllerSpeed, smoothingSeconds: smoothing,
+      includeTotals: true)
+    var next: EnergyTotalsState?
+    try feedEnergy(query, &branches, timeline: timeline, from: from, until: until) {
+      guard $0 == cut else { return }
+      next = EnergyTotalsState(
+        checkpoint: try query.checkpoint(), cut: $0, revision: source.revision, generation: snapshot.storageID,
+        pointID: snapshot.maximumPointID)
+      energyStates.count("energyCheckpoints")
+    }
+    energyStates.save(next, for: key)
+    energyStates.count("energyFullReads")
+    return try result(query.resultJson())
+  }
+  /// The newest chunk boundary a checkpoint can follow. Every row at or before it is more than the kernel's margin
+  /// before the end and keeps its active interval while the timeline end stays after it.
+  private static func energyCut(endUs: Int64, timelineEndUs: Int64) -> Double? {
+    let chunkUs = Int64(energyChunkSeconds * 1_000_000)
+    let chunks = (min(endUs - EnergyPerDistancePolicy.shared.checkpointMarginUs, timelineEndUs) - 1) / chunkUs
+    return chunks > 0 ? Double(chunks) * energyChunkSeconds : nil
+  }
+  private func energyResumable(
+    _ saved: EnergyTotalsState, source: MonitorDescription, snapshot: WorkoutDistanceSnapshot, distance: String,
+    battery: String, endUs: Int64, timelineEndUs: Int64
+  ) throws -> Bool {
+    guard saved.generation == snapshot.storageID, saved.revision <= source.revision,
+      saved.pointID <= snapshot.maximumPointID,
+      endUs - saved.checkpoint.throughUs > EnergyPerDistancePolicy.shared.checkpointMarginUs,
+      WorkoutDistancePolicy.timeUs(saved.cut) < timelineEndUs
+    else { return false }
+    return try store.read { db in
+      if saved.revision < source.revision,
+        try !energyRowsUnchanged(
+          db, source: source, distance: distance, since: saved.revision, committed: { $0 <= saved.cut })
+      {
+        return false
+      }
+      guard saved.pointID < snapshot.maximumPointID else { return true }
+      let first = try db.rows(
+        Self.energyPointsSQL,
+        [
+          .integer(snapshot.storageID), .text(distance), .text(battery), .integer(saved.pointID),
+          .integer(snapshot.maximumPointID),
+        ], limit: 1
+      ).first?.double("time")
+      return first.map { $0 > saved.cut } != false
+    }
+  }
+  private func energySeriesResumable(
+    _ saved: EnergySeriesState, source: MonitorDescription, distance: String, timelineEndUs: Int64
+  ) throws -> Bool {
+    guard saved.revision <= source.revision, saved.threshold <= timelineEndUs else { return false }
+    guard saved.revision < source.revision else { return true }
+    return try store.read { db in
+      try energyRowsUnchanged(db, source: source, distance: distance, since: saved.revision) {
+        WorkoutDistancePolicy.timeUs($0) < saved.threshold
+      }
+    }
+  }
+  /// Whether everything stored after `revision` leaves the active timeline and every row that `committed` admits as
+  /// they were.
+  private func energyRowsUnchanged(
+    _ db: PowerLogDatabase, source: MonitorDescription, distance: String, since revision: Int64,
+    committed: (Double) -> Bool
+  ) throws -> Bool {
+    let gps = distance.hasPrefix("gps:") ? String(distance.dropFirst(4)) : nil
+    let window: [PowerLogSQLValue] = [.text(source.id), .integer(revision), .integer(source.revision)]
+    let speed: [PowerLogSQLValue] =
+      gps == nil ? [.text(""), .text("")] : [.text("speedMps"), .text("speedAccuracyMps")]
+    if try db.scalarInt(Self.energyMarksSQL, [.text(source.id)] + speed + [.integer(revision)]) != nil { return false }
+    if try db.scalarInt(Self.energyCorrectionsSQL, window) != nil { return false }
+    guard let appended = try db.rows(Self.energyAppendedSQL, [.text(gps ?? "")] + window, limit: 1).first,
+      appended.int("lifecycle") != 1
+    else { return false }
+    return appended.double("telemetry").map(committed) != true && appended.double("location").map(committed) != true
+  }
+  private func feedEnergy(
+    _ sink: EnergyPerDistanceInputs, _ branches: inout [EnergyBranch], timeline: ActiveTimeline, from: Double,
+    resuming: Bool = false, until: Double, boundary: (Double) throws -> Void = { _ in },
+    admit: ((Int64) throws -> Bool)? = nil
+  ) throws {
+    var chunkStart = from
+    var after = resuming ? from : from.nextDown
+    var fed = 0
+    defer { energyStates.count("energyRows", fed) }
+    while true {
+      let chunkEnd = min(until, chunkStart + Self.energyChunkSeconds)
+      try store.read { db in
+        for index in branches.indices {
+          try Self.readEnergyPage(db, &branches[index], after: after, id: .max, through: chunkEnd)
+        }
+      }
+      while let row = try nextEnergyRow(&branches, through: chunkEnd) {
+        if let admit, try !admit(WorkoutDistancePolicy.timeUs(row.time)) { continue }
+        fed += 1
+        if let input = Self.energyInput(row, timeline: timeline) { try Self.append(input, to: sink) }
+      }
+      try boundary(chunkEnd)
+      if chunkEnd == until { return }
+      chunkStart = chunkEnd
+      after = chunkEnd
+    }
+  }
+  private func nextEnergyRow(_ branches: inout [EnergyBranch], through upper: Double) throws -> EnergyRow? {
+    var best: Int?
+    for index in branches.indices {
+      if branches[index].next == branches[index].rows.count {
+        guard branches[index].more, let last = branches[index].rows.last else { continue }
+        try store.read { db in
+          try Self.readEnergyPage(db, &branches[index], after: last.time, id: last.id, through: upper)
+        }
+        if branches[index].rows.isEmpty { continue }
+      }
+      // Branches are in channel order, so an equal time keeps the lower channel.
+      if let current = best,
+        branches[index].rows[branches[index].next].time >= branches[current].rows[branches[current].next].time
+      {
+        continue
+      }
+      best = index
+    }
+    guard let best else { return nil }
+    branches[best].next += 1
+    return branches[best].rows[branches[best].next - 1]
+  }
+  private static func readEnergyPage(
+    _ db: PowerLogDatabase, _ branch: inout EnergyBranch, after time: Double, id: Int64, through upper: Double
+  ) throws {
+    var rows: [EnergyRow] = []
+    swap(&rows, &branch.rows)
+    rows.removeAll(keepingCapacity: true)
+    branch.next = 0
+    let channel = branch.channel
+    let count = try db.scan(
+      branch.sql, branch.values + [.real(time), .real(time), .integer(id), .real(upper)], limit: energyPageRows
+    ) { row in
+      rows.append(energyRow(row, channel: channel))
+      return true
+    }
+    branch.rows = rows
+    branch.more = count == energyPageRows
+  }
+  private static func energyRow(_ row: PowerLogStatementRow, channel: Int) -> EnergyRow {
+    switch channel {
+    case 0, 1:
+      return EnergyRow(
+        channel: channel, id: row.integer(0)!, time: row.double(1)!, start: row.double(2)!, end: row.double(3)!,
+        amount: row.double(4)!, rate0: row.double(5), rate1: row.double(6), indivisible: row.integer(7) == 1,
+        timestamp: channel == 1 ? row.text(8)! : "")
+    case 2:
+      return EnergyRow(
+        channel: channel, id: row.integer(0)!, time: row.double(1)!, producer: row.text(2)!,
+        sequence: row.integer(3)!, clock: row.text(4), speed: row.double(5), accuracy: row.double(6))
+    default:
+      return EnergyRow(
+        channel: channel, id: row.integer(0)!, time: row.double(1)!, timestamp: row.text(2)!, producer: row.text(3)!,
+        sequence: row.integer(4)!, clock: row.text(5), connection: row.text(6), watts: row.double(7),
+        power: row.double(8), speed: row.double(9))
+    }
+  }
+  private static func energyInput(_ row: EnergyRow, timeline: ActiveTimeline) -> EnergyInput? {
+    switch row.channel {
+    case 0:
+      let a = WorkoutDistancePolicy.timeUs(row.start)
+      let b = WorkoutDistancePolicy.timeUs(row.end)
+      return b > a ? .distance(startUs: a, endUs: b, meters: row.amount, speed0: row.rate0, speed1: row.rate1) : nil
+    case 1:
+      return .battery(
+        startUs: WorkoutDistancePolicy.timeUs(row.start), endUs: WorkoutDistancePolicy.timeUs(row.end),
+        wattHours: row.amount, rate0: row.rate0, rate1: row.rate1, indivisible: row.indivisible,
+        timestamp: row.timestamp)
+    default:
+      let time = WorkoutDistancePolicy.timeUs(row.time)
+      let active = timeline.membership(t: time, producer: row.producer, sequence: row.sequence, clockEpoch: row.clock)
+      guard row.channel == 3 else {
+        return .speed(timeUs: time, mps: row.speed, accuracy: row.accuracy, activeInterval: active)
+      }
+      return .telemetry(
+        timeUs: time, watts: row.watts, batteryWatts: row.power, speedMps: row.speed, activeInterval: active,
+        continuity: "\(row.clock ?? "")|\(row.connection ?? "")", timestamp: row.timestamp)
+    }
+  }
+  private static func append(_ input: EnergyInput, to query: EnergyPerDistanceInputs) throws {
+    energyInputObserverForTesting?(input)
+    switch input {
+    case .distance(let startUs, let endUs, let meters, let speed0, let speed1):
+      try query.appendDistance(
+        startUs: startUs, endUs: endUs, meters: meters, speed0: speed0.map(KotlinDouble.init(value:)),
+        speed1: speed1.map(KotlinDouble.init(value:)))
+    case .battery(let startUs, let endUs, let wattHours, let rate0, let rate1, let indivisible, let timestamp):
+      try query.appendBattery(
+        startUs: startUs, endUs: endUs, wattHours: wattHours, rate0: rate0.map(KotlinDouble.init(value:)),
+        rate1: rate1.map(KotlinDouble.init(value:)), indivisible: indivisible, timestamp: timestamp)
+    case .speed(let timeUs, let mps, let accuracy, let activeInterval):
+      try query.appendSpeed(
+        timeUs: timeUs, mps: mps.map(KotlinDouble.init(value:)), accuracy: accuracy.map(KotlinDouble.init(value:)),
+        activeInterval: activeInterval)
+    case .telemetry(
+      let timeUs, let watts, let batteryWatts, let speedMps, let activeInterval, let continuity, let timestamp):
+      try query.appendTelemetry(
+        timeUs: timeUs, watts: watts.map(KotlinDouble.init(value:)),
+        batteryWatts: batteryWatts.map(KotlinDouble.init(value:)), speedMps: speedMps.map(KotlinDouble.init(value:)),
+        activeInterval: activeInterval, continuity: continuity, timestamp: timestamp)
+    }
   }
   private func activeTimeline(_ source: MonitorDescription, sourceKind: String) throws -> ActiveTimeline {
     var events: [AnalysisItem] = []
@@ -2602,7 +3611,7 @@ final class MonitorDataStore {
       || (since < source.revision
         && ((rows.first?.int("revision") ?? source.revision + 1) > since + 1
           || (rows.last?.int("revision") ?? -1) < source.revision))
-    result["changes"] = rows.map { row -> [String: Any] in
+    result["changes"] = rows.filter { $0.string("kind") != "timing" }.map { row -> [String: Any] in
       var change: [String: Any] = [
         "startSeconds": Double(row.int("min_us") ?? 0) / 1e6,
         "endSeconds": Double(row.int("max_us") ?? Int64(source.end * 1e6)) / 1e6,
@@ -2636,3 +3645,16 @@ final class MonitorDataStore {
     return try published(result, request: request, source: source)
   }
 }
+
+private protocol EnergyPerDistanceInputs {
+  func appendDistance(startUs: Int64, endUs: Int64, meters: Double, speed0: KotlinDouble?, speed1: KotlinDouble?) throws
+  func appendBattery(
+    startUs: Int64, endUs: Int64, wattHours: Double, rate0: KotlinDouble?, rate1: KotlinDouble?, indivisible: Bool,
+    timestamp: String) throws
+  func appendSpeed(timeUs: Int64, mps: KotlinDouble?, accuracy: KotlinDouble?, activeInterval: KotlinInt?) throws
+  func appendTelemetry(
+    timeUs: Int64, watts: KotlinDouble?, batteryWatts: KotlinDouble?, speedMps: KotlinDouble?,
+    activeInterval: KotlinInt?, continuity: String?, timestamp: String) throws
+}
+extension EnergyPerDistanceQuery: EnergyPerDistanceInputs {}
+extension EnergyPerDistanceSeriesRead: EnergyPerDistanceInputs {}

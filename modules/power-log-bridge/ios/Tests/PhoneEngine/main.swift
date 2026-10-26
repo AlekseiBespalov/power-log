@@ -412,13 +412,29 @@ do {
   check(
     states.count == 1 && states[0].phase == "paused" && states[0].action == nil,
     "reconnect resends current Pause without replaying actions")
-  Thread.sleep(forTimeInterval: 1.1)
+  Thread.sleep(forTimeInterval: WorkoutEngine.watchRoutineSeconds + 0.1)
   engine.queue.sync {
     transport.changed?()
     transport.changed?()
   }
   let all = engine.queue.sync { transport.sent.filter { $0.kind == .state } }
-  check(all.count == 2 && all[1].stateRevision == states[0].stateRevision, "paused routine traffic capped at 1 Hz")
+  check(
+    all.count == 2 && all[1].stateRevision == states[0].stateRevision,
+    "paused routine traffic capped at one message per routine interval")
+  _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
+}
+do {
+  let (engine, _) = try make()
+  let id = try start(engine, watch: true)
+  let transport = WorkoutCompanionTransport.latest!
+  let sent = try engine.queue.sync {
+    transport.sent.removeAll()
+    _ = try engine.pause(expectedID: id)
+    return transport.sent
+  }
+  check(
+    sent.map(\.kind) == [.telemetry, .state] && sent[0].phase == "running" && sent[1].phase == "paused",
+    "Pause sends the eligible Health seconds before the paused state discards their window")
   _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
 }
 // Cancellation may overtake Start in transit, or arrive while the native Start reply is outstanding.
@@ -479,6 +495,34 @@ do {
     engine.queue.sync { engine.state()["id"] as? String } == newRide
       && engine.queue.sync { engine.state()["phase"] as? String } == "running",
     "old Start replies and cancellation cannot affect a newer phone ride")
+}
+do {
+  let (engine, archive) = try make()
+  let id = try start(engine)
+  let transport = WorkoutCompanionTransport.latest!
+  var stateBuilds = 0
+  try archive.store.read { db in
+    db.queryObserverForTesting = { _, values in
+      if case .text("catalog-state")? = values.first { stateBuilds += 1 }
+    }
+  }
+  var delivered = 0
+  engine.queue.sync {
+    let activity = WorkoutLiveActivity.shared.published(id)
+    stateBuilds = 0
+    transport.changed?()
+    check(stateBuilds == 0, "a publish without listeners skips the bridge state")
+    engine.addSink(id: UUID()) { _ in delivered += 1 }
+    engine.setBackground(true)
+    stateBuilds = 0
+    transport.changed?()
+    check(stateBuilds == 0 && delivered == 1, "a background publish skips the bridge state")
+    check(
+      WorkoutLiveActivity.shared.published(id) == activity + 2, "undelivered publishes still refresh the Live Activity")
+    engine.setBackground(false)
+    check(stateBuilds == 1 && delivered == 2, "returning to the foreground delivers one fresh state")
+  }
+  _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
 }
 print(
   "Production phone engine: bike admission, Watch handshake, Stop cutoff, failed Finish, and paused convergence passed")

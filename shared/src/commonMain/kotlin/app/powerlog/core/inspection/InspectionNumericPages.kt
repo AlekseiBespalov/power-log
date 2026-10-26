@@ -46,6 +46,16 @@ internal object InspectionNumericPages {
         }
     }
 
+    fun summary(summary: InspectionPlotSummary, input: InspectionNumericInput, identity: (Long) -> String) {
+        require(input.count in 0..256)
+        for (i in 0 until input.count) {
+            val point = point(input, i)
+            if (input.word(i, 3) and 8 != 0L)
+                summary.appendCompactDistance(point, input.word(i, 7).toInt(), point.reference)
+            else summary.appendCompact(point, identity)
+        }
+    }
+
     fun query(reducer: InspectionQuery, input: InspectionNumericInput) {
         require(input.count in 0..256)
         for (i in 0 until input.count) reducer.appendCompact(point(input, i))

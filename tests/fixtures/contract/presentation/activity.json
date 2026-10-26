@@ -9,8 +9,8 @@
   "token": "66666666-6666-4666-8666-666666666666",
   "bikeAcquiredUs": "100000000",
   "heartAcquiredUs": "100000000",
-  "bikeExpiresAtUs": "106000000",
-  "heartRateExpiresAtUs": "115000000",
+  "bikeExpiresAtUs": "121000000",
+  "heartRateExpiresAtUs": "130000000",
   "cases": [
     {
       "nowUs": "105000000",
@@ -25,10 +25,10 @@
         "finish"
       ],
       "timer": "running",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "105999999",
+      "nowUs": "120999999",
       "systemStale": false,
       "phase": "running",
       "pending": null,
@@ -40,10 +40,10 @@
         "finish"
       ],
       "timer": "running",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "running",
       "pending": null,
@@ -55,10 +55,10 @@
         "finish"
       ],
       "timer": "running",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "running",
       "pending": null,
@@ -73,7 +73,7 @@
       "staleDateUs": null
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": true,
       "phase": "running",
       "pending": null,
@@ -82,7 +82,7 @@
       "status": "Open Power Log",
       "controls": [],
       "timer": "unavailable",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
       "nowUs": "105000000",
@@ -97,7 +97,7 @@
         "finish"
       ],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
       "nowUs": "105000000",
@@ -109,10 +109,10 @@
       "status": "Updating\u2026",
       "controls": [],
       "timer": "running",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": true,
       "phase": "running",
       "pending": null,
@@ -133,10 +133,10 @@
       "status": "Finishing\u2026",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "finishing",
       "pending": null,
@@ -145,10 +145,10 @@
       "status": "Finishing\u2026",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "finishing",
       "pending": null,
@@ -169,10 +169,10 @@
       "status": "Starting\u2026",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "preparing",
       "pending": null,
@@ -181,10 +181,10 @@
       "status": "Starting\u2026",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "preparing",
       "pending": null,
@@ -205,10 +205,10 @@
       "status": "Open Power Log",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "interrupted",
       "pending": null,
@@ -217,10 +217,10 @@
       "status": "Open Power Log",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "interrupted",
       "pending": null,
@@ -241,10 +241,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "completed",
       "pending": null,
@@ -253,10 +253,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "completed",
       "pending": null,
@@ -277,10 +277,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "failed",
       "pending": null,
@@ -289,10 +289,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "failed",
       "pending": null,
@@ -313,10 +313,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "idle",
       "pending": null,
@@ -325,10 +325,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "idle",
       "pending": null,
@@ -349,10 +349,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "106000000"
+      "staleDateUs": "121000000"
     },
     {
-      "nowUs": "106000000",
+      "nowUs": "121000000",
       "systemStale": false,
       "phase": "ready",
       "pending": null,
@@ -361,10 +361,10 @@
       "status": "Ride ended",
       "controls": [],
       "timer": "frozen",
-      "staleDateUs": "115000000"
+      "staleDateUs": "130000000"
     },
     {
-      "nowUs": "115000000",
+      "nowUs": "130000000",
       "systemStale": false,
       "phase": "ready",
       "pending": null,

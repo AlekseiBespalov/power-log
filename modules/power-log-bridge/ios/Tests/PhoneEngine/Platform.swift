@@ -110,5 +110,17 @@ final class ControllerEngine {
 }
 final class WorkoutLiveActivity {
   static let shared = WorkoutLiveActivity()
-  func publish(_ snapshot: WorkoutActivitySnapshot) {}
+  private let lock = NSLock()
+  private var counts: [String: Int] = [:]
+  func publish(_ snapshot: WorkoutActivitySnapshot) {
+    guard let id = snapshot.rideID else { return }
+    lock.lock()
+    defer { lock.unlock() }
+    counts[id, default: 0] += 1
+  }
+  func published(_ id: String) -> Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return counts[id, default: 0]
+  }
 }

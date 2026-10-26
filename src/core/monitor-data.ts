@@ -5,11 +5,14 @@ import {
   InspectionMetricPolicy,
   InspectionTargetInput,
   analyticsTimeUs,
+  AnalyticsEnergyPerDistance,
+  analyticsEnergyContextSeconds,
   inspectionHeldTail,
 } from '../../shared/js';
 import { inspectionPoint, inspectionStatistics, monitorInspectionItem, plotMonitorItems } from './monitor-inspection';
 import { isDistanceMetric } from './distance';
 import { isConsumptionMetric } from './consumption';
+import type { EnergyPerDistanceResult } from './energy-per-distance';
 import {
   metricById,
   MONITOR_METRICS,
@@ -23,6 +26,7 @@ import {
   type MonitorPlotRequest,
   type MonitorPlotResult,
   type MonitorPoint,
+  type MonitorResult,
   type MonitorSource,
   type MonitorStatistics,
   type MonitorStatsRequest,
@@ -244,6 +248,39 @@ export class TelemetryMonitor implements MonitorSource {
       availableMetrics: [...this.available],
       outcome: this.samples.length ? 'available' : this.live ? 'pending' : 'unavailable',
     };
+  }
+  /** Foreground preview has no ride totals or GPS capture; use the speed in each controller frame. */
+  async readEnergyPerDistance(request: MonitorPlotRequest): Promise<MonitorResult<EnergyPerDistanceResult>> {
+    const envelope = this.envelope(request.generation);
+    if (request.expectedRevision !== envelope.revision) return { ...envelope, status: 'retry' };
+    const end = request.endSeconds ?? this.end;
+    const start = request.energyCurrent ? end : (request.startSeconds ?? end);
+    const query = new AnalyticsEnergyPerDistance(
+      analyticsTimeUs(start),
+      analyticsTimeUs(end),
+      Math.max(1, Math.min(2048, request.buckets ?? request.pixelWidth ?? 240)),
+      analyticsTimeUs(end - start),
+      true,
+      request.energySmoothingSeconds ?? 0,
+      false,
+    );
+    for (const sample of this.samples) {
+      if (
+        sample.elapsedSeconds < start - analyticsEnergyContextSeconds(request.energySmoothingSeconds ?? 0) ||
+        sample.elapsedSeconds > end
+      )
+        continue;
+      query.telemetry(
+        analyticsTimeUs(sample.elapsedSeconds),
+        sample.humanPowerW ?? null,
+        sample.motorInputPowerW ?? null,
+        sample.controllerSpeedMps ?? null,
+        sample.activeInterval === undefined ? 0 : sample.activeInterval,
+        `${sample.clockEpoch ?? ''}|${sample.connectionEpoch ?? ''}|${sample.interruptionIndex ?? 0}`,
+        sample.timestamp,
+      );
+    }
+    return { ...envelope, status: 'ok', ...(JSON.parse(query.resultJson()) as EnergyPerDistanceResult) };
   }
   async readPlot(request: MonitorPlotRequest): Promise<MonitorPlotResult> {
     const envelope = this.envelope(request.generation);

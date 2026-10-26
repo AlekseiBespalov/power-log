@@ -12,6 +12,7 @@ vi.mock('../../src/components/use-native-chart-gestures', () => ({}));
 vi.mock('../../src/components/monitor-raster', () => ({}));
 vi.mock('../../src/components/monitor-chart-grid', () => ({}));
 vi.mock('../../src/components/modal-dialog', () => ({}));
+vi.mock('../../src/services/use-foreground-activity', () => ({ useForegroundActivity: () => true }));
 
 const point = (value: number, elapsedSeconds: number): MonitorPoint => ({
   value,
@@ -29,6 +30,24 @@ function data(): MonitorData {
   };
 }
 describe('History range readouts', () => {
+  it('shows energy divided by distance, not the mean of instantaneous chart readings', () => {
+    const value = data();
+    value.series.batteryWhPerKm = [point(100, 0), point(50, 10)];
+    value.statistics.batteryWhPerKm = { ratio: 66.666666, sampleMean: 75, count: 2, coveredSeconds: 10 };
+    expect(historyRangeReadout(value, metricById('batteryWhPerKm')!, { start: 0, end: 10 })).toEqual({
+      value: 'avg 66.7',
+      detail: '',
+    });
+    value.statistics.batteryWhPerKm!.partial = true;
+    expect(historyRangeReadout(value, metricById('batteryWhPerKm')!, { start: 0, end: 10 }).detail).toBe(
+      'Partial data',
+    );
+    value.statistics = {};
+    expect(historyRangeReadout(value, metricById('batteryWhPerKm')!, { start: 0, end: 10 })).toEqual({
+      value: 'avg —',
+      detail: '',
+    });
+  });
   it('uses original range statistics rather than the last plotted point', () => {
     expect(historyRangeReadout(data(), metricById('humanPowerW')!, { start: 0, end: 10 })).toEqual({
       value: 'avg 123',

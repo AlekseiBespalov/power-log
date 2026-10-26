@@ -2,6 +2,7 @@ package app.powerlog.bridge
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.database.sqlite.SQLiteDatabaseLockedException
 import android.database.sqlite.SQLiteException
 import android.location.Location
 import android.location.LocationListener
@@ -23,6 +24,58 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowSystemClock
 
 class RecordingEngineCaptureTest : RecordingEngineTestBase() {
+    @Test
+    fun aBusyStoreDuringTheEightSampleFlushIsRetriedWithoutInterruptingTheRide() = command {
+        val id = start(sampleHz = 8)
+        for (index in 1..7) {
+            ShadowSystemClock.advanceBy(Duration.ofMillis(125))
+            telemetry()
+        }
+        var busy = 1
+        engine.store.beforeTransactionEnd = {
+            if (busy > 0) {
+                busy--
+                throw SQLiteDatabaseLockedException("database is locked")
+            }
+        }
+        try {
+            ShadowSystemClock.advanceBy(Duration.ofMillis(125))
+            telemetry()
+        } finally {
+            engine.store.beforeTransactionEnd = null
+        }
+        assertEquals(0, busy)
+        assertEquals("running", engine.state().str("phase"))
+        assertNull(engine.state()["failure"])
+        engine.flush()
+        assertEquals(8, engine.store.page(id).size)
+    }
+
+    @Test
+    fun aFlushReadsEachBlockAndTheTimelineOnceForAllMetrics() = command {
+        start(sampleHz = 8)
+        for (second in 1L..6L) {
+            advanceTo(second)
+            telemetry(speed = 5.0)
+        }
+        engine.flush()
+        advanceTo(8)
+        telemetry(speed = 5.0)
+        val queries = mutableListOf<Pair<String, List<Any>>>()
+        engine.store.queryObserver = { sql, args -> queries.add(sql to args.toList()) }
+        try {
+            engine.flush()
+        } finally {
+            engine.store.queryObserver = null
+        }
+        val observationReads = queries.filter { (sql, _) -> "INDEXED BY observations_elapsed" in sql }
+        val lifecycleReads = queries.filter { (sql, _) -> "FROM lifecycle" in sql }
+        assertTrue(observationReads.isNotEmpty())
+        assertEquals(observationReads.size, observationReads.toSet().size)
+        assertTrue(lifecycleReads.isNotEmpty())
+        assertEquals(lifecycleReads.size, lifecycleReads.toSet().size)
+    }
+
     @Test
     fun malformedGpsOriginalsDoNotAbortTheRemainingBatch() = command {
         val id = start(true)
@@ -226,14 +279,14 @@ class RecordingEngineCaptureTest : RecordingEngineTestBase() {
             engine.monitorReads.submit(
                 owner,
                 "destroy-monitor",
-                MonitorOperation.Plot,
+                MonitorInput(MonitorOperation.Plot, MonitorTarget.Live, 0),
                 promise(1),
                 ::work,
             )
             engine.monitorReads.submit(
                 "retained",
                 "retain-monitor",
-                MonitorOperation.Plot,
+                MonitorInput(MonitorOperation.Plot, MonitorTarget.Live, 0),
                 promise(2),
                 ::work,
             )

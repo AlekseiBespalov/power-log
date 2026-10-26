@@ -11,6 +11,140 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], manifest = Config.NONE)
 class RideConsumptionTest {
+    @Test
+    fun previewGraphsFirstMovingFrameWithoutAccumulatedRideTotals() {
+        RideStore(RuntimeEnvironment.getApplication(), null).use { store ->
+            val id = store.replaceLive(RecordingClockReading("2026-01-01T00:00:00Z", 0))
+            fun frame(time: Double, speed: Double) {
+                sample(
+                    store,
+                    id,
+                    time,
+                    values =
+                        mapOf(
+                            "humanPowerW" to 180.0,
+                            "motorInputPowerW" to 1800.0,
+                            "controllerSpeedMps" to speed,
+                        ),
+                )
+            }
+            fun read(time: Double, smooth: Int = 0) =
+                query(
+                    store,
+                    id,
+                    MonitorOperation.EnergyPerDistance,
+                    emptyList(),
+                    mapOf(
+                        "source" to "live",
+                        "startSeconds" to time,
+                        "endSeconds" to time,
+                        "energySmoothingSeconds" to smooth,
+                    ),
+                )
+            frame(1.0, 5.0)
+            var result = read(1.0)
+            val first = result["points"] as Map<*, *>
+            assertEquals(100.0, ((first["batteryWhPerKm"] as Map<*, *>)["value"] as Number).toDouble(), 1e-9)
+            assertEquals(10.0, ((first["riderWhPerKm"] as Map<*, *>)["value"] as Number).toDouble(), 1e-9)
+            frame(2.0, 10.0)
+            for (smooth in listOf(0, 5, 30, 60)) {
+                result = read(2.0, smooth)
+                assertNotNull((result["points"] as Map<*, *>)["batteryWhPerKm"])
+                assertNull((result["averages"] as Map<*, *>)["batteryWhPerKm"])
+                assertNull(((result["statistics"] as Map<*, *>)["batteryWhPerKm"] as Map<*, *>)["ratio"])
+            }
+            frame(3.0, 0.0)
+            assertNull((read(3.0)["points"] as Map<*, *>)["batteryWhPerKm"])
+        }
+    }
+
+    @Test
+    fun energyPerDistanceUsesFrozenSourceAndExposesInstantaneousGraphAndWeightedAverage() {
+        RideStore(RuntimeEnvironment.getApplication(), "economy-${UUID.randomUUID()}.sqlite").use { store ->
+            val id =
+                store.create(
+                    RideOptions(
+                        true,
+                        saveToHealth = false,
+                        recordGPS = false,
+                        distanceSource = "controller",
+                        batteryConsumptionSource = "calculated",
+                    ),
+                    RecordingClockReading("2026-01-01T00:00:00Z", 0),
+                )
+            val distance = RideDistance(store)
+            for (t in 0..120) store.transaction {
+                val speed = if (t <= 60) 5.0 else 10.0
+                val values =
+                    mapOf(
+                        "humanPowerW" to 180.0,
+                        "controllerSpeedMps" to speed,
+                        "batteryCurrentA" to 36.0,
+                        "motorInputPowerW" to 1800.0,
+                        "batteryVoltageV" to 50.0,
+                        "consumedWh" to 100.0 + t * 2.0,
+                    )
+                val row = sample(store, id, t.toDouble(), values = values)
+                distance.append(id, row, t.toDouble(), values, true, 0, "first", "X6|fixture|5.3", false)
+            }
+            val response =
+                query(
+                    store,
+                    id,
+                    MonitorOperation.EnergyPerDistance,
+                    emptyList(),
+                    mapOf("startSeconds" to 0.0, "endSeconds" to 120.0, "buckets" to 64),
+                )
+            assertEquals("ok", response["status"])
+            val stats = response["statistics"] as Map<*, *>
+            val battery = stats["batteryWhPerKm"] as Map<*, *>
+            val rider = stats["riderWhPerKm"] as Map<*, *>
+            // The speed transition is trapezoidal: 897.5 m, not 900 m.
+            assertEquals(60.0 / 0.8975, (battery["ratio"] as Number).toDouble(), 1e-8)
+            assertEquals(6.0 / 0.8975, (rider["ratio"] as Number).toDouble(), 1e-8)
+            assertEquals(emptyMap<String, Any?>(), response["series"])
+            val plotted =
+                query(
+                    store,
+                    id,
+                    MonitorOperation.EnergyPerDistance,
+                    emptyList(),
+                    mapOf("startSeconds" to 0.0, "endSeconds" to 120.0, "buckets" to 64, "energyTotals" to false),
+                )
+            val graph = ((plotted["series"] as Map<*, *>)["batteryWhPerKm"] as List<*>).map { it as Map<*, *> }
+            assertTrue(graph.any { (it["value"] as Number).toDouble() > 99.9 })
+            assertTrue(graph.any { (it["value"] as Number).toDouble() < 50.3 })
+            val point = ((response["points"] as Map<*, *>)["riderWhPerKm"] as Map<*, *>)
+            assertTrue((point["value"] as Number).toDouble() < 5.1)
+            for ((smooth, expected) in listOf(0 to 50.0, 5 to 95.0, 30 to (100 - 25.0 / 30), 60 to (100 - 25.0 / 60))) {
+                val instant =
+                    query(
+                        store,
+                        id,
+                        MonitorOperation.EnergyPerDistance,
+                        emptyList(),
+                        mapOf(
+                            "startSeconds" to 61.0,
+                            "endSeconds" to 61.0,
+                            "energySmoothingSeconds" to smooth,
+                            "energyTotals" to false,
+                        ),
+                    )
+                val batteryPoint = (instant["points"] as Map<*, *>)["batteryWhPerKm"] as Map<*, *>
+                assertEquals(expected, (batteryPoint["value"] as Number).toDouble(), 1e-8)
+            }
+            val stale =
+                query(
+                    store,
+                    id,
+                    MonitorOperation.EnergyPerDistance,
+                    emptyList(),
+                    mapOf("expectedRevision" to "1", "startSeconds" to 0.0, "endSeconds" to 120.0),
+                )
+            assertEquals("retry", stale["status"])
+        }
+    }
+
     private fun withRide(body: (RideStore, String) -> Unit) {
         RideStore(RuntimeEnvironment.getApplication(), "battery-${UUID.randomUUID()}.sqlite").use { store ->
             val id =

@@ -109,6 +109,8 @@ data class ActivityRender(
 )
 
 object ActivityPresentations {
+    const val refreshSeconds = 15.0
+
     private fun checkedAdd(a: Long, b: Long): Long? =
         if ((b > 0 && a > Long.MAX_VALUE - b) || (b < 0 && a < Long.MIN_VALUE - b)) null else a + b
 
@@ -149,8 +151,8 @@ object ActivityPresentations {
         val matching = state.rideId == input.rideId
         val bike = if (matching) state.reading(LiveSource.controller) else null
         val heart = if (matching) state.reading(LiveSource.heartRate) else null
-        val bikeExpiry = deadline(bike, clock, StreamStatus.controllerStaleSeconds)
-        val heartExpiry = deadline(heart, clock, StreamStatus.heartStaleSeconds)
+        val bikeExpiry = deadline(bike, clock, StreamStatus.controllerStaleSeconds + refreshSeconds)
+        val heartExpiry = deadline(heart, clock, StreamStatus.heartStaleSeconds + refreshSeconds)
         val staleDate = listOfNotNull(bikeExpiry, heartExpiry).filter { it > clock.utcUs }.minOrNull()
         val context = ExternalControlContext(input.rideId, input.controlToken, input.phase, input.pendingAction)
         fun control(action: String, label: String, symbol: String): ActivityControl? {

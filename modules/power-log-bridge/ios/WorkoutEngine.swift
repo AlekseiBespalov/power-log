@@ -9,6 +9,7 @@
   /// The phone owns the application recording on every ride. Health is an independent best-effort output.
   final class WorkoutEngine {
     static let shared = WorkoutEngine()
+    static let watchRoutineSeconds = 2.0
     let queue = DispatchQueue(label: "app.powerlog.workout", qos: .userInitiated)
     let fileQueue = DispatchQueue(label: "app.powerlog.workout.analysis", qos: .utility)
     private var archive: WorkoutArchive?
@@ -167,8 +168,10 @@
       return value
     }
     private func publish() {
-      let body = state()
-      if !background { for sink in sinks.values { sink(body) } }
+      if !background && !sinks.isEmpty {
+        let body = state()
+        for sink in sinks.values { sink(body) }
+      }
       publishActivity()
     }
     func publishActivity() {
@@ -400,6 +403,7 @@
         try appendLifecycle("pause")
         _ = try archive.update(id: id, phase: "paused", ownerTiming: timing, elapsedSeconds: timing.elapsedSeconds)
       }
+      forwardSeconds(paced: false, watch: watch)
       activeBase = stoppedActive
       activeOrigin = nil
       phase = "paused"
@@ -545,10 +549,11 @@
       }
       _ = live.controllerFreshness.receive(id: event.eventId, age: max(0, Date().timeIntervalSince(at)), at: clock)
     }
-    private func forwardSeconds(force: Bool = false, watch forcedWatch: Bool? = nil) {
+    private func forwardSeconds(force: Bool = false, paced: Bool = true, watch forcedWatch: Bool? = nil) {
       guard let id, let options, phase == "running" || force else { return }
-      if !force {
-        guard clock - lastRoutineSend >= 1 else { return }
+      let watch = forcedWatch ?? ((try? archive?.metadata(id: id).watchEnabled) == true)
+      if !force && paced {
+        guard clock - lastRoutineSend >= (watch ? Self.watchRoutineSeconds : 1) else { return }
         lastRoutineSend = clock
       }
       var seconds: [WorkoutCompanionSecond] = []
@@ -561,7 +566,6 @@
       }
       let fixes = Array(locations.suffix(32))
       locations.removeAll(keepingCapacity: true)
-      let watch = forcedWatch ?? ((try? archive?.metadata(id: id).watchEnabled) == true)
       if watch {
         if force {
           finalHealthSeconds = seconds
@@ -849,7 +853,9 @@
         forwardSeconds()
         return
       }
-      guard ["paused", "interrupted"].contains(phase), clock - lastRoutineSend >= 1 else { return }
+      guard ["paused", "interrupted"].contains(phase), clock - lastRoutineSend >= Self.watchRoutineSeconds else {
+        return
+      }
       lastRoutineSend = clock
       sendState(id: id)
     }

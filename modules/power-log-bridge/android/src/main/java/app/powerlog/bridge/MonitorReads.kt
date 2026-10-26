@@ -8,15 +8,19 @@ internal class MonitorReads : AutoCloseable {
     private val plot = SummaryReads()
     private val range = SummaryReads()
     private val metadata = SummaryReads()
-    private val lanes = listOf(latest, inspect, plot, range, metadata)
+    private val energy = SummaryReads()
+    private val currentEnergy = SummaryReads()
+    private val lanes = listOf(latest, inspect, plot, range, metadata, energy, currentEnergy)
 
-    fun submit(owner: String, cancellationId: String, operation: MonitorOperation, promise: Promise, body: () -> Any?) {
+    fun submit(owner: String, cancellationId: String, input: MonitorInput, promise: Promise, body: () -> Any?) {
         val lane =
-            when (operation) {
+            when (input.operation) {
                 MonitorOperation.Latest -> latest
                 MonitorOperation.Inspect -> inspect
                 MonitorOperation.Plot -> plot
                 MonitorOperation.Stats -> range
+                MonitorOperation.EnergyPerDistance ->
+                    if (input.energyCurrent && !input.energyTotals) currentEnergy else energy
                 else -> metadata
             }
         lane.submit(owner, cancellationId, promise, body)

@@ -715,18 +715,18 @@ class AndroidAnalyticsTest {
     }
 
     @Test
-    fun healthHeartRateDisplayUsesFifteenSecondsWithoutExtendingIntegration() = withRide { store, id ->
+    fun healthHeartRatePlotJoinsThirtySecondsWithoutExtendingIntegration() = withRide { store, id ->
         val start = java.time.Instant.parse("2026-01-01T00:00:00Z")
-        store.seal(id, RideTiming(40.0, 40.0, start.plusSeconds(40).toString()))
+        store.seal(id, RideTiming(70.0, 70.0, start.plusSeconds(70).toString()))
         HealthReadback(store, FakeHealthConnectAccess())
             .import(
                 id,
                 androidx.health.connect.client.records.HeartRateRecord(
                     start,
                     java.time.ZoneOffset.UTC,
-                    start.plusSeconds(40),
+                    start.plusSeconds(70),
                     java.time.ZoneOffset.UTC,
-                    listOf(0L, 12L, 27L).map {
+                    listOf(0L, 12L, 27L, 60L).map {
                         androidx.health.connect.client.records.HeartRateRecord.Sample(start.plusSeconds(it), 100)
                     },
                     HealthMetadata.received(
@@ -735,16 +735,17 @@ class AndroidAnalyticsTest {
                         1,
                         null,
                         "a.generated",
-                        start.plusSeconds(40),
+                        start.plusSeconds(70),
                         androidx.health.connect.client.records.metadata.Metadata.RECORDING_METHOD_ACTIVELY_RECORDED,
                     ),
                 ),
             )
-        val points = store.analytics.plot(id, "heartRateBpm", 0.0, 40.0, 40)
-        assertEquals(listOf(true, false, true), points.map { it["startsSegment"] })
+        val points = store.analytics.plot(id, "heartRateBpm", 0.0, 70.0, 70)
+        assertEquals(listOf(true, false, false, true), points.map { it["startsSegment"] })
         assertEquals(0.0, (inspectHealth(store, id, "heartRateBpm", 6.0) as Map<*, *>)["elapsedSeconds"])
-        assertNull(inspectHealth(store, id, "heartRateBpm", 20.0))
-        assertEquals(0.0, store.analytics.stats(id, "heartRateBpm", 0.0, 40.0).num("coveredSeconds"), 0.0)
+        assertEquals(27.0, (inspectHealth(store, id, "heartRateBpm", 20.0) as Map<*, *>)["elapsedSeconds"])
+        assertNull(inspectHealth(store, id, "heartRateBpm", 45.0))
+        assertEquals(0.0, store.analytics.stats(id, "heartRateBpm", 0.0, 70.0).num("coveredSeconds"), 0.0)
     }
 
     @Test

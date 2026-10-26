@@ -158,6 +158,7 @@ for (const width of [320, 390, 430, 440, 768, 1440, 1920])
     await page.goto('/sessions');
     await importFixture(page);
     const chart = page.getByTestId('monitor-chart-current');
+    const speedReadout = page.getByTestId('monitor-readout-controllerSpeedMps');
     if (phase !== 'before') {
       const comparisonInsideVoltage = await page.getByTestId('monitor-chart-batteryVoltageV').evaluate(element => {
         let card = element.parentElement!;
@@ -172,7 +173,8 @@ for (const width of [320, 390, 430, 440, 768, 1440, 1920])
     await chart.focus();
     await chart.press('Home');
     await expect(chart).toHaveAttribute('aria-valuetext', /Battery current 8\.9 A/);
-    await expect(page.getByTestId('monitor-readout-controllerSpeedMps')).toContainText('8.9');
+    await speedReadout.scrollIntoViewIfNeeded();
+    await expect(speedReadout).toContainText('8.9');
     states.push(await measurements(page));
     await screenshot(page, `current-${width}-8.9.png`);
     await screenshotCard(page, 'speed', `speed-${width}-8.9.png`);
@@ -182,7 +184,8 @@ for (const width of [320, 390, 430, 440, 768, 1440, 1920])
         'aria-valuetext',
         new RegExp(`Battery current ${value.replace('.', '\\.')} A`),
       );
-      await expect(page.getByTestId('monitor-readout-controllerSpeedMps')).toContainText(value);
+      await speedReadout.scrollIntoViewIfNeeded();
+      await expect(speedReadout).toContainText(value);
       states.push(await measurements(page));
       await screenshot(page, `current-${width}-${value}.png`);
       await screenshotCard(page, 'speed', `speed-${width}-${value}.png`);

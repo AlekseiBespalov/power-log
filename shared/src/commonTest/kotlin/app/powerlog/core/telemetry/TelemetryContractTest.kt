@@ -709,6 +709,7 @@ class TelemetryContractTest {
             assertEquals(row["color"].text(), m.color)
             assertEquals(row["decimals"].long().toInt(), m.decimals)
             assertEquals(row["gapSeconds"].double(), m.gapSeconds)
+            assertEquals(row["plotGapSeconds"].optionalDouble(), m.plotGapSeconds)
             assertEquals(row["scale"].double(), m.scale)
             assertEquals(row["text"].text(), MetricCatalog.format(m.id, f["value"].double()))
             for (missing in listOf(null, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) assertEquals(

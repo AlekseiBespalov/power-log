@@ -849,7 +849,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
           endSeconds: 220,
         };
         const stats = await source.rangeStats({ ...query, includeEndpoints: true });
-        const plot = await source.readPlot({ ...query, pixelWidth: 100 });
+        const plot = await source.readPlot({ ...query, pixelWidth: 8 });
         const min = await source.inspectAt({
           ...query,
           seconds: 62.5,
@@ -878,7 +878,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
       expect(result.gap.points.humanPowerW).toBeNull();
       expect(result.clipped.statistics.humanPowerW?.coveredSeconds).toBeCloseTo(0.25);
       expect(result.clipped.statistics.humanPowerW?.count).toBe(2);
-      expect(result.plot.series.humanPowerW!.length).toBeLessThanOrEqual(408);
+      expect(result.plot.series.humanPowerW!.length).toBeLessThanOrEqual(40);
       expect(result.rowsRead).toBeLessThan(1600);
       expect(result.plot.series.humanPowerW!.some(point => point.startsSegment === false)).toBe(true);
       if (result.narrow.status !== 'ok') throw new Error('Unexpected retry');
@@ -912,7 +912,9 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         const query = {
           generation: 1,
           expectedRevision: description.revision,
-          metrics: description.availableMetrics.filter(id => id !== 'distanceMeters'),
+          metrics: description.availableMetrics.filter(
+            id => !['distanceMeters', 'batteryWhPerKm', 'riderWhPerKm'].includes(id),
+          ),
         };
         return {
           full: await source.rangeStats({ ...query, startSeconds: 0, endSeconds: 16 }),

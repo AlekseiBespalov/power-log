@@ -142,15 +142,24 @@ final class WorkoutArchive {
     try store.transaction { db in
       try store.requireWorkoutWritable(id: id)
       var m = try metadata(id: id)
+      let before = m
       let original = keepsUnchanged ? try WorkoutCoding.encoder().encode(m) : nil
       try body(&m)
       try m.validate()
       if let original, try WorkoutCoding.encoder().encode(m) == original { return m }
-      try commitRevision(&m, db: db)
+      let kind = try Self.onlyTimingChanged(before, m) ? "timing" : "metadata"
+      try commitRevision(&m, db: db, kind: kind)
       return m
     }
   }
-  private func commitRevision(_ m: inout WorkoutMetadata, db: PowerLogDatabase) throws {
+  private static func onlyTimingChanged(_ before: WorkoutMetadata, _ after: WorkoutMetadata) throws -> Bool {
+    guard before.ownerTiming != after.ownerTiming || before.elapsedSeconds != after.elapsedSeconds else { return false }
+    var timed = before
+    timed.ownerTiming = after.ownerTiming
+    timed.elapsedSeconds = after.elapsedSeconds
+    return try WorkoutCoding.encoder().encode(timed) == WorkoutCoding.encoder().encode(after)
+  }
+  private func commitRevision(_ m: inout WorkoutMetadata, db: PowerLogDatabase, kind: String) throws {
     if scopedRecords != nil { scopedRecords = [:] }
     let next = try PowerLogRevision.next(m.collectionRevision ?? 0)
     m.collectionRevision = next
@@ -164,7 +173,7 @@ final class WorkoutArchive {
     try db.execute(
       "INSERT INTO collection_versions(collection_id,revision,metadata) VALUES(?,?,?)",
       [.text(m.id), .integer(next), .blob(data)])
-    try store.recordChange(db, id: m.id, revision: next, minUS: nil, maxUS: nil, kind: "metadata", metrics: [])
+    try store.recordChange(db, id: m.id, revision: next, minUS: nil, maxUS: nil, kind: kind, metrics: [])
   }
   @discardableResult
   func recordOwnerStart(id: String, startedAt: ProtocolTimestamp) throws -> WorkoutMetadata {

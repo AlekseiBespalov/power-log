@@ -11,6 +11,7 @@ import {
   metricById,
   metricValue,
   type MonitorData,
+  type MonitorDrawing,
   type MonitorMetric,
   type MonitorPoint,
   type SpeedUnit,
@@ -37,6 +38,8 @@ export function monitorViewportTransform(geometry: ChartViewport, view: ChartVie
 
 // Matching units alone are insufficient: crank and motor RPM, for example, have unrelated scales.
 const overlays: Record<string, readonly [string, string]> = {
+  batteryWhPerKm: ['energy-per-distance', 'Consumption'],
+  riderWhPerKm: ['energy-per-distance', 'Consumption'],
   humanPowerW: ['power', 'Power'],
   motorInputPowerW: ['power', 'Power'],
   motorTempC: ['temperature', 'Temperature'],
@@ -79,8 +82,83 @@ export function reorderMonitorCharts(ids: readonly string[], from: string, to: s
   return groups.flatMap(group => group.metrics.map(metric => metric.id));
 }
 
+export const isVoltageMetric = (id: string) => id === 'batteryVoltageV' || id === 'throttleVoltageV';
+
 export function validMonitorPoint(point: MonitorPoint | null | undefined): point is MonitorPoint {
   return !!point && Number.isFinite(point.elapsedSeconds) && Number.isFinite(point.value);
+}
+
+export function reuseShallow<T extends object>(previous: T | undefined, next: T): T {
+  return previous &&
+    Object.keys(next).every(key => previous[key as keyof T] === next[key as keyof T]) &&
+    Object.keys(previous).length === Object.keys(next).length
+    ? previous
+    : next;
+}
+
+/**
+ * One chart's inputs. It draws every metric confirmed by the same plot snapshot as its current (else newest) drawing,
+ * so a chart never mixes revisions, and takes its scene identity from the newest of those reads; every part that
+ * equals `previous` keeps its identity.
+ */
+export function monitorChartData(
+  data: MonitorData,
+  metrics: readonly MonitorMetric[],
+  previous?: MonitorData,
+): MonitorData {
+  const ids = metrics.map(metric => metric.id);
+  let snapshot: MonitorDrawing | undefined;
+  for (const id of ids) {
+    const candidate = data.drawings?.[id];
+    if (
+      candidate &&
+      (!snapshot ||
+        (candidate.current && !snapshot.current) ||
+        (candidate.current === snapshot.current && candidate.generation > snapshot.generation))
+    )
+      snapshot = candidate;
+  }
+  const member = (drawing: MonitorDrawing | undefined): drawing is MonitorDrawing =>
+    !!drawing &&
+    !!snapshot &&
+    drawing.confirmed === snapshot.confirmed &&
+    drawing.viewport.start === snapshot.viewport.start &&
+    drawing.viewport.end === snapshot.viewport.end;
+  const drawn = data.drawings ? ids.filter(id => member(data.drawings![id])) : ids;
+  let drawing = snapshot;
+  for (const id of drawn) {
+    const candidate = data.drawings?.[id];
+    if (candidate && drawing && candidate.generation > drawing.generation) drawing = candidate;
+  }
+  const pick = <T>(record: Record<string, T> | undefined, keys: readonly string[] = ids) => {
+    if (!record) return undefined;
+    const picked: Record<string, T> = {};
+    for (const key of keys) if (Object.prototype.hasOwnProperty.call(record, key)) picked[key] = record[key]!;
+    return picked;
+  };
+  const keep = <T extends object>(value: T | undefined, before: T | undefined) => value && reuseShallow(before, value);
+  const states = ids.flatMap(id => data.statisticsStates?.[id] ?? []);
+  return reuseShallow(previous, {
+    sourceId: data.sourceId,
+    startedAt: data.startedAt,
+    domain: data.domain,
+    revision: data.drawings ? drawing?.revision : data.revision,
+    plotViewport: data.drawings ? drawing?.viewport : data.plotViewport,
+    plotGeneration: data.drawings ? drawing?.generation : data.plotGeneration,
+    mapMonotonicSeconds: data.mapMonotonicSeconds,
+    liveAcquiredAt: keep(pick(data.liveAcquiredAt), previous?.liveAcquiredAt),
+    series: keep(pick(data.series, drawn), previous?.series)!,
+    drawings: keep(pick(data.drawings, drawn), previous?.drawings),
+    statistics: keep(pick(data.statistics), previous?.statistics)!,
+    statisticsViewport: data.statisticsStates ? states[0]?.viewport : data.statisticsViewport,
+    statisticsPending: data.statisticsStates ? states.some(state => state.pending) : data.statisticsPending,
+    latest: keep(pick(data.latest), previous?.latest),
+    selection: keep(pick(data.selection), previous?.selection),
+    reference: keep(pick(data.reference), previous?.reference),
+    selectionSeconds: data.selectionSeconds,
+    referenceSeconds: data.referenceSeconds,
+    selectionPending: data.selectionPending,
+  });
 }
 
 export function monitorScale(

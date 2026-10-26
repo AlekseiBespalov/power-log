@@ -13,6 +13,7 @@ import {
   GPS,
   HEART_RATE,
   RecordEmitter,
+  fitRecords,
   TELEMETRY,
   type WitnessRows,
 } from '../../src/core/export/fit/records';
@@ -58,7 +59,7 @@ function witness(step: Step): WitnessRows {
 function emitted(steps: readonly Step[], interval: number): number {
   let records = 0;
   const writer = { message: () => records++, drain: async () => undefined } as unknown as FitWriter;
-  const emitter = new RecordEmitter(writer, clock(), interval, () => undefined);
+  const emitter = new RecordEmitter(fitRecords(writer, clock()), clock(), interval, () => undefined);
   for (const step of steps) emitter.witnesses(witness(step), 0, 1);
   emitter.finish();
   expect(emitter.records).toBe(records);

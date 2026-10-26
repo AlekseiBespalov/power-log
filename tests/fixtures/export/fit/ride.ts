@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { analyticsTimeUs } from '../../../../shared/js';
+import { exportCsv, type CsvExportResult } from '../../../../src/core/export/csv-export';
 import { exportFit, type FitExportResult, type FitExportTuning } from '../../../../src/core/export/fit-export';
 import { projectionColumns } from '../../../../src/core/export/pages';
 import {
@@ -365,6 +366,33 @@ export async function runFit(ride: RideSpec, tuning?: FitExportTuning, signal?: 
     tuning,
   );
   return { result, bytes: sink.bytes, source, sink };
+}
+
+export interface CsvRun {
+  readonly result: CsvExportResult;
+  readonly header: readonly string[];
+  readonly rows: readonly Readonly<Record<string, string>>[];
+  readonly kinds: readonly string[];
+  readonly source: MemorySource;
+  readonly sink: MemorySink;
+}
+
+export async function runCsv(ride: RideSpec): Promise<CsvRun> {
+  const source = new MemorySource(ride);
+  const sink = new MemorySink();
+  const kinds: string[] = [];
+  const result = await exportCsv(
+    source,
+    async kind => {
+      kinds.push(kind);
+      return sink;
+    },
+    { rideId: ride.rideId ?? 'ride-1', context: { exportedAt: CONTEXT_TIME, platform: source.platform } },
+  );
+  const [first, ...lines] = new TextDecoder().decode(sink.bytes).trimEnd().split('\n');
+  const header = first!.split(',');
+  const rows = lines.map(line => Object.fromEntries(line.split(',').map((cell, i) => [header[i]!, cell])));
+  return { result, header, rows, kinds, source, sink };
 }
 
 export async function fitFailure(

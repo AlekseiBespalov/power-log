@@ -758,6 +758,7 @@ final class PowerLogStore: @unchecked Sendable {
           priority,
           { [self] in
             let started = ProcessInfo.processInfo.systemUptime
+            let cpuStarted = Self.threadCPUMilliseconds()
             let observer = jobObserverForTesting
             let before = observer.map { _ in db.workForTesting }
             result = Result { try escaped() }
@@ -768,6 +769,7 @@ final class PowerLogStore: @unchecked Sendable {
             metrics["jobs", default: 0] += 1
             metrics["queueMilliseconds", default: 0] += (started - enqueued) * 1000
             metrics["executionMilliseconds", default: 0] += (ProcessInfo.processInfo.systemUptime - started) * 1000
+            metrics["executionCPUMilliseconds", default: 0] += Self.threadCPUMilliseconds() - cpuStarted
           }, signal
         ))
       if !draining {
@@ -778,6 +780,11 @@ final class PowerLogStore: @unchecked Sendable {
       signal.wait()
       return try result!.get()
     }
+  }
+  static func threadCPUMilliseconds() -> Double {
+    var time = timespec()
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time)
+    return Double(time.tv_sec) * 1000 + Double(time.tv_nsec) / 1_000_000
   }
   private func drain() {
     while true {
@@ -960,6 +967,7 @@ final class PowerLogStore: @unchecked Sendable {
       "CREATE TABLE IF NOT EXISTS collection_channels(collection_id TEXT NOT NULL REFERENCES collections(id),metric TEXT NOT NULL,source TEXT NOT NULL,representation TEXT NOT NULL,count INTEGER NOT NULL,min_elapsed REAL,max_elapsed REAL,PRIMARY KEY(collection_id,metric,source,representation)) STRICT",
       "CREATE TABLE IF NOT EXISTS health_deletions(collection_id TEXT NOT NULL REFERENCES collections(id),source TEXT NOT NULL,external_id TEXT NOT NULL,revision INTEGER NOT NULL,tombstone_event_id TEXT NOT NULL,PRIMARY KEY(collection_id,source,external_id,revision)) STRICT",
       "CREATE TABLE IF NOT EXISTS collection_changes(collection_id TEXT NOT NULL REFERENCES collections(id),revision INTEGER NOT NULL,min_us INTEGER,max_us INTEGER,kind TEXT NOT NULL,metrics BLOB NOT NULL,PRIMARY KEY(collection_id,revision)) STRICT",
+      "CREATE TABLE IF NOT EXISTS collection_change_marks(collection_id TEXT NOT NULL REFERENCES collections(id),metric TEXT NOT NULL,kind TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(collection_id,metric,kind)) STRICT",
       "CREATE TABLE IF NOT EXISTS derived_cache(key TEXT PRIMARY KEY,collection_id TEXT NOT NULL REFERENCES collections(id),revision INTEGER NOT NULL,value BLOB NOT NULL) STRICT",
       "CREATE INDEX IF NOT EXISTS derived_cache_collection ON derived_cache(collection_id)",
       "CREATE TABLE IF NOT EXISTS health_route_points(ride TEXT NOT NULL,origin_key TEXT NOT NULL,time_us INTEGER NOT NULL,sequence INTEGER NOT NULL,point BLOB NOT NULL,PRIMARY KEY(ride,origin_key)) STRICT",
@@ -1491,11 +1499,10 @@ final class PowerLogStore: @unchecked Sendable {
         ])
     }
     collection.sources[producer] = (max(source.last, sequence), source.added + 1)
-    let chartMetrics = Set(Self.telemetryColumns + Self.locationColumns + Self.healthColumns).subtracting([
-      "value", "sampleCount",
-    ])
-    let names = payload.compactMap { chartMetrics.contains($0.key) && Self.numeric($0.value) != .null ? $0.key : nil }
-      .sorted()
+    let names = payload.compactMap {
+      Self.chartMetrics.contains($0.key) && Self.numeric($0.value) != .null ? $0.key : nil
+    }
+    .sorted()
     let representation = rawHeart == 1 ? "raw" : ""
     let group = event.source + "\u{0}" + representation
     if collection.channelCounts[group] == nil {
@@ -1536,7 +1543,9 @@ final class PowerLogStore: @unchecked Sendable {
       || names.contains(where: { ["activeEnergyKcal", "basalEnergyKcal", "distanceMeters"].contains($0) })
     if broadChange {
       try insertChange(
-        db, id: collectionID, revision: revision, minUS: nil, maxUS: nil, kind: "semantics", metrics: names)
+        db, id: collectionID, revision: revision, minUS: nil, maxUS: nil, kind: "semantics",
+        metrics: try semanticsMetrics(
+          names, event: event, payload: payload, observationID: observationID, collectionID: collectionID, db: db))
     } else {
       // Invalidate each selected metric's neighboring edges. Optional fields cannot use
       // an arbitrary stream neighbor because it may be null (or already superseded).
@@ -1583,6 +1592,69 @@ final class PowerLogStore: @unchecked Sendable {
         .text(id), .integer(revision), minUS.map(PowerLogSQLValue.integer) ?? .null,
         maxUS.map(PowerLogSQLValue.integer) ?? .null, .text(kind), .blob(try WorkoutCoding.encoder().encode(metrics)),
       ])
+    guard kind != "append" else { return }
+    for metric in metrics.isEmpty ? [""] : metrics {
+      try db.execute(
+        "INSERT INTO collection_change_marks(collection_id,metric,kind,revision) VALUES(?,?,?,?) ON CONFLICT(collection_id,metric,kind) DO UPDATE SET revision=max(revision,excluded.revision)",
+        [.text(id), .text(metric), .text(kind), .integer(revision)])
+    }
+  }
+  private static let chartMetrics = Set(telemetryColumns + locationColumns + healthColumns).subtracting([
+    "value", "sampleCount",
+  ])
+  private static let chartTables = [
+    "telemetry": "telemetry_frames", "location": "locations", "health": "health_samples",
+  ]
+  private func semanticsMetrics(
+    _ names: [String], event: WorkoutEvent, payload: [String: WorkoutJSON], observationID: Int64,
+    collectionID: String, db: PowerLogDatabase
+  ) throws -> [String] {
+    let target = try payload["supersedesEventId"]?.string.map(WorkoutCoding.id)
+    var deletedSample: String?
+    if event.kind == "health", payload["deleted"] == .bool(true),
+      let external = payload["sampleUUID"]?.string ?? payload["healthKitUUID"]?.string
+        ?? payload["supersedesEventId"]?.string
+    {
+      deletedSample = try WorkoutCoding.id(external)
+    }
+    guard event.kind != "lifecycle", target != nil || deletedSample != nil else { return names }
+    var replaced = Set<String>()
+    var resolved = false
+    if let target,
+      let row = try db.rows(
+        "SELECT observation_id,kind FROM collection_memberships WHERE collection_id=? AND event_id=?",
+        [.text(collectionID), .text(target)], limit: 1
+      ).first
+    {
+      guard let kind = row.string("kind"), Self.chartTables[kind] != nil else { return [] }
+      let carried = try carriedMetrics(
+        db, kind: kind, join: "", condition: "h.observation_id=?", [.integer(row.int("observation_id")!)])
+      resolved = carried.originals > 0
+      replaced.formUnion(carried.metrics)
+    }
+    if let deletedSample {
+      let carried = try carriedMetrics(
+        db, kind: "health", join: " JOIN collection_memberships m ON m.observation_id=h.observation_id",
+        condition: "h.external_id=? AND m.collection_id=? AND m.source=? AND m.observation_id<>?",
+        [.text(deletedSample), .text(collectionID), .text(event.source), .integer(observationID)])
+      resolved = resolved || carried.originals > 0
+      replaced.formUnion(carried.metrics)
+    }
+    // An empty list marks every metric, so a replaced original that cannot be named invalidates them all.
+    guard resolved, !replaced.isEmpty else { return [] }
+    return replaced.union(names).sorted()
+  }
+  private func carriedMetrics(
+    _ db: PowerLogDatabase, kind: String, join: String, condition: String, _ values: [PowerLogSQLValue]
+  ) throws -> (originals: Int64, metrics: Set<String>) {
+    let columns =
+      (kind == "telemetry" ? Self.telemetryColumns : kind == "location" ? Self.locationColumns : Self.healthColumns)
+      .filter { Self.chartMetrics.contains($0) }
+    let row = try db.rows(
+      "SELECT count(*) AS originals,\(columns.map { "max(h.\($0) IS NOT NULL) AS \($0)" }.joined(separator: ",")) FROM \(Self.chartTables[kind]!) h\(join) WHERE \(condition)",
+      values, limit: 1
+    ).first
+    return (row?.int("originals") ?? 0, Set(columns.filter { row?.int($0) == 1 }))
   }
 
   func telemetryOriginal(collectionID: String, observationID: String) throws -> [String: Any]? {
@@ -1735,8 +1807,8 @@ final class PowerLogStore: @unchecked Sendable {
       }
       if try db.scalarInt("SELECT 1 FROM collection_memberships WHERE collection_id=? LIMIT 1", [.text(stale)]) == nil {
         for table in [
-          "collection_sources", "collection_channels", "collection_changes", "collection_versions",
-          "collection_corrections", "health_deletions", "derived_cache",
+          "collection_sources", "collection_channels", "collection_changes", "collection_change_marks",
+          "collection_versions", "collection_corrections", "health_deletions", "derived_cache",
         ] {
           try db.execute("DELETE FROM \(table) WHERE collection_id=?", [.text(stale)])
         }
@@ -1947,6 +2019,7 @@ extension PowerLogStore {
         }
       }
       if record.cleanupPhase == 10 {
+        try db.execute("DELETE FROM collection_change_marks WHERE collection_id=?", [.text(id)])
         try db.execute("DELETE FROM collections WHERE id=?", [.text(id)])
       }
       try saveWorkoutDeletion(record, db: db)

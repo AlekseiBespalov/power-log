@@ -33,7 +33,7 @@ class BatteryConsumptionTest {
     }
 
     @Test
-    fun boundariesRebaseWithoutCountingPausedResetOrDisconnectedConsumption() {
+    fun boundariesRebaseWithoutCountingPausedOrResetConsumption() {
         val kernel = BatteryConsumptionKernel()
         kernel.sample(0.0)
         kernel.sample(1.0, energy = 601.0)
@@ -44,12 +44,32 @@ class BatteryConsumptionTest {
         assertTrue(kernel.sample(4.0, energy = 100.0, active = null).isEmpty())
         assertTrue(kernel.sample(5.0, energy = 110.0, active = 1).all { it.baseline })
         assertEquals(3.0, kernel.sample(6.0, energy = 111.0, active = 1).metric("controllerEnergyWh").endValue)
-        val reconnected = kernel.sample(7.0, energy = 150.0, active = 1, continuity = "controller/connection-2")
-        assertTrue(reconnected.all { it.baseline })
-        assertEquals(3.0, reconnected.metric("controllerEnergyWh").endValue)
-        assertTrue(
-            kernel.sample(10.0, energy = 180.0, active = 1, continuity = "controller/connection-2").all { it.baseline }
-        )
+    }
+
+    @Test
+    fun countersSpanLinkLossesShorterThanTheHoldWhileCalculationRebases() {
+        val kernel = BatteryConsumptionKernel()
+        kernel.sample(0.0)
+        val reconnected = kernel.sample(5.5, charge = 12.1, energy = 605.0, continuity = "controller/connection-2")
+        val energy = reconnected.metric("controllerEnergyWh")
+        assertFalse(energy.baseline)
+        assertTrue(energy.indivisible)
+        assertEquals(0L, energy.startUs)
+        assertEquals(5.0, energy.endValue)
+        assertEquals(0, energy.segment)
+        assertEquals(0.1, reconnected.metric("controllerChargeAh").endValue, 1e-12)
+        assertTrue(reconnected.metric("calculatedEnergyWh").baseline)
+        assertTrue(reconnected.metric("calculatedChargeAh").baseline)
+        assertEquals(5.0, energy.range(0, 5_500_000).amount)
+        assertTrue(energy.range(1_000_000, 5_500_000).unresolvedBoundary)
+        val held = kernel.sample(11.5, energy = 610.0, continuity = "controller/connection-2")
+        assertTrue(held.metric("controllerEnergyWh").baseline)
+        assertEquals(5.0, held.metric("controllerEnergyWh").endValue)
+        val reset = kernel.sample(12.0, energy = 609.0, continuity = "controller/connection-2")
+        assertTrue(reset.metric("controllerEnergyWh").baseline)
+        val jump = kernel.sample(14.0, energy = 700.0, continuity = "controller/connection-3")
+        assertTrue(jump.metric("controllerEnergyWh").baseline)
+        assertEquals(5.0, jump.metric("controllerEnergyWh").endValue)
     }
 
     @Test

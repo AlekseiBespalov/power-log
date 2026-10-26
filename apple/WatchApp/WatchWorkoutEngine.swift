@@ -66,6 +66,7 @@ final class WatchWorkoutEngine: ObservableObject {
   private var timerAt = Date()
   private var readingsAt = Date.distantPast
   private var heartAt = Date.distantPast
+  private var sentHeartAt = Date.distantPast
   private var values: [String: Double] = [:]
   private var lastTelemetrySequence: Int64 = 0
   private var lastStateRevision: Int64 = 0
@@ -321,6 +322,7 @@ final class WatchWorkoutEngine: ObservableObject {
       displayedIssue = nil
       pendingHealth = nil
       heartAt = .distantPast
+      sentHeartAt = .distantPast
       readingsAt = .distantPast
       buffer = WorkoutCompanionBuffer()
       lapCount = 0
@@ -465,9 +467,10 @@ final class WatchWorkoutEngine: ObservableObject {
       }
     }
     let page = buffer.page(now: Date())
-    guard let id = selectedRideID, !page.isEmpty || isActive else { return }
-    let token = generation
     let readings = Date().timeIntervalSince(heartAt) < 15 ? values.filter { $0.key == "heartRateBpm" } : [:]
+    let heart = readings.isEmpty ? nil : heartAt
+    guard let id = selectedRideID, !page.isEmpty || (isActive && heart.map { $0 > sentHeartAt } == true) else { return }
+    let token = generation
     transport.send(
       WorkoutCompanionMessage(
         kind: .measurements, rideID: id, sampleTime: heartAt, observations: page.map(\.observation), readings: readings,
@@ -475,10 +478,10 @@ final class WatchWorkoutEngine: ObservableObject {
     ) { [weak self] result in
       Task { @MainActor in
         guard let self, self.generation == token, self.selectedRideID == id,
-          case .success(let reply) = result, reply.rideID == id, reply.error == nil,
-          let acknowledgement = reply.acknowledgement
+          case .success(let reply) = result, reply.rideID == id, reply.error == nil
         else { return }
-        self.buffer.acknowledge(acknowledgement)
+        if let heart, heart > self.sentHeartAt { self.sentHeartAt = heart }
+        if let acknowledgement = reply.acknowledgement { self.buffer.acknowledge(acknowledgement) }
       }
     }
   }

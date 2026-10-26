@@ -148,7 +148,8 @@ describe('History saved and CSV selection', () => {
       await rows(page).last().click();
       await ui(chart(page)).toHaveAttribute('data-source', 'workout:second');
       await ui(page.getByTestId('ride-summary')).toBeVisible();
-      await ui(page.getByRole('button', { name: 'Export CSV', exact: true })).toHaveCount(0);
+      for (const name of ['Export FIT', 'Export CSV', 'Export ZIP'])
+        await ui(page.getByRole('button', { name, exact: true })).toHaveCount(1);
       expect(await page.evaluate(() => window.historyTests.snapshot().counts.read)).toEqual(['first', 'second']);
     }));
 
@@ -462,7 +463,7 @@ describe('production History and resource lifecycle in React', () => {
       expect(await page.evaluate(() => window.historyTests.openedURLs)).toEqual([]);
     }));
   for (const kind of ['example', 'browser'] as const)
-    it(`offers both exports for ${kind} rides and the Strava shortcut only for recorded rides`, async () =>
+    it(`offers FIT, CSV and ZIP exports for ${kind} rides and the Strava shortcut only for recorded rides`, async () =>
       run(async page => {
         await page.evaluate(kind => {
           const h = window.historyTests,
@@ -476,9 +477,8 @@ describe('production History and resource lifecycle in React', () => {
         await ui(page.getByRole('button', { name: 'Open Strava upload', exact: true })).toHaveCount(
           kind === 'example' ? 0 : 1,
         );
-        await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
-        await ui(page.getByRole('button', { name: 'Export ZIP', exact: true })).toBeEnabled();
-        await ui(page.getByRole('button', { name: 'Export CSV', exact: true })).toHaveCount(0);
+        for (const name of ['Export FIT', 'Export CSV', 'Export ZIP'])
+          await ui(page.getByRole('button', { name, exact: true })).toBeEnabled();
       }));
   it('shows frozen source coverage despite settings changes and keeps active history actions disabled', async () =>
     run(async page => {

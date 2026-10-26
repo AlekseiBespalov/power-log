@@ -71,33 +71,36 @@ func activityPresentationFixtureChecks(_ check: (Bool, String) -> Void) throws {
       restored.publicationSequence == Int64(index + 1) && restored.rideID == ride && restored.controlToken == token,
       "Wire retains publication and control identity")
     check(
-      restored.bikeExpiresAt == Date(timeIntervalSince1970: 106)
-        && restored.heartRateExpiresAt == Date(timeIntervalSince1970: 115), "F47 exact independent expiry instants")
+      restored.bikeExpiresAt == Date(timeIntervalSince1970: 121)
+        && restored.heartRateExpiresAt == Date(timeIntervalSince1970: 130), "F47 exact independent expiry instants")
   }
   func content(_ snapshot: WorkoutActivitySnapshot, sequence: Int64) throws -> PowerLogRideAttributes.ContentState {
     WorkoutActivityProjection.content(try snapshot.project(sequence: sequence)!, at: snapshot.clock.utcUs)
   }
   check(
     !WorkoutActivityUpdateGate.deadlineReached(
-      Date(timeIntervalSince1970: 106), at: Date(timeIntervalSince1970: 105.999999)),
+      Date(timeIntervalSince1970: 121), at: Date(timeIntervalSince1970: 120.999999)),
     "Delivered deadline is upcoming before equality")
   check(
-    WorkoutActivityUpdateGate.deadlineReached(Date(timeIntervalSince1970: 106), at: Date(timeIntervalSince1970: 106)),
+    WorkoutActivityUpdateGate.deadlineReached(Date(timeIntervalSince1970: 121), at: Date(timeIntervalSince1970: 121)),
     "Delivered expiry forces the latest presentation at equality")
   check(
-    !WorkoutActivityUpdateGate.deadlineReached(nil, at: Date(timeIntervalSince1970: 106)),
+    !WorkoutActivityUpdateGate.deadlineReached(nil, at: Date(timeIntervalSince1970: 121)),
     "Absent expiry never forces a deadline update")
   check(
-    !WorkoutActivityUpdateGate.allows(deadline: false, controlChanged: false, lastUpdate: 105, now: 106),
-    "Ordinary publications retain five-second throttle")
+    !WorkoutActivityUpdateGate.allows(deadline: false, controlChanged: false, lastUpdate: 105, now: 119.999),
+    "Ordinary publications retain the 15-second throttle")
   check(
-    WorkoutActivityUpdateGate.allows(deadline: true, controlChanged: false, lastUpdate: 105, now: 106),
-    "Bike deadline bypasses five-second throttle")
+    WorkoutActivityUpdateGate.allows(deadline: false, controlChanged: false, lastUpdate: 105, now: 120),
+    "Ordinary publications resume after 15 seconds")
   check(
-    WorkoutActivityUpdateGate.allows(deadline: true, controlChanged: false, lastUpdate: 114, now: 115),
-    "HR deadline bypasses five-second throttle")
+    WorkoutActivityUpdateGate.allows(deadline: true, controlChanged: false, lastUpdate: 120, now: 121),
+    "Bike deadline bypasses the 15-second throttle")
   check(
-    WorkoutActivityUpdateGate.allows(deadline: false, controlChanged: true, lastUpdate: 105, now: 106),
+    WorkoutActivityUpdateGate.allows(deadline: true, controlChanged: false, lastUpdate: 129, now: 130),
+    "HR deadline bypasses the 15-second throttle")
+  check(
+    WorkoutActivityUpdateGate.allows(deadline: false, controlChanged: true, lastUpdate: 120, now: 121),
     "Changed controls bypass throttle")
   for age in [Double.nan, .infinity, -1] {
     let invalid = WorkoutActivitySnapshot(
@@ -116,8 +119,8 @@ func activityPresentationFixtureChecks(_ check: (Bool, String) -> Void) throws {
       bikeSampleAgeSeconds: 5, heartSampleAgeSeconds: 5, riderPowerW: 200, heartRateBpm: 150, controlToken: token)
     let output = try content(mapped, sequence: 1)
     check(
-      output.bikeExpiresAt == Date(timeIntervalSince1970: 106 + shift)
-        && output.heartRateExpiresAt == Date(timeIntervalSince1970: 115 + shift),
+      output.bikeExpiresAt == Date(timeIntervalSince1970: 121 + shift)
+        && output.heartRateExpiresAt == Date(timeIntervalSince1970: 130 + shift),
       "App maps local monotonic acquisition into the explicit UTC clock")
   }
   let initial = try content(activitySnapshot(rideID: ride, token: token), sequence: 1)
@@ -125,27 +128,27 @@ func activityPresentationFixtureChecks(_ check: (Bool, String) -> Void) throws {
   var schedule = WorkoutActivitySchedule()
   schedule.replace(initial)
   let first = schedule.deadline!
-  check(first.utcUs == 106_000_000 && schedule.take(first), "F47 schedules bike deadline at 106")
-  let at106 = try content(activitySnapshot(rideID: ride, token: token, now: 106_000_000), sequence: 2)
-  schedule.replace(at106)
+  check(first.utcUs == 121_000_000 && schedule.take(first), "F47 schedules bike deadline at 121")
+  let at121 = try content(activitySnapshot(rideID: ride, token: token, now: 121_000_000), sequence: 2)
+  schedule.replace(at121)
   let second = schedule.deadline!
-  check(second.utcUs == 115_000_000 && schedule.take(second), "F47 refresh at 106 schedules HR deadline at 115")
-  let at115 = try content(activitySnapshot(rideID: ride, token: token, now: 115_000_000), sequence: 3)
-  schedule.replace(at115)
-  check(schedule.deadline == nil, "F47 has no future deadline after 115")
-  let suspended = initial.render(at: Date(timeIntervalSince1970: 106), isStale: true)
+  check(second.utcUs == 130_000_000 && schedule.take(second), "F47 refresh at 121 schedules HR deadline at 130")
+  let at130 = try content(activitySnapshot(rideID: ride, token: token, now: 130_000_000), sequence: 3)
+  schedule.replace(at130)
+  check(schedule.deadline == nil, "F47 has no future deadline after 130")
+  let suspended = initial.render(at: Date(timeIntervalSince1970: 121), isStale: true)
   check(
     suspended.bike.text == "—" && suspended.heartRate.text == "—" && suspended.controls.isEmpty,
-    "F47 suspension before 106 hides every live reading")
+    "F47 suspension before 121 hides every live reading")
   check(
-    at106.render(at: Date(timeIntervalSince1970: 114), isStale: false).heartRate.text == "150",
+    at121.render(at: Date(timeIntervalSince1970: 129), isStale: false).heartRate.text == "150",
     "F47 HR remains after bike deadline update")
   check(
-    at106.render(at: Date(timeIntervalSince1970: 115), isStale: true).heartRate.text == "—",
+    at121.render(at: Date(timeIntervalSince1970: 130), isStale: true).heartRate.text == "—",
     "F47 suspension between deadlines hides HR at system stale")
   let missing = try content(activitySnapshot(rideID: ride, token: token, bike: nil), sequence: 4)
   check(
-    missing.bikeExpiresAt == nil && missing.staleDate == Date(timeIntervalSince1970: 115),
+    missing.bikeExpiresAt == nil && missing.staleDate == Date(timeIntervalSince1970: 130),
     "Missing bike has no expiry; HR owns staleDate")
   check(
     missing.render(at: Date(timeIntervalSince1970: 105), isStale: false).bike.text == "—",
@@ -155,14 +158,14 @@ func activityPresentationFixtureChecks(_ check: (Bool, String) -> Void) throws {
   schedule.replace(initial)
   schedule.replace(try content(activitySnapshot(rideID: ride, token: token, bike: 104_000_000), sequence: 6))
   check(
-    !schedule.take(first) && schedule.deadline?.utcUs == 110_000_000, "New acquisition rejects old scheduled callback")
+    !schedule.take(first) && schedule.deadline?.utcUs == 125_000_000, "New acquisition rejects old scheduled callback")
   let refreshed = try content(activitySnapshot(rideID: ride, token: token, bike: 104_000_000), sequence: 8)
   schedule.replace(refreshed, delivered: initial, nowUtcUs: 105_000_000)
   check(
-    schedule.deadline?.utcUs == 106_000_000 && schedule.deadline?.sequence == 8,
+    schedule.deadline?.utcUs == 121_000_000 && schedule.deadline?.sequence == 8,
     "Throttled new reading refreshes at the delivered staleDate using current publication")
-  schedule.replace(refreshed, delivered: initial, nowUtcUs: 106_000_000)
-  check(schedule.deadline?.utcUs == 110_000_000, "Passed delivered expiry cannot cause a deadline loop")
+  schedule.replace(refreshed, delivered: initial, nowUtcUs: 121_000_000)
+  check(schedule.deadline?.utcUs == 125_000_000, "Passed delivered expiry cannot cause a deadline loop")
   schedule.replace(try content(activitySnapshot(rideID: fixture["rideB"] as! String, token: token), sequence: 7))
   check(!schedule.take(first), "Changed ride rejects old deadline callback")
   schedule.replace(nil)

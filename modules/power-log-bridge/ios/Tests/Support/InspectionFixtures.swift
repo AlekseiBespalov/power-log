@@ -101,7 +101,8 @@ func runStoredPyramidPersistenceFixture() throws {
   }
   _ = try archive.finish(id: ride.id, endedAt: start.addingTimeInterval(Double(count) / 8))
   let reader = MonitorDataStore(root: root)
-  let request = MonitorRequest(source: "workout", id: ride.id, metrics: ["cadenceRpm"], buckets: full ? 360 : 32)
+  let request = MonitorRequest(
+    source: "workout", id: ride.id, startSeconds: 0.5, metrics: ["cadenceRpm"], buckets: full ? 360 : 32)
   _ = try reader.readPlot(request)
   let stored = try db.read {
     try $0.rows("SELECT value FROM derived_cache WHERE key LIKE 'lod|%'", limit: 1).first?.data("value")

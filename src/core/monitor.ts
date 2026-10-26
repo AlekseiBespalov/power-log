@@ -1,3 +1,4 @@
+import type { EnergySmoothingSeconds } from './energy-per-distance';
 import type { FitPowerSource } from './export/types';
 import {
   coreMetricDeclarations,
@@ -37,8 +38,26 @@ export interface MonitorStatistics {
   integral?: number;
   distance?: number;
   amount?: number;
+  /** Total matched energy divided by distance; not an observation mean. */
+  ratio?: number;
   unresolvedBoundary?: boolean;
   partial?: boolean;
+}
+/**
+ * `revision` and `generation` identify the read that produced a metric's plotted points; `confirmed` is the newest
+ * plot snapshot revision at which those points are unchanged, and `current` marks that snapshot as the latest.
+ */
+export interface MonitorDrawing {
+  revision: MonitorRevision;
+  generation: number;
+  viewport: ChartViewport;
+  confirmed: MonitorRevision;
+  current: boolean;
+}
+export interface MonitorStatisticsState {
+  revision: MonitorRevision;
+  viewport: ChartViewport;
+  pending: boolean;
 }
 export interface MonitorData {
   metricSources?: Record<string, MetricSourceInfo>;
@@ -51,7 +70,9 @@ export interface MonitorData {
   liveAcquiredAt?: Record<string, number | null>;
   mapMonotonicSeconds?: (seconds: number) => number | null;
   series: Record<string, MonitorPoint[]>;
+  drawings?: Record<string, MonitorDrawing>;
   statistics: Record<string, MonitorStatistics>;
+  statisticsStates?: Record<string, MonitorStatisticsState>;
   plotViewport?: ChartViewport;
   plotGeneration?: number;
   latest?: Record<string, MonitorPoint | null>;
@@ -74,9 +95,18 @@ export type NativeMonitorTarget = {
   cancellationId?: string;
 };
 export type MonitorDescribeRequest = { generation: number; signal?: AbortSignal };
-export type MonitorLatestRequest = MonitorDescribeRequest & { metrics: string[] };
-export type MonitorSnapshotRequest = MonitorDescribeRequest & { expectedRevision: MonitorRevision };
+export type MonitorLatestRequest = MonitorDescribeRequest & {
+  metrics: string[];
+  energySmoothingSeconds?: EnergySmoothingSeconds;
+};
+export type MonitorSnapshotRequest = MonitorDescribeRequest & {
+  expectedRevision: MonitorRevision;
+  energySmoothingSeconds?: EnergySmoothingSeconds;
+};
 export type MonitorPlotRequest = MonitorSnapshotRequest & {
+  energyTotals?: boolean;
+  /** Query the actual source end when no live clock is available. */
+  energyCurrent?: boolean;
   metrics: string[];
   startSeconds?: number;
   endSeconds?: number;
@@ -117,6 +147,10 @@ export type MonitorDescription = {
 };
 export type MonitorDescribeResult = MonitorEnvelope & { status: 'ok' } & MonitorDescription;
 export type MonitorLatestResult = MonitorResult<{
+  averages?: Record<string, MonitorPoint | null>;
+  /** A throttled live average retains the revision it was actually calculated from. */
+  averagesRevision?: MonitorRevision;
+  averagesPending?: boolean;
   points: Record<string, MonitorPoint | null>;
   nowSeconds?: number;
   monotonicAt?: number;
@@ -148,6 +182,7 @@ export interface MonitorSource {
   mapMonotonicSeconds?(seconds: number): number | null;
   revisionHint?: string;
   semanticKey?: string;
+  distanceSelection?: DistanceSource;
   describeSource(request: MonitorDescribeRequest): Promise<MonitorDescribeResult>;
   readLatest(request: MonitorLatestRequest): Promise<MonitorLatestResult>;
   readPlot(request: MonitorPlotRequest): Promise<MonitorPlotResult>;
@@ -167,8 +202,9 @@ export type MonitorMetric = {
   scale?: number;
   kind?: 'step';
   zero?: boolean;
-  semantics?: 'cumulative' | 'counter' | 'distance' | 'category' | 'circular';
+  semantics?: 'cumulative' | 'counter' | 'distance' | 'category' | 'circular' | 'ratio';
   description?: string;
+  plotGapSeconds?: number;
 };
 
 export const MONITOR_METRICS: readonly MonitorMetric[] = coreMetricDeclarations().map(metric => ({
@@ -185,6 +221,7 @@ export const MONITOR_METRICS: readonly MonitorMetric[] = coreMetricDeclarations(
   ...(metric.zero == null ? {} : { zero: metric.zero }),
   ...(metric.semantics == null ? {} : { semantics: metric.semantics as MonitorMetric['semantics'] }),
   ...(metric.description == null ? {} : { description: metric.description }),
+  ...(metric.plotGapSeconds == null ? {} : { plotGapSeconds: metric.plotGapSeconds }),
 }));
 export type SpeedUnit = 'km/h' | 'mph' | 'm/s';
 const metricCache = new Map<string, MonitorMetric>(MONITOR_METRICS.map(metric => [`km/h:${metric.id}`, metric]));
@@ -203,8 +240,9 @@ export function metricAllowsMean(metric: MonitorMetric): boolean {
   return presentationMetricAllowsMean(metric.id);
 }
 export const controllerSpeedPreferenceId = (id: string) => (id === 'speedRaw' ? 'controllerSpeedMps' : id);
-export function monitorQueryMetrics(ids: readonly string[]): string[] {
-  return [...new Set(ids.flatMap(id => (id === 'controllerSpeedMps' ? [id, 'speedRaw'] : [id])))];
+export function monitorQueryMetrics(ids: readonly string[], available?: readonly string[]): string[] {
+  const rawSpeed = !available?.includes('controllerSpeedMps');
+  return [...new Set(ids.flatMap(id => (id === 'controllerSpeedMps' && rawSpeed ? [id, 'speedRaw'] : [id])))];
 }
 export function resolveMonitorMetrics(ids: readonly string[], available: readonly string[] = []): string[] {
   const unknownUnit = !available.includes('controllerSpeedMps') && available.includes('speedRaw');

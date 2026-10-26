@@ -14,11 +14,11 @@ final class ActivityQualification: XCTestCase {
     app.launch()
     if caseName == "F" {
       var states: [[String: Any]] = []
-      for offset in [6.0, 15.0] {
+      for offset in [21.0, 30.0] {
         while Date().timeIntervalSince1970 < acquired + offset { Thread.sleep(forTimeInterval: 0.02) }
         states.append(["at": Date().timeIntervalSince1970, "foreground": app.state == .runningForeground])
       }
-      while Date().timeIntervalSince1970 < acquired + 30 { Thread.sleep(forTimeInterval: 0.02) }
+      while Date().timeIntervalSince1970 < acquired + 45 { Thread.sleep(forTimeInterval: 0.02) }
       let result: [String: Any] = [
         "case": caseName, "acquired": acquired, "frames": [],
         "lifecycle": ["foreground": app.state == .runningForeground, "deadlineStates": states],
@@ -35,7 +35,7 @@ final class ActivityQualification: XCTestCase {
     func wait(until target: Double) {
       while Date().timeIntervalSince1970 < target { Thread.sleep(forTimeInterval: 0.02) }
     }
-    wait(until: acquired + (caseName == "C" ? 6.2 : 0.2))
+    wait(until: acquired + (caseName == "C" ? 21.2 : 0.2))
     XCUIDevice.shared.press(.home)
     lifecycle["backgroundedAt"] = Date().timeIntervalSince1970
     springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).press(forDuration: 0.6)
@@ -59,7 +59,7 @@ final class ActivityQualification: XCTestCase {
       return request.results?.compactMap { $0.topCandidates(1).first?.string } ?? []
     }
     if caseName != "A" {
-      let cutoff = acquired + (caseName == "B" ? 6 : 15)
+      let cutoff = acquired + (caseName == "B" ? 21 : 30)
       while Date().timeIntervalSince1970 < cutoff {
         if app.state == .runningBackgroundSuspended {
           lifecycle["suspendedAt"] = Date().timeIntervalSince1970
@@ -68,7 +68,7 @@ final class ActivityQualification: XCTestCase {
         Thread.sleep(forTimeInterval: 0.05)
       }
     }
-    for offset in caseName == "A" ? [6.0, 15.0] : [caseName == "B" ? 6.0 : 15.0] {
+    for offset in caseName == "A" ? [21.0, 30.0] : [caseName == "B" ? 21.0 : 30.0] {
       let deadline = acquired + offset
       wait(until: deadline + 0.7)
       let screenshot = XCUIScreen.main.screenshot()
@@ -83,11 +83,11 @@ final class ActivityQualification: XCTestCase {
         "visible": visible, "panelText": panelText,
         "attachment": attachment.name!,
       ])
-      if offset == 15 && caseName == "A" {
+      if offset == 30 && caseName == "A" {
         lifecycle["unsuspendedAtHeartExpiry"] = app.state == .runningBackground || app.state == .runningForeground
       }
     }
-    wait(until: acquired + 30)
+    wait(until: acquired + 45)
     let result: [String: Any] = [
       "case": caseName, "acquired": acquired, "lifecycle": lifecycle, "frames": frames,
       "observedUntil": Date().timeIntervalSince1970,

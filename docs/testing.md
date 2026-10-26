@@ -140,7 +140,7 @@ probes, generated storage workloads or simulator runs physical acceptance.
 ### Live Activity and notification controls
 
 1. Start with real controller and HR inputs, then stop new data. Check foreground, locked and suspended states around
-   controller +6 seconds and HR +15 seconds. Capture publication, `staleDate`, evaluation and visible-card timestamps.
+   controller +21 seconds and HR +30 seconds. Capture publication, `staleDate`, evaluation and visible-card timestamps.
    No reading may be refreshed merely by delivery of an old sample or by a moving timer.
 2. With the phone process cold, invoke Pause/Resume/Finish from an existing Activity or Android notification. Finish
    must open the Save/Discard confirmation; Cancel must not send Stop/Discard. Replay controls from an old ride or phase.

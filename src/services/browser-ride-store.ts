@@ -25,6 +25,12 @@ export const BROWSER_BATCH_TARGET = 8;
 export const BROWSER_OWNER_WORK_LOCK = 'power-log-owner-work';
 // A 16-second base keeps retained projections smaller than the originals at 8 Hz.
 export const TILE_SECONDS = [16, 64, 256, 1024, 4096, 16384, 65536] as const;
+export const PLOT_SUMMARY_POINTS = 4096;
+export function tileLevelWithin(slotUs: string): number {
+  let level = -1;
+  for (const [index, size] of TILE_SECONDS.entries()) if (BigInt(size) * 1_000_000n <= BigInt(slotUs)) level = index;
+  return level;
+}
 export { browserIndexKey, browserIndexValue, timestampUs } from './browser-storage-keys';
 export type OriginalIdentity = {
   eventId: string;
@@ -1319,6 +1325,27 @@ export class BrowserRideStore {
           ),
           count,
         ),
+    );
+  }
+  async originalsSince<T extends RideRow | RideLocationRow>(
+    name: 'samples' | 'ride-locations',
+    id: string,
+    revision: string,
+    through: string,
+    after: OriginalCursor | null = null,
+    limit = BROWSER_PAGE,
+  ): Promise<(T & { revision: string })[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1025) throw new Error('Invalid browser read bound');
+    const range = browserKeyRange(
+      after
+        ? [id, browserIndexKey(after[0]), after[1], browserIndexKey(after[2])]
+        : [id, browserIndexKey(revision), []],
+      [id, browserIndexKey(through), []],
+      true,
+    );
+    if (!range) return [];
+    return browserTransaction([name], 'readonly', tx =>
+      idbRequest<(T & { revision: string })[]>(tx.objectStore(name).index('byRevision').getAll(range, limit)),
     );
   }
   async lifecycleAfter(id: string, after: number | null, limit: number): Promise<RevisionRead<RideLifecycleRow>> {

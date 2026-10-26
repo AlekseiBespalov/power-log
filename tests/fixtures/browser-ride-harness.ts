@@ -5,6 +5,7 @@ import { writeTelemetry } from '../../src/core/export/tables/telemetry';
 import { TextChunks } from '../../src/core/export/tables/text';
 import { readTimeline } from '../../src/core/export/timeline';
 import type { TelemetrySample } from '../../src/core/types';
+import type { MonitorLatestRequest, MonitorSource } from '../../src/core/monitor';
 import { browserExportSource } from '../../src/services/browser-export-source';
 import { BrowserWorkoutRecorder } from '../../src/services/browser-workout-recorder';
 import {
@@ -42,6 +43,15 @@ export {
   inspectBrowserDistance,
   plotBrowserDistance,
 } from '../../src/services/browser-distance-store';
+
+export async function readSettledLatest(source: MonitorSource, request: MonitorLatestRequest) {
+  let latest = await source.readLatest(request);
+  while (latest.status === 'ok' && latest.averagesPending) {
+    await new Promise(resolve => setTimeout(resolve, 5));
+    latest = await source.readLatest(request);
+  }
+  return latest;
+}
 
 export function createRecorder() {
   let time = 0;

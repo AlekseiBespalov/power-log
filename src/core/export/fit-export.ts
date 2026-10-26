@@ -12,8 +12,10 @@ import {
   HeartRateStream,
   RecordEmitter,
   TelemetryStream,
+  fitRecords,
   lifecycleGroups,
   mergeWitnesses,
+  type LifecycleGroup,
   type WitnessStream,
 } from './fit/records';
 import {
@@ -87,7 +89,7 @@ function distanceProfile(value: unknown): ExportDistanceProfile | null {
   return value as ExportDistanceProfile;
 }
 
-interface FitSession {
+export interface FitSession {
   readonly source: ExportSource;
   readonly session: string;
   readonly reads: ExportReads;
@@ -160,7 +162,87 @@ interface Streams {
   readonly geometry: FitGeometry | null;
 }
 
-function streams(
+export interface PerSecondRequest {
+  readonly rideId: string;
+  readonly context: ExportContext;
+  readonly distanceSource?: DistanceSource;
+  readonly signal?: AbortSignal;
+}
+
+export interface PerSecondRide {
+  readonly input: FitSession;
+  readonly opened: ExportOpenResult;
+  readonly consumptionSource: BatteryConsumptionSource;
+  readonly profile: ExportDistanceProfile | null;
+  readonly gps: Producer | null;
+  readonly health: HealthPlan;
+  readonly clock: FitClock;
+  readonly groups: LifecycleGroup[];
+}
+
+/**
+ * Opens a ride for the per-second exports (FIT and the one-file CSV) and closes it on failure. `write` closes the
+ * ride itself before committing; a sink it adopts is aborted on failure.
+ */
+export async function perSecondExport<R>(
+  source: ExportSource,
+  request: PerSecondRequest,
+  reads: ExportReads,
+  file: string,
+  checkTimeline: (timeline: Timeline) => void,
+  write: (ride: PerSecondRide, adopt: (sink: ExportSink) => ExportSink) => Promise<R>,
+): Promise<R> {
+  const { rideId, context, distanceSource, signal } = request;
+  const opened: ExportOpenResult = await source.open({
+    rideId,
+    kind: 'fit',
+    context,
+    ...(distanceSource === undefined ? {} : { distanceSource }),
+  });
+  const session = opened.session;
+  let sink: ExportSink | undefined;
+  try {
+    if (signal?.aborted) throw exportCancelled();
+    const consumptionSource = opened.metadata.batteryConsumptionSource;
+    if (consumptionSource !== 'controller' && consumptionSource !== 'calculated')
+      throw invalidSession('battery consumption source');
+    const profile = distanceProfile(opened.distanceProfile);
+    const producers = opened.producers as Partial<Record<string, unknown>> | null;
+    const gpsProducers = producerSet(producers?.gps, 'GPS');
+    const healthProducers = producerSet(producers?.health, 'Health');
+    const timeline = await readAnalyticsTimeline(source, session, opened.elapsedEnd, reads, { fitLimits: true, file });
+    checkTimeline(timeline);
+    const start = parseStartedAt(opened.metadata.startedAt);
+    const owner: Producer = opened.metadata.watchEnabled ? 'watch' : 'phone';
+    const input: FitSession = { source, session, reads, timeline };
+    const gps = await discoverGps(input, gpsProducers, profile, owner);
+    const health: HealthPlan =
+      healthProducers.length > 0
+        ? await discoverHealth(input, owner, retainedHealthOrigins(opened))
+        : {
+            heartRate: null,
+            calories: NaN,
+            basal: { valueKcal: null, reason: 'missingOperand', selectedOrigin: null },
+          };
+    const ride: PerSecondRide = {
+      input,
+      opened,
+      consumptionSource,
+      profile,
+      gps,
+      health,
+      clock: fitClock(start),
+      groups: lifecycleGroups(timeline),
+    };
+    return await write(ride, adopted => (sink = adopted));
+  } catch (error) {
+    await sink?.abort().catch(() => undefined);
+    await source.close(session).catch(() => undefined);
+    throw error;
+  }
+}
+
+export function streams(
   input: FitSession,
   clock: FitClock,
   profile: ExportDistanceProfile | null,
@@ -223,46 +305,19 @@ export async function exportFit(
   request: FitExportRequest,
   tuning: FitExportTuning = {},
 ): Promise<FitExportResult> {
-  const { rideId, context, distanceSource, powerSource = 'rider', signal } = request;
+  const { rideId, context, powerSource = 'rider', signal } = request;
   if (tuning.recordInterval !== undefined && !(Number.isInteger(tuning.recordInterval) && tuning.recordInterval >= 1))
     throw new RangeError('A FIT record interval is a whole number of seconds');
   if (signal?.aborted) throw exportCancelled();
   const slicer = createSlicer(signal);
   const reads = new ExportReads({ platform: context.platform, kind: 'fit', slicer, signal });
-  const opened: ExportOpenResult = await source.open({
-    rideId,
-    kind: 'fit',
-    context,
-    ...(distanceSource === undefined ? {} : { distanceSource }),
-  });
-  const session = opened.session;
-  let sink: ExportSink | undefined;
-  try {
-    if (signal?.aborted) throw exportCancelled();
-    const consumptionSource = opened.metadata.batteryConsumptionSource;
-    if (consumptionSource !== 'controller' && consumptionSource !== 'calculated')
-      throw invalidSession('battery consumption source');
-    const profile = distanceProfile(opened.distanceProfile);
-    const producers = opened.producers as Partial<Record<string, unknown>> | null;
-    const gpsProducers = producerSet(producers?.gps, 'GPS');
-    const healthProducers = producerSet(producers?.health, 'Health');
-    const timeline = await readAnalyticsTimeline(source, session, opened.elapsedEnd, reads);
+  const checkTimeline = (timeline: Timeline) => {
     if (timeline.laps.length > FIT_MAX_MESSAGE_INDEX + 1)
       throw new ExportError('limit', 'A FIT file can hold at most 4096 laps, and this ride has more.');
-    const start = parseStartedAt(opened.metadata.startedAt);
-    const owner: Producer = opened.metadata.watchEnabled ? 'watch' : 'phone';
-    const input: FitSession = { source, session, reads, timeline };
-    const gps = await discoverGps(input, gpsProducers, profile, owner);
-    const health: HealthPlan =
-      healthProducers.length > 0
-        ? await discoverHealth(input, owner, retainedHealthOrigins(opened))
-        : {
-            heartRate: null,
-            calories: NaN,
-            basal: { valueKcal: null, reason: 'missingOperand', selectedOrigin: null },
-          };
-    const clock = fitClock(start);
-    const groups = lifecycleGroups(timeline);
+  };
+  return perSecondExport(source, request, reads, 'FIT file', checkTimeline, async (ride, adopt) => {
+    const { input, opened, consumptionSource, profile, gps, health, clock, groups } = ride;
+    const { timeline } = input;
     let interval = tuning.recordInterval ?? 1;
     if (tuning.recordInterval === undefined && needsPlanning(clock, timeline.end, tuning.recordLimit)) {
       const witnesses = new WitnessSeconds();
@@ -271,7 +326,7 @@ export async function exportFit(
       interval = (await planRecordInterval(witnesses, clock.second(0), slicer, tuning.recordLimit ?? FIT_RECORD_LIMIT))
         .interval;
     }
-    sink = await openSink('fit', context);
+    const sink = adopt(await openSink('fit', context));
     if (signal?.aborted) throw exportCancelled();
     const writer = new FitWriter(sink, slicer);
     await writer.begin();
@@ -281,7 +336,7 @@ export async function exportFit(
     writer.developerMetadata(consumptionSource);
     const statistics = new RideStatistics(timeline.endUs);
     const emission = streams(input, clock, profile, gps, health, statistics, ranges, consumptionSource, powerSource);
-    const emitter = new RecordEmitter(writer, clock, interval, lifecycleWriter(summary));
+    const emitter = new RecordEmitter(fitRecords(writer, clock), clock, interval, lifecycleWriter(summary));
     await mergeWitnesses(emission.list, groups, timeline.intervals, emitter, slicer);
     emitter.finish();
     if (emitter.records === 0) throw noRecords();
@@ -294,13 +349,9 @@ export async function exportFit(
     });
     writeActivity(summary);
     await writer.finish();
-    await source.close(session);
+    await source.close(input.session);
     if (signal?.aborted) throw exportCancelled();
     const committed = await sink.commit(`power-log-${rideId}.fit`);
     return { ...committed, records: emitter.records, recordInterval: interval, health };
-  } catch (error) {
-    await sink?.abort().catch(() => undefined);
-    await source.close(session).catch(() => undefined);
-    throw error;
-  }
+  });
 }

@@ -493,9 +493,9 @@ test('pending and current exact minima keep the narrow chart card height stable'
   await page.getByTestId('monitor-view-picker').click();
   await page.getByRole('button', { name: 'Battery', exact: true }).click();
   const minimum = page.locator('[aria-label^="Minimum "]').first();
-  await expect(minimum).toHaveAttribute('aria-label', /, interval /);
   const chart = page.getByTestId('monitor-chart-batteryVoltageV');
   await chart.scrollIntoViewIfNeeded();
+  await expect(minimum).toHaveAttribute('aria-label', /, interval /);
   await minimum.evaluate(element => {
     const observations: { prior: boolean; lineHeight: number; cardHeight: number }[] = [];
     const record = () =>

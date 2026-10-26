@@ -890,7 +890,7 @@ class PresentationContractTest {
             )
         val p = ActivityPresentations.project(input, heart, clock(105_000_000))
         assertNull(p.bikeExpiresAtUs)
-        assertEquals(115_000_000L, p.staleDateUs)
+        assertEquals(130_000_000L, p.staleDateUs)
         assertEquals(7L, p.publicationSequence)
         assertEquals("Bike unavailable", p.render(105_000_000, false).status.text)
         assertEquals("—", p.render(105_000_000, false).bike.text)
@@ -912,13 +912,13 @@ class PresentationContractTest {
                 liveState(),
                 clock(105_000_000),
             )
-        assertEquals("200", p.render(105_999_999, false).bike.text)
-        assertEquals("—", p.render(106_000_000, false).bike.text)
-        assertEquals("150", p.render(106_000_000, false).heartRate.text)
-        assertEquals("—", p.render(106_000_000, true).heartRate.text)
-        assertEquals("—", p.render(106_000_000, true).timer.text)
-        assertTrue(p.render(106_000_000, true).controls.isEmpty())
-        assertEquals("antenna.radiowaves.left.and.right.slash", p.render(106_000_000, false).status.symbol)
+        assertEquals("200", p.render(120_999_999, false).bike.text)
+        assertEquals("—", p.render(121_000_000, false).bike.text)
+        assertEquals("150", p.render(121_000_000, false).heartRate.text)
+        assertEquals("—", p.render(121_000_000, true).heartRate.text)
+        assertEquals("—", p.render(121_000_000, true).timer.text)
+        assertTrue(p.render(121_000_000, true).controls.isEmpty())
+        assertEquals("antenna.radiowaves.left.and.right.slash", p.render(121_000_000, false).status.symbol)
     }
 
     @Test

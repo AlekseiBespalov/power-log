@@ -23,6 +23,9 @@ class MonitorReadsTest {
         }
     }
 
+    private fun input(operation: MonitorOperation, totals: Boolean = true, current: Boolean = false) =
+        MonitorInput(operation, MonitorTarget.Live, 0, energyTotals = totals, energyCurrent = current)
+
     @Test
     fun latestAndInspectRunWhilePlotAndRangeSlotsAreOccupiedAndCancelledWorkIsInterrupted() {
         MonitorReads().use { reads ->
@@ -35,7 +38,7 @@ class MonitorReadsTest {
                     reads.submit(
                         "old-source",
                         "slow-$index",
-                        if (index < 2) MonitorOperation.Plot else MonitorOperation.Stats,
+                        input(if (index < 2) MonitorOperation.Plot else MonitorOperation.Stats),
                         promise,
                     ) {
                         started.countDown()
@@ -50,7 +53,7 @@ class MonitorReadsTest {
                 assertTrue(started.await(5, TimeUnit.SECONDS))
                 for (operation in listOf(MonitorOperation.Latest, MonitorOperation.Inspect)) {
                     val promise = ResultPromise()
-                    reads.submit("current", operation.name, operation, promise) { 7 }
+                    reads.submit("current", operation.name, input(operation), promise) { 7 }
                     assertTrue(promise.settled.await(1, TimeUnit.SECONDS))
                     assertEquals(7, promise.value)
                 }
@@ -62,6 +65,53 @@ class MonitorReadsTest {
                 }
             } finally {
                 release.countDown()
+            }
+        }
+    }
+
+    @Test
+    fun currentEnergyReadsRunWhileWholeRideEnergyReadsOccupyTheirLane() {
+        MonitorReads().use { reads ->
+            val started = CountDownLatch(2)
+            val release = CountDownLatch(1)
+            val held = (0..1).map { ResultPromise() }
+            try {
+                held.forEachIndexed { index, promise ->
+                    reads.submit("source", "totals-$index", input(MonitorOperation.EnergyPerDistance), promise) {
+                        started.countDown()
+                        release.await()
+                        "totals"
+                    }
+                }
+                assertTrue(started.await(5, TimeUnit.SECONDS))
+                val current = ResultPromise()
+                reads.submit(
+                    "source",
+                    "current",
+                    input(MonitorOperation.EnergyPerDistance, totals = false, current = true),
+                    current,
+                ) {
+                    7
+                }
+                assertTrue(current.settled.await(1, TimeUnit.SECONDS))
+                assertEquals(7, current.value)
+                for ((name, request) in
+                    listOf(
+                        "totals" to input(MonitorOperation.EnergyPerDistance),
+                        "current-with-totals" to input(MonitorOperation.EnergyPerDistance, current = true),
+                        "cursor" to input(MonitorOperation.EnergyPerDistance, totals = false),
+                    )) {
+                    val deferred = ResultPromise()
+                    reads.submit("source", name, request, deferred) { 8 }
+                    assertTrue(deferred.settled.await(1, TimeUnit.SECONDS))
+                    assertEquals(name, "ERR_READ_DEFERRED", deferred.code)
+                }
+            } finally {
+                release.countDown()
+            }
+            held.forEach {
+                assertTrue(it.settled.await(5, TimeUnit.SECONDS))
+                assertEquals("totals", it.value)
             }
         }
     }

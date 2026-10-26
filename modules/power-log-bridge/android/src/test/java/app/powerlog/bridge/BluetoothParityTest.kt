@@ -85,11 +85,20 @@ class BluetoothParityTest {
             .getDeclaredMethod(
                 "failed",
                 String::class.java,
+                TelemetryDiagnosticReason::class.java,
                 Boolean::class.javaPrimitiveType,
                 Boolean::class.javaPrimitiveType,
+                Map::class.java,
             )
             .apply { isAccessible = true }
-            .invoke(bluetooth, message, false, false)
+            .invoke(
+                bluetooth,
+                message,
+                TelemetryDiagnosticReason.linkDisconnected,
+                false,
+                false,
+                emptyMap<String, Any?>(),
+            )
     }
 
     @Test
@@ -314,7 +323,7 @@ class BluetoothParityTest {
         bluetooth.connect(id, 4) {}
         shadowOf(old).gattCallback.onConnectionStateChange(old, 0, BluetoothProfile.STATE_CONNECTED)
         advance(0)
-        assertEquals(2, bluetooth.diagnostics()["connectionAttempts"])
+        assertEquals(1, bluetooth.diagnostics()["connectionAttempts"])
         assertEquals("connecting", bluetooth.state["status"])
     }
 
@@ -397,11 +406,20 @@ class BluetoothParityTest {
                 .getDeclaredMethod(
                     "failed",
                     String::class.java,
+                    TelemetryDiagnosticReason::class.java,
                     Boolean::class.javaPrimitiveType,
                     Boolean::class.javaPrimitiveType,
+                    Map::class.java,
                 )
                 .apply { isAccessible = true }
-                .invoke(bluetooth, "fixture", row.getBoolean("peer") && row.getBoolean("completed"), false)
+                .invoke(
+                    bluetooth,
+                    "fixture",
+                    TelemetryDiagnosticReason.linkDisconnected,
+                    row.getBoolean("peer") && row.getBoolean("completed"),
+                    false,
+                    emptyMap<String, Any?>(),
+                )
             val transport = adapterSession(bluetooth).state
             if (row.isNull("delay")) assertEquals("error", bluetooth.state["status"])
             else {

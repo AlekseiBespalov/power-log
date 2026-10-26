@@ -1,3 +1,4 @@
+import CoreBluetooth
 import ExpoModulesCore
 import Foundation
 import PowerLogCore
@@ -31,6 +32,26 @@ private func bridgeFailure(_ error: Error, stage: String? = nil) -> BridgeExcept
   let code = (error as? WorkoutAnalysisError)?.bridgeCode ?? readErrorCode(error) ?? failure.code
   let message = (error as? MonitorError)?.bridgeMessage ?? failure.message
   return BridgeException(code: code, message: message)
+}
+
+private func diagnosticDevice() -> [String: Any] {
+  var system = utsname()
+  uname(&system)
+  let model = withUnsafeBytes(of: system.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+  let version = ProcessInfo.processInfo.operatingSystemVersion
+  let authorization: String
+  switch CBManager.authorization {
+  case .allowedAlways: authorization = "allowedAlways"
+  case .denied: authorization = "denied"
+  case .restricted: authorization = "restricted"
+  case .notDetermined: authorization = "notDetermined"
+  @unknown default: authorization = "unknown"
+  }
+  return [
+    "manufacturer": "Apple", "model": model,
+    "osVersion": "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
+    "powerSave": ProcessInfo.processInfo.isLowPowerModeEnabled, "bluetoothAuthorization": authorization,
+  ]
 }
 
 private func reject(_ promise: Promise, _ error: Error, stage: String? = nil) {
@@ -90,13 +111,17 @@ struct MonitorReadOptions: Record {
   @Field var startAnchor: MonitorAnchorOptions?
   @Field var endAnchor: MonitorAnchorOptions?
   @Field var distanceSource: String = "auto"
+  @Field var energySmoothingSeconds: Int = 0
+  @Field var energyTotals: Bool = true
+  @Field var energyCurrent: Bool = false
   var request: MonitorRequest {
     MonitorRequest(
       source: source, id: id, generation: generation, expectedRevision: expectedRevision,
       sinceRevision: sinceRevision, startSeconds: startSeconds, endSeconds: endSeconds, seconds: seconds,
       metrics: metrics, buckets: buckets, pixelWidth: pixelWidth, includeEndpoints: includeEndpoints,
       anchor: anchor?.anchor, startAnchor: startAnchor?.anchor, endAnchor: endAnchor?.anchor,
-      distanceSource: distanceSource)
+      distanceSource: distanceSource, energySmoothingSeconds: energySmoothingSeconds, energyTotals: energyTotals,
+      energyCurrent: energyCurrent)
   }
 }
 
@@ -166,6 +191,14 @@ public final class PowerLogBridgeModule: Module {
         }
       }
     }
+    AsyncFunction("readMonitorEnergyPerDistance") { (options: MonitorReadOptions, promise: Promise) in
+      MonitorDataStore.shared.submit(.energyPerDistance, request: options.request) { result in
+        switch result {
+        case .success(let value): promise.resolve(value)
+        case .failure(let error): reject(promise, error)
+        }
+      }
+    }
     AsyncFunction("monitorChangesSince") { (options: MonitorReadOptions, promise: Promise) in
       MonitorDataStore.shared.submit(.changes, request: options.request) { result in
         switch result {
@@ -218,6 +251,14 @@ public final class PowerLogBridgeModule: Module {
     AsyncFunction("stopBluetoothTrace") { engine.stopBluetoothTrace() }.runOnQueue(engine.queue)
     AsyncFunction("clearBluetoothTrace") { engine.clearBluetoothTrace() }.runOnQueue(engine.queue)
     AsyncFunction("readBluetoothTrace") { () -> String in engine.readBluetoothTrace() }.runOnQueue(engine.queue)
+    AsyncFunction("readConnectionDiagnostics") { (promise: Promise) in
+      engine.readDiagnosticLog { result in
+        switch result {
+        case .success(let log): promise.resolve(["log": log, "device": diagnosticDevice()])
+        case .failure(let error): reject(promise, error)
+        }
+      }
+    }
     AsyncFunction("startScan") { () throws in try bridged(stage: "bike") { try engine.startScan() } }.runOnQueue(
       engine.queue)
     AsyncFunction("stopScan") { () in engine.stopScan() }.runOnQueue(engine.queue)

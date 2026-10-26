@@ -127,7 +127,9 @@ internal class RideMonitor(
             val key = if (profile["source"] == "controller") "controllerDistanceMeters" else "gpsDistanceMeters"
             metricSources[key] = profile
         }
-        for (metric in consumptionMetrics.intersect(store.available(id).toSet())) {
+        for (metric in
+            if (kind == MonitorOperation.EnergyPerDistance) emptySet()
+            else consumptionMetrics.intersect(store.available(id).toSet())) {
             val total = RideConsumption(store).range(id, metric, 0.0, store.timing(id).elapsed)
             metricSources[metric] =
                 mapOf(
@@ -172,6 +174,16 @@ internal class RideMonitor(
         }
         val result: Payload =
             when (kind) {
+                MonitorOperation.EnergyPerDistance ->
+                    store.energy.read(
+                        id,
+                        request.startSeconds,
+                        request.endSeconds,
+                        request.buckets,
+                        request.energySmoothingSeconds,
+                        request.energyTotals,
+                        request.energyCurrent,
+                    )
                 MonitorOperation.Describe -> {
                     val available = store.available(id).toMutableList()
                     if (distanceInfo["selected"] != null) available.add("distanceMeters")
@@ -205,13 +217,18 @@ internal class RideMonitor(
                     )
                 }
                 MonitorOperation.Plot -> {
-                    val buckets = request.buckets
+                    val count = metrics.toSet().size
+                    val buckets = InspectionPlotSlots.buckets(request.buckets, count)
+                    val pointLimit = InspectionPlotSlots.pointLimit(count)
+                    val dataEnd = max(10.0, elapsed)
+                    val columns = metrics.associateWith { column(id, it, source) }
+                    val plotted = columns.values.filterNotNull().toSet()
+                    val series =
+                        if (start <= 0.0 && (request.endSeconds ?: dataEnd) >= dataEnd)
+                            store.analytics.wholePlot(id, plotted, dataEnd, buckets, pointLimit)
+                        else plotted.associateWith { store.analytics.plot(id, it, start, end, buckets, pointLimit) }
                     mapOf(
-                        "series" to
-                            metrics.associateWith { m ->
-                                column(id, m, source)?.let { store.analytics.plot(id, it, start, end, buckets) }
-                                    ?: emptyList<Payload>()
-                            },
+                        "series" to columns.mapValues { (_, column) -> column?.let(series::getValue) ?: emptyList() },
                         "resolution" to "reduced",
                     )
                 }

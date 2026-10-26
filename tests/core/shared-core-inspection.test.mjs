@@ -414,3 +414,92 @@ test('generated projected boundaries retain the selected metric without a distan
     assert.equal(plot.result()[0].original.value, 12.5);
   }
 });
+
+test('generated aligned slots and bucket budgets match the shared fixture', () => {
+  const rule = fixture('inspection/aligned-slots');
+  for (const row of rule.slots) {
+    if (row.invalid) assert.throws(() => core.inspectionPlotSlotUs(row.startUs, row.endUs, row.buckets), row.id);
+    else assert.equal(core.inspectionPlotSlotUs(row.startUs, row.endUs, row.buckets), row.slotUs, row.id);
+  }
+  for (const row of rule.budgets) {
+    if (row.invalid) {
+      assert.throws(() => core.inspectionPlotBuckets(row.requested, row.metrics), row.id);
+      continue;
+    }
+    assert.equal(core.inspectionPlotBuckets(row.requested, row.metrics), row.buckets, row.id);
+    assert.equal(core.inspectionPlotPointLimit(row.metrics), row.pointLimit, row.id);
+  }
+});
+
+test('generated plot summary merges like direct aligned reduction of a growing ride', () => {
+  const metric = 'humanPowerW';
+  const rows = Array.from({ length: 400 }, (_, index) => ({
+    id: `p${String((index * 7919) % 100003).padStart(6, '0')}`,
+    timeUs: String(Math.floor(index / 2) * 5_000_000 + (index >= 200 ? 30_000_000 : 0)),
+    value: index % 11 === 0 ? null : (index * 37) % 400,
+  }));
+  const selected = index => index % 9 !== 0;
+  const view = query => query.result().map(point => [point.original.observationId, point.timeUs, point.segment]);
+  const summary = new core.InspectionPlotSlotSummary(metric);
+  rows.forEach((row, index) => {
+    summary.append(item(row, metric, index), selected(index), false);
+    if (index % 50 !== 49) return;
+    for (const buckets of [64, 161, 512]) {
+      const slot = core.inspectionPlotSlotUs('0', row.timeUs, buckets);
+      if (slot === null) {
+        assert.equal(
+          summary.canMergeInto(new core.InspectionPlotQuery(metric, '0', row.timeUs, buckets, 16384)),
+          false,
+        );
+        continue;
+      }
+      const direct = new core.InspectionPlotQuery(metric, '0', row.timeUs, buckets, 16384, slot);
+      rows.slice(0, index + 1).forEach((fed, i) => direct.append(item(fed, metric, i), selected(i), false));
+      const merged = new core.InspectionPlotQuery(metric, '0', row.timeUs, buckets, 16384, slot);
+      assert.equal(summary.canMergeInto(merged), true, `${index} ${buckets}`);
+      summary.mergeInto(merged);
+      assert.deepEqual(view(merged), view(direct), `${index} ${buckets}`);
+    }
+  });
+  assert.equal(summary.overflowed, false);
+  assert.equal(summary.rawInputs, String(rows.filter((_, index) => selected(index)).length));
+  assert.equal(summary.slotUs, '4000000');
+  assert.equal(summary.lastRawUs, rows.at(-1).timeUs);
+  assert.ok(summary.retainedPoints > 0);
+  const prepared = new core.InspectionPlotSlotSummary(metric);
+  rows.forEach((row, index) =>
+    prepared.appendOriginal(new core.InspectionOriginalInput(item(row, metric, index)), selected(index)),
+  );
+  const whole = core.inspectionPlotSlotUs('0', rows.at(-1).timeUs, 161);
+  const fromItems = new core.InspectionPlotQuery(metric, '0', rows.at(-1).timeUs, 161, 16384, whole);
+  summary.mergeInto(fromItems);
+  const fromOriginals = new core.InspectionPlotQuery(metric, '0', rows.at(-1).timeUs, 161, 16384, whole);
+  prepared.mergeInto(fromOriginals);
+  assert.deepEqual(view(fromOriginals), view(fromItems));
+  const coarse = new core.InspectionPlotSlotSummary(metric, 16);
+  rows.forEach((row, index) => coarse.append(item(row, metric, index), selected(index), false));
+  const end = rows.at(-1).timeUs;
+  const finer = new core.InspectionPlotQuery(metric, '0', end, 512, 16384, core.inspectionPlotSlotUs('0', end, 512));
+  assert.equal(coarse.canMergeInto(finer), false);
+  assert.throws(() => coarse.mergeInto(finer));
+});
+
+test('generated plot summary merges projected boundaries like the aligned reducer', () => {
+  const metric = 'distanceMeters';
+  const boundaries = Array.from({ length: 120 }, (_, index) => {
+    const timeUs = String(Math.floor(index / 3) * 4_000_000);
+    const original = item({ id: `d${index}`, timeUs, value: Math.floor(index / 2) * 2.5 }, metric, index);
+    const segment = Math.floor(index / 25);
+    return new core.InspectionDistanceBoundary(original, segment, timeUs, timeUs, String(index + 1), segment, metric);
+  });
+  const end = '200000000';
+  const slot = core.inspectionPlotSlotUs('0', end, 64);
+  const summary = new core.InspectionPlotSlotSummary(metric, 512, 16384);
+  boundaries.forEach(boundary => summary.appendDistance(boundary));
+  const direct = new core.InspectionPlotQuery(metric, '0', end, 64, 16384, slot);
+  boundaries.forEach(boundary => direct.appendDistance(boundary));
+  const merged = new core.InspectionPlotQuery(metric, '0', end, 64, 16384, slot);
+  summary.mergeInto(merged);
+  const view = query => query.result().map(point => [point.original.observationId, point.timeUs, point.segment]);
+  assert.deepEqual(view(merged), view(direct));
+});

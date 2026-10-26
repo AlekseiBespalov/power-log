@@ -1,6 +1,10 @@
+import type { EnergySmoothingSeconds } from '../core/energy-per-distance';
+import { EnergySmoothingMenu } from './energy-smoothing-menu';
 import type { MonitorSnap, MonitorHitScene } from '../core/monitor-hit-test';
 import { useSharedValue } from 'react-native-reanimated';
 import {
+  memo,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -9,8 +13,9 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
-import { Modal, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, StyleSheet, Text, View, useWindowDimensions, type LayoutRectangle } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
@@ -36,6 +41,8 @@ import {
 } from '../core/monitor';
 import {
   groupMonitorMetrics,
+  isVoltageMetric,
+  monitorChartData,
   reorderMonitorCharts,
   monitorDisplayDomain,
   monitorElapsed,
@@ -48,6 +55,13 @@ import {
   validMonitorPoint,
   type MonitorPlotGroup,
 } from '../core/monitor-chart';
+import {
+  monitorChartEstimate,
+  monitorChartVisibility,
+  monitorGroupMetrics,
+  type MonitorChartBounds,
+  type MonitorChartVisibility,
+} from '../core/monitor-visibility';
 import { Card, colors, formatDuration, Pressable, type, lineHeight } from './ui';
 import { useChartInteraction, type ChartInteraction } from './use-chart-interaction';
 import { useNativeChartGestures } from './use-native-chart-gestures';
@@ -56,9 +70,12 @@ import { MonitorRasterAxis } from './monitor-raster-axis';
 import { MonitorChartGrid } from './monitor-chart-grid';
 import { useFocusedModal } from './modal-dialog';
 import { useModalAccessibility } from '../services/modal-accessibility';
+import { useForegroundActivity } from '../services/use-foreground-activity';
 
 export interface MonitorChartsProps {
   emptyState?: ReactNode;
+  energySmoothingSeconds?: EnergySmoothingSeconds;
+  onEnergySmoothingChange?: (seconds: EnergySmoothingSeconds) => void;
   resetKey?: number;
   data: MonitorData;
   metricIds: readonly string[];
@@ -77,11 +94,12 @@ export interface MonitorChartsProps {
   availableHeight?: number;
   onReorderCharts?: (ids: string[]) => void;
   onPlotWidthChange?: (width: number) => void;
+  onVisibleMetricsChange?: (metrics: string[]) => void;
 }
 
 const leftInset = CHART_INSET.left;
 const rightInset = CHART_INSET.right;
-const isVoltage = (metric: MonitorMetric) => metric.id === 'batteryVoltageV' || metric.id === 'throttleVoltageV';
+const isVoltage = (metric: MonitorMetric) => isVoltageMetric(metric.id);
 
 export function MonitorCharts(props: MonitorChartsProps) {
   const groups = useMemo(
@@ -97,10 +115,11 @@ export function MonitorCharts(props: MonitorChartsProps) {
     : 1;
   const rows = Math.max(1, Math.ceil(groups.length / columns));
   const height = props.availableHeight ? Math.max(140, Math.min(480, (props.availableHeight - 56) / rows - 104)) : 140;
-  const close = () => {
+  const close = useCallback(() => {
     setFullscreen(false);
     setReady(false);
-  };
+  }, []);
+  const expand = useCallback(() => setFullscreen(true), []);
   const fullscreenVisible = useFocusedModal(fullscreen, close);
   const fullscreenRef = useModalAccessibility(fullscreenVisible);
   if (props.emptyState) return <Card>{props.emptyState}</Card>;
@@ -109,13 +128,7 @@ export function MonitorCharts(props: MonitorChartsProps) {
     <View testID="monitor-charts" onLayout={event => setWidth(event.nativeEvent.layout.width)}>
       {!fullscreen ? (
         <View onLayout={event => setInlineHeight(event.nativeEvent.layout.height)}>
-          <ChartCollection
-            {...props}
-            groups={groups}
-            columns={columns}
-            height={height}
-            onExpand={() => setFullscreen(true)}
-          />
+          <ChartCollection {...props} groups={groups} columns={columns} height={height} onExpand={expand} />
         </View>
       ) : (
         <View style={{ height: inlineHeight }} />
@@ -172,6 +185,120 @@ function FullscreenCharts(props: Omit<CollectionProps, 'height'>) {
   );
 }
 
+type ChartPlacement = {
+  top: number | null;
+  layouts: ReadonlyMap<string, MonitorChartBounds>;
+  onScreen: ReadonlyMap<string, boolean>;
+  read: ReadonlyMap<string, boolean>;
+};
+function scrollParent(node: HTMLElement | null) {
+  for (let parent = node?.parentElement; parent; parent = parent.parentElement) {
+    const { overflowY } = getComputedStyle(parent);
+    if (overflowY === 'auto' || overflowY === 'scroll') return parent;
+  }
+  return null;
+}
+
+/**
+ * Native charts are placed from their layouts inside the collection and the collection's polled window position;
+ * web charts use intersection observers rooted at their scroll container.
+ */
+function useChartVisibility(
+  ids: readonly string[],
+  estimate: number,
+): MonitorChartVisibility & {
+  container: RefObject<View | null>;
+  onChartLayout: (id: string, layout: LayoutRectangle) => void;
+  onChartNode: (id: string, node: unknown) => void;
+} {
+  const { height: screenHeight } = useWindowDimensions();
+  const active = useForegroundActivity();
+  const container = useRef<View>(null);
+  const nodes = useRef(new Map<string, HTMLElement>());
+  const observers = useRef<IntersectionObserver[]>([]);
+  const [placement, setPlacement] = useState<ChartPlacement>({
+    top: null,
+    layouts: new Map(),
+    onScreen: new Map(),
+    read: new Map(),
+  });
+  useEffect(() => {
+    if (Platform.OS === 'web' || !active) return;
+    const measure = () =>
+      container.current?.measureInWindow((_x, y) =>
+        setPlacement(previous => (previous.top === y ? previous : { ...previous, top: y })),
+      );
+    measure();
+    const timer = setInterval(measure, 200);
+    return () => clearInterval(timer);
+  }, [active]);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !active) return;
+    const root = scrollParent(container.current as unknown as HTMLElement | null);
+    const observe = (key: 'onScreen' | 'read', rootMargin: string) =>
+      new IntersectionObserver(
+        entries =>
+          setPlacement(previous => {
+            const next = new Map(previous[key]);
+            for (const entry of entries) {
+              const id = (entry.target as HTMLElement).dataset.monitorChart;
+              if (id) next.set(id, entry.isIntersecting);
+            }
+            return { ...previous, [key]: next };
+          }),
+        { root, rootMargin },
+      );
+    observers.current = [observe('onScreen', '0px'), observe('read', '50% 0px')];
+    for (const node of nodes.current.values()) for (const observer of observers.current) observer.observe(node);
+    return () => {
+      for (const observer of observers.current) observer.disconnect();
+      observers.current = [];
+    };
+  }, [active]);
+  const visibility = useMemo(() => {
+    if (Platform.OS === 'web') {
+      const fallback = monitorChartVisibility(ids, new Map(), screenHeight, estimate);
+      return {
+        onScreen: ids.filter(id => placement.onScreen.get(id) ?? fallback.onScreen.includes(id)),
+        read: ids.filter(id => placement.read.get(id) ?? fallback.read.includes(id)),
+      };
+    }
+    const bounds = new Map<string, MonitorChartBounds>();
+    if (placement.top !== null)
+      for (const [id, layout] of placement.layouts)
+        bounds.set(id, { top: placement.top + layout.top, bottom: placement.top + layout.bottom });
+    return monitorChartVisibility(ids, bounds, screenHeight, estimate);
+  }, [ids, screenHeight, estimate, placement]);
+  const onChartLayout = useCallback((id: string, layout: LayoutRectangle) => {
+    const bounds = { top: layout.y, bottom: layout.y + layout.height };
+    setPlacement(previous => {
+      const known = previous.layouts.get(id);
+      if (known?.top === bounds.top && known.bottom === bounds.bottom) return previous;
+      return { ...previous, layouts: new Map(previous.layouts).set(id, bounds) };
+    });
+  }, []);
+  const onChartNode = useCallback((id: string, node: unknown) => {
+    const previous = nodes.current.get(id);
+    if (previous) for (const observer of observers.current) observer.unobserve(previous);
+    if (!node) {
+      nodes.current.delete(id);
+      return;
+    }
+    const element = node as HTMLElement;
+    element.dataset.monitorChart = id;
+    nodes.current.set(id, element);
+    for (const observer of observers.current) observer.observe(element);
+  }, []);
+  return { ...visibility, container, onChartLayout, onChartNode };
+}
+
+const chartInputs = new WeakMap<MonitorPlotGroup, MonitorData>();
+function chartData(data: MonitorData, group: MonitorPlotGroup) {
+  const next = monitorChartData(data, group.metrics, chartInputs.get(group));
+  chartInputs.set(group, next);
+  return next;
+}
+
 function ChartCollection(props: CollectionProps) {
   const size = useWindowDimensions();
   const {
@@ -181,38 +308,92 @@ function ChartCollection(props: CollectionProps) {
     cursorSeconds,
     onCursorChange,
     referenceSeconds,
+    onReferenceChange,
     groups,
     fullscreen,
     onExpand,
     onClose,
+    onVisibleMetricsChange,
   } = props;
-  const domain = monitorDisplayDomain(data, props.live, props.displayTimeSeconds);
-  const view = clampChartViewport(viewport, domain);
-  const interaction = useChartInteraction(
+  const { start: domainStart, end: domainEnd } = monitorDisplayDomain(data, props.live, props.displayTimeSeconds);
+  const domain = useMemo(() => ({ start: domainStart, end: domainEnd }), [domainStart, domainEnd]);
+  const { start: viewStart, end: viewEnd } = clampChartViewport(viewport, domain);
+  const view = useMemo(() => ({ start: viewStart, end: viewEnd }), [viewStart, viewEnd]);
+  const {
+    shared,
+    receive,
+    cancel: cancelGestures,
+    epoch,
+    sequence,
+  } = useChartInteraction(
     { view, domain, cursor: cursorSeconds, reference: referenceSeconds },
     `${data.sourceId}:${props.resetKey ?? 0}:${groups.map(group => group.metrics.map(metric => metric.id).join(',')).join(';')}:${fullscreen ?? false}:${size.width}:${size.height}:${size.fontScale}:${props.height}`,
     onCursorChange,
     onViewportChange,
   );
-  const cancel = () => {
-    if (Platform.OS !== 'web') interaction.cancel();
-  };
-  const setCursor = (seconds: number | null, interacting = false) => {
-    cancel();
-    onCursorChange(seconds, interacting);
-  };
-  const setViewport = (next: ChartViewport, interacting = false) => {
-    cancel();
-    onViewportChange(next, interacting);
-  };
-  const zoomed = isChartZoomed(view, domain);
-  const anySamples = groups.some(group =>
-    group.metrics.some(metric =>
-      data.series[metric.id]?.some(
-        point => validMonitorPoint(point) && Number.isFinite(metricValue(metric, point.value)),
-      ),
-    ),
+  const interaction = useMemo(
+    () => ({ shared, receive, cancel: cancelGestures, epoch, sequence }),
+    [shared, receive, cancelGestures, epoch, sequence],
   );
+  const cancel = useCallback(() => {
+    if (Platform.OS !== 'web') cancelGestures();
+  }, [cancelGestures]);
+  const setCursor = useCallback(
+    (seconds: number | null, interacting = false) => {
+      cancel();
+      onCursorChange(seconds, interacting);
+    },
+    [cancel, onCursorChange],
+  );
+  const setViewport = useCallback(
+    (next: ChartViewport, interacting = false) => {
+      cancel();
+      onViewportChange(next, interacting);
+    },
+    [cancel, onViewportChange],
+  );
+  const setReference = useCallback(
+    (seconds: number | null) => {
+      cancel();
+      onReferenceChange(seconds);
+    },
+    [cancel, onReferenceChange],
+  );
+  const ids = useMemo(() => groups.map(group => group.id), [groups]);
+  const { onScreen, read, container, onChartLayout, onChartNode } = useChartVisibility(
+    ids,
+    monitorChartEstimate(props.height),
+  );
+  const [focusedChart, setFocusedChart] = useState<string | null>(null);
+  const onChartFocus = useCallback(
+    (id: string, focused: boolean) => setFocusedChart(current => (focused ? id : current === id ? null : current)),
+    [],
+  );
+  const shown = (id: string) => onScreen.includes(id) || id === focusedChart;
+  const readKey = ids.filter(id => read.includes(id) || id === focusedChart).join(',');
+  const visibleMetrics = useMemo(() => monitorGroupMetrics(groups, readKey.split(',')), [groups, readKey]);
+  useEffect(() => {
+    onVisibleMetricsChange?.(visibleMetrics);
+  }, [onVisibleMetricsChange, visibleMetrics]);
+  const zoomed = isChartZoomed(view, domain);
+  const anySamples = useMemo(
+    () =>
+      groups.some(group =>
+        group.metrics.some(metric =>
+          data.series[metric.id]?.some(
+            point => validMonitorPoint(point) && Number.isFinite(metricValue(metric, point.value)),
+          ),
+        ),
+      ),
+    [groups, data.series],
+  );
+  const owner = groups.find(item => item.metrics.some(isVoltage));
+  const canReference =
+    !data.selectionPending &&
+    cursorSeconds !== null &&
+    groups.some(item =>
+      item.metrics.some(metric => isVoltage(metric) && monitorSelection(data, metric, cursorSeconds) !== null),
+    );
   const zoom = (scale: number) => {
     const currentView = Platform.OS === 'web' ? view : interaction.shared.value.view;
     cancel();
@@ -220,9 +401,44 @@ function ChartCollection(props: CollectionProps) {
     onViewportChange(zoomChartViewport(currentView, domain, scale));
   };
   const suffix = fullscreen ? '-fullscreen' : '';
+  const plot = (group: MonitorPlotGroup) => (
+    <MonitorPlot
+      key={group.id}
+      chart={chartData(data, group)}
+      group={group}
+      view={view}
+      domain={domain}
+      height={props.height}
+      laneCount={groups.length}
+      interaction={interaction}
+      live={props.live}
+      following={props.following}
+      holdTail={props.holdTail ?? true}
+      displayTimeSeconds={props.displayTimeSeconds}
+      nowSeconds={data.nowSeconds}
+      monotonicAt={data.monotonicAt}
+      cursor={cursorSeconds}
+      referenceSeconds={referenceSeconds}
+      ownsComparison={group === owner}
+      canReference={group === owner && canReference}
+      fullscreen={fullscreen ?? false}
+      desktopColumns={props.desktopColumns}
+      energySmoothingSeconds={props.energySmoothingSeconds}
+      onEnergySmoothingChange={props.onEnergySmoothingChange}
+      onCursorChange={setCursor}
+      onViewportChange={setViewport}
+      onReferenceChange={setReference}
+      onClose={onClose}
+      onPlotWidthChange={props.onPlotWidthChange}
+      onScreen={shown(group.id)}
+      onChartLayout={onChartLayout}
+      onChartNode={onChartNode}
+      onChartFocus={onChartFocus}
+    />
+  );
   // Fabric can retain old text bounds when Dynamic Type changes in an open modal.
   return (
-    <View key={size.fontScale} style={styles.collection}>
+    <View key={size.fontScale} ref={container} style={styles.collection}>
       <View style={styles.toolbar}>
         <Text style={styles.range}>
           {anySamples ? `${formatDuration(view.start)} – ${formatDuration(view.end)}` : ' '}
@@ -292,35 +508,10 @@ function ChartCollection(props: CollectionProps) {
         <MonitorChartGrid
           columns={props.columns ?? 1}
           onMove={(from, to) => props.onReorderCharts?.(reorderMonitorCharts(props.metricIds, from, to))}
-          items={groups.map(group => ({
-            id: group.id,
-            label: group.label,
-            content: (
-              <MonitorPlot
-                {...props}
-                view={view}
-                domain={domain}
-                group={group}
-                interaction={interaction}
-                onCursorChange={setCursor}
-                onViewportChange={setViewport}
-              />
-            ),
-          }))}
+          items={groups.map(group => ({ id: group.id, label: group.label, content: plot(group) }))}
         />
       ) : (
-        groups.map(group => (
-          <MonitorPlot
-            key={group.id}
-            {...props}
-            view={view}
-            domain={domain}
-            group={group}
-            interaction={interaction}
-            onCursorChange={setCursor}
-            onViewportChange={setViewport}
-          />
-        ))
+        groups.map(plot)
       )}
     </View>
   );
@@ -350,6 +541,8 @@ export function historyRangeReadout(data: MonitorData, metric: MonitorMetric, vi
       (Math.abs(data.statisticsViewport.start - view.start) < 1e-6 &&
         Math.abs(data.statisticsViewport.end - view.end) < 1e-6));
   const stats = matches ? data.statistics[metric.id] : undefined;
+  if (metric.semantics === 'ratio')
+    return { value: `avg ${formatMetric(metric, stats?.ratio)}`, detail: stats?.partial ? 'Partial data' : '' };
   const cumulative = stats?.amount ?? stats?.distance;
   if (metric.semantics === 'cumulative' || metric.semantics === 'distance')
     return {
@@ -370,56 +563,108 @@ export function historyRangeReadout(data: MonitorData, metric: MonitorMetric, vi
   };
 }
 
-function MonitorPlot({
-  data,
-  view,
-  domain,
-  group,
-  groups,
-  interaction,
-  height,
-  live,
-  following,
-  holdTail = true,
-  displayTimeSeconds,
-  cursorSeconds: cursor,
-  onCursorChange: changeCursor,
-  referenceSeconds,
-  onReferenceChange,
-  onViewportChange: commitViewport,
-  fullscreen = false,
-  onClose,
-  desktopColumns,
-  onPlotWidthChange,
-}: CollectionProps & {
+type PlotProps = {
+  chart: MonitorData;
+  group: MonitorPlotGroup;
   view: ChartViewport;
   domain: ChartViewport;
-  group: MonitorPlotGroup;
+  height: number;
+  laneCount: number;
   interaction: ChartInteraction;
-}) {
+  live?: boolean;
+  following?: boolean;
+  holdTail: boolean;
+  displayTimeSeconds?: number;
+  nowSeconds?: number;
+  monotonicAt?: number;
+  cursor: number | null;
+  referenceSeconds: number | null;
+  ownsComparison: boolean;
+  canReference: boolean;
+  fullscreen: boolean;
+  desktopColumns?: number;
+  energySmoothingSeconds?: EnergySmoothingSeconds;
+  onEnergySmoothingChange?: (seconds: EnergySmoothingSeconds) => void;
+  onCursorChange: (seconds: number | null, interacting?: boolean) => void;
+  onViewportChange: (next: ChartViewport, interacting?: boolean) => void;
+  onReferenceChange: (seconds: number | null) => void;
+  onClose?: () => void;
+  onPlotWidthChange?: (width: number) => void;
+  onScreen: boolean;
+  onChartLayout: (id: string, layout: LayoutRectangle) => void;
+  onChartNode: (id: string, node: unknown) => void;
+  onChartFocus: (id: string, focused: boolean) => void;
+};
+const layoutProps = new Set<keyof PlotProps>([
+  'group',
+  'height',
+  'laneCount',
+  'ownsComparison',
+  'referenceSeconds',
+  'fullscreen',
+  'desktopColumns',
+  'onEnergySmoothingChange',
+  'onChartLayout',
+  'onChartNode',
+  'onChartFocus',
+]);
+/** Off-screen charts skip every update that cannot change their size. */
+function samePlotProps(previous: PlotProps, next: PlotProps) {
+  const hidden = !next.onScreen;
+  return (Object.keys(next) as (keyof PlotProps)[]).every(
+    key => previous[key] === next[key] || (hidden && !layoutProps.has(key)),
+  );
+}
+
+const MonitorPlot = memo(function MonitorPlot({
+  chart,
+  group,
+  view,
+  domain,
+  height,
+  laneCount,
+  interaction,
+  live,
+  following,
+  holdTail,
+  displayTimeSeconds,
+  nowSeconds,
+  monotonicAt,
+  cursor,
+  referenceSeconds,
+  ownsComparison,
+  canReference,
+  fullscreen,
+  desktopColumns,
+  energySmoothingSeconds,
+  onEnergySmoothingChange,
+  onCursorChange: changeCursor,
+  onViewportChange: commitViewport,
+  onReferenceChange: setReference,
+  onClose,
+  onPlotWidthChange,
+  onChartLayout,
+  onChartNode,
+  onChartFocus,
+}: PlotProps) {
+  const data = useMemo(() => ({ ...chart, nowSeconds, monotonicAt }), [chart, nowSeconds, monotonicAt]);
   const [width, setWidth] = useState(360);
   const { fontScale } = useWindowDimensions();
   const readingColumns = Math.max(1, Math.min(group.metrics.length, Math.floor((width + 12) / (120 * fontScale + 12))));
-  const ownsComparison = group === groups.find(item => item.metrics.some(isVoltage));
-  const canReference =
-    !data.selectionPending &&
-    cursor !== null &&
-    groups.some(item =>
-      item.metrics.some(metric => isVoltage(metric) && monitorSelection(data, metric, cursor) !== null),
-    );
-  const setReference = (seconds: number | null) => {
-    if (Platform.OS !== 'web') interaction.cancel();
-    onReferenceChange(seconds);
-  };
   const surface = useRef<View>(null);
   const clipID = `monitor-${useId().replace(/[^a-z0-9]/gi, '')}`;
   const zoomed = isChartZoomed(view, domain);
   const plotWidth = Math.max(1, width - leftInset - rightInset);
   const duration = view.end - view.start;
-  const scale = useMemo(
+  const {
+    min: scaleMin,
+    max: scaleMax,
+    decimals,
+  } = useMemo(
     () => monitorScale(group.metrics, { series: data.series, statistics: data.statistics }),
     [group.metrics, data.series, data.statistics],
   );
+  const scale = useMemo(() => ({ min: scaleMin, max: scaleMax, decimals }), [scaleMin, scaleMax, decimals]);
   const hasSamples = useMemo(
     () =>
       group.metrics.some(metric =>
@@ -429,6 +674,8 @@ function MonitorPlot({
       ),
     [group.metrics, data.series],
   );
+  const drawn = !data.drawings || group.metrics.some(metric => data.drawings![metric.id]);
+  const snappable = !data.drawings || group.metrics.every(metric => data.drawings![metric.id]?.current);
   const geometryView = data.plotViewport ?? data.domain;
   const geometryDuration = Math.max(1e-9, geometryView.end - geometryView.start);
   const displayX = (seconds: number) => leftInset + ((seconds - view.start) / duration) * plotWidth;
@@ -608,12 +855,15 @@ function MonitorPlot({
     node.addEventListener('wheel', wheel, { passive: false });
     return () => node.removeEventListener('wheel', wheel);
   }, []);
+  const chartNode = useCallback((node: View | null) => onChartNode(group.id, node), [onChartNode, group.id]);
   const webProps =
     Platform.OS === 'web'
       ? {
           'aria-valuetext': `${accessibleValue}. Visible ${elapsed(view.start)} to ${elapsed(view.end)}.`,
           dataSet: { visibleStart: String(view.start), visibleEnd: String(view.end) },
           tabIndex: 0 as const,
+          onFocus: () => onChartFocus(group.id, true),
+          onBlur: () => onChartFocus(group.id, false),
           onKeyUp: (event: KeyboardEvent<HTMLDivElement>) => {
             if (event.key === 'Escape') event.stopPropagation();
           },
@@ -651,7 +901,11 @@ function MonitorPlot({
   const inside = (seconds: number | null) =>
     seconds !== null && Number.isFinite(seconds) && seconds >= view.start && seconds <= view.end;
   return (
-    <View style={styles.chartRoot}>
+    <View
+      ref={Platform.OS === 'web' ? chartNode : undefined}
+      onLayout={Platform.OS === 'web' ? undefined : event => onChartLayout(group.id, event.nativeEvent.layout)}
+      style={styles.chartRoot}
+    >
       <GestureHandlerRootView style={{ flexGrow: 0, flexShrink: 0 }}>
         <View
           onLayout={event => {
@@ -667,6 +921,13 @@ function MonitorPlot({
                 <Text style={styles.unit}>{group.unit}</Text>
               </View>
             </View>
+            {group.metrics.every(metric => metric.semantics === 'ratio') && onEnergySmoothingChange && (
+              <EnergySmoothingMenu
+                value={energySmoothingSeconds ?? 0}
+                onChange={onEnergySmoothingChange}
+                testID={`monitor-energy-smoothing${suffix}`}
+              />
+            )}
             {ownsComparison && (
               <View style={styles.controls}>
                 <Control
@@ -778,12 +1039,13 @@ function MonitorPlot({
                   data={data}
                   group={group}
                   scale={scale}
-                  laneCount={groups.length}
+                  laneCount={laneCount}
                   height={height}
                   interaction={interaction}
                   cursor={cursor}
                   reference={referenceSeconds}
                   tailTime={live && holdTail ? (displayTimeSeconds ?? data.nowSeconds) : undefined}
+                  snappable={snappable}
                 />
               ) : (
                 <Svg pointerEvents="none" width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -940,7 +1202,7 @@ function MonitorPlot({
                     { left: leftInset, right: rightInset, top: plot.y(scale.max), bottom: height - plot.y(scale.min) },
                   ]}
                 >
-                  <Text style={styles.emptyText}>No samples</Text>
+                  <Text style={styles.emptyText}>{drawn ? 'No samples' : 'Loading…'}</Text>
                 </View>
               )}
             </View>
@@ -949,7 +1211,7 @@ function MonitorPlot({
       </GestureHandlerRootView>
     </View>
   );
-}
+}, samePlotProps);
 
 function VoltageDetails({
   metric,

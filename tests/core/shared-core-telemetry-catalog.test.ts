@@ -43,6 +43,7 @@ describe('core monitor catalog', () => {
       zero: metric.zero,
       semantics: metric.semantics,
       ...(metric.description == null ? {} : { description: metric.description }),
+      ...(metric.plotGapSeconds == null ? {} : { plotGapSeconds: metric.plotGapSeconds }),
     }));
     expect(actual).toEqual(expected);
   });

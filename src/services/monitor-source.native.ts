@@ -3,6 +3,7 @@ import type { MonitorSource, NativeMonitorTarget } from '../core/monitor';
 import type { DistanceSource } from '../core/distance';
 import { nativeMonotonicClock } from './native-monotonic-clock';
 import { nativeRead } from './native-read';
+import { withEnergyPerDistance } from './energy-per-distance-monitor';
 
 export function nativeMonitorSource(
   source: NativeMonitorTarget['source'],
@@ -26,23 +27,28 @@ export function nativeMonitorSource(
       module.cancelMonitorRead?.bind(module),
     );
   };
-  return {
-    key: `${source}:${id ?? 'current'}`,
-    live,
-    semanticKey: `distance:${distanceSource}`,
-    revisionHint: `distance:${distanceSource}`,
-    mapMonotonicSeconds: seconds => nativeMonotonicClock.toJS(seconds),
-    describeSource: async request => {
-      if (live) await nativeMonotonicClock.ready();
-      return execute(request, options => native().describeMonitorSource(options));
+  return withEnergyPerDistance(
+    {
+      key: `${source}:${id ?? 'current'}`,
+      live,
+      semanticKey: `distance:${distanceSource}`,
+      distanceSelection: distanceSource,
+      revisionHint: `distance:${distanceSource}`,
+      mapMonotonicSeconds: seconds => nativeMonotonicClock.toJS(seconds),
+      describeSource: async request => {
+        if (live) await nativeMonotonicClock.ready();
+        return execute(request, options => native().describeMonitorSource(options));
+      },
+      readLatest: async request => {
+        if (live) await nativeMonotonicClock.ready();
+        return execute(request, options => native().readMonitorLatest(options));
+      },
+      readPlot: request => execute(request, options => native().readMonitorPlot(options)),
+      inspectAt: request => execute(request, options => native().inspectMonitorAt(options)),
+      rangeStats: request => execute(request, options => native().readMonitorRangeStats(options)),
+      changesSince: request => execute(request, options => native().monitorChangesSince(options)),
     },
-    readLatest: async request => {
-      if (live) await nativeMonotonicClock.ready();
-      return execute(request, options => native().readMonitorLatest(options));
-    },
-    readPlot: request => execute(request, options => native().readMonitorPlot(options)),
-    inspectAt: request => execute(request, options => native().inspectMonitorAt(options)),
-    rangeStats: request => execute(request, options => native().readMonitorRangeStats(options)),
-    changesSince: request => execute(request, options => native().monitorChangesSince(options)),
-  };
+    request => execute(request, options => native().readMonitorEnergyPerDistance(options)),
+    { preview: source === 'live' },
+  );
 }

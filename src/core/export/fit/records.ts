@@ -40,6 +40,22 @@ const DEVELOPER_COUNT = FIT_DEVELOPER_FIELDS.length;
 const FLOAT32_CHANNELS = FIT_DEVELOPER_FIELDS.map(field => field.type === 'float32');
 const LAST_CHANNELS = FIT_DEVELOPER_FIELDS.map(field => field.policy === 'last');
 
+// One record second in physical units; the developer channels follow in catalog order.
+export const SECOND = {
+  power: 0,
+  cadence: 1,
+  motor: 2,
+  assist: 3,
+  heartRate: 4,
+  latitude: 5,
+  longitude: 6,
+  altitude: 7,
+  speed: 8,
+  distance: 9,
+  developer: 10,
+} as const;
+export const SECOND_VALUES = SECOND.developer + DEVELOPER_COUNT;
+
 const inRange = (value: number, max: number) => value >= 0 && value <= max;
 const validAssist = (value: number) => inRange(value, ASSIST_MAX) && Number.isInteger(value);
 
@@ -397,6 +413,24 @@ class RecordFields extends FieldSums {
     }
   }
 
+  read(values: Float64Array): void {
+    this.settle();
+    values[SECOND.power] = this.power.value;
+    values[SECOND.cadence] = this.cadence.value;
+    values[SECOND.motor] = this.motor.value;
+    values[SECOND.assist] = this.assist;
+    values[SECOND.heartRate] = this.heartRate;
+    values[SECOND.latitude] = this.latitude;
+    values[SECOND.longitude] = this.longitude;
+    values[SECOND.altitude] = this.altitude;
+    values[SECOND.speed] = this.speed;
+    values[SECOND.distance] = this.distance;
+    for (let j = 0; j < DEVELOPER_COUNT; j++) {
+      const mean = this.counts[j]! > 0 ? this.sums[j]! / this.counts[j]! : NaN;
+      values[SECOND.developer + j] = LAST_CHANNELS[j] ? this.lasts[j]! : mean;
+    }
+  }
+
   private settle(): void {
     if (this.telemetry === null) return;
     this.addTelemetry(this.telemetry, this.from, this.to);
@@ -447,14 +481,35 @@ export class WitnessTie {
   }
 }
 
+export interface RecordSecond {
+  readonly second: number;
+  encode(values: Float64Array, developer: Float64Array, clock: FitClock): void;
+  read(values: Float64Array): void;
+}
+
+export interface RecordTarget {
+  record(second: RecordSecond): void;
+  drain(): Promise<void>;
+}
+
+export function fitRecords(writer: FitWriter, clock: FitClock): RecordTarget {
+  const values = new Float64Array(11);
+  const developer = new Float64Array(DEVELOPER_COUNT);
+  return {
+    record(second) {
+      second.encode(values, developer, clock);
+      writer.message('record', values, developer);
+    },
+    drain: () => writer.drain(),
+  };
+}
+
 export class RecordEmitter implements MergeConsumer {
   records = 0;
   private readonly breaks = new BinBreaks();
   private readonly bins: RecordBins;
   private readonly fields = new RecordFields();
   private readonly queue: LifecycleItem[] = [];
-  private readonly values = new Float64Array(11);
-  private readonly developer = new Float64Array(DEVELOPER_COUNT);
   private readonly tieBreaks: boolean[] = [];
   private pending = false;
   private lastStream = -1;
@@ -463,8 +518,8 @@ export class RecordEmitter implements MergeConsumer {
   private lastSecond = NaN;
 
   constructor(
-    private readonly writer: FitWriter,
-    private readonly clock: FitClock,
+    private readonly target: RecordTarget,
+    clock: FitClock,
     interval: number,
     private readonly writeLifecycle: (item: LifecycleItem) => void,
   ) {
@@ -507,7 +562,7 @@ export class RecordEmitter implements MergeConsumer {
   }
 
   drain(): Promise<void> {
-    return this.writer.drain();
+    return this.target.drain();
   }
 
   finish(): void {
@@ -522,8 +577,7 @@ export class RecordEmitter implements MergeConsumer {
 
   private flush(): void {
     if (!this.pending) return;
-    this.fields.encode(this.values, this.developer, this.clock);
-    this.writer.message('record', this.values, this.developer);
+    this.target.record(this.fields);
     this.records++;
     this.pending = false;
     for (const item of this.queue) this.writeLifecycle(item);

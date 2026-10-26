@@ -11,7 +11,11 @@ import {
   type MonitorData,
   type MonitorPoint,
 } from '../../src/core/monitor';
+import { groupMonitorMetrics, monitorScale } from '../../src/core/monitor-chart';
+import { TelemetryMonitor } from '../../src/core/monitor-data';
+import { MonitorReadController } from '../../src/features/monitor/monitor-read-controller';
 import freshness from '../fixtures/contract/presentation/freshness.json';
+import { syntheticSample } from '../fixtures/synthetic-sample';
 const { renderToStaticMarkup } = createRequire(import.meta.url)('react-dom/server') as {
   renderToStaticMarkup: (node: ReactNode) => string;
 };
@@ -83,6 +87,7 @@ vi.mock('../../src/components/use-native-chart-gestures', () => ({ useNativeChar
 vi.mock('../../src/components/monitor-raster', () => ({ MonitorRaster: () => null }));
 vi.mock('../../src/components/monitor-chart-grid', () => ({ MonitorChartGrid: () => null }));
 vi.mock('../../src/components/modal-dialog', () => ({ useFocusedModal: () => false }));
+vi.mock('../../src/services/use-foreground-activity', () => ({ useForegroundActivity: () => true }));
 
 const point: MonitorPoint = {
   elapsedSeconds: 10,
@@ -491,6 +496,53 @@ describe('chart no-cursor readouts', () => {
     expect(html).toContain(point.timestamp);
     expect(html).not.toContain('Last in range');
   });
+});
+
+it('draws identical live scales and readouts from voltage-only statistics as from every metric', async () => {
+  const metrics = ['humanPowerW', 'cadenceRpm', 'batteryVoltageV', 'motorTempC', 'batteryCurrentA'];
+  const source = new TelemetryMonitor(
+    'workout:plotted-extrema',
+    true,
+    Array.from({ length: 2400 }, (_, i) => {
+      const seconds = i / 4;
+      const value = syntheticSample(seconds, i, new Date(Date.UTC(2026, 0, 1) + i * 250).toISOString());
+      if (i === 1337) return { ...value, humanPowerW: 911, batteryVoltageV: 47.3, motorTempC: 81 };
+      if (i === 2011) return { ...value, cadenceRpm: 3, batteryCurrentA: 29.5 };
+      return value;
+    }),
+  );
+  const controller = new MonitorReadController(source);
+  try {
+    controller.configure(metrics, 'all', 120);
+    controller.refresh();
+    for (let i = 0; i < 100; i++) await Promise.resolve();
+    const state = controller.getSnapshot(),
+      data = state.data!;
+    expect(Object.keys(data.statistics)).toEqual(['batteryVoltageV']);
+    expect(data.series.humanPowerW!.length).toBeLessThan(2400);
+    const all = await source.rangeStats({
+      generation: 0,
+      expectedRevision: data.revision!,
+      metrics,
+      startSeconds: data.statisticsViewport!.start,
+      endSeconds: data.statisticsViewport!.end,
+    });
+    if (all.status !== 'ok') throw new Error('Unexpected retry');
+    expect(all.statistics.humanPowerW?.max?.value).toBe(911);
+    const full = { ...data, statistics: all.statistics };
+    for (const group of groupMonitorMetrics(metrics))
+      expect(monitorScale(group.metrics, data)).toEqual(monitorScale(group.metrics, full));
+    const props = {
+      metricIds: metrics,
+      live: true,
+      following: true,
+      viewport: state.viewport,
+      displayTimeSeconds: state.nowSeconds,
+    };
+    expect(render({ ...props, data })).toBe(render({ ...props, data: full }));
+  } finally {
+    controller.dispose();
+  }
 });
 
 it('marks shared headings for native and web accessibility semantics', () => {

@@ -277,6 +277,70 @@ let asyncChange = try store.read {
 check(
   asyncChange.string("kind") == "append" && asyncChange.int("min_us") == 0 && asyncChange.int("max_us") == 10_000_000,
   "late async point invalidates both original neighbors")
+func changeMarks(_ id: String) throws -> [String: Int64] {
+  try store.read { db in
+    Dictionary(
+      uniqueKeysWithValues: try db.rows(
+        "SELECT metric,kind,revision FROM collection_change_marks WHERE collection_id=?", [.text(id)], limit: 512
+      ).map { ($0.string("kind")! + ":" + $0.string("metric")!, $0.int("revision")!) })
+  }
+}
+func lifecycle(_ id: String, _ action: String, seconds: Double) throws {
+  try archive.append(
+    WorkoutEvent(
+      workoutId: id, kind: "lifecycle", source: "phone", timestamp: fixedDate.addingTimeInterval(seconds),
+      elapsedSeconds: seconds, payload: ["action": .string(action)]))
+}
+let markedRide = try archive.create(
+  startedAt: fixedDate, indoor: true, watchEnabled: true, saveToHealth: true, recordGPS: false, sampleHz: 4)
+try archive.append(health(markedRide.id, seconds: 1))
+let introducedRevision = try archive.revision(id: markedRide.id)
+try archive.append(health(markedRide.id, seconds: 2))
+check(
+  try changeMarks(markedRide.id) == ["semantics:heartRateBpm": introducedRevision],
+  "a new channel marks its metric and an ordinary append leaves no mark")
+try lifecycle(markedRide.id, "start", seconds: 0)
+let startRevision = try archive.revision(id: markedRide.id)
+_ = try archive.update(id: markedRide.id, phase: "running")
+let metadataRevision = try archive.revision(id: markedRide.id)
+_ = try archive.update(
+  id: markedRide.id,
+  ownerTiming: WorkoutOwnerTiming(
+    timestamp: WorkoutCoding.timestamp(fixedDate.addingTimeInterval(5)), elapsedSeconds: 5, timerSeconds: 5),
+  elapsedSeconds: 5, onlyIfChanged: true)
+let timingRevision = try archive.revision(id: markedRide.id)
+check(
+  try changeMarks(markedRide.id) == [
+    "semantics:heartRateBpm": introducedRevision, "semantics:": startRevision, "metadata:": metadataRevision,
+    "timing:": timingRevision,
+  ], "changes that list no metric mark the all-metrics sentinel of their kind")
+for offset in stride(from: 0, to: 600, by: 200) {
+  try archive.appendBatch((offset..<(offset + 200)).map { try health(markedRide.id, seconds: 10 + Double($0) / 4) })
+}
+try lifecycle(markedRide.id, "pause", seconds: 200)
+let pauseRevision = try archive.revision(id: markedRide.id)
+check(
+  try store.read {
+    try $0.scalarInt("SELECT min(revision) FROM collection_changes WHERE collection_id=?", [.text(markedRide.id)])
+  }! > timingRevision, "the change journal no longer holds the earlier changes")
+check(
+  try changeMarks(markedRide.id) == [
+    "semantics:heartRateBpm": introducedRevision, "semantics:": pauseRevision, "metadata:": metadataRevision,
+    "timing:": timingRevision,
+  ], "marks keep the newest revision of each metric and kind beyond the change journal")
+let prunedLiveID = UUID().uuidString.lowercased()
+try store.createCollection(id: prunedLiveID, kind: "live", startedAt: WorkoutCoding.timestamp(fixedDate))
+for t in [0.0, 1.0, 2.0] {
+  var wide: [String: Any] = Dictionary(uniqueKeysWithValues: PowerLogStore.telemetryColumns.map { ($0, 2.0 as Any) })
+  wide["timestamp"] = WorkoutCoding.timestamp(fixedDate.addingTimeInterval(t))
+  _ = try store.appendTelemetry(wide, collectionID: prunedLiveID, elapsedSeconds: t)
+}
+try store.prunePreview(id: prunedLiveID, retaining: 1)
+let pruneRevision = try store.collection(id: prunedLiveID).int("revision")!
+let pruneMarks = try changeMarks(prunedLiveID)
+check(
+  PowerLogStore.telemetryColumns.allSatisfy { pruneMarks["telemetry:" + $0] == pruneRevision },
+  "a preview prune marks every telemetry column")
 rejects(
   {
     _ = try archive.appendBatch(
@@ -287,6 +351,9 @@ let activeLiveID = UUID().uuidString.lowercased()
 try store.createCollection(id: sharedLiveID, kind: "live", startedAt: WorkoutCoding.timestamp(fixedDate))
 try store.createCollection(id: activeLiveID, kind: "live", startedAt: WorkoutCoding.timestamp(fixedDate))
 _ = try store.appendTelemetry(sample, collectionID: sharedLiveID, elapsedSeconds: 7)
+check(
+  try [changeID, sharedLiveID, prunedLiveID].allSatisfy { try !changeMarks($0).isEmpty },
+  "stale live collections hold change marks before cleanup")
 var cleanupPages = 0
 while try store.pruneLivePage(keeping: activeLiveID, limit: 2) {
   cleanupPages += 1
@@ -297,6 +364,99 @@ check(
   try archive.pageEvents(id: first.id).first!.event.eventId == original.eventId,
   "saved workout membership protects shared physical original")
 rejects({ _ = try store.collection(id: sharedLiveID) }, "old live catalog reclaimed")
+check(
+  try [changeID, sharedLiveID, prunedLiveID].allSatisfy { try changeMarks($0).isEmpty },
+  "live cleanup removes the change marks of every reclaimed collection")
+_ = try store.markWorkoutDeleted(id: markedRide.id)
+var deletionPages = 0
+while try !archive.cleanupDeletedWorkoutPage(id: markedRide.id) {
+  deletionPages += 1
+  check(deletionPages < 1_000, "bounded ride deletion makes progress")
+}
+check(
+  try store.read {
+    (
+      try $0.scalarInt("SELECT count(*) FROM collections WHERE id=?", [.text(markedRide.id)]),
+      try $0.scalarInt("SELECT count(*) FROM collection_change_marks WHERE collection_id=?", [.text(markedRide.id)])
+    )
+  } == (0, 0), "ride deletion removes the change marks with the collection")
+let correctedRide = try archive.create(
+  startedAt: fixedDate, indoor: true, watchEnabled: true, saveToHealth: true, recordGPS: false, sampleHz: 4)
+func frame(_ seconds: Double, _ extra: [String: WorkoutJSON] = [:]) throws -> WorkoutEvent {
+  var payload: [String: WorkoutJSON] = ["humanPowerW": .number(200), "cadenceRpm": .number(80)]
+  payload.merge(extra) { _, new in new }
+  return try WorkoutEvent(
+    workoutId: correctedRide.id, kind: "telemetry", source: "controller",
+    timestamp: fixedDate.addingTimeInterval(seconds), elapsedSeconds: seconds, payload: payload)
+}
+func latestChange(_ id: String) throws -> (revision: Int64, metrics: [String]) {
+  try store.read { db in
+    let row = try db.rows(
+      "SELECT revision,metrics FROM collection_changes WHERE collection_id=? ORDER BY revision DESC LIMIT 1",
+      [.text(id)], limit: 1
+    ).first!
+    return (row.int("revision")!, try JSONDecoder().decode([String].self, from: row.data("metrics")!))
+  }
+}
+let withVoltage = try frame(1, ["batteryVoltageV": .number(52)])
+try archive.append(withVoltage)
+try archive.append(frame(2, ["supersedesEventId": .string(withVoltage.eventId)]))
+var correction = try latestChange(correctedRide.id)
+var correctionMarks = try changeMarks(correctedRide.id)
+check(
+  correction.metrics == ["batteryVoltageV", "cadenceRpm", "humanPowerW"]
+    && correctionMarks["semantics:batteryVoltageV"] == correction.revision && correctionMarks["semantics:"] == nil,
+  "a correction marks the metrics of the original it replaces as well as its own")
+let deletedVoltage = try frame(3, ["batteryVoltageV": .number(53)])
+try archive.append(deletedVoltage)
+try archive.append(frame(4, ["supersedesEventId": .string(deletedVoltage.eventId), "deleted": .bool(true)]))
+correction = try latestChange(correctedRide.id)
+check(
+  try correction.metrics == ["batteryVoltageV", "cadenceRpm", "humanPowerW"]
+    && changeMarks(correctedRide.id)["semantics:batteryVoltageV"] == correction.revision,
+  "a deletion marks the metrics of the original it deletes")
+let deletedHeart = try health(correctedRide.id, seconds: 5)
+try archive.append(deletedHeart)
+let marksBeforeTombstone = try changeMarks(correctedRide.id)
+try archive.append(
+  WorkoutHealthObservation.tombstone(
+    id: correctedRide.id, source: "watch", parentID: deletedHeart.eventId,
+    observedAt: fixedDate.addingTimeInterval(6), elapsed: 6))
+correction = try latestChange(correctedRide.id)
+correctionMarks = try changeMarks(correctedRide.id)
+check(
+  correction.metrics == ["heartRateBpm"] && correctionMarks["semantics:heartRateBpm"] == correction.revision
+    && correctionMarks.filter { $0.key != "semantics:heartRateBpm" }
+      == marksBeforeTombstone.filter { $0.key != "semantics:heartRateBpm" },
+  "a Health tombstone marks only the metric of the sample it deletes")
+let deletedParent = UUID().uuidString.lowercased()
+var seriesMember = try health(correctedRide.id, seconds: 7)
+seriesMember.payload["sampleUUID"] = .string(deletedParent)
+try archive.append(seriesMember)
+try archive.append(
+  WorkoutEvent(
+    workoutId: correctedRide.id, kind: "health", source: "watch", timestamp: fixedDate.addingTimeInterval(8),
+    elapsedSeconds: 8,
+    payload: [
+      "sampleUUID": .string(deletedParent), "deleted": .bool(true), "representation": .string("deletedSample"),
+    ]))
+check(
+  try latestChange(correctedRide.id).metrics == ["heartRateBpm"],
+  "a Health deletion by sample identifier marks the metric of the samples it deletes")
+try archive.append(frame(9, ["supersedesEventId": .string(UUID().uuidString.lowercased())]))
+correction = try latestChange(correctedRide.id)
+check(
+  try correction.metrics.isEmpty && changeMarks(correctedRide.id)["semantics:"] == correction.revision,
+  "a correction whose original is absent marks every metric")
+let replacedPause = try WorkoutEvent(
+  workoutId: correctedRide.id, kind: "lifecycle", source: "phone", timestamp: fixedDate.addingTimeInterval(10),
+  elapsedSeconds: 10, payload: ["action": .string("pause")])
+try archive.append(replacedPause)
+try archive.append(frame(11, ["supersedesEventId": .string(replacedPause.eventId)]))
+correction = try latestChange(correctedRide.id)
+check(
+  try correction.metrics.isEmpty && changeMarks(correctedRide.id)["semantics:"] == correction.revision,
+  "a correction that replaces a lifecycle record marks every metric")
 let countBeforeCrash = try archive.metadata(id: first.id).eventCount
 let process = Process()
 process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])

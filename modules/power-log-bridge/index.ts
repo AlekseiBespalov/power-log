@@ -1,5 +1,5 @@
 import type { CatalogRequest } from '../../src/core/catalog';
-import type { BluetoothTraceStatus } from '../../src/core/bluetooth-diagnostics';
+import type { BluetoothTraceStatus, ConnectionLogExport } from '../../src/core/bluetooth-diagnostics';
 import { requireOptionalNativeModule, NativeModule } from 'expo-modules-core';
 import type {
   ConnectionDiagnostics,
@@ -59,6 +59,11 @@ export declare class PowerLogBridge extends NativeModule<Events> {
   ): Promise<import('../../src/core/monitor').MonitorLatestResult>;
   describeMonitorSource(options: NativeMonitorTarget & MonitorDescribeRequest): Promise<MonitorDescribeResult>;
   readMonitorPlot(options: NativeMonitorTarget & MonitorPlotRequest): Promise<MonitorPlotResult>;
+  readMonitorEnergyPerDistance(
+    options: NativeMonitorTarget & MonitorPlotRequest,
+  ): Promise<
+    import('../../src/core/monitor').MonitorResult<import('../../src/core/energy-per-distance').EnergyPerDistanceResult>
+  >;
   inspectMonitorAt(options: NativeMonitorTarget & MonitorInspectRequest): Promise<MonitorInspectResult>;
   readMonitorRangeStats(options: NativeMonitorTarget & MonitorStatsRequest): Promise<MonitorStatsResult>;
   monitorChangesSince(options: NativeMonitorTarget & MonitorChangesRequest): Promise<MonitorChangesResult>;
@@ -88,6 +93,7 @@ export declare class PowerLogBridge extends NativeModule<Events> {
   stopBluetoothTrace(): Promise<void>;
   clearBluetoothTrace(): Promise<void>;
   readBluetoothTrace(): Promise<string>;
+  readConnectionDiagnostics(): Promise<ConnectionLogExport>;
   startScan(): Promise<void>;
   stopScan(): Promise<void>;
   connect(options: ConnectionOptions): Promise<void>;

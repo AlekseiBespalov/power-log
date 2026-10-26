@@ -44,13 +44,14 @@ export function PrivacyPolicy() {
         </Body>
         <Body>
           iPhone and Android keep recorded rides in local databases and pre-Start previews in bounded memory, settings
-          in app files, and temporary imports and exports in app storage. An exported ride file stays there for at least
-          24 hours so the app you share it with can read it; Power Log deletes it the next time it starts or exports
-          after that. iPhone also remembers the selected Bluetooth device and the identifiers, model and firmware of
-          controllers it has recognized (disconnecting does not clear that list), and keeps bounded connection logs.
-          Apple Watch keeps recording settings and a bounded in-memory buffer of observations for its paired iPhone. The
-          phone keeps the ride archive; interrupted rides retain only committed data. Native apps also write operational
-          errors to system logs.
+          in app files, and temporary imports and exports in app storage. An exported file stays there for at least 24
+          hours so the app you share it with can read it; Power Log deletes it the next time it starts or exports after
+          that. iPhone also remembers the selected Bluetooth device and the identifiers, model and firmware of
+          controllers it has recognized (disconnecting does not clear that list). iPhone and Android keep a bounded
+          connection log of connection events, timings and error codes, without device names, identifiers, locations or
+          ride measurements. Apple Watch keeps recording settings and a bounded in-memory buffer of observations for its
+          paired iPhone. The phone keeps the ride archive; interrupted rides retain only committed data. Native apps
+          also write operational errors to system logs.
         </Body>
         <Body>
           Depending on your Apple backup settings, iPhone app data, including rides with their Health readings and
@@ -82,6 +83,11 @@ export function PrivacyPolicy() {
           remains in memory until deleted or the app exits. Export log saves a separate JSON file and opens sharing or a
           browser download. On phones, Clear also removes that local export copy; starting a new capture replaces it.
           Copies you shared or downloaded remain where you saved them.
+        </Body>
+        <Body>
+          Share diagnostics on iPhone and Android puts the connection log, the phone model, system version, power saving
+          and Bluetooth permission states, and the app version in a ZIP and opens the system share sheet. Nothing leaves
+          the phone unless you share that file.
         </Body>
         <Body>
           Android asks for Nearby devices permission on newer versions. Older Android versions also require location
@@ -154,9 +160,9 @@ export function PrivacyPolicy() {
           synchronization you enable there.
         </Body>
         <Body>
-          Export buttons create a FIT file or a ride-data ZIP. On iPhone and Android, sharing opens the system share
-          sheet so you choose where the file goes; the website downloads the file. Exports can contain precise routes,
-          Health readings and controller details. Imported CSV files can also be exported again.
+          Export buttons create a FIT file, a CSV file or a ride-data ZIP. On iPhone and Android, sharing opens the
+          system share sheet so you choose where the file goes; the website downloads the file. Exports can contain
+          precise routes, Health readings and controller details. Imported CSV files can also be exported again.
         </Body>
         <Body>
           Open Strava upload only opens Strava’s website. It sends no ride file. You must select and upload the file

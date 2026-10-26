@@ -4,6 +4,7 @@ import app.powerlog.core.analytics.Wide
 import app.powerlog.core.protocol.CanonicalNumber
 import app.powerlog.core.protocol.Natural
 import kotlin.math.abs
+import kotlin.math.floor
 
 enum class MetricGroup {
     Rider,
@@ -23,6 +24,7 @@ enum class MetricSemantics {
     distance,
     category,
     circular,
+    ratio,
 }
 
 data class MetricDeclaration(
@@ -39,6 +41,7 @@ data class MetricDeclaration(
     val zero: Boolean? = null,
     val semantics: MetricSemantics? = null,
     val description: String? = null,
+    val plotGapSeconds: Double? = null,
 )
 
 object MetricCatalog {
@@ -85,6 +88,7 @@ object MetricCatalog {
                 null,
                 null,
                 null,
+                plotGapSeconds = 30.0,
             ),
             MetricDeclaration(
                 "pedalTorqueNm",
@@ -350,7 +354,7 @@ object MetricCatalog {
                 MetricGroup.Battery,
                 "#f3c260",
                 2,
-                2.5,
+                6.0,
                 1.0,
                 zero = true,
                 semantics = MetricSemantics.cumulative,
@@ -364,7 +368,7 @@ object MetricCatalog {
                 MetricGroup.Battery,
                 "#e0b36a",
                 3,
-                2.5,
+                6.0,
                 1.0,
                 zero = true,
                 semantics = MetricSemantics.cumulative,
@@ -378,7 +382,7 @@ object MetricCatalog {
                 MetricGroup.Battery,
                 "#8dbfdf",
                 2,
-                2.5,
+                6.0,
                 1.0,
                 zero = true,
                 semantics = MetricSemantics.cumulative,
@@ -393,11 +397,39 @@ object MetricCatalog {
                 MetricGroup.Battery,
                 "#9eafd9",
                 3,
-                2.5,
+                6.0,
                 1.0,
                 zero = true,
                 semantics = MetricSemantics.cumulative,
                 description = "Calculated by Power Log by integrating positive battery current during this ride.",
+            ),
+            MetricDeclaration(
+                "batteryWhPerKm",
+                "Battery consumption",
+                "Battery consumption",
+                "Wh/km",
+                MetricGroup.Battery,
+                "#3d8bfd",
+                1,
+                6.0,
+                zero = true,
+                semantics = MetricSemantics.ratio,
+                description =
+                    "Battery power divided by speed; ride average uses the selected battery energy and distance.",
+            ),
+            MetricDeclaration(
+                "riderWhPerKm",
+                "Rider contribution",
+                "Rider contribution",
+                "Wh/km",
+                MetricGroup.Rider,
+                "#ff8735",
+                1,
+                6.0,
+                zero = true,
+                semantics = MetricSemantics.ratio,
+                description =
+                    "Rider power divided by speed; ride average uses accumulated pedalling work and distance.",
             ),
             MetricDeclaration(
                 "altitudeMeters",
@@ -514,6 +546,8 @@ object MetricCatalog {
         )
     private val exactIntegerPattern = Regex("-?(0|[1-9][0-9]*)")
     private val exactScalePattern = Regex("[0-9]+(\\.[0-9]+)?")
+    private val powersOfTen = DoubleArray(23) { 1.0 }.also { for (i in 1 until it.size) it[i] = it[i - 1] * 10 }
+    private val fastFixedLimit = (1L shl 52).toDouble()
     val all: List<MetricDeclaration>
         get() = declarations.toList()
 
@@ -636,7 +670,38 @@ object MetricCatalog {
         return digits.concatToString()
     }
 
-    internal fun fixed(value: Double, decimals: Int): String {
+    internal fun fixed(value: Double, decimals: Int): String = fastFixed(value, decimals) ?: exactFixed(value, decimals)
+
+    // A power of ten up to 10^22 is exact, so the scaled magnitude is the exact product rounded once. Below 2^52 every
+    // whole number plus one half is a double and rounding preserves order, so the exact product lies on the same side
+    // of that half as the scaled magnitude unless the scaled magnitude is the half itself.
+    internal fun fastFixed(value: Double, decimals: Int): String? {
+        if (decimals !in powersOfTen.indices) return null
+        val magnitude = abs(value)
+        val scaled = magnitude * powersOfTen[decimals]
+        if (!(scaled < fastFixedLimit)) return null
+        val whole = floor(scaled)
+        val fraction = scaled - whole
+        val up = if (fraction != 0.5) fraction > 0.5 else reachesHalf(magnitude, decimals, whole.toLong())
+        val digits = (whole.toLong() + if (up) 1 else 0).toString().padStart(decimals + 1, '0')
+        val text = if (decimals == 0) digits else digits.dropLast(decimals) + "." + digits.takeLast(decimals)
+        return (if (value < 0) "-" else "") + text
+    }
+
+    // m × 2^e × 10^d ≥ whole + 1/2 exactly when m × 5^d ≥ (2 × whole + 1) × 2^-(e + d + 1). Below 2^52 the shift is
+    // not negative (e + d + 1 > 0 would need m × 2^e × 10^d ≥ 2^52) and both sides stay below 2^106.
+    private fun reachesHalf(magnitude: Double, decimals: Int, whole: Long): Boolean {
+        val bits = magnitude.toBits()
+        val exponent = (bits ushr 52).toInt()
+        val significand = (bits and 0x000fffffffffffffL) or if (exponent == 0) 0L else 1L shl 52
+        val power = if (exponent == 0) -1074 else exponent - 1075
+        var five = 1UL
+        repeat(decimals) { five *= 5UL }
+        val half = Wide.of((2 * whole + 1).toULong()).shiftLeft(-(power + decimals + 1))
+        return Wide.product(significand.toULong(), five) >= half
+    }
+
+    internal fun exactFixed(value: Double, decimals: Int): String {
         if (!value.isFinite()) return if (value > 0) "Infinity" else "-Infinity"
         if (abs(value) >= 1e21) return CanonicalNumber.encode(value).replace("e", "e+")
         val bits = abs(value).toBits()

@@ -99,8 +99,8 @@ for (const width of [390, 1440])
     await expect(
       page.getByTestId('tab-transition-1').filter({ visible: true }).getByTestId('monitor-chart-power'),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'Export ZIP', exact: true })).toBeEnabled();
+    for (const name of ['Export FIT', 'Export CSV', 'Export ZIP'])
+      await expect(page.getByRole('button', { name, exact: true })).toBeEnabled();
     expect((await stored(page))[0]?.distanceSource).toBe('controller');
     await page
       .getByTestId('tab-transition-1')
@@ -137,6 +137,7 @@ for (const width of [390, 1440])
       .filter({ visible: true })
       .getByTestId('monitor-chart-distanceMeters');
     await expect(distanceChart).toBeVisible();
+    await distanceChart.scrollIntoViewIfNeeded();
     await expect(distanceChart.locator('path').first()).toHaveAttribute('d', /L/);
     const monitorStatus = page.getByTestId('tab-transition-1').filter({ visible: true }).getByTestId('monitor-status');
     await testInfo.attach('monitor-status', {
@@ -149,7 +150,7 @@ for (const width of [390, 1440])
       contentType: 'text/plain',
     });
     await expect(monitorStatus.filter({ hasText: 'Chart error' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Export CSV', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Export CSV', exact: true })).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`saved-ride-${width}.png`), fullPage: true });
     await distanceChart.screenshot({ path: testInfo.outputPath(`saved-distance-chart-${width}.png`) });

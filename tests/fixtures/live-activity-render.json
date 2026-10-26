@@ -3,22 +3,22 @@
     {
       "sequence": 5,
       "now": 105.0601098537445,
-      "staleDate": 106.0,
+      "staleDate": 121.0,
       "flag": false,
       "bike": "200",
       "heart": "150"
     },
     {
       "sequence": 6,
-      "now": 106.00449991226196,
-      "staleDate": 115.0,
+      "now": 121.00449991226196,
+      "staleDate": 130.0,
       "flag": true,
       "bike": "—",
       "heart": "150"
     },
     {
       "sequence": 7,
-      "now": 115.02513194084167,
+      "now": 130.02513194084167,
       "staleDate": -1,
       "flag": true,
       "bike": "—",
@@ -29,7 +29,7 @@
     {
       "sequence": 5,
       "now": 105.58912587165833,
-      "staleDate": 106.0,
+      "staleDate": 121.0,
       "flag": false,
       "bike": "200",
       "heart": "150"
@@ -37,46 +37,46 @@
     {
       "sequence": 5,
       "now": 105.60598683357239,
-      "staleDate": 106.0,
+      "staleDate": 121.0,
       "flag": false,
       "bike": "200",
       "heart": "150"
     },
     {
       "sequence": 6,
-      "now": 106.26094388961792,
-      "staleDate": 115.0,
+      "now": 121.26094388961792,
+      "staleDate": 130.0,
       "flag": false,
       "bike": "—",
       "heart": "150"
     },
     {
       "sequence": 6,
-      "now": 106.26136803627014,
-      "staleDate": 115.0,
+      "now": 121.26136803627014,
+      "staleDate": 130.0,
       "flag": false,
       "bike": "—",
       "heart": "150"
     },
     {
       "sequence": 6,
-      "now": 107.44983196258545,
-      "staleDate": 115.0,
+      "now": 122.44983196258545,
+      "staleDate": 130.0,
       "flag": false,
       "bike": "—",
       "heart": "150"
     },
     {
       "sequence": 6,
-      "now": 107.45034289360046,
-      "staleDate": 115.0,
+      "now": 122.45034289360046,
+      "staleDate": 130.0,
       "flag": false,
       "bike": "—",
       "heart": "150"
     },
     {
       "sequence": 7,
-      "now": 122.12402200698853,
+      "now": 137.12402200698853,
       "staleDate": -1,
       "flag": false,
       "bike": "—",
@@ -84,7 +84,7 @@
     },
     {
       "sequence": 7,
-      "now": 122.12449789047241,
+      "now": 137.12449789047241,
       "staleDate": -1,
       "flag": false,
       "bike": "—",

@@ -39,11 +39,11 @@ let input = try ActivityInput(
   rideId: ride, publicationSequence: 1, controlToken: token, phase: "running", pendingAction: nil,
   timerSeconds: KotlinDouble(value: 10))
 let activity = ActivityPresentations.shared.project(input: input, state: state, clock: now)
-check(activity.bikeExpiresAtUs?.int64Value == 106_000_000)
-check(activity.staleDateUs?.int64Value == 106_000_000)
-check(activity.render(nowUtcUs: 105_999_999, systemStale: false).bike.text == "200")
-check(activity.render(nowUtcUs: 106_000_000, systemStale: false).bike.text == "—")
-check(activity.render(nowUtcUs: 106_000_000, systemStale: true).controls.isEmpty)
+check(activity.bikeExpiresAtUs?.int64Value == 121_000_000)
+check(activity.staleDateUs?.int64Value == 121_000_000)
+check(activity.render(nowUtcUs: 120_999_999, systemStale: false).bike.text == "200")
+check(activity.render(nowUtcUs: 121_000_000, systemStale: false).bike.text == "—")
+check(activity.render(nowUtcUs: 121_000_000, systemStale: true).controls.isEmpty)
 check(activity.timer.originUs?.int64Value == 95_000_000)
 
 let capabilities = RideCapabilities(
@@ -121,8 +121,8 @@ let finishing = try ActivityPresentations.shared.project(
   input: ActivityInput(
     rideId: ride, publicationSequence: 1, controlToken: token, phase: "finishing", pendingAction: nil,
     timerSeconds: KotlinDouble(value: 10)), state: state, clock: now)
-check(finishing.bikeExpiresAtUs?.int64Value == 106_000_000 && finishing.staleDateUs?.int64Value == 106_000_000)
-check(finishing.heartRateExpiresAtUs?.int64Value == 115_000_000)
+check(finishing.bikeExpiresAtUs?.int64Value == 121_000_000 && finishing.staleDateUs?.int64Value == 121_000_000)
+check(finishing.heartRateExpiresAtUs?.int64Value == 130_000_000)
 let android = MeasurementSource(source: .phone, device: .androidphone, provider: .healthconnect, dataOrigin: nil)
 check(
   try PresentationFormatting.shared.distance(

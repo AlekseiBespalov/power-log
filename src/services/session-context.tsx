@@ -16,6 +16,8 @@ import type { TelemetryAdapter } from './adapter';
 import { deviceAdapter } from './device';
 import { initialSessionErrors, sessionErrorMessage, sessionErrorReducer } from './session-errors';
 import { TelemetryMonitor } from '../core/monitor-data';
+import type { MonitorSource } from '../core/monitor';
+import { withEnergyPerDistance } from './energy-per-distance-monitor';
 import { useMonitorPreferences } from './monitor-preferences';
 import { appIsForeground, subscribeAppVisibility } from './app-visibility';
 import { SessionPresentation } from './session-presentation';
@@ -29,7 +31,7 @@ interface SessionContextValue {
   error: string | null;
   busy: boolean;
   hz: 2 | 4 | 8;
-  monitor: TelemetryMonitor;
+  monitor: MonitorSource;
   run: (action: () => Promise<unknown>) => Promise<void>;
   clearError: () => void;
   scan: () => Promise<void>;
@@ -38,6 +40,10 @@ const adapter = deviceAdapter;
 const SessionContext = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [monitor] = useState(() => new TelemetryMonitor(`foreground:${adapter.kind}`, true));
+  const previewMonitor = useMemo(
+    () => withEnergyPerDistance(monitor, request => monitor.readEnergyPerDistance(request), { preview: true }),
+    [monitor],
+  );
   const [presentation] = useState(() => new SessionPresentation());
   const { state, display, faultCode } = useSyncExternalStore(
     presentation.subscribe,
@@ -124,7 +130,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       error,
       busy,
       hz,
-      monitor,
+      monitor: previewMonitor,
       run,
       clearError: () => dispatchError({ type: 'dismiss' }),
       scan: async () => {
@@ -132,7 +138,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await adapter.startScan();
       },
     }),
-    [state, devices, display, faultCode, error, busy, hz, monitor, run],
+    [state, devices, display, faultCode, error, busy, hz, previewMonitor, run],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

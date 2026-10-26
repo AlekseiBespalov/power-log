@@ -1,4 +1,9 @@
 import {
+  AnalyticsEnergyPerDistance,
+  type AnalyticsEnergyPerDistanceCheckpoint,
+  AnalyticsEnergyPerDistanceSeries,
+  analyticsEnergyCheckpointMarginUs,
+  analyticsEnergyContextSeconds,
   AnalyticsConsumptionKernel,
   AnalyticsConsumptionInterval,
   AnalyticsControllerKernel,
@@ -16,6 +21,7 @@ import {
   InspectionPlotBucket,
   InspectionPlotCache,
   InspectionPlotQuery,
+  InspectionPlotSlotSummary,
   type AnalyticsInterval,
 } from '../../shared/js';
 import { monitorInspectionItem, inspectionPoint } from '../core/monitor-inspection';
@@ -23,14 +29,16 @@ import { type DistanceSource, type WorkoutDistanceInfo } from '../core/distance'
 import { browserIndexKey, browserKeyRange, int64, secondsKey, secondsUs } from './browser-storage-keys';
 import type { MonitorPoint, MonitorStatistics } from '../core/monitor';
 import { TELEMETRY_DISPLAY_HOLD_SECONDS } from '../core/telemetry-display';
-import { optionalChartCache } from '../core/failures';
+import { isChartCapacity, optionalChartCache } from '../core/failures';
 import {
   BROWSER_PAGE,
   browserTransaction,
   idbRequest,
   browserRideStore,
   normalize,
+  PLOT_SUMMARY_POINTS,
   TILE_SECONDS,
+  tileLevelWithin,
   type BrowserRide,
   type RideRow,
   type RideLocationRow,
@@ -53,6 +61,7 @@ import {
   type BatteryConsumptionSummary,
 } from '../core/consumption';
 import { distanceMetricSource } from '../core/distance';
+import type { EnergyPerDistanceResult } from '../core/energy-per-distance';
 const PROFILE_SOURCES = ['controller', 'gps:phone', ...CONSUMPTION_METRICS] as const;
 type ProfileSource = (typeof PROFILE_SOURCES)[number];
 type ConsumptionIntervalData = {
@@ -387,6 +396,328 @@ export async function browserConsumptionSummary(handle: BrowserDistanceHandle): 
     chargeAh: charge?.value ?? null,
     partial: consumptionMetrics(source).some(metric => sources[metric]?.partial ?? true),
   };
+}
+
+type EnergyCheckpoint = {
+  key: string;
+  checkpoint: AnalyticsEnergyPerDistanceCheckpoint;
+  cutUs: bigint;
+  revision: string;
+  profiles: Profile[];
+};
+const energyCheckpoints = new Map<string, EnergyCheckpoint>();
+const energyMarginUs = BigInt(analyticsEnergyCheckpointMarginUs());
+async function unownedBetween(profile: Profile, fromUs: bigint, toUs: bigint): Promise<boolean> {
+  const own = profileSpans(profile).find(span => span.generation === profile.generation);
+  if (!own || fromUs >= toUs) return false;
+  const prefix = spanKey(profile, own);
+  let after: DistanceRow | undefined;
+  while (true) {
+    const range = browserKeyRange(
+      after
+        ? [...prefix, after.endKey, after.producer, after.sequenceKey, after.revisionKey]
+        : [...prefix, browserIndexKey(fromUs.toString())],
+      [...prefix, browserIndexKey(toUs.toString())],
+      Boolean(after),
+      true,
+    );
+    if (!range) return false;
+    const rows = await browserTransaction(['distance-intervals'], 'readonly', tx =>
+      idbRequest<DistanceRow[]>(tx.objectStore('distance-intervals').getAll(range, BROWSER_PAGE)),
+    );
+    if (rows.some(row => row.revisionKey <= own.revisionKey && row.sequence > own.inputSequence)) return true;
+    if (rows.length < BROWSER_PAGE) return false;
+    after = rows.at(-1);
+  }
+}
+async function appendedSince(record: BrowserRide, revision: string, cutUs: bigint): Promise<boolean> {
+  if (int64(record.revision) < int64(revision)) return false;
+  if (record.revision === revision) return true;
+  for (const name of record.distanceSource === 'controller'
+    ? ['samples' as const]
+    : (['samples', 'ride-locations'] as const)) {
+    let after: OriginalCursor | null = null;
+    while (true) {
+      const rows: ((RideRow | RideLocationRow) & { revision: string })[] = await browserRideStore.originalsSince(
+        name,
+        record.id,
+        revision,
+        record.revision,
+        after,
+      );
+      if (rows.some(row => BigInt(row.elapsedUs) < cutUs)) return false;
+      if (rows.length < BROWSER_PAGE) break;
+      const tail = rows.at(-1)!;
+      after = [tail.revision, tail.producer, tail.producerSequence];
+    }
+  }
+  let after = Number(revision);
+  while (true) {
+    const page = await browserRideStore.lifecycleAfter(record.id, after, BROWSER_PAGE);
+    if (page.rows.some(row => int64(row.revision) <= int64(record.revision) && BigInt(row.elapsedUs) < cutUs))
+      return false;
+    if (page.rows.length < BROWSER_PAGE) return true;
+    after = Number(page.rows.at(-1)!.revision);
+  }
+}
+async function energyResumes(
+  state: EnergyCheckpoint,
+  record: BrowserRide,
+  profiles: Profile[],
+  endUs: string,
+): Promise<boolean> {
+  if (
+    int64(record.revision) < int64(state.revision) ||
+    BigInt(endUs) - BigInt(state.checkpoint.throughUs) <= energyMarginUs
+  )
+    return false;
+  for (const [index, profile] of profiles.entries()) {
+    const previous = state.profiles[index]!;
+    if (profile.revisionKey < previous.revisionKey || profile.inputSequence < previous.inputSequence) return false;
+    if ((await generationRowsSince(profile, previous.revisionKey)).some(row => BigInt(row.endUs) < state.cutUs))
+      return false;
+  }
+  return appendedSince(record, state.revision, state.cutUs);
+}
+type EnergySink = Pick<AnalyticsEnergyPerDistance, 'distance' | 'battery' | 'speed' | 'telemetry'>;
+type EnergySeries = { key: string; series: AnalyticsEnergyPerDistanceSeries; cutUs: bigint; revision: string };
+const energySeries = new Map<string, EnergySeries | null>();
+let energySeriesWork: Promise<unknown> = Promise.resolve();
+export async function browserEnergyPerDistance(
+  record: BrowserRide,
+  handle: BrowserDistanceHandle | null,
+  start: number,
+  end: number,
+  buckets: number | null,
+  smoothingSeconds = 0,
+  whole?: { slotUs: string | null; incremental: boolean },
+): Promise<EnergyPerDistanceResult> {
+  const timeline = await prepareBrowserTimeline(record);
+  const startUs = secondsUs(start),
+    endUs = secondsUs(end),
+    timerUs = timeline.rangeTimerUs(startUs, endUs),
+    cutUs = BigInt(endUs) - energyMarginUs;
+  const from = Math.max(0, start - analyticsEnergyContextSeconds(smoothingSeconds)),
+    until = end + 10;
+  const controllerSpeed = record.distanceSource === 'controller';
+  const battery = `${record.batteryConsumptionSource}EnergyWh`;
+  const profiles = handle
+    ? [
+        ...(handle.info.selected ? [browserDerivedHandle(handle, 'distanceMeters').profile] : []),
+        browserDerivedHandle(handle, battery).profile,
+      ]
+    : [];
+  const slot = `${record.id}:${smoothingSeconds}`;
+  const key =
+    buckets === null && handle && start === 0
+      ? JSON.stringify([
+          record.distanceSource,
+          smoothingSeconds,
+          profiles.map(p => [p.source, p.generation, p.prefixes]),
+        ])
+      : undefined;
+  const release = handle ? await retainBrowserDistance(handle) : async () => {};
+  type Input = { end: number; timeUs: bigint; append: (sink: EnergySink) => void };
+  const feed = async (sink: EnergySink, resumedCutUs: bigint | undefined, throughUs: bigint, cut: () => void) => {
+    const fromUs = resumedCutUs === undefined ? secondsUs(from) : resumedCutUs.toString();
+    async function* intervals(metric: string, battery: boolean): AsyncGenerator<Input> {
+      if (!handle || (!battery && !handle.info.selected)) return;
+      const selected = browserDerivedHandle(handle, metric);
+      let after: readonly [number, number] = [
+        resumedCutUs === undefined ? Number(secondsUs(from)) : Math.max(0, Number(resumedCutUs) - 1),
+        0,
+      ];
+      while (true) {
+        const rows = await browserDistanceIntervals(selected, after, BROWSER_PAGE);
+        if (!rows) throw new Error('Energy/distance pin changed');
+        for (const interval of rows) {
+          const row = interval as DistanceRow;
+          if (row.end > until) return;
+          if (row.end <= row.start || (resumedCutUs !== undefined && BigInt(row.endUs) < resumedCutUs)) continue;
+          yield {
+            end: row.end,
+            timeUs: BigInt(row.endUs),
+            append: sink => {
+              if (battery && row.consumption) {
+                const c = row.consumption;
+                sink.battery(
+                  c.startUs,
+                  c.endUs,
+                  c.endValue - c.startValue,
+                  c.rate0,
+                  c.rate1,
+                  c.indivisible,
+                  row.timestamp,
+                );
+              } else if (!battery) {
+                sink.distance(row.startUs, row.endUs, row.distance, row.startSpeed, row.endSpeed);
+              }
+            },
+          };
+        }
+        if (rows.length < BROWSER_PAGE) return;
+        const last = rows.at(-1)!;
+        after = [Number(last.endUs), last.sequence];
+      }
+    }
+    async function* rider(): AsyncGenerator<Input> {
+      let after: OriginalCursor | null = null;
+      while (true) {
+        const rows = await browserRideStore.pageExact(
+          record.id,
+          fromUs,
+          secondsUs(until),
+          after,
+          BROWSER_PAGE,
+          record.revision,
+        );
+        for (const row of rows)
+          yield {
+            end: row.elapsedSeconds,
+            timeUs: BigInt(row.elapsedUs),
+            append: sink => {
+              const item = browserAnalysisItem(row);
+              sink.telemetry(
+                row.elapsedUs,
+                row.humanPowerW ?? null,
+                row.motorInputPowerW ?? null,
+                row.controllerSpeedMps ?? null,
+                row.active ? timeline.activeInterval(item) : null,
+                JSON.stringify([row.recordingId, row.connectionEpoch]),
+                row.timestamp,
+              );
+            },
+          };
+        if (rows.length < BROWSER_PAGE) return;
+        const last = rows.at(-1)!;
+        after = [last.elapsedUs, last.producer, last.producerSequence];
+      }
+    }
+    async function* gps(): AsyncGenerator<Input> {
+      if (controllerSpeed) return;
+      let after: OriginalCursor | null = null;
+      while (true) {
+        const rows = await browserRideStore.locationPage(record.id, fromUs, secondsUs(until), after, record.revision);
+        for (const row of rows)
+          yield {
+            end: row.elapsedSeconds,
+            timeUs: BigInt(row.elapsedUs),
+            append: sink =>
+              sink.speed(
+                row.elapsedUs,
+                row.distanceBarrier ? null : (row.speedMps ?? null),
+                row.speedAccuracyMps ?? null,
+                row.active ? timeline.activeInterval(browserAnalysisItem(row)) : null,
+              ),
+          };
+        if (rows.length < BROWSER_PAGE) return;
+        const last = rows.at(-1)!;
+        after = [last.elapsedUs, last.producer, last.producerSequence];
+      }
+    }
+    let highWater = throughUs,
+      saved = false;
+    const save = () => {
+      if (saved || highWater >= cutUs) return;
+      saved = true;
+      cut();
+    };
+    const streams = [intervals('distanceMeters', false), intervals(battery, true), gps(), rider()];
+    const heads = await Promise.all(streams.map(stream => stream.next()));
+    while (true) {
+      let index = -1;
+      for (let i = 0; i < heads.length; i++)
+        if (!heads[i]!.done && (index < 0 || heads[i]!.value.end < heads[index]!.value.end)) index = i;
+      if (index < 0) break;
+      const input = heads[index]!.value as Input;
+      if (input.timeUs >= cutUs) save();
+      input.append(sink);
+      if (input.timeUs > highWater) highWater = input.timeUs;
+      heads[index] = await streams[index]!.next();
+    }
+    save();
+  };
+  const fresh = async (resumed?: EnergyCheckpoint) => {
+    const query = new AnalyticsEnergyPerDistance(
+      startUs,
+      endUs,
+      buckets,
+      timerUs,
+      controllerSpeed,
+      smoothingSeconds,
+      handle !== null,
+      resumed?.checkpoint ?? null,
+      whole?.slotUs ?? null,
+    );
+    let next: EnergyCheckpoint | undefined;
+    await feed(query, resumed?.cutUs, resumed ? BigInt(resumed.checkpoint.throughUs) : -1n, () => {
+      if (key !== undefined) next = { key, checkpoint: query.checkpoint(), cutUs, revision: record.revision, profiles };
+    });
+    return { result: JSON.parse(query.resultJson()) as EnergyPerDistanceResult, next };
+  };
+  const cached = async (state: EnergySeries | undefined, seriesKey: string) => {
+    const series =
+      state?.series ??
+      new AnalyticsEnergyPerDistanceSeries(controllerSpeed, smoothingSeconds, handle !== null, PLOT_SUMMARY_POINTS);
+    const read = series.begin(endUs, timerUs, buckets!, whole!.slotUs);
+    let committed = state?.cutUs ?? 0n;
+    await feed(read, state?.cutUs, BigInt(series.throughUs), () => {
+      read.cut();
+      committed = cutUs;
+    });
+    const result = JSON.parse(read.resultJson()) as EnergyPerDistanceResult;
+    return { result, next: { key: seriesKey, series, cutUs: committed, revision: record.revision } };
+  };
+  try {
+    if (whole && buckets !== null && start === 0) {
+      const ride = `${record.id}:`;
+      for (const name of energySeries.keys())
+        if (whole.incremental ? !name.startsWith(ride) : record.endedAt && name.startsWith(ride))
+          energySeries.delete(name);
+      if (!whole.incremental) return (await fresh()).result;
+      const seriesKey = JSON.stringify([record.distanceSource, smoothingSeconds, handle !== null]);
+      const work = energySeriesWork.then(async () => {
+        let state = energySeries.get(slot);
+        if (state === null) return (await fresh()).result;
+        if (
+          state &&
+          !(
+            state.key === seriesKey &&
+            state.series.valid &&
+            BigInt(endUs) - BigInt(state.series.throughUs) > energyMarginUs &&
+            (await appendedSince(record, state.revision, state.cutUs))
+          )
+        )
+          state = undefined;
+        let outcome: Awaited<ReturnType<typeof cached>>;
+        try {
+          outcome = await cached(state, seriesKey);
+        } catch (error) {
+          if (!state || isChartCapacity(error)) throw error;
+          outcome = await cached(undefined, seriesKey);
+        }
+        energySeries.set(slot, outcome.next.series.valid ? outcome.next : null);
+        return outcome.result;
+      });
+      energySeriesWork = work.catch(() => {});
+      return await work;
+    }
+    const stored = key === undefined ? undefined : energyCheckpoints.get(slot);
+    const resumed =
+      stored?.key === key && stored && (await energyResumes(stored, record, profiles, endUs)) ? stored : undefined;
+    const { result, next } = await fresh(resumed);
+    let reusable = next !== undefined && (!stored || int64(next.revision) >= int64(stored.revision));
+    for (const profile of profiles)
+      if (reusable && (await unownedBetween(profile, resumed?.cutUs ?? 0n, next!.cutUs))) reusable = false;
+    if (reusable) {
+      energyCheckpoints.delete(slot);
+      energyCheckpoints.set(slot, next!);
+      if (energyCheckpoints.size > 8) energyCheckpoints.delete(energyCheckpoints.keys().next().value!);
+    }
+    return result;
+  } finally {
+    await release();
+  }
 }
 function makeHandle(record: BrowserRide, profiles: Profile[]): BrowserDistanceHandle {
   const handle: BrowserDistanceHandle = {
@@ -1280,17 +1611,121 @@ async function consumptionStats(handle: BrowserDistanceHandle, start: number, en
     await release();
   }
 }
+type DistanceSummary = {
+  key: string;
+  summary?: InspectionPlotSlotSummary;
+  revisionKey: string;
+  inputSequence: number;
+  last?: DistanceRow;
+  unowned: boolean;
+};
+const distanceSummaries = new Map<string, DistanceSummary>();
+let distanceSummaryWork: Promise<unknown> = Promise.resolve();
+function compareDistanceRows(a: DistanceRow, b: DistanceRow): number {
+  for (const field of ['endKey', 'producer', 'sequenceKey', 'revisionKey'] as const)
+    if (a[field] !== b[field]) return a[field] < b[field] ? -1 : 1;
+  return 0;
+}
+async function spanRows(profile: Profile, span: DistanceSpan, after?: DistanceRow): Promise<DistanceRow[]> {
+  const prefix = spanKey(profile, span);
+  const range = browserKeyRange(
+    after
+      ? [...prefix, after.endKey, after.producer, after.sequenceKey, after.revisionKey]
+      : [...prefix, browserIndexKey(span.startUs)],
+    [...prefix, browserIndexKey(span.endUs), []],
+    Boolean(after),
+  );
+  if (!range) return [];
+  return browserTransaction(['distance-intervals'], 'readonly', tx =>
+    idbRequest<DistanceRow[]>(tx.objectStore('distance-intervals').getAll(range, BROWSER_PAGE)),
+  );
+}
+async function generationRowsSince(profile: Profile, revisionKey: string): Promise<DistanceRow[]> {
+  const prefix = [profile.recordingId, profile.source, profile.generationKey];
+  const range = browserKeyRange([...prefix, revisionKey, []], [...prefix, profile.revisionKey, []], true);
+  if (!range) return [];
+  return browserTransaction(['distance-intervals'], 'readonly', tx =>
+    idbRequest<DistanceRow[]>(tx.objectStore('distance-intervals').index('byRevision').getAll(range)),
+  );
+}
+function feedDistance(state: DistanceSummary, span: DistanceSpan, rows: DistanceRow[], own: boolean): void {
+  const owned = rows.filter(row => spanOwns(span, row));
+  // A later profile owns rows written past this input sequence without writing them again.
+  if (own) state.unowned ||= rows.some(row => row.sequence > span.inputSequence && row.revisionKey <= span.revisionKey);
+  try {
+    for (const row of owned) for (const edge of boundaries(row)) state.summary?.appendDistance(edge.boundary);
+    state.last = owned.at(-1) ?? state.last;
+  } catch {
+    state.summary = undefined;
+  }
+}
+async function distanceSummary(handle: BrowserDistanceHandle): Promise<InspectionPlotSlotSummary | undefined> {
+  const profile = handle.profile,
+    spans = profileSpans(profile),
+    slot = `${profile.recordingId}:${profile.source}`,
+    key = JSON.stringify([profile.generation, profile.prefixes]);
+  for (const name of distanceSummaries.keys())
+    if (!name.startsWith(`${profile.recordingId}:`)) distanceSummaries.delete(name);
+  let state = distanceSummaries.get(slot);
+  if (state?.key !== key) state = undefined;
+  if (state && (state.revisionKey > profile.revisionKey || state.inputSequence > profile.inputSequence)) return;
+  if (state?.summary && state.revisionKey !== profile.revisionKey) {
+    const own = spans.find(span => span.generation === profile.generation);
+    if (state.unowned && profile.inputSequence > state.inputSequence) state = undefined;
+    else if (own) {
+      const rows = (await generationRowsSince(profile, state.revisionKey)).sort(compareDistanceRows);
+      const first = rows.find(row => spanOwns(own, row));
+      if (first && state.last?.generation === profile.generation && compareDistanceRows(first, state.last) <= 0)
+        state = undefined;
+      else feedDistance(state, own, rows, true);
+    }
+  }
+  if (!state) {
+    state = {
+      key,
+      summary: new InspectionPlotSlotSummary('distanceMeters', 512, PLOT_SUMMARY_POINTS),
+      revisionKey: profile.revisionKey,
+      inputSequence: profile.inputSequence,
+      unowned: false,
+    };
+    for (const span of spans) {
+      let after: DistanceRow | undefined;
+      while (state.summary) {
+        const rows = await spanRows(profile, span, after);
+        feedDistance(state, span, rows, span.generation === profile.generation);
+        if (rows.length < BROWSER_PAGE) break;
+        after = rows.at(-1);
+      }
+    }
+  }
+  state.revisionKey = profile.revisionKey;
+  state.inputSequence = profile.inputSequence;
+  distanceSummaries.set(slot, state);
+  return state.summary;
+}
+function mergeDistanceSummary(handle: BrowserDistanceHandle, reducer: InspectionPlotQuery): Promise<boolean> {
+  const work = distanceSummaryWork.then(async () => {
+    const summary = await distanceSummary(handle);
+    if (!summary?.canMergeInto(reducer)) return false;
+    summary.mergeInto(reducer);
+    return true;
+  });
+  distanceSummaryWork = work.catch(() => {});
+  return work;
+}
 export async function plotBrowserDistance(
   handle: BrowserDistanceHandle,
   start: number,
   end: number,
   budget: number,
+  slotUs?: string,
+  summarized = false,
 ): Promise<MonitorPoint[]> {
   if (handle.profile.state.intervals === 0) return [];
-  const reducer = new InspectionPlotQuery('distanceMeters', secondsUs(start), secondsUs(end), budget, 16384);
+  const reducer = new InspectionPlotQuery('distanceMeters', secondsUs(start), secondsUs(end), budget, 16384, slotUs);
   const spans = profileSpans(handle.profile);
   const candidate = TILE_SECONDS.findIndex(size => (end - start) / size <= budget / 4);
-  const level = candidate < 0 ? TILE_SECONDS.length - 1 : candidate;
+  const level = slotUs === undefined ? (candidate < 0 ? TILE_SECONDS.length - 1 : candidate) : tileLevelWithin(slotUs);
   const [before, after] = await Promise.all([neighbor(handle, start, 'next'), neighbor(handle, end, 'next', true)]);
   if (before)
     boundaries(before)
@@ -1299,25 +1734,28 @@ export async function plotBrowserDistance(
   const descend = async (level: number, first: number, last: number): Promise<void> => {
     if (last < first) return;
     if (last - first > 2048) throw new Error('Distance chart tile request exceeds its bound');
-    const size = TILE_SECONDS[level]!;
-    const tiles = await browserTransaction(['distance-tiles'], 'readonly', tx =>
-      Promise.all(
-        spans.map(span => {
-          const prefix = spanKey(handle.profile, span);
-          return idbRequest<DistanceTile[]>(
-            tx
-              .objectStore('distance-tiles')
-              .getAll(
-                IDBKeyRange.bound(
-                  [...prefix, level, browserIndexKey(String(first))],
-                  [...prefix, level, browserIndexKey(String(last)), []],
-                ),
-                2049,
-              ),
+    const size = TILE_SECONDS[Math.max(0, level)]!;
+    const tiles =
+      level < 0
+        ? []
+        : await browserTransaction(['distance-tiles'], 'readonly', tx =>
+            Promise.all(
+              spans.map(span => {
+                const prefix = spanKey(handle.profile, span);
+                return idbRequest<DistanceTile[]>(
+                  tx
+                    .objectStore('distance-tiles')
+                    .getAll(
+                      IDBKeyRange.bound(
+                        [...prefix, level, browserIndexKey(String(first))],
+                        [...prefix, level, browserIndexKey(String(last)), []],
+                      ),
+                      2049,
+                    ),
+                );
+              }),
+            ),
           );
-        }),
-      ),
-    );
     for (let bucket = first; bucket <= last; bucket++) {
       const index = spans.findIndex(
         (span, index) =>
@@ -1327,7 +1765,7 @@ export async function plotBrowserDistance(
       const tile =
         index < 0
           ? undefined
-          : tiles[index]!.find(tile => tile.bucket === bucket && tile.revisionKey <= spans[index]!.revisionKey);
+          : tiles[index]?.find(tile => tile.bucket === bucket && tile.revisionKey <= spans[index]!.revisionKey);
       let aggregate: InspectionPlotCache | undefined;
       if (tile?.plot && tile.revisionKey <= handle.profile.revisionKey) {
         try {
@@ -1374,8 +1812,9 @@ export async function plotBrowserDistance(
       }
     }
   };
-  const size = TILE_SECONDS[level]!;
-  await descend(level, Math.floor(start / size), Math.floor(end / size));
+  const size = TILE_SECONDS[Math.max(0, level)]!;
+  if (!(summarized && slotUs !== undefined && (await mergeDistanceSummary(handle, reducer))))
+    await descend(level, Math.floor(start / size), Math.floor(end / size));
   if (after)
     boundaries(after)
       .filter(p => p.original.elapsedSeconds > end)

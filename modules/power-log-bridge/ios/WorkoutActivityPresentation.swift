@@ -252,6 +252,6 @@ enum WorkoutActivityUpdateGate {
   static func deadlineReached(_ expiry: Date?, at date: Date) -> Bool { expiry.map { $0 <= date } ?? false }
 
   static func allows(deadline: Bool, controlChanged: Bool, lastUpdate: Double, now: Double) -> Bool {
-    deadline || controlChanged || now - lastUpdate >= 5
+    deadline || controlChanged || now - lastUpdate >= ActivityPresentations.shared.refreshSeconds
   }
 }

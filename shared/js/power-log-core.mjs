@@ -73,6 +73,17 @@ import {
   checkIndexOverflow3frtmheghr0th as checkIndexOverflow,
   ArithmeticException18dajwq7kbp38 as ArithmeticException,
   substringAfter1hku067gwr5ve as substringAfter,
+  abs22kdeprm0tm5i as abs,
+  ArrayDeque_init_$Create$blxiwakg760c as ArrayDeque_init_$Create$,
+  IllegalStateException_init_$Create$38ax6c90susjc as IllegalStateException_init_$Create$,
+  mapOf2zpbbmyqk8xpf as mapOf_0,
+  get_ONEazvfdh9ju3d4 as get_ONE,
+  Collection1k04j3hzsbod0 as Collection,
+  mapCapacity1h45rc3eh9p2l as mapCapacity,
+  coerceAtLeast2bkz8m9ik7hep as coerceAtLeast,
+  LinkedHashMap_init_$Create$21wpz6bm2n4yn as LinkedHashMap_init_$Create$,
+  plus2lr02ok6jhhxu as plus_0,
+  LinkedHashMap_init_$Create$s27yccuovnls as LinkedHashMap_init_$Create$_0,
   THROW_IAE23kobfj9wdoxr as THROW_IAE,
   Enum3alwj03lh1n41 as Enum,
   ArithmeticException_init_$Init$2k4hypf289rdc as ArithmeticException_init_$Init$,
@@ -95,11 +106,7 @@ import {
   modulo3mmbfwxzpcw3a as modulo,
   negate12tprdg5pyd5t as negate,
   toBitszo75lm27azgm as toBits,
-  LinkedHashMap_init_$Create$s27yccuovnls as LinkedHashMap_init_$Create$,
   constructCallableReference23y65rf941mch as constructCallableReference,
-  mapCapacity1h45rc3eh9p2l as mapCapacity,
-  coerceAtLeast2bkz8m9ik7hep as coerceAtLeast,
-  LinkedHashMap_init_$Create$21wpz6bm2n4yn as LinkedHashMap_init_$Create$_0,
   toSet2orjxp16sotqu as toSet,
   NoSuchElementException_init_$Create$14710snnwdnfb as NoSuchElementException_init_$Create$,
   DoubleCompanionObject_instance43opzxl97v4p as DoubleCompanionObject_instance,
@@ -113,13 +120,10 @@ import {
   lastOrNull1aq5oz189qoe1 as lastOrNull,
   KtMap140uvy3s5zad8 as KtMap,
   IllegalArgumentException2asla15b5jaob as IllegalArgumentException,
-  get_ONEazvfdh9ju3d4 as get_ONE,
   minWith3p14uf6ckrc6d as minWith,
   KtList3hktaavzmj137 as KtList,
-  plus1so6nizi7tpx6 as plus_0,
+  plus1so6nizi7tpx6 as plus_1,
   StringBuilder_init_$Create$b2348mky3co as StringBuilder_init_$Create$,
-  Collection1k04j3hzsbod0 as Collection,
-  IllegalStateException_init_$Create$38ax6c90susjc as IllegalStateException_init_$Create$,
   substringBefore3n7kj60w69hju as substringBefore,
   padEnd2jv3jyj2267cs as padEnd,
   takeLast2r8kr8e6g6hi7 as takeLast,
@@ -144,7 +148,6 @@ import {
   substringiqarkczpya5m as substring,
   substring3saq8ornu0luv as substring_0,
   zipWithNext2nnv9puh4xyfv as zipWithNext,
-  abs22kdeprm0tm5i as abs,
   listOfNotNull2woi2boe01ub4 as listOfNotNull,
   withIndex37cl61h9v5txo as withIndex,
   HashSet_init_$Create$b2fvq2b4c4v2 as HashSet_init_$Create$,
@@ -152,10 +155,11 @@ import {
   Exception_init_$Init$aq0gqtvnezdz as Exception_init_$Init$,
   first58ocm7j58k3q as first,
   last1vo29oleiqj36 as last,
-  plus310ted5e4i90h as plus_1,
+  plus310ted5e4i90h as plus_2,
   toMap2ku0qkp1e70rb as toMap_1,
+  addAll1k27qatfgp3k5 as addAll,
+  listOfNotNull1v4ggfackvuny as listOfNotNull_0,
   isBlank1dvkhjjvox3p0 as isBlank,
-  plus2lr02ok6jhhxu as plus_2,
   trimEndvvzjdhan75g as trimEnd,
   get_lastIndex1yw0x4k50k51w as get_lastIndex_0,
   numberToChar93r9buh19yek as numberToChar,
@@ -203,7 +207,6 @@ import {
   setOf1u3mizs95ngxo as setOf_0,
   plus1ogy4liedzq5j as plus_4,
   minus1f3bieyodk5vw as minus,
-  mapOf2zpbbmyqk8xpf as mapOf_0,
   plus2m1vv33moko5t as plus_5,
   until1jbpn0z3f8lbg as until,
   sliceArray2hu2ljigibgmi as sliceArray,
@@ -266,6 +269,18 @@ initMetadataForClass(DistanceInfo, 'DistanceInfo');
 initMetadataForClass(ControllerDistanceCheckpoint, 'ControllerDistanceCheckpoint');
 initMetadataForClass(ControllerDistanceKernel, 'ControllerDistanceKernel', ControllerDistanceKernel_init_$Create$);
 initMetadataForClass(EnergyReducer, 'EnergyReducer');
+initMetadataForObject(EnergyPerDistancePolicy, 'EnergyPerDistancePolicy');
+initMetadataForClass(EnergyPerDistanceCheckpoint, 'EnergyPerDistanceCheckpoint');
+initMetadataForClass(Distance, 'Distance');
+initMetadataForClass(Energy_0, 'Energy');
+initMetadataForClass(Speed, 'Speed');
+initMetadataForClass(Reading, 'Reading');
+initMetadataForClass(Rider, 'Rider');
+initMetadataForClass(Selection, 'Selection');
+initMetadataForClass(Lane, 'Lane');
+initMetadataForClass(EnergyPerDistanceQuery, 'EnergyPerDistanceQuery');
+initMetadataForClass(EnergyPerDistanceSeries, 'EnergyPerDistanceSeries');
+initMetadataForClass(EnergyPerDistanceSeriesRead, 'EnergyPerDistanceSeriesRead');
 initMetadataForClass(Quantity, 'Quantity', VOID, Enum);
 initMetadataForClass(NumericOverflow, 'NumericOverflow');
 initMetadataForClass(NumericFailure, 'NumericFailure', VOID, ArithmeticException);
@@ -427,6 +442,14 @@ initMetadataForClass(InspectionPlotReducer, 'InspectionPlotReducer');
 initMetadataForClass(sam$kotlin_Comparator$0_8, 'sam$kotlin_Comparator$0', VOID, VOID, [Comparator, FunctionAdapter]);
 initMetadataForObject(InspectionCacheCodec, 'InspectionCacheCodec');
 initMetadataForClass(InspectionCacheEncoding, 'InspectionCacheEncoding', InspectionCacheEncoding);
+initMetadataForObject(InspectionPlotSlots, 'InspectionPlotSlots');
+initMetadataForClass(Form, 'Form', VOID, Enum);
+initMetadataForClass(Input, 'Input');
+initMetadataForClass(ItemInput, 'ItemInput', VOID, Input);
+initMetadataForClass(DistanceInput, 'DistanceInput', VOID, Input);
+initMetadataForClass(Reduction, 'Reduction');
+initMetadataForClass(Slot, 'Slot');
+initMetadataForClass(InspectionPlotSummary, 'InspectionPlotSummary');
 initMetadataForClass(RideAction, 'RideAction', VOID, Enum);
 initMetadataForClass(RideActionSurface, 'RideActionSurface', VOID, Enum);
 initMetadataForClass(FinishConfirmation, 'FinishConfirmation');
@@ -582,6 +605,10 @@ initMetadataForClass(AnalyticsConsumptionRange, 'AnalyticsConsumptionRange');
 initMetadataForClass(AnalyticsConsumptionInterval, 'AnalyticsConsumptionInterval');
 initMetadataForClass(AnalyticsConsumptionKernel, 'AnalyticsConsumptionKernel', AnalyticsConsumptionKernel);
 initMetadataForClass(AnalyticsConsumptionReducer, 'AnalyticsConsumptionReducer');
+initMetadataForClass(AnalyticsEnergyPerDistanceCheckpoint, 'AnalyticsEnergyPerDistanceCheckpoint');
+initMetadataForClass(AnalyticsEnergyPerDistance, 'AnalyticsEnergyPerDistance');
+initMetadataForClass(AnalyticsEnergyPerDistanceSeries, 'AnalyticsEnergyPerDistanceSeries');
+initMetadataForClass(AnalyticsEnergyPerDistanceSeriesRead, 'AnalyticsEnergyPerDistanceSeriesRead');
 initMetadataForClass(HealthEnergyConsumption, 'HealthEnergyConsumption');
 initMetadataForClass(GPSLocationInput, 'GPSLocationInput');
 initMetadataForClass(GPSTimelineInput, 'GPSTimelineInput');
@@ -601,6 +628,7 @@ initMetadataForClass(InspectionOriginalInput, 'InspectionOriginalInput');
 initMetadataForClass(InspectionPlotBucket, 'InspectionPlotBucket');
 initMetadataForClass(InspectionPlotOriginal, 'InspectionPlotOriginal');
 initMetadataForClass(InspectionPlotQuery, 'InspectionPlotQuery');
+initMetadataForClass(InspectionPlotSlotSummary, 'InspectionPlotSlotSummary');
 initMetadataForClass(InspectionRequestContext, 'InspectionRequestContext');
 initMetadataForClass(InspectionRequestTicket, 'InspectionRequestTicket');
 initMetadataForClass(InspectionRequestGate, 'InspectionRequestGate', InspectionRequestGate);
@@ -1950,6 +1978,9 @@ function compareScalars$integerReal(n, d) {
 function BatteryConsumptionPolicy() {
   BatteryConsumptionPolicy_instance = this;
   this.metrics_1 = listOf(['controllerChargeAh', 'controllerEnergyWh', 'calculatedChargeAh', 'calculatedEnergyWh']);
+  this.maximumCounterEdgeUs_1 = new Long(6000000, 0);
+  this.maximumCounterCurrentA_1 = 200.0;
+  this.maximumCounterPowerW_1 = 25000.0;
 }
 protoOf(BatteryConsumptionPolicy).isMetric_e9vjr4_k$ = function (metric) {
   return this.metrics_1.contains_aljjnj_k$(metric);
@@ -2002,7 +2033,7 @@ function BatteryConsumptionInterval(metric, startUs, endUs, startValue, endValue
   }
   // Inline function 'kotlin.require' call
   // Inline function 'kotlin.require' call
-  if (!(this.baseline_1 || compare(subtract(this.endUs_1, this.startUs_1), new Long(2500000, 0)) <= 0)) {
+  if (!(this.baseline_1 || compare(subtract(this.endUs_1, this.startUs_1), this.indivisible_1 ? new Long(6000000, 0) : new Long(2500000, 0)) <= 0)) {
     var message_3 = 'Failed requirement.';
     throw IllegalArgumentException_init_$Create$(toString_0(message_3));
   }
@@ -2600,7 +2631,10 @@ protoOf(BatteryConsumptionKernel).append_lkavfw_k$ = function (timeUs, activeInt
         break $l$block_1;
       }
       item.previous_1 = next;
-      var connects = !(old == null) && compare(dt, new Long(2500000, 0)) <= 0 && old.activeInterval_1 === activeInterval && old.continuity_1 === continuityIdentity && (!counter || value >= old.value_1);
+      var same = !(old == null) && compare(dt, new Long(2500000, 0)) <= 0 && old.continuity_1 === continuityIdentity;
+      var limit = tmp0_0 === 0 ? 200.0 : 25000.0;
+      var bridged = counter && !(old == null) && compare(dt, new Long(6000000, 0)) < 0 && (value - old.value_1) * 3.6E9 <= limit * toNumber(dt);
+      var connects = !(old == null) && old.activeInterval_1 === activeInterval && (!counter || value >= old.value_1) && (same || bridged);
       if (!connects) {
         if (!(old == null)) {
           item.segment_1 = item.segment_1 + 1 | 0;
@@ -3413,6 +3447,1583 @@ protoOf(EnergyReducer).valueQ_dmh62o_k$ = function () {
     return this.intervals_1.value_3xdjki_k$(this.metric_1 + 'EnergyKcal', Quantity_energyQ_getInstance());
   var tmp0_safe_receiver = this.snapshot_1;
   return tmp0_safe_receiver == null ? null : tmp0_safe_receiver.second_1;
+};
+function EnergyPerDistancePolicy() {
+  EnergyPerDistancePolicy_instance = this;
+  this.metrics_1 = listOf(['batteryWhPerKm', 'riderWhPerKm']);
+  this.checkpointMarginUs_1 = new Long(2500000, 0);
+}
+protoOf(EnergyPerDistancePolicy).validSmoothing_p69zls_k$ = function (seconds) {
+  switch (seconds) {
+    case 0:
+    case 5:
+    case 30:
+      return true;
+    default:
+      return seconds === 60;
+  }
+};
+protoOf(EnergyPerDistancePolicy).contextSeconds_lbfwc8_k$ = function (seconds) {
+  // Inline function 'kotlin.comparisons.maxOf' call
+  var b = seconds + 13 | 0;
+  return Math.max(18, b);
+};
+var EnergyPerDistancePolicy_instance;
+function EnergyPerDistancePolicy_getInstance() {
+  if (EnergyPerDistancePolicy_instance == null)
+    new EnergyPerDistancePolicy();
+  return EnergyPerDistancePolicy_instance;
+}
+function EnergyPerDistanceCheckpoint(state, throughUs) {
+  this.state_1 = state;
+  this.throughUs_1 = throughUs;
+}
+function EnergyPerDistanceQuery_init_$Init$(startUs, endUs, buckets, timerUs, controllerSpeed, smoothingSeconds, includeTotals, $this) {
+  includeTotals = includeTotals === VOID ? true : includeTotals;
+  EnergyPerDistanceQuery.call($this, startUs, endUs, buckets, null, timerUs, controllerSpeed, smoothingSeconds, includeTotals, null);
+  return $this;
+}
+function EnergyPerDistanceQuery_init_$Create$(startUs, endUs, buckets, timerUs, controllerSpeed, smoothingSeconds, includeTotals) {
+  return EnergyPerDistanceQuery_init_$Init$(startUs, endUs, buckets, timerUs, controllerSpeed, smoothingSeconds, includeTotals, objectCreate(protoOf(EnergyPerDistanceQuery)));
+}
+function EnergyPerDistanceQuery_init_$Init$_0(startUs, endUs, buckets, alignedSlotUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, $this) {
+  EnergyPerDistanceQuery.call($this, startUs, endUs, buckets, alignedSlotUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, null);
+  return $this;
+}
+function EnergyPerDistanceQuery_init_$Create$_0(startUs, endUs, buckets, alignedSlotUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals) {
+  return EnergyPerDistanceQuery_init_$Init$_0(startUs, endUs, buckets, alignedSlotUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, objectCreate(protoOf(EnergyPerDistanceQuery)));
+}
+function EnergyPerDistanceQuery_init_$Init$_1(startUs, endUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, $this) {
+  includeTotals = includeTotals === VOID ? true : includeTotals;
+  EnergyPerDistanceQuery.call($this, startUs, endUs, null, null, timerUs, controllerSpeed, smoothingSeconds, includeTotals, null);
+  return $this;
+}
+function EnergyPerDistanceQuery_init_$Create$_1(startUs, endUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals) {
+  return EnergyPerDistanceQuery_init_$Init$_1(startUs, endUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, objectCreate(protoOf(EnergyPerDistanceQuery)));
+}
+function EnergyPerDistanceQuery_init_$Init$_2(checkpoint, startUs, endUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, $this) {
+  includeTotals = includeTotals === VOID ? true : includeTotals;
+  EnergyPerDistanceQuery.call($this, startUs, endUs, null, null, timerUs, controllerSpeed, smoothingSeconds, includeTotals, checkpoint.state_1);
+  return $this;
+}
+function EnergyPerDistanceQuery_init_$Create$_2(checkpoint, startUs, endUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals) {
+  return EnergyPerDistanceQuery_init_$Init$_2(checkpoint, startUs, endUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, objectCreate(protoOf(EnergyPerDistanceQuery)));
+}
+function Distance(start, end, meters, speed0, speed1) {
+  this.start_1 = start;
+  this.end_1 = end;
+  this.meters_1 = meters;
+  this.speed0__1 = speed0;
+  this.speed1__1 = speed1;
+}
+protoOf(Distance).amount_lgvq5k_k$ = function (a, b) {
+  var duration = toNumber(subtract(this.end_1, this.start_1));
+  if (this.speed0__1 == null || this.speed1__1 == null)
+    return this.meters_1 * toNumber(subtract(b, a)) / duration;
+  var u = this.speed0__1 + (this.speed1__1 - this.speed0__1) * toNumber(subtract(a, this.start_1)) / duration;
+  var v = this.speed0__1 + (this.speed1__1 - this.speed0__1) * toNumber(subtract(b, this.start_1)) / duration;
+  return (u + v) * toNumber(subtract(b, a)) / 2000000.0;
+};
+protoOf(Distance).toString = function () {
+  return 'Distance(start=' + this.start_1.toString() + ', end=' + this.end_1.toString() + ', meters=' + this.meters_1 + ', speed0=' + this.speed0__1 + ', speed1=' + this.speed1__1 + ')';
+};
+protoOf(Distance).hashCode = function () {
+  var result = this.start_1.hashCode();
+  result = imul(result, 31) + this.end_1.hashCode() | 0;
+  result = imul(result, 31) + getNumberHashCode(this.meters_1) | 0;
+  result = imul(result, 31) + (this.speed0__1 == null ? 0 : getNumberHashCode(this.speed0__1)) | 0;
+  result = imul(result, 31) + (this.speed1__1 == null ? 0 : getNumberHashCode(this.speed1__1)) | 0;
+  return result;
+};
+protoOf(Distance).equals = function (other) {
+  if (this === other)
+    return true;
+  if (!(other instanceof Distance))
+    return false;
+  if (!equalsLong(this.start_1, other.start_1))
+    return false;
+  if (!equalsLong(this.end_1, other.end_1))
+    return false;
+  if (!equals(this.meters_1, other.meters_1))
+    return false;
+  if (!equals(this.speed0__1, other.speed0__1))
+    return false;
+  if (!equals(this.speed1__1, other.speed1__1))
+    return false;
+  return true;
+};
+function Energy_0(start, end, wh, rate0, rate1, indivisible, timestamp) {
+  this.start_1 = start;
+  this.end_1 = end;
+  this.wh_1 = wh;
+  this.rate0__1 = rate0;
+  this.rate1__1 = rate1;
+  this.indivisible_1 = indivisible;
+  this.timestamp_1 = timestamp;
+}
+protoOf(Energy_0).amount_lgvq5k_k$ = function (a, b) {
+  if (equalsLong(a, this.start_1) && equalsLong(b, this.end_1))
+    return this.wh_1;
+  // Inline function 'kotlin.requireNotNull' call
+  var tmp0 = this.rate0__1;
+  var tmp$ret$1;
+  $l$block: {
+    // Inline function 'kotlin.requireNotNull' call
+    if (tmp0 == null) {
+      var message = 'Required value was null.';
+      throw IllegalArgumentException_init_$Create$(toString_0(message));
+    } else {
+      tmp$ret$1 = tmp0;
+      break $l$block;
+    }
+  }
+  var u = tmp$ret$1;
+  // Inline function 'kotlin.requireNotNull' call
+  var tmp0_0 = this.rate1__1;
+  var tmp$ret$4;
+  $l$block_0: {
+    // Inline function 'kotlin.requireNotNull' call
+    if (tmp0_0 == null) {
+      var message_0 = 'Required value was null.';
+      throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+    } else {
+      tmp$ret$4 = tmp0_0;
+      break $l$block_0;
+    }
+  }
+  var v = tmp$ret$4;
+  var duration = toNumber(subtract(this.end_1, this.start_1));
+  return positiveArea(u + (v - u) * toNumber(subtract(a, this.start_1)) / duration, u + (v - u) * toNumber(subtract(b, this.start_1)) / duration, subtract(b, a));
+};
+protoOf(Energy_0).toString = function () {
+  return 'Energy(start=' + this.start_1.toString() + ', end=' + this.end_1.toString() + ', wh=' + this.wh_1 + ', rate0=' + this.rate0__1 + ', rate1=' + this.rate1__1 + ', indivisible=' + this.indivisible_1 + ', timestamp=' + this.timestamp_1 + ')';
+};
+protoOf(Energy_0).hashCode = function () {
+  var result = this.start_1.hashCode();
+  result = imul(result, 31) + this.end_1.hashCode() | 0;
+  result = imul(result, 31) + getNumberHashCode(this.wh_1) | 0;
+  result = imul(result, 31) + (this.rate0__1 == null ? 0 : getNumberHashCode(this.rate0__1)) | 0;
+  result = imul(result, 31) + (this.rate1__1 == null ? 0 : getNumberHashCode(this.rate1__1)) | 0;
+  result = imul(result, 31) + getBooleanHashCode(this.indivisible_1) | 0;
+  result = imul(result, 31) + getStringHashCode(this.timestamp_1) | 0;
+  return result;
+};
+protoOf(Energy_0).equals = function (other) {
+  if (this === other)
+    return true;
+  if (!(other instanceof Energy_0))
+    return false;
+  if (!equalsLong(this.start_1, other.start_1))
+    return false;
+  if (!equalsLong(this.end_1, other.end_1))
+    return false;
+  if (!equals(this.wh_1, other.wh_1))
+    return false;
+  if (!equals(this.rate0__1, other.rate0__1))
+    return false;
+  if (!equals(this.rate1__1, other.rate1__1))
+    return false;
+  if (!(this.indivisible_1 === other.indivisible_1))
+    return false;
+  if (!(this.timestamp_1 === other.timestamp_1))
+    return false;
+  return true;
+};
+function Speed(time, mps, active) {
+  this.time_1 = time;
+  this.mps_1 = mps;
+  this.active_1 = active;
+}
+protoOf(Speed).toString = function () {
+  return 'Speed(time=' + this.time_1.toString() + ', mps=' + this.mps_1 + ', active=' + this.active_1 + ')';
+};
+protoOf(Speed).hashCode = function () {
+  var result = this.time_1.hashCode();
+  result = imul(result, 31) + getNumberHashCode(this.mps_1) | 0;
+  result = imul(result, 31) + this.active_1 | 0;
+  return result;
+};
+protoOf(Speed).equals = function (other) {
+  if (this === other)
+    return true;
+  if (!(other instanceof Speed))
+    return false;
+  if (!equalsLong(this.time_1, other.time_1))
+    return false;
+  if (!equals(this.mps_1, other.mps_1))
+    return false;
+  if (!(this.active_1 === other.active_1))
+    return false;
+  return true;
+};
+function Reading(time, value) {
+  this.time_1 = time;
+  this.value_1 = value;
+}
+protoOf(Reading).toString = function () {
+  return 'Reading(time=' + this.time_1.toString() + ', value=' + this.value_1 + ')';
+};
+protoOf(Reading).hashCode = function () {
+  var result = this.time_1.hashCode();
+  result = imul(result, 31) + getNumberHashCode(this.value_1) | 0;
+  return result;
+};
+protoOf(Reading).equals = function (other) {
+  if (this === other)
+    return true;
+  if (!(other instanceof Reading))
+    return false;
+  if (!equalsLong(this.time_1, other.time_1))
+    return false;
+  if (!equals(this.value_1, other.value_1))
+    return false;
+  return true;
+};
+function Rider(time, watts, active, continuity) {
+  this.time_1 = time;
+  this.watts_1 = watts;
+  this.active_1 = active;
+  this.continuity_1 = continuity;
+}
+protoOf(Rider).toString = function () {
+  return 'Rider(time=' + this.time_1.toString() + ', watts=' + this.watts_1 + ', active=' + this.active_1 + ', continuity=' + this.continuity_1 + ')';
+};
+protoOf(Rider).hashCode = function () {
+  var result = this.time_1.hashCode();
+  result = imul(result, 31) + getNumberHashCode(this.watts_1) | 0;
+  result = imul(result, 31) + this.active_1 | 0;
+  result = imul(result, 31) + getStringHashCode(this.continuity_1) | 0;
+  return result;
+};
+protoOf(Rider).equals = function (other) {
+  if (this === other)
+    return true;
+  if (!(other instanceof Rider))
+    return false;
+  if (!equalsLong(this.time_1, other.time_1))
+    return false;
+  if (!equals(this.watts_1, other.watts_1))
+    return false;
+  if (!(this.active_1 === other.active_1))
+    return false;
+  if (!(this.continuity_1 === other.continuity_1))
+    return false;
+  return true;
+};
+function Selection(target, origin) {
+  origin = origin === VOID ? null : origin;
+  this.target_1 = target;
+  var tmp = this;
+  tmp.point_1 = origin == null ? null : origin.point_1;
+  var tmp_0 = this;
+  var tmp1_elvis_lhs = origin == null ? null : origin.distance_1;
+  tmp_0.distance_1 = tmp1_elvis_lhs == null ? new Long(-1, 2147483647) : tmp1_elvis_lhs;
+}
+protoOf(Selection).append_o40hch_k$ = function (time, value) {
+  var delta = abs(subtract(time, this.target_1));
+  if (compare(delta, new Long(2500000, 0)) <= 0 && (compare(delta, this.distance_1) < 0 || (equalsLong(delta, this.distance_1) && value == null))) {
+    this.distance_1 = delta;
+    this.point_1 = value;
+  }
+};
+function Lane($outer, metric, plot, origin) {
+  this.$this_1 = $outer;
+  this.metric_1 = metric;
+  this.plot_1 = plot;
+  var tmp = this;
+  // Inline function 'kotlin.collections.orEmpty' call
+  var tmp0_elvis_lhs = origin == null ? null : origin.pending_1;
+  var tmp$ret$0 = tmp0_elvis_lhs == null ? emptyList() : tmp0_elvis_lhs;
+  tmp.pending_1 = ArrayDeque_init_$Create$(tmp$ret$0);
+  var tmp_0 = this;
+  // Inline function 'kotlin.collections.orEmpty' call
+  var tmp0_elvis_lhs_0 = origin == null ? null : origin.smoothing_1;
+  var tmp$ret$1 = tmp0_elvis_lhs_0 == null ? emptyList() : tmp0_elvis_lhs_0;
+  tmp_0.smoothing_1 = ArrayDeque_init_$Create$(tmp$ret$1);
+  var tmp_1 = this;
+  var tmp1_elvis_lhs = origin == null ? null : origin.smoothingArea_1;
+  tmp_1.smoothingArea_1 = tmp1_elvis_lhs == null ? 0.0 : tmp1_elvis_lhs;
+  var tmp_2 = this;
+  tmp_2.active_1 = origin == null ? null : origin.active_1;
+  var tmp_3 = this;
+  tmp_3.continuity_1 = origin == null ? null : origin.continuity_1;
+  var tmp_4 = this;
+  var tmp1_elvis_lhs_0 = origin == null ? null : origin.lastTimestamp_1;
+  tmp_4.lastTimestamp_1 = tmp1_elvis_lhs_0 == null ? '' : tmp1_elvis_lhs_0;
+  var tmp_5 = this;
+  var tmp1_elvis_lhs_1 = origin == null ? null : origin.energy_1;
+  tmp_5.energy_1 = tmp1_elvis_lhs_1 == null ? 0.0 : tmp1_elvis_lhs_1;
+  var tmp_6 = this;
+  var tmp1_elvis_lhs_2 = origin == null ? null : origin.meters_1;
+  tmp_6.meters_1 = tmp1_elvis_lhs_2 == null ? 0.0 : tmp1_elvis_lhs_2;
+  var tmp_7 = this;
+  var tmp1_elvis_lhs_3 = origin == null ? null : origin.coverage_1;
+  tmp_7.coverage_1 = tmp1_elvis_lhs_3 == null ? new Long(0, 0) : tmp1_elvis_lhs_3;
+  var tmp_8 = this;
+  var tmp1_elvis_lhs_4 = origin == null ? null : origin.lastInputUs_1;
+  tmp_8.lastInputUs_1 = tmp1_elvis_lhs_4 == null ? new Long(-1, -1) : tmp1_elvis_lhs_4;
+  var tmp_9 = this;
+  tmp_9.latest_1 = origin == null ? null : origin.latest_1;
+  var tmp_10 = this;
+  tmp_10.left_1 = new Selection(this.$this_1.startUs_1, origin == null ? null : origin.left_1);
+  this.right_1 = new Selection(this.$this_1.endUs_1);
+  var tmp_11 = this;
+  tmp_11.minimum_1 = origin == null ? null : origin.minimum_1;
+  var tmp_12 = this;
+  tmp_12.maximum_1 = origin == null ? null : origin.maximum_1;
+  var tmp_13 = this;
+  var tmp1_elvis_lhs_5 = origin == null ? null : origin.count_1;
+  tmp_13.count_1 = tmp1_elvis_lhs_5 == null ? new Long(0, 0) : tmp1_elvis_lhs_5;
+  var tmp_14 = this;
+  var tmp1_elvis_lhs_6 = origin == null ? null : origin.unresolved_1;
+  tmp_14.unresolved_1 = tmp1_elvis_lhs_6 == null ? false : tmp1_elvis_lhs_6;
+}
+function advance($this, time) {
+  // Inline function 'kotlin.check' call
+  if (!!$this.finished_1) {
+    throw IllegalStateException_init_$Create$('Check failed.');
+  }
+  // Inline function 'kotlin.require' call
+  if (!(compare(time, $this.highWater_1) >= 0)) {
+    var message = 'Energy/distance inputs must be ordered by end time';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  $this.highWater_1 = time;
+  drain($this, false);
+  $l$loop: while (true) {
+    var tmp0_safe_receiver = $this.distance_1.firstOrNull_j0zfvq_k$();
+    var tmp1_safe_receiver = tmp0_safe_receiver == null ? null : tmp0_safe_receiver.end_1;
+    var tmp;
+    if (tmp1_safe_receiver == null) {
+      tmp = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      // Inline function 'kotlin.Long.minus' call
+      var tmp$ret$5 = subtract(time, fromInt(20000000));
+      tmp = compare(tmp1_safe_receiver, tmp$ret$5) < 0;
+    }
+    if (!(tmp === true)) {
+      break $l$loop;
+    }
+    $this.distance_1.removeFirst_58pi0k_k$();
+  }
+}
+function enqueue($this, lane, edge) {
+  // Inline function 'kotlin.require' call
+  if (!(compare(edge.start_1, lane.lastInputUs_1) >= 0)) {
+    var message = 'Overlapping energy edges';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  lane.lastInputUs_1 = edge.end_1;
+  lane.pending_1.addLast_gaaijb_k$(edge);
+  // Inline function 'kotlin.require' call
+  if (!(lane.pending_1.size_1 <= 1024)) {
+    var message_0 = 'Energy input exceeds its bounded window';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+  }
+  drain($this, false);
+}
+function matchedMeters($this, start, end) {
+  var through = end;
+  var meters = 0.0;
+  var inductionVariable = $this.distance_1.size_1 - 1 | 0;
+  if (0 <= inductionVariable)
+    $l$loop: do {
+      var index = inductionVariable;
+      inductionVariable = inductionVariable + -1 | 0;
+      var edge = $this.distance_1.get_c1px32_k$(index);
+      if (compare(edge.start_1, through) >= 0)
+        continue $l$loop;
+      if (compare(edge.end_1, through) < 0)
+        return null;
+      // Inline function 'kotlin.comparisons.maxOf' call
+      var b = edge.start_1;
+      var next = compare(start, b) >= 0 ? start : b;
+      meters = meters + edge.amount_lgvq5k_k$(next, through);
+      through = next;
+      if (equalsLong(through, start))
+        return meters;
+    }
+     while (0 <= inductionVariable);
+  return null;
+}
+function drain($this, final) {
+  var _iterator__ex2g4s = $this.lanes_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var lane = _iterator__ex2g4s.next_20eer_k$();
+    $l$loop_0: while (true) {
+      var tmp0_elvis_lhs = lane.pending_1.firstOrNull_j0zfvq_k$();
+      var tmp;
+      if (tmp0_elvis_lhs == null) {
+        break $l$loop_0;
+      } else {
+        tmp = tmp0_elvis_lhs;
+      }
+      var edge = tmp;
+      var tmp_0;
+      if (!final && compare(edge.end_1, $this.distanceThrough_1) > 0) {
+        // Inline function 'kotlin.Long.minus' call
+        var this_0 = $this.highWater_1;
+        var tmp$ret$0 = subtract(this_0, fromInt(10000000));
+        tmp_0 = compare(edge.end_1, tmp$ret$0) >= 0;
+      } else {
+        tmp_0 = false;
+      }
+      if (tmp_0)
+        break $l$loop_0;
+      lane.pending_1.removeFirst_58pi0k_k$();
+      var meters = matchedMeters($this, edge.start_1, edge.end_1);
+      if (!(meters == null)) {
+        summarize($this, lane, edge);
+      }
+    }
+  }
+}
+function plot($this, index, time, raw, active, continuity, timestamp) {
+  var lane = $this.lanes_1.get_c1px32_k$(index);
+  var previous = lane.smoothing_1.lastOrNull_u4yjpc_k$();
+  var tmp;
+  if (!(lane.active_1 == active) || !(lane.continuity_1 == continuity)) {
+    tmp = true;
+  } else {
+    var tmp_0;
+    if (previous == null) {
+      tmp_0 = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      var containsArg = subtract(time, previous.time_1);
+      tmp_0 = !(compare(new Long(1, 0), containsArg) <= 0 ? compare(containsArg, new Long(2500000, 0)) <= 0 : false);
+    }
+    tmp = tmp_0 === true;
+  }
+  var interrupted = tmp;
+  if (raw == null || interrupted) {
+    lane.smoothing_1.clear_j9egeb_k$();
+    lane.smoothingArea_1 = 0.0;
+  }
+  lane.active_1 = active;
+  lane.continuity_1 = continuity;
+  var value = raw;
+  if (!(raw == null) && $this.smoothingSeconds_1 > 0) {
+    var tmp1_safe_receiver = lane.smoothing_1.lastOrNull_u4yjpc_k$();
+    if (tmp1_safe_receiver == null)
+      null;
+    else {
+      // Inline function 'kotlin.let' call
+      lane.smoothingArea_1 = lane.smoothingArea_1 + (tmp1_safe_receiver.value_1 + raw) * toNumber(subtract(time, tmp1_safe_receiver.time_1)) / 2;
+    }
+    lane.smoothing_1.addLast_gaaijb_k$(new Reading(time, raw));
+    var start = subtract(time, multiply(numberToLong($this.smoothingSeconds_1), new Long(1000000, 0)));
+    while (lane.smoothing_1.size_1 > 2 && compare(lane.smoothing_1.get_c1px32_k$(1).time_1, start) <= 0) {
+      var a = lane.smoothing_1.removeFirst_58pi0k_k$();
+      var b = lane.smoothing_1.first_1m0hio_k$();
+      lane.smoothingArea_1 = lane.smoothingArea_1 - (a.value_1 + b.value_1) * toNumber(subtract(b.time_1, a.time_1)) / 2;
+    }
+    // Inline function 'kotlin.require' call
+    if (!(lane.smoothing_1.size_1 <= 1024)) {
+      var message = 'Smoothing input exceeds its bounded window';
+      throw IllegalArgumentException_init_$Create$(toString_0(message));
+    }
+    var first = lane.smoothing_1.first_1m0hio_k$();
+    var area = lane.smoothingArea_1;
+    if (compare(first.time_1, start) < 0 && lane.smoothing_1.size_1 > 1) {
+      var second = lane.smoothing_1.get_c1px32_k$(1);
+      var boundary = first.value_1 + (second.value_1 - first.value_1) * toNumber(subtract(start, first.time_1)) / toNumber(subtract(second.time_1, first.time_1));
+      area = area - (first.value_1 + boundary) * toNumber(subtract(start, first.time_1)) / 2;
+    }
+    // Inline function 'kotlin.comparisons.maxOf' call
+    var b_0 = first.time_1;
+    var tmp$ret$6 = compare(start, b_0) >= 0 ? start : b_0;
+    var covered = subtract(time, tmp$ret$6);
+    if (compare(covered, new Long(0, 0)) > 0) {
+      // Inline function 'kotlin.comparisons.maxOf' call
+      var b_1 = area / toNumber(covered);
+      value = Math.max(0.0, b_1);
+    }
+  }
+  var id = lane.metric_1 + ':' + time.toString();
+  var tmp2_safe_receiver = value;
+  var tmp_1;
+  if (tmp2_safe_receiver == null) {
+    tmp_1 = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    // Inline function 'kotlin.Long.div' call
+    var tmp$ret$10 = toNumber(time) / 1000000.0;
+    tmp_1 = new Original(id, id, timestamp, tmp$ret$10, new Real64(tmp2_safe_receiver));
+  }
+  var point = tmp_1;
+  var sink = $this.readings_1;
+  if (!(lane.plot_1 == null) || !(sink == null)) {
+    // Inline function 'kotlin.Long.div' call
+    var tmp_2 = toNumber(time) / 1000000.0;
+    var tmp_3 = continuity == null ? 'missing' : continuity;
+    var tmp4_safe_receiver = value;
+    var tmp_4;
+    if (tmp4_safe_receiver == null) {
+      tmp_4 = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      tmp_4 = mapOf_0(to(lane.metric_1, new Real64(tmp4_safe_receiver)));
+    }
+    var tmp5_elvis_lhs = tmp_4;
+    var tmp_5 = tmp5_elvis_lhs == null ? emptyMap() : tmp5_elvis_lhs;
+    var reading = new AnalysisItem(time, tmp_2, id, id, tmp_3, time, 'telemetry', 'derived', timestamp, tmp_5, VOID, VOID, new Continuity(VOID, continuity, active == null ? -1 : active));
+    var tmp7_safe_receiver = lane.plot_1;
+    if (tmp7_safe_receiver == null)
+      null;
+    else {
+      tmp7_safe_receiver.append$default_p3p94k_k$(reading);
+    }
+    if (sink == null)
+      null;
+    else
+      sink(index, reading);
+  }
+  if (compare(time, $this.endUs_1) <= 0) {
+    lane.latest_1 = point;
+    lane.lastTimestamp_1 = timestamp;
+  }
+  lane.left_1.append_o40hch_k$(time, point);
+  lane.right_1.append_o40hch_k$(time, point);
+  if (!(point == null)) {
+    var containsLower = $this.startUs_1;
+    if (compare(time, $this.endUs_1) <= 0 ? compare(containsLower, time) <= 0 : false) {
+      var _unary__edvuaz = lane.count_1;
+      lane.count_1 = add(_unary__edvuaz, get_ONE());
+      if (lane.minimum_1 == null || ensureNotNull(value) < ensureNotNull(lane.minimum_1).value_1.real_22xsu_k$())
+        lane.minimum_1 = point;
+      if (lane.maximum_1 == null || ensureNotNull(value) > ensureNotNull(lane.maximum_1).value_1.real_22xsu_k$())
+        lane.maximum_1 = point;
+    }
+  }
+}
+function summarize($this, lane, edge) {
+  var tmp0 = $this.startUs_1;
+  // Inline function 'kotlin.comparisons.maxOf' call
+  var b = edge.start_1;
+  var a = compare(tmp0, b) >= 0 ? tmp0 : b;
+  var tmp0_0 = $this.endUs_1;
+  // Inline function 'kotlin.comparisons.minOf' call
+  var b_0 = edge.end_1;
+  var b_1 = compare(tmp0_0, b_0) <= 0 ? tmp0_0 : b_0;
+  if (compare(b_1, a) <= 0)
+    return Unit_instance;
+  if (edge.indivisible_1 && (!equalsLong(a, edge.start_1) || !equalsLong(b_1, edge.end_1))) {
+    lane.unresolved_1 = true;
+    return Unit_instance;
+  }
+  var tmp0_elvis_lhs = matchedMeters($this, a, b_1);
+  var tmp;
+  if (tmp0_elvis_lhs == null) {
+    return Unit_instance;
+  } else {
+    tmp = tmp0_elvis_lhs;
+  }
+  var meters = tmp;
+  lane.energy_1 = lane.energy_1 + edge.amount_lgvq5k_k$(a, b_1);
+  lane.meters_1 = lane.meters_1 + meters;
+  lane.coverage_1 = add(lane.coverage_1, subtract(b_1, a));
+}
+function resultJson$point(value) {
+  var tmp;
+  if (value == null) {
+    tmp = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp = new Obj(mapOf([to('elapsedSeconds', new Num(value.elapsedSeconds_1)), to('timestamp', new Str(value.timestamp_1)), to('value', new Num(value.value_1.real_22xsu_k$())), to('observationId', new Str(value.observationId_1)), to('derived', new Bool(true))]));
+  }
+  var tmp1_elvis_lhs = tmp;
+  return tmp1_elvis_lhs == null ? Nil_getInstance() : tmp1_elvis_lhs;
+}
+function resultJson$at(this$0, lane) {
+  var tmp0_safe_receiver = lane.latest_1;
+  var tmp;
+  if (tmp0_safe_receiver == null) {
+    tmp = null;
+  } else {
+    // Inline function 'kotlin.takeIf' call
+    var tmp_0;
+    if (compare(subtract(this$0.endUs_1, FixedPoint_instance.timeUs_mx044l_k$(tmp0_safe_receiver.elapsedSeconds_1)), new Long(2500000, 0)) <= 0) {
+      tmp_0 = tmp0_safe_receiver;
+    } else {
+      tmp_0 = null;
+    }
+    tmp = tmp_0;
+  }
+  // Inline function 'kotlin.let' call
+  var p0 = tmp;
+  return resultJson$point(p0);
+}
+function EnergyPerDistanceQuery(startUs, endUs, buckets, alignedSlotUs, timerUs, controllerSpeed, smoothingSeconds, includeTotals, origin) {
+  this.startUs_1 = startUs;
+  this.endUs_1 = endUs;
+  this.timerUs_1 = timerUs;
+  this.controllerSpeed_1 = controllerSpeed;
+  this.smoothingSeconds_1 = smoothingSeconds;
+  this.includeTotals_1 = includeTotals;
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!EnergyPerDistancePolicy_getInstance().validSmoothing_p69zls_k$(this.smoothingSeconds_1)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(compare(this.startUs_1, new Long(0, 0)) >= 0 && compare(this.endUs_1, this.startUs_1) >= 0 && compare(this.timerUs_1, new Long(0, 0)) >= 0)) {
+    var message_0 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+  }
+  if (!(origin == null)) {
+    // Inline function 'kotlin.require' call
+    if (!(equalsLong(origin.startUs_1, this.startUs_1) && origin.controllerSpeed_1 === this.controllerSpeed_1 && origin.smoothingSeconds_1 === this.smoothingSeconds_1 && origin.includeTotals_1 === this.includeTotals_1)) {
+      var message_1 = 'The checkpoint belongs to a query with other parameters';
+      throw IllegalArgumentException_init_$Create$(toString_0(message_1));
+    }
+    // Inline function 'kotlin.require' call
+    if (!(compare(subtract(this.endUs_1, origin.highWater_1), new Long(2500000, 0)) > 0)) {
+      var message_2 = 'Energy/distance checkpoints must precede the query end by more than the checkpoint margin';
+      throw IllegalArgumentException_init_$Create$(toString_0(message_2));
+    }
+  }
+  var tmp = this;
+  // Inline function 'kotlin.collections.orEmpty' call
+  var tmp0_elvis_lhs = origin == null ? null : origin.distance_1;
+  var tmp$ret$10 = tmp0_elvis_lhs == null ? emptyList() : tmp0_elvis_lhs;
+  tmp.distance_1 = ArrayDeque_init_$Create$(tmp$ret$10);
+  var tmp_0 = this;
+  // Inline function 'kotlin.collections.mapIndexed' call
+  var this_0 = EnergyPerDistancePolicy_getInstance().metrics_1;
+  // Inline function 'kotlin.collections.mapIndexedTo' call
+  var destination = ArrayList_init_$Create$(collectionSizeOrDefault(this_0, 10));
+  var index = 0;
+  var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var item = _iterator__ex2g4s.next_20eer_k$();
+    var _unary__edvuaz = index;
+    index = _unary__edvuaz + 1 | 0;
+    var index_0 = checkIndexOverflow(_unary__edvuaz);
+    var tmp_1;
+    if (buckets == null) {
+      tmp_1 = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      tmp_1 = new InspectionPlotReducer(item, new AnalysisRange(this.startUs_1, this.endUs_1), buckets, VOID, VOID, VOID, alignedSlotUs);
+    }
+    var plot = tmp_1;
+    var tmp2_safe_receiver = origin == null ? null : origin.lanes_1;
+    var tmp$ret$13 = new Lane(this, item, plot, tmp2_safe_receiver == null ? null : tmp2_safe_receiver.get_c1px32_k$(index_0));
+    destination.add_utx5q5_k$(tmp$ret$13);
+  }
+  tmp_0.lanes_1 = destination;
+  var tmp_2 = this;
+  var tmp1_elvis_lhs = origin == null ? null : origin.distanceThrough_1;
+  tmp_2.distanceThrough_1 = tmp1_elvis_lhs == null ? new Long(-1, -1) : tmp1_elvis_lhs;
+  var tmp_3 = this;
+  var tmp1_elvis_lhs_0 = origin == null ? null : origin.highWater_1;
+  tmp_3.highWater_1 = tmp1_elvis_lhs_0 == null ? new Long(-1, -1) : tmp1_elvis_lhs_0;
+  var tmp_4 = this;
+  tmp_4.rider_1 = origin == null ? null : origin.rider_1;
+  var tmp_5 = this;
+  tmp_5.gps_1 = origin == null ? null : origin.gps_1;
+  this.finished_1 = false;
+  this.readings_1 = null;
+}
+protoOf(EnergyPerDistanceQuery).appendDistance_q89x5b_k$ = function (startUs, endUs, meters, speed0, speed1) {
+  advance(this, endUs);
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(compare(startUs, new Long(0, 0)) >= 0 && compare(endUs, startUs) > 0 && compare(subtract(endUs, startUs), new Long(10000000, 0)) <= 0)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(isFinite(meters) && meters >= 0 && speed0 == null === (speed1 == null))) {
+    var message_0 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+  }
+  var tmp;
+  if (speed0 == null) {
+    tmp = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp = (isFinite(speed0) && speed0 >= 0);
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!!(tmp === false)) {
+    var message_1 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_1));
+  }
+  var tmp_0;
+  if (speed1 == null) {
+    tmp_0 = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp_0 = (isFinite(speed1) && speed1 >= 0);
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!!(tmp_0 === false)) {
+    var message_2 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_2));
+  }
+  var tmp2_safe_receiver = this.distance_1.lastOrNull_u4yjpc_k$();
+  var tmp3_safe_receiver = tmp2_safe_receiver == null ? null : tmp2_safe_receiver.end_1;
+  var tmp_1;
+  if (tmp3_safe_receiver == null) {
+    tmp_1 = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp_1 = compare(startUs, tmp3_safe_receiver) >= 0;
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!!(tmp_1 === false)) {
+    var message_3 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_3));
+  }
+  this.distance_1.addLast_gaaijb_k$(new Distance(startUs, endUs, meters, speed0, speed1));
+  this.distanceThrough_1 = endUs;
+  drain(this, false);
+};
+protoOf(EnergyPerDistanceQuery).appendBattery_3h1ada_k$ = function (startUs, endUs, wattHours, rate0, rate1, indivisible, timestamp) {
+  advance(this, endUs);
+  if (equalsLong(endUs, startUs))
+    return Unit_instance;
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(compare(startUs, new Long(0, 0)) >= 0 && compare(endUs, startUs) > 0 && compare(subtract(endUs, startUs), indivisible ? new Long(6000000, 0) : new Long(2500000, 0)) <= 0)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(isFinite(wattHours) && wattHours >= 0)) {
+    var message_0 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(indivisible || (!(rate0 == null) && !(rate1 == null)))) {
+    var message_1 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_1));
+  }
+  var tmp;
+  if (!((rate0 == null ? null : isFinite(rate0)) === false)) {
+    tmp = !((rate1 == null ? null : isFinite(rate1)) === false);
+  } else {
+    tmp = false;
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!tmp) {
+    var message_2 = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_2));
+  }
+  enqueue(this, this.lanes_1.get_c1px32_k$(0), new Energy_0(startUs, endUs, wattHours, rate0, rate1, indivisible, timestamp));
+};
+protoOf(EnergyPerDistanceQuery).appendSpeed_xpn85i_k$ = function (timeUs, mps, accuracy, activeInterval) {
+  advance(this, timeUs);
+  var tmp = this;
+  var tmp_0;
+  var tmp_1;
+  if (!(activeInterval == null)) {
+    var tmp_2 = Metrics_getInstance().policy_8ckzrc_k$('speedMps');
+    var tmp_3;
+    if (mps == null) {
+      tmp_3 = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      tmp_3 = new Real64(mps);
+    }
+    var tmp_4 = tmp_3;
+    var tmp_5;
+    if (accuracy == null) {
+      tmp_5 = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      tmp_5 = new Real64(accuracy);
+    }
+    tmp_1 = tmp_2.valid_y6n03g_k$(tmp_4, tmp_5);
+  } else {
+    tmp_1 = false;
+  }
+  if (tmp_1) {
+    // Inline function 'kotlin.requireNotNull' call
+    var tmp$ret$5;
+    $l$block: {
+      // Inline function 'kotlin.requireNotNull' call
+      if (mps == null) {
+        var message = 'Required value was null.';
+        throw IllegalArgumentException_init_$Create$(toString_0(message));
+      } else {
+        tmp$ret$5 = mps;
+        break $l$block;
+      }
+    }
+    var tmp$ret$4 = tmp$ret$5;
+    tmp_0 = new Speed(timeUs, tmp$ret$4, activeInterval);
+  } else {
+    tmp_0 = null;
+  }
+  tmp.gps_1 = tmp_0;
+};
+protoOf(EnergyPerDistanceQuery).appendTelemetry_ttdkmw_k$ = function (timeUs, watts, batteryWatts, speedMps, activeInterval, continuity, timestamp) {
+  advance(this, timeUs);
+  var tmp;
+  if (this.controllerSpeed_1) {
+    var tmp_0;
+    if (speedMps == null) {
+      tmp_0 = null;
+    } else {
+      // Inline function 'kotlin.takeIf' call
+      var tmp_1;
+      if (Metrics_getInstance().policy_8ckzrc_k$('controllerSpeedMps').valid$default_w0zrli_k$(new Real64(speedMps))) {
+        tmp_1 = speedMps;
+      } else {
+        tmp_1 = null;
+      }
+      tmp_0 = tmp_1;
+    }
+    tmp = tmp_0;
+  } else {
+    var tmp1_safe_receiver = this.gps_1;
+    var tmp_2;
+    if (tmp1_safe_receiver == null) {
+      tmp_2 = null;
+    } else {
+      // Inline function 'kotlin.takeIf' call
+      var tmp_3;
+      var tmp_4;
+      if (tmp1_safe_receiver.active_1 === activeInterval) {
+        var containsArg = subtract(timeUs, tmp1_safe_receiver.time_1);
+        tmp_4 = compare(new Long(0, 0), containsArg) <= 0 ? compare(containsArg, new Long(10000000, 0)) <= 0 : false;
+      } else {
+        tmp_4 = false;
+      }
+      if (tmp_4) {
+        tmp_3 = tmp1_safe_receiver;
+      } else {
+        tmp_3 = null;
+      }
+      tmp_2 = tmp_3;
+    }
+    var tmp2_safe_receiver = tmp_2;
+    tmp = tmp2_safe_receiver == null ? null : tmp2_safe_receiver.mps_1;
+  }
+  var speed = tmp;
+  var iterator = listOf([batteryWatts, watts]).iterator_jk1svi_k$();
+  var index = 0;
+  while (iterator.hasNext_bitz1p_k$()) {
+    var index_0 = index;
+    index = index + 1 | 0;
+    var power = iterator.next_20eer_k$();
+    var metric = index_0 === 0 ? 'motorInputPowerW' : 'humanPowerW';
+    var tmp_5;
+    var tmp_6;
+    var tmp_7;
+    var tmp_8;
+    var tmp_9;
+    var tmp_10;
+    if (!(activeInterval == null)) {
+      // Inline function 'kotlin.text.isNullOrEmpty' call
+      tmp_10 = !(continuity == null || charSequenceLength(continuity) === 0);
+    } else {
+      tmp_10 = false;
+    }
+    if (tmp_10) {
+      tmp_9 = !(speed == null);
+    } else {
+      tmp_9 = false;
+    }
+    if (tmp_9) {
+      tmp_8 = speed > 0;
+    } else {
+      tmp_8 = false;
+    }
+    if (tmp_8) {
+      tmp_7 = !(power == null);
+    } else {
+      tmp_7 = false;
+    }
+    if (tmp_7) {
+      tmp_6 = power >= 0;
+    } else {
+      tmp_6 = false;
+    }
+    if (tmp_6) {
+      tmp_5 = Metrics_getInstance().policy_8ckzrc_k$(metric).valid$default_w0zrli_k$(new Real64(power));
+    } else {
+      tmp_5 = false;
+    }
+    var valid = tmp_5;
+    var value = valid ? ensureNotNull(power) / (ensureNotNull(speed) * 3.6) : null;
+    var tmp_11;
+    if (value == null) {
+      tmp_11 = null;
+    } else {
+      // Inline function 'kotlin.takeIf' call
+      var tmp_12;
+      if (isFinite(value)) {
+        tmp_12 = value;
+      } else {
+        tmp_12 = null;
+      }
+      tmp_11 = tmp_12;
+    }
+    plot(this, index_0, timeUs, tmp_11, activeInterval, continuity, timestamp);
+  }
+  if (!this.includeTotals_1)
+    return Unit_instance;
+  var old = this.rider_1;
+  var valid_0 = !(watts == null) && Metrics_getInstance().policy_8ckzrc_k$('humanPowerW').valid$default_w0zrli_k$(new Real64(watts));
+  var tmp_13 = this;
+  var tmp_14;
+  var tmp_15;
+  if (valid_0 && !(activeInterval == null)) {
+    // Inline function 'kotlin.text.isNullOrEmpty' call
+    tmp_15 = !(continuity == null || charSequenceLength(continuity) === 0);
+  } else {
+    tmp_15 = false;
+  }
+  if (tmp_15) {
+    // Inline function 'kotlin.requireNotNull' call
+    var tmp$ret$9;
+    $l$block: {
+      // Inline function 'kotlin.requireNotNull' call
+      if (watts == null) {
+        var message = 'Required value was null.';
+        throw IllegalArgumentException_init_$Create$(toString_0(message));
+      } else {
+        tmp$ret$9 = watts;
+        break $l$block;
+      }
+    }
+    var tmp$ret$8 = tmp$ret$9;
+    tmp_14 = new Rider(timeUs, tmp$ret$8, activeInterval, continuity);
+  } else {
+    tmp_14 = null;
+  }
+  tmp_13.rider_1 = tmp_14;
+  var tmp4_elvis_lhs = this.rider_1;
+  var tmp_16;
+  if (tmp4_elvis_lhs == null) {
+    return Unit_instance;
+  } else {
+    tmp_16 = tmp4_elvis_lhs;
+  }
+  var current = tmp_16;
+  if (old == null || compare(current.time_1, old.time_1) <= 0 || compare(subtract(current.time_1, old.time_1), new Long(2500000, 0)) > 0 || !(current.active_1 === old.active_1) || !(current.continuity_1 === old.continuity_1))
+    return Unit_instance;
+  enqueue(this, this.lanes_1.get_c1px32_k$(1), new Energy_0(old.time_1, timeUs, positiveArea(old.watts_1, current.watts_1, subtract(timeUs, old.time_1)), old.watts_1, current.watts_1, false, timestamp));
+};
+protoOf(EnergyPerDistanceQuery).checkpoint_8bc41k_k$ = function () {
+  // Inline function 'kotlin.check' call
+  if (!!this.finished_1) {
+    var message = 'A finished energy/distance query has drained its pending edges';
+    throw IllegalStateException_init_$Create$(toString_0(message));
+  }
+  var tmp0 = this.lanes_1;
+  var tmp$ret$2;
+  $l$block_0: {
+    // Inline function 'kotlin.collections.all' call
+    var tmp;
+    if (isInterface(tmp0, Collection)) {
+      tmp = tmp0.isEmpty_y1axqb_k$();
+    } else {
+      tmp = false;
+    }
+    if (tmp) {
+      tmp$ret$2 = true;
+      break $l$block_0;
+    }
+    var _iterator__ex2g4s = tmp0.iterator_jk1svi_k$();
+    while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+      var element = _iterator__ex2g4s.next_20eer_k$();
+      if (!(element.plot_1 == null)) {
+        tmp$ret$2 = false;
+        break $l$block_0;
+      }
+    }
+    tmp$ret$2 = true;
+  }
+  // Inline function 'kotlin.check' call
+  if (!tmp$ret$2) {
+    var message_0 = 'Only series-free energy/distance queries can be resumed';
+    throw IllegalStateException_init_$Create$(toString_0(message_0));
+  }
+  var state = new EnergyPerDistanceQuery(this.startUs_1, this.endUs_1, null, null, this.timerUs_1, this.controllerSpeed_1, this.smoothingSeconds_1, this.includeTotals_1, this);
+  return new EnergyPerDistanceCheckpoint(state, this.highWater_1);
+};
+protoOf(EnergyPerDistanceQuery).resultJson_9gmyqj_k$ = function () {
+  // Inline function 'kotlin.collections.mapNotNull' call
+  var tmp0 = this.lanes_1;
+  // Inline function 'kotlin.collections.mapNotNullTo' call
+  var destination = ArrayList_init_$Create$_0();
+  // Inline function 'kotlin.collections.forEach' call
+  var _iterator__ex2g4s = tmp0.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var element = _iterator__ex2g4s.next_20eer_k$();
+    var tmp0_safe_receiver = element.plot_1;
+    var tmp;
+    if (tmp0_safe_receiver == null) {
+      tmp = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      tmp = to(element.metric_1, tmp0_safe_receiver.result_fgc06b_k$());
+    }
+    var tmp0_safe_receiver_0 = tmp;
+    if (tmp0_safe_receiver_0 == null)
+      null;
+    else {
+      // Inline function 'kotlin.let' call
+      destination.add_utx5q5_k$(tmp0_safe_receiver_0);
+    }
+  }
+  return this.resultJson_jnmzrk_k$(destination);
+};
+protoOf(EnergyPerDistanceQuery).resultJson_jnmzrk_k$ = function (series) {
+  if (!this.finished_1) {
+    drain(this, true);
+    this.finished_1 = true;
+  }
+  var tmp = JsonCodec_instance;
+  // Inline function 'kotlin.collections.associate' call
+  var this_0 = this.lanes_1;
+  var capacity = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16);
+  // Inline function 'kotlin.collections.associateTo' call
+  var destination = LinkedHashMap_init_$Create$(capacity);
+  var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var element = _iterator__ex2g4s.next_20eer_k$();
+    // Inline function 'kotlin.collections.plusAssign' call
+    var pair = to(element.metric_1, resultJson$at(this, element));
+    destination.put_4fpzoq_k$(pair.first_1, pair.second_1);
+  }
+  var tmp_0 = to('points', new Obj(destination));
+  // Inline function 'kotlin.collections.associate' call
+  var this_1 = this.lanes_1;
+  var capacity_0 = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_1, 10)), 16);
+  // Inline function 'kotlin.collections.associateTo' call
+  var destination_0 = LinkedHashMap_init_$Create$(capacity_0);
+  var _iterator__ex2g4s_0 = this_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
+    var element_0 = _iterator__ex2g4s_0.next_20eer_k$();
+    var tmp_1;
+    var tmp_2;
+    if (element_0.meters_1 > 0 && compare(element_0.coverage_1, new Long(0, 0)) > 0) {
+      // Inline function 'kotlin.text.isNotEmpty' call
+      var this_2 = element_0.lastTimestamp_1;
+      tmp_2 = charSequenceLength(this_2) > 0;
+    } else {
+      tmp_2 = false;
+    }
+    if (tmp_2) {
+      var tmp_3 = element_0.metric_1 + ':average';
+      var tmp_4 = element_0.metric_1 + ':average';
+      var tmp_5 = element_0.lastTimestamp_1;
+      // Inline function 'kotlin.Long.div' call
+      var this_3 = this.endUs_1;
+      var tmp$ret$8 = toNumber(this_3) / 1000000.0;
+      tmp_1 = new Original(tmp_3, tmp_4, tmp_5, tmp$ret$8, new Real64(element_0.energy_1 * 1000 / element_0.meters_1));
+    } else {
+      tmp_1 = null;
+    }
+    // Inline function 'kotlin.collections.plusAssign' call
+    var pair_0 = to(element_0.metric_1, resultJson$point(tmp_1));
+    destination_0.put_4fpzoq_k$(pair_0.first_1, pair_0.second_1);
+  }
+  var tmp_6 = to('averages', new Obj(destination_0));
+  // Inline function 'kotlin.collections.associate' call
+  var this_4 = this.lanes_1;
+  var capacity_1 = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_4, 10)), 16);
+  // Inline function 'kotlin.collections.associateTo' call
+  var destination_1 = LinkedHashMap_init_$Create$(capacity_1);
+  var _iterator__ex2g4s_1 = this_4.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_1.hasNext_bitz1p_k$()) {
+    var element_1 = _iterator__ex2g4s_1.next_20eer_k$();
+    // Inline function 'kotlin.collections.plusAssign' call
+    var pair_1 = to(element_1.metric_1, resultJson$point(element_1.left_1.point_1));
+    destination_1.put_4fpzoq_k$(pair_1.first_1, pair_1.second_1);
+  }
+  var tmp_7 = to('start', new Obj(destination_1));
+  // Inline function 'kotlin.collections.associate' call
+  var this_5 = this.lanes_1;
+  var capacity_2 = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_5, 10)), 16);
+  // Inline function 'kotlin.collections.associateTo' call
+  var destination_2 = LinkedHashMap_init_$Create$(capacity_2);
+  var _iterator__ex2g4s_2 = this_5.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_2.hasNext_bitz1p_k$()) {
+    var element_2 = _iterator__ex2g4s_2.next_20eer_k$();
+    // Inline function 'kotlin.collections.plusAssign' call
+    var pair_2 = to(element_2.metric_1, resultJson$point(element_2.right_1.point_1));
+    destination_2.put_4fpzoq_k$(pair_2.first_1, pair_2.second_1);
+  }
+  var tmp_8 = to('endpoints', new Obj(mapOf([tmp_7, to('end', new Obj(destination_2))])));
+  // Inline function 'kotlin.collections.associate' call
+  var capacity_3 = coerceAtLeast(mapCapacity(collectionSizeOrDefault(series, 10)), 16);
+  // Inline function 'kotlin.collections.associateTo' call
+  var destination_3 = LinkedHashMap_init_$Create$(capacity_3);
+  var _iterator__ex2g4s_3 = series.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_3.hasNext_bitz1p_k$()) {
+    var element_3 = _iterator__ex2g4s_3.next_20eer_k$();
+    var metric = element_3.component1_7eebsc_k$();
+    var points = element_3.component2_7eebsb_k$();
+    var segment = null;
+    // Inline function 'kotlin.collections.map' call
+    // Inline function 'kotlin.collections.mapTo' call
+    var destination_4 = ArrayList_init_$Create$(collectionSizeOrDefault(points, 10));
+    var _iterator__ex2g4s_4 = points.iterator_jk1svi_k$();
+    while (_iterator__ex2g4s_4.hasNext_bitz1p_k$()) {
+      var item = _iterator__ex2g4s_4.next_20eer_k$();
+      var p = obj(resultJson$point(item.point_1.get_original_8zw1nq_k$()));
+      var result = new Obj(plus_0(p.fields_1, to('startsSegment', new Bool(!(segment === item.segment_1)))));
+      segment = item.segment_1;
+      destination_4.add_utx5q5_k$(result);
+    }
+    // Inline function 'kotlin.collections.plusAssign' call
+    var pair_3 = to(metric, new Arr(destination_4));
+    destination_3.put_4fpzoq_k$(pair_3.first_1, pair_3.second_1);
+  }
+  var tmp_9 = to('series', new Obj(destination_3));
+  // Inline function 'kotlin.collections.associate' call
+  var this_6 = this.lanes_1;
+  var capacity_4 = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_6, 10)), 16);
+  // Inline function 'kotlin.collections.associateTo' call
+  var destination_5 = LinkedHashMap_init_$Create$(capacity_4);
+  var _iterator__ex2g4s_5 = this_6.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_5.hasNext_bitz1p_k$()) {
+    var element_4 = _iterator__ex2g4s_5.next_20eer_k$();
+    // Inline function 'kotlin.collections.buildMap' call
+    // Inline function 'kotlin.collections.buildMapInternal' call
+    // Inline function 'kotlin.apply' call
+    var this_7 = LinkedHashMap_init_$Create$_0();
+    this_7.put_4fpzoq_k$('count', new Num(toNumber(element_4.count_1)));
+    this_7.put_4fpzoq_k$('min', resultJson$point(element_4.minimum_1));
+    this_7.put_4fpzoq_k$('max', resultJson$point(element_4.maximum_1));
+    // Inline function 'kotlin.Long.div' call
+    var this_8 = element_4.coverage_1;
+    var tmp$ret$32 = toNumber(this_8) / 1000000.0;
+    this_7.put_4fpzoq_k$('coveredSeconds', new Num(tmp$ret$32));
+    this_7.put_4fpzoq_k$('partial', new Bool(element_4.unresolved_1 || compare(subtract(this.timerUs_1, element_4.coverage_1), new Long(1000, 0)) > 0));
+    this_7.put_4fpzoq_k$('unresolvedBoundary', new Bool(element_4.unresolved_1));
+    if (element_4.meters_1 > 0 && compare(element_4.coverage_1, new Long(0, 0)) > 0) {
+      this_7.put_4fpzoq_k$('ratio', new Num(element_4.energy_1 * 1000 / element_4.meters_1));
+    }
+    var tmp$ret$28 = this_7.build_nmwvly_k$();
+    // Inline function 'kotlin.collections.plusAssign' call
+    var pair_4 = to(element_4.metric_1, new Obj(tmp$ret$28));
+    destination_5.put_4fpzoq_k$(pair_4.first_1, pair_4.second_1);
+  }
+  return tmp.encode_mr1ssb_k$(new Obj(mapOf([tmp_0, tmp_6, tmp_8, tmp_9, to('statistics', new Obj(destination_5))])));
+};
+function EnergyPerDistanceSeries(controllerSpeed, smoothingSeconds, includeTotals, pointBudget) {
+  pointBudget = pointBudget === VOID ? 16384 : pointBudget;
+  this.controllerSpeed_1 = controllerSpeed;
+  this.smoothingSeconds_1 = smoothingSeconds;
+  this.includeTotals_1 = includeTotals;
+  var tmp = this;
+  // Inline function 'kotlin.collections.map' call
+  var this_0 = EnergyPerDistancePolicy_getInstance().metrics_1;
+  // Inline function 'kotlin.collections.mapTo' call
+  var destination = ArrayList_init_$Create$(collectionSizeOrDefault(this_0, 10));
+  var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var item = _iterator__ex2g4s.next_20eer_k$();
+    var tmp$ret$2 = new InspectionPlotSummary(item, 512, pointBudget);
+    destination.add_utx5q5_k$(tmp$ret$2);
+  }
+  tmp.summaries_1 = destination;
+  var tmp_0 = this;
+  // Inline function 'kotlin.collections.map' call
+  var this_1 = EnergyPerDistancePolicy_getInstance().metrics_1;
+  // Inline function 'kotlin.collections.mapTo' call
+  var destination_0 = ArrayList_init_$Create$(collectionSizeOrDefault(this_1, 10));
+  var _iterator__ex2g4s_0 = this_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
+    var item_0 = _iterator__ex2g4s_0.next_20eer_k$();
+    // Inline function 'kotlin.collections.mutableListOf' call
+    var tmp$ret$5 = ArrayList_init_$Create$_0();
+    destination_0.add_utx5q5_k$(tmp$ret$5);
+  }
+  tmp_0.log_1 = destination_0;
+  this.checkpoint_1 = null;
+  this.broken_1 = false;
+  this.current_1 = null;
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!EnergyPerDistancePolicy_getInstance().validSmoothing_p69zls_k$(this.smoothingSeconds_1)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+}
+protoOf(EnergyPerDistanceSeries).get_valid_j01e4z_k$ = function () {
+  var tmp;
+  if (!this.broken_1) {
+    var tmp0_safe_receiver = this.current_1;
+    tmp = !((tmp0_safe_receiver == null ? null : tmp0_safe_receiver.appended_1) === true);
+  } else {
+    tmp = false;
+  }
+  return tmp;
+};
+protoOf(EnergyPerDistanceSeries).get_throughUs_ca342u_k$ = function () {
+  var tmp0_safe_receiver = this.checkpoint_1;
+  var tmp1_elvis_lhs = tmp0_safe_receiver == null ? null : tmp0_safe_receiver.throughUs_1;
+  return tmp1_elvis_lhs == null ? new Long(-1, -1) : tmp1_elvis_lhs;
+};
+protoOf(EnergyPerDistanceSeries).get_retainedPoints_bn4l0w_k$ = function () {
+  // Inline function 'kotlin.collections.sumOf' call
+  var sum = 0;
+  var _iterator__ex2g4s = this.summaries_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var element = _iterator__ex2g4s.next_20eer_k$();
+    var tmp = sum;
+    sum = tmp + element.get_retainedPoints_bn4l0w_k$() | 0;
+  }
+  var tmp_0 = sum;
+  var tmp0_safe_receiver = this.log_1;
+  var tmp_1;
+  if (tmp0_safe_receiver == null) {
+    tmp_1 = null;
+  } else {
+    // Inline function 'kotlin.collections.sumOf' call
+    var sum_0 = 0;
+    var _iterator__ex2g4s_0 = tmp0_safe_receiver.iterator_jk1svi_k$();
+    while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
+      var element_0 = _iterator__ex2g4s_0.next_20eer_k$();
+      var tmp_2 = sum_0;
+      sum_0 = tmp_2 + element_0.get_size_woubt6_k$() | 0;
+    }
+    tmp_1 = sum_0;
+  }
+  var tmp1_elvis_lhs = tmp_1;
+  return tmp_0 + (tmp1_elvis_lhs == null ? 0 : tmp1_elvis_lhs) | 0;
+};
+protoOf(EnergyPerDistanceSeries).begin_65at3q_k$ = function (endUs, timerUs, buckets, alignedSlotUs) {
+  var tmp0_safe_receiver = this.current_1;
+  if ((tmp0_safe_receiver == null ? null : tmp0_safe_receiver.appended_1) === true) {
+    this.broken_1 = true;
+    this.current_1 = null;
+  }
+  // Inline function 'kotlin.check' call
+  if (!!this.broken_1) {
+    var message = 'The energy/distance series must be rebuilt';
+    throw IllegalStateException_init_$Create$(toString_0(message));
+  }
+  var tmp1_safe_receiver = this.checkpoint_1;
+  var tmp;
+  if (tmp1_safe_receiver == null) {
+    tmp = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp = EnergyPerDistanceQuery_init_$Create$_2(tmp1_safe_receiver, new Long(0, 0), endUs, timerUs, this.controllerSpeed_1, this.smoothingSeconds_1, this.includeTotals_1);
+  }
+  var tmp2_elvis_lhs = tmp;
+  var query = tmp2_elvis_lhs == null ? EnergyPerDistanceQuery_init_$Create$_1(new Long(0, 0), endUs, timerUs, this.controllerSpeed_1, this.smoothingSeconds_1, this.includeTotals_1) : tmp2_elvis_lhs;
+  // Inline function 'kotlin.collections.mapIndexed' call
+  var this_0 = EnergyPerDistancePolicy_getInstance().metrics_1;
+  // Inline function 'kotlin.collections.mapIndexedTo' call
+  var destination = ArrayList_init_$Create$(collectionSizeOrDefault(this_0, 10));
+  var index = 0;
+  var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var item = _iterator__ex2g4s.next_20eer_k$();
+    var _unary__edvuaz = index;
+    index = _unary__edvuaz + 1 | 0;
+    var lane = checkIndexOverflow(_unary__edvuaz);
+    var plot = new InspectionPlotReducer(item, new AnalysisRange(new Long(0, 0), endUs), buckets, VOID, VOID, VOID, alignedSlotUs);
+    if (!(alignedSlotUs == null)) {
+      this.summaries_1.get_c1px32_k$(lane).mergeInto_9huala_k$(plot);
+    } else {
+      var tmp0 = this.log_1;
+      var tmp$ret$7;
+      $l$block: {
+        // Inline function 'kotlin.requireNotNull' call
+        if (tmp0 == null) {
+          var message_0 = 'Exact-width series need a read ending before 512 s';
+          throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+        } else {
+          tmp$ret$7 = tmp0;
+          break $l$block;
+        }
+      }
+      var replay = tmp$ret$7;
+      var _iterator__ex2g4s_0 = replay.get_c1px32_k$(lane).iterator_jk1svi_k$();
+      while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
+        var reading = _iterator__ex2g4s_0.next_20eer_k$();
+        plot.append$default_p3p94k_k$(reading);
+      }
+    }
+    destination.add_utx5q5_k$(plot);
+  }
+  var plots = destination;
+  // Inline function 'kotlin.also' call
+  var this_1 = new EnergyPerDistanceSeriesRead(this, query, plots);
+  this.current_1 = this_1;
+  return this_1;
+};
+protoOf(EnergyPerDistanceSeries).keep_efcce2_k$ = function (lane, reading) {
+  if (this.broken_1)
+    return Unit_instance;
+  try {
+    this.summaries_1.get_c1px32_k$(lane).append$default_i63xde_k$(reading);
+    if (compare(reading.collectionUs_1, new Long(512000000, 0)) < 0) {
+      var tmp0_safe_receiver = this.log_1;
+      var tmp1_safe_receiver = tmp0_safe_receiver == null ? null : tmp0_safe_receiver.get_c1px32_k$(lane);
+      if (tmp1_safe_receiver == null)
+        null;
+      else
+        tmp1_safe_receiver.add_utx5q5_k$(reading);
+    }
+  } catch ($p) {
+    if ($p instanceof Error) {
+      var _unused_var__etf5q3 = $p;
+      this.broken_1 = true;
+    } else {
+      throw $p;
+    }
+  }
+};
+protoOf(EnergyPerDistanceSeries).fail_2hr8a6_k$ = function (invalidate) {
+  this.current_1 = null;
+  if (invalidate)
+    this.broken_1 = true;
+};
+protoOf(EnergyPerDistanceSeries).commit_4qhi2v_k$ = function (next, appended) {
+  this.current_1 = null;
+  if (next == null) {
+    if (appended)
+      this.broken_1 = true;
+    return Unit_instance;
+  }
+  if (this.broken_1)
+    return Unit_instance;
+  this.checkpoint_1 = next;
+  if (compare(next.throughUs_1, new Long(512000000, 0)) >= 0)
+    this.log_1 = null;
+};
+function EnergyPerDistanceSeriesRead$lambda(this$0) {
+  return function (lane, reading) {
+    this$0.plots_1.get_c1px32_k$(lane).append$default_p3p94k_k$(reading);
+    var tmp;
+    if (this$0.next_1 == null && compare(reading.collectionUs_1, this$0.keptBeforeUs_1) < 0) {
+      this$0.appended_1 = true;
+      this$0.series_1.keep_efcce2_k$(lane, reading);
+      tmp = Unit_instance;
+    }
+    return Unit_instance;
+  };
+}
+function EnergyPerDistanceSeriesRead(series, query, plots) {
+  this.series_1 = series;
+  this.query_1 = query;
+  this.plots_1 = plots;
+  this.keptBeforeUs_1 = subtract(this.query_1.endUs_1, new Long(2500000, 0));
+  this.next_1 = null;
+  this.appended_1 = false;
+  var tmp = this.query_1;
+  tmp.readings_1 = EnergyPerDistanceSeriesRead$lambda(this);
+}
+protoOf(EnergyPerDistanceSeriesRead).appendDistance_q89x5b_k$ = function (startUs, endUs, meters, speed0, speed1) {
+  $l$block: {
+    // Inline function 'app.powerlog.core.analytics.EnergyPerDistanceSeriesRead.feed' call
+    // Inline function 'kotlin.check' call
+    if (!(this.series_1.current_1 === this)) {
+      var message = 'This energy/distance series read has ended';
+      throw IllegalStateException_init_$Create$(toString_0(message));
+    }
+    try {
+      this.query_1.appendDistance_q89x5b_k$(startUs, endUs, meters, speed0, speed1);
+      break $l$block;
+    } catch ($p) {
+      if ($p instanceof Error) {
+        var failure = $p;
+        var tmp;
+        if (!(failure instanceof InspectionCapacityException)) {
+          tmp = true;
+        } else {
+          tmp = this.appended_1;
+        }
+        this.series_1.fail_2hr8a6_k$(tmp);
+        throw failure;
+      } else {
+        throw $p;
+      }
+    }
+  }
+  return Unit_instance;
+};
+protoOf(EnergyPerDistanceSeriesRead).appendBattery_3h1ada_k$ = function (startUs, endUs, wattHours, rate0, rate1, indivisible, timestamp) {
+  $l$block: {
+    // Inline function 'app.powerlog.core.analytics.EnergyPerDistanceSeriesRead.feed' call
+    // Inline function 'kotlin.check' call
+    if (!(this.series_1.current_1 === this)) {
+      var message = 'This energy/distance series read has ended';
+      throw IllegalStateException_init_$Create$(toString_0(message));
+    }
+    try {
+      this.query_1.appendBattery_3h1ada_k$(startUs, endUs, wattHours, rate0, rate1, indivisible, timestamp);
+      break $l$block;
+    } catch ($p) {
+      if ($p instanceof Error) {
+        var failure = $p;
+        var tmp;
+        if (!(failure instanceof InspectionCapacityException)) {
+          tmp = true;
+        } else {
+          tmp = this.appended_1;
+        }
+        this.series_1.fail_2hr8a6_k$(tmp);
+        throw failure;
+      } else {
+        throw $p;
+      }
+    }
+  }
+  return Unit_instance;
+};
+protoOf(EnergyPerDistanceSeriesRead).appendSpeed_xpn85i_k$ = function (timeUs, mps, accuracy, activeInterval) {
+  $l$block: {
+    // Inline function 'app.powerlog.core.analytics.EnergyPerDistanceSeriesRead.feed' call
+    // Inline function 'kotlin.check' call
+    if (!(this.series_1.current_1 === this)) {
+      var message = 'This energy/distance series read has ended';
+      throw IllegalStateException_init_$Create$(toString_0(message));
+    }
+    try {
+      this.query_1.appendSpeed_xpn85i_k$(timeUs, mps, accuracy, activeInterval);
+      break $l$block;
+    } catch ($p) {
+      if ($p instanceof Error) {
+        var failure = $p;
+        var tmp;
+        if (!(failure instanceof InspectionCapacityException)) {
+          tmp = true;
+        } else {
+          tmp = this.appended_1;
+        }
+        this.series_1.fail_2hr8a6_k$(tmp);
+        throw failure;
+      } else {
+        throw $p;
+      }
+    }
+  }
+  return Unit_instance;
+};
+protoOf(EnergyPerDistanceSeriesRead).appendTelemetry_ttdkmw_k$ = function (timeUs, watts, batteryWatts, speedMps, activeInterval, continuity, timestamp) {
+  $l$block: {
+    // Inline function 'app.powerlog.core.analytics.EnergyPerDistanceSeriesRead.feed' call
+    // Inline function 'kotlin.check' call
+    if (!(this.series_1.current_1 === this)) {
+      var message = 'This energy/distance series read has ended';
+      throw IllegalStateException_init_$Create$(toString_0(message));
+    }
+    try {
+      this.query_1.appendTelemetry_ttdkmw_k$(timeUs, watts, batteryWatts, speedMps, activeInterval, continuity, timestamp);
+      break $l$block;
+    } catch ($p) {
+      if ($p instanceof Error) {
+        var failure = $p;
+        var tmp;
+        if (!(failure instanceof InspectionCapacityException)) {
+          tmp = true;
+        } else {
+          tmp = this.appended_1;
+        }
+        this.series_1.fail_2hr8a6_k$(tmp);
+        throw failure;
+      } else {
+        throw $p;
+      }
+    }
+  }
+  return Unit_instance;
+};
+protoOf(EnergyPerDistanceSeriesRead).cut_y94t5a_k$ = function () {
+  $l$block: {
+    // Inline function 'app.powerlog.core.analytics.EnergyPerDistanceSeriesRead.feed' call
+    // Inline function 'kotlin.check' call
+    if (!(this.series_1.current_1 === this)) {
+      var message = 'This energy/distance series read has ended';
+      throw IllegalStateException_init_$Create$(toString_0(message));
+    }
+    try {
+      // Inline function 'kotlin.check' call
+      if (!(this.next_1 == null)) {
+        var message_0 = 'An energy/distance series read is cut once';
+        throw IllegalStateException_init_$Create$(toString_0(message_0));
+      }
+      this.next_1 = this.query_1.checkpoint_8bc41k_k$();
+      break $l$block;
+    } catch ($p) {
+      if ($p instanceof Error) {
+        var failure = $p;
+        var tmp;
+        if (!(failure instanceof InspectionCapacityException)) {
+          tmp = true;
+        } else {
+          tmp = this.appended_1;
+        }
+        this.series_1.fail_2hr8a6_k$(tmp);
+        throw failure;
+      } else {
+        throw $p;
+      }
+    }
+  }
+  return Unit_instance;
+};
+protoOf(EnergyPerDistanceSeriesRead).resultJson_9gmyqj_k$ = function () {
+  var tmp$ret$0;
+  $l$block: {
+    // Inline function 'app.powerlog.core.analytics.EnergyPerDistanceSeriesRead.feed' call
+    // Inline function 'kotlin.check' call
+    if (!(this.series_1.current_1 === this)) {
+      var message = 'This energy/distance series read has ended';
+      throw IllegalStateException_init_$Create$(toString_0(message));
+    }
+    try {
+      var tmp0 = EnergyPerDistancePolicy_getInstance().metrics_1;
+      // Inline function 'kotlin.collections.zip' call
+      var other = this.plots_1;
+      var first = tmp0.iterator_jk1svi_k$();
+      var second = other.iterator_jk1svi_k$();
+      var tmp0_0 = collectionSizeOrDefault(tmp0, 10);
+      // Inline function 'kotlin.comparisons.minOf' call
+      var b = collectionSizeOrDefault(other, 10);
+      var tmp$ret$5 = Math.min(tmp0_0, b);
+      var list = ArrayList_init_$Create$(tmp$ret$5);
+      while (first.hasNext_bitz1p_k$() && second.hasNext_bitz1p_k$()) {
+        var tmp0_1 = first.next_20eer_k$();
+        var plot = second.next_20eer_k$();
+        var tmp$ret$6 = to(tmp0_1, plot.result_fgc06b_k$());
+        list.add_utx5q5_k$(tmp$ret$6);
+      }
+      tmp$ret$0 = this.query_1.resultJson_jnmzrk_k$(list);
+      break $l$block;
+    } catch ($p) {
+      if ($p instanceof Error) {
+        var failure = $p;
+        var tmp;
+        if (!(failure instanceof InspectionCapacityException)) {
+          tmp = true;
+        } else {
+          tmp = this.appended_1;
+        }
+        this.series_1.fail_2hr8a6_k$(tmp);
+        throw failure;
+      } else {
+        throw $p;
+      }
+    }
+  }
+  var json = tmp$ret$0;
+  this.series_1.commit_4qhi2v_k$(this.next_1, this.appended_1);
+  return json;
 };
 var static_init_called;
 function static_init() {
@@ -4566,7 +6177,7 @@ protoOf(GPSFix).get_item_woo5lo_k$ = function () {
     // Inline function 'kotlin.let' call
     var record = tmp$ret$1;
     // Inline function 'kotlin.collections.mutableMapOf' call
-    var values = LinkedHashMap_init_$Create$();
+    var values = LinkedHashMap_init_$Create$_0();
     var _iterator__ex2g4s = listOf(['latitude', 'longitude', 'horizontalAccuracyM', 'speedMps', 'speedAccuracyMps', 'altitudeMeters', 'verticalAccuracyM']).iterator_jk1svi_k$();
     while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
       var metric = _iterator__ex2g4s.next_20eer_k$();
@@ -5337,10 +6948,10 @@ function Metrics() {
   Metrics_instance = this;
   var tmp = this;
   // Inline function 'kotlin.collections.associateBy' call
-  var this_0 = listOf([new MetricPolicy('humanPowerW', new Long(1000, 0), 0.0, 32766.0), new MetricPolicy('cadenceRpm', new Long(10000, 0), 0.0, 254.0), new MetricPolicy('heartRateBpm', new Long(1000, 0), 1.0, 254.0, new Long(10000000, 0)), new MetricPolicy('speedMps', new Long(1000000, 0), 0.0, 40.0, new Long(10000000, 0)), new MetricPolicy('speedAccuracyMps', new Long(1000000, 0), 0.0, VOID, new Long(10000000, 0)), new MetricPolicy('controllerSpeedMps', new Long(1000000, 0), 0.0, 40.0), new MetricPolicy('distanceMeters', new Long(1000000, 0), 0.0), new MetricPolicy('gpsDistanceMeters', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('controllerDistanceMeters', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('controllerEnergyWh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('controllerChargeAh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('calculatedEnergyWh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('calculatedChargeAh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('altitudeMeters', new Long(1000, 0), -500.0, 20000.0, new Long(10000000, 0)), new MetricPolicy('horizontalAccuracyM', new Long(1000, 0), 0.0, 50.0, new Long(10000000, 0)), new MetricPolicy('verticalAccuracyM', new Long(1000, 0), 0.0, 20.0, new Long(10000000, 0)), new MetricPolicy('courseDegrees', new Long(1000, 0), 0.0, VOID, VOID, true), new MetricPolicy('activeEnergyKcal', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('basalEnergyKcal', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('consumedAh', new Long(10000, 0), VOID, VOID, VOID, true), new MetricPolicy('consumedWh', new Long(10000, 0), VOID, VOID, VOID, true), new MetricPolicy('assistLevel', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('raceMode', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('faultCode', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('crankRevolutions', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('motorInputPowerW', new Long(1000, 0)), new MetricPolicy('batteryCurrentA', new Long(100, 0)), new MetricPolicy('motorCurrentA', new Long(100, 0)), new MetricPolicy('pedalTorqueNm', new Long(100, 0)), new MetricPolicy('motorTempC', new Long(10, 0)), new MetricPolicy('controllerTempC', new Long(10, 0)), new MetricPolicy('batteryVoltageV', new Long(10, 0)), new MetricPolicy('throttleVoltageV', new Long(100, 0)), new MetricPolicy('motorRpm', new Long(1, 0)), new MetricPolicy('speedRaw', new Long(100, 0))]);
+  var this_0 = listOf([new MetricPolicy('humanPowerW', new Long(1000, 0), 0.0, 32766.0), new MetricPolicy('cadenceRpm', new Long(10000, 0), 0.0, 254.0), new MetricPolicy('heartRateBpm', new Long(1000, 0), 1.0, 254.0, new Long(10000000, 0)), new MetricPolicy('speedMps', new Long(1000000, 0), 0.0, 40.0, new Long(10000000, 0)), new MetricPolicy('speedAccuracyMps', new Long(1000000, 0), 0.0, VOID, new Long(10000000, 0)), new MetricPolicy('controllerSpeedMps', new Long(1000000, 0), 0.0, 40.0), new MetricPolicy('distanceMeters', new Long(1000000, 0), 0.0), new MetricPolicy('gpsDistanceMeters', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('controllerDistanceMeters', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('controllerEnergyWh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('controllerChargeAh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('calculatedEnergyWh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('calculatedChargeAh', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('batteryWhPerKm', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('riderWhPerKm', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('altitudeMeters', new Long(1000, 0), -500.0, 20000.0, new Long(10000000, 0)), new MetricPolicy('horizontalAccuracyM', new Long(1000, 0), 0.0, 50.0, new Long(10000000, 0)), new MetricPolicy('verticalAccuracyM', new Long(1000, 0), 0.0, 20.0, new Long(10000000, 0)), new MetricPolicy('courseDegrees', new Long(1000, 0), 0.0, VOID, VOID, true), new MetricPolicy('activeEnergyKcal', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('basalEnergyKcal', new Long(1000000, 0), 0.0, VOID, VOID, true), new MetricPolicy('consumedAh', new Long(10000, 0), VOID, VOID, VOID, true), new MetricPolicy('consumedWh', new Long(10000, 0), VOID, VOID, VOID, true), new MetricPolicy('assistLevel', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('raceMode', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('faultCode', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('crankRevolutions', new Long(1, 0), VOID, VOID, VOID, true), new MetricPolicy('motorInputPowerW', new Long(1000, 0)), new MetricPolicy('batteryCurrentA', new Long(100, 0)), new MetricPolicy('motorCurrentA', new Long(100, 0)), new MetricPolicy('pedalTorqueNm', new Long(100, 0)), new MetricPolicy('motorTempC', new Long(10, 0)), new MetricPolicy('controllerTempC', new Long(10, 0)), new MetricPolicy('batteryVoltageV', new Long(10, 0)), new MetricPolicy('throttleVoltageV', new Long(100, 0)), new MetricPolicy('motorRpm', new Long(1, 0)), new MetricPolicy('speedRaw', new Long(100, 0))]);
   var capacity = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16);
   // Inline function 'kotlin.collections.associateByTo' call
-  var destination = LinkedHashMap_init_$Create$_0(capacity);
+  var destination = LinkedHashMap_init_$Create$(capacity);
   var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
     var element = _iterator__ex2g4s.next_20eer_k$();
@@ -5352,7 +6963,7 @@ function Metrics() {
   // Inline function 'kotlin.collections.mapValues' call
   var this_1 = this.policies_1;
   // Inline function 'kotlin.collections.mapValuesTo' call
-  var destination_0 = LinkedHashMap_init_$Create$_0(mapCapacity(this_1.get_size_woubt6_k$()));
+  var destination_0 = LinkedHashMap_init_$Create$(mapCapacity(this_1.get_size_woubt6_k$()));
   // Inline function 'kotlin.collections.associateByTo' call
   var _iterator__ex2g4s_0 = this_1.get_entries_p20ztl_k$().iterator_jk1svi_k$();
   while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
@@ -5370,7 +6981,7 @@ function Metrics() {
   // Inline function 'kotlin.collections.mapValues' call
   var this_2 = this.monitorPolicies_1;
   // Inline function 'kotlin.collections.mapValuesTo' call
-  var destination_1 = LinkedHashMap_init_$Create$_0(mapCapacity(this_2.get_size_woubt6_k$()));
+  var destination_1 = LinkedHashMap_init_$Create$(mapCapacity(this_2.get_size_woubt6_k$()));
   // Inline function 'kotlin.collections.associateByTo' call
   var _iterator__ex2g4s_1 = this_2.get_entries_p20ztl_k$().iterator_jk1svi_k$();
   while (_iterator__ex2g4s_1.hasNext_bitz1p_k$()) {
@@ -7136,19 +8747,19 @@ function SummaryPreparation(pin) {
   tmp.lifecycle_1 = ArrayList_init_$Create$_0();
   var tmp_0 = this;
   // Inline function 'kotlin.collections.mutableMapOf' call
-  tmp_0.counts_1 = LinkedHashMap_init_$Create$();
+  tmp_0.counts_1 = LinkedHashMap_init_$Create$_0();
   var tmp_1 = this;
   // Inline function 'kotlin.collections.mutableMapOf' call
-  tmp_1.locations_1 = LinkedHashMap_init_$Create$();
+  tmp_1.locations_1 = LinkedHashMap_init_$Create$_0();
   var tmp_2 = this;
   // Inline function 'kotlin.collections.mutableMapOf' call
-  tmp_2.available_1 = LinkedHashMap_init_$Create$();
+  tmp_2.available_1 = LinkedHashMap_init_$Create$_0();
   var tmp_3 = this;
   // Inline function 'kotlin.collections.mutableSetOf' call
   tmp_3.rawHeartRate_1 = LinkedHashSet_init_$Create$();
   var tmp_4 = this;
   // Inline function 'kotlin.collections.mutableMapOf' call
-  tmp_4.rawHeartRateOrigins_1 = LinkedHashMap_init_$Create$();
+  tmp_4.rawHeartRateOrigins_1 = LinkedHashMap_init_$Create$_0();
   this.maxTime_1 = new Long(0, 0);
   this.lastTimestamp_1 = null;
   this.total_1 = new Long(0, 0);
@@ -7385,7 +8996,7 @@ protoOf(SummaryPreparation).finish_mk598q_k$ = function (distance) {
   // Inline function 'kotlin.collections.mapValues' call
   var this_0 = this.rawHeartRateOrigins_1;
   // Inline function 'kotlin.collections.mapValuesTo' call
-  var destination_0 = LinkedHashMap_init_$Create$_0(mapCapacity(this_0.get_size_woubt6_k$()));
+  var destination_0 = LinkedHashMap_init_$Create$(mapCapacity(this_0.get_size_woubt6_k$()));
   // Inline function 'kotlin.collections.associateByTo' call
   var _iterator__ex2g4s_1 = this_0.get_entries_p20ztl_k$().iterator_jk1svi_k$();
   while (_iterator__ex2g4s_1.hasNext_bitz1p_k$()) {
@@ -7621,7 +9232,7 @@ function SummaryComposer(prepared, distance, healthSelections) {
   var tmp_1 = this;
   // Inline function 'kotlin.collections.associateWith' call
   var this_2 = listOf(['active', 'basal']);
-  var result = LinkedHashMap_init_$Create$_0(coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_2, 10)), 16));
+  var result = LinkedHashMap_init_$Create$(coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_2, 10)), 16));
   // Inline function 'kotlin.collections.associateWithTo' call
   var _iterator__ex2g4s = this_2.iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
@@ -7866,7 +9477,7 @@ protoOf(SummaryComposer).finish_l2rq7h_k$ = function () {
   var this_0 = listOf([this.power_1, this.cadence_1, this.hr_1]);
   var capacity = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16);
   // Inline function 'kotlin.collections.associateTo' call
-  var destination = LinkedHashMap_init_$Create$_0(capacity);
+  var destination = LinkedHashMap_init_$Create$(capacity);
   var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
     var element = _iterator__ex2g4s.next_20eer_k$();
@@ -7890,7 +9501,7 @@ protoOf(SummaryComposer).finish_l2rq7h_k$ = function () {
   try {
     // Inline function 'kotlin.collections.mapValues' call
     // Inline function 'kotlin.collections.mapValuesTo' call
-    var destination_0 = LinkedHashMap_init_$Create$_0(mapCapacity(results.get_size_woubt6_k$()));
+    var destination_0 = LinkedHashMap_init_$Create$(mapCapacity(results.get_size_woubt6_k$()));
     // Inline function 'kotlin.collections.associateByTo' call
     var _iterator__ex2g4s_0 = results.get_entries_p20ztl_k$().iterator_jk1svi_k$();
     while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
@@ -8069,7 +9680,7 @@ protoOf(SummaryWire).fields_t15cfe_k$ = function (summary, lifecycleCount) {
     var tmp$ret$10 = mapOf([to('latitude', item_0.latitude_1), to('longitude', item_0.longitude_1), to('elapsedSeconds', item_0.elapsedSeconds_1), to('segment', item_0.segment_1), to('startsSegment', item_0.startsSegment_1)]);
     destination_1.add_utx5q5_k$(tmp$ret$10);
   }
-  return plus_0(mapOf([tmp, tmp_0, tmp_1, tmp_2, tmp_3, tmp_4, tmp_8, tmp_9, tmp_10, tmp_11, tmp_12, tmp_13, tmp_14, tmp_15, tmp_16, to('routePreview', destination_1), to('provenance', s.provenance_1), to('completeness', mapOf([to('distance', s.completeness_1.distance_1), to('riderPower', s.completeness_1.riderPower_1), to('heartRate', s.completeness_1.heartRate_1), to('route', s.completeness_1.route_1)]))]), optional);
+  return plus_1(mapOf([tmp, tmp_0, tmp_1, tmp_2, tmp_3, tmp_4, tmp_8, tmp_9, tmp_10, tmp_11, tmp_12, tmp_13, tmp_14, tmp_15, tmp_16, to('routePreview', destination_1), to('provenance', s.provenance_1), to('completeness', mapOf([to('distance', s.completeness_1.distance_1), to('riderPower', s.completeness_1.riderPower_1), to('heartRate', s.completeness_1.heartRate_1), to('route', s.completeness_1.route_1)]))]), optional);
 };
 protoOf(SummaryWire).encode_6aau9z_k$ = function (summary, lifecycleCount) {
   // Inline function 'kotlin.text.buildString' call
@@ -9692,7 +11303,7 @@ function fields($this, pairs) {
   // Inline function 'kotlin.collections.associate' call
   var capacity = coerceAtLeast(mapCapacity(collectionSizeOrDefault(destination, 10)), 16);
   // Inline function 'kotlin.collections.associateTo' call
-  var destination_0 = LinkedHashMap_init_$Create$_0(capacity);
+  var destination_0 = LinkedHashMap_init_$Create$(capacity);
   var _iterator__ex2g4s = destination.iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
     var element_0 = _iterator__ex2g4s.next_20eer_k$();
@@ -10907,7 +12518,7 @@ function EnergyOriginPreparation(source, window_0) {
   this.window_1 = window_0;
   var tmp = this;
   // Inline function 'kotlin.collections.mutableMapOf' call
-  tmp.origins_1 = LinkedHashMap_init_$Create$();
+  tmp.origins_1 = LinkedHashMap_init_$Create$_0();
   this.previousStart_1 = new Long(0, -2147483648);
 }
 protoOf(EnergyOriginPreparation).append_1mms00_k$ = function (metric, record) {
@@ -10996,7 +12607,7 @@ function HeartRateOriginPreparation(source, window_0) {
   this.window_1 = window_0;
   var tmp = this;
   // Inline function 'kotlin.collections.mutableMapOf' call
-  tmp.reducers_1 = LinkedHashMap_init_$Create$();
+  tmp.reducers_1 = LinkedHashMap_init_$Create$_0();
 }
 protoOf(HeartRateOriginPreparation).append_w220k5_k$ = function (record, activeInterval) {
   if (!(record.source_1.name_1 === this.source_1))
@@ -13415,12 +15026,14 @@ function InspectionMetrics() {
   var this_0 = MetricCatalog_getInstance().get_all_18j9hk_k$();
   var capacity = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16);
   // Inline function 'kotlin.collections.associateTo' call
-  var destination = LinkedHashMap_init_$Create$_0(capacity);
+  var destination = LinkedHashMap_init_$Create$(capacity);
   var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
     var element = _iterator__ex2g4s.next_20eer_k$();
+    var tmp_0 = FixedPoint_instance;
+    var tmp0_elvis_lhs = element.plotGapSeconds_1;
     // Inline function 'kotlin.collections.plusAssign' call
-    var pair = to(element.id_1, FixedPoint_instance.timeUs_mx044l_k$(element.gapSeconds_1));
+    var pair = to(element.id_1, tmp_0.timeUs_mx044l_k$(tmp0_elvis_lhs == null ? element.gapSeconds_1 : tmp0_elvis_lhs));
     destination.put_4fpzoq_k$(pair.first_1, pair.second_1);
   }
   tmp.plotGapsUs_1 = destination;
@@ -13625,6 +15238,18 @@ protoOf(InspectionPoint).identity_kys6u1_k$ = function () {
     tmp = tmp1_elvis_lhs;
   }
   return tmp;
+};
+protoOf(InspectionPoint).withIdentity_g6n7ce_k$ = function (identity) {
+  var tmp0_safe_receiver = this.reference_1;
+  var tmp;
+  if (tmp0_safe_receiver == null) {
+    tmp = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp = new InspectionPoint(this.timeUs_1, null, this.continuity_1, this.producer_1, this.sequence_1, new MetricValueReference(tmp0_safe_receiver.reference_1, tmp0_safe_receiver.value_1, identity), this.interruptionBoundary_1);
+  }
+  var tmp1_elvis_lhs = tmp;
+  return tmp1_elvis_lhs == null ? this : tmp1_elvis_lhs;
 };
 protoOf(InspectionPoint).equals = function (other) {
   var tmp;
@@ -14865,7 +16490,7 @@ function InspectionPlotAggregate(metric, range, points, firstRawUs, lastRawUs, l
   } else {
     // Inline function 'kotlin.collections.groupBy' call
     // Inline function 'kotlin.collections.groupByTo' call
-    var destination = LinkedHashMap_init_$Create$();
+    var destination = LinkedHashMap_init_$Create$_0();
     var _iterator__ex2g4s_4 = points.iterator_jk1svi_k$();
     while (_iterator__ex2g4s_4.hasNext_bitz1p_k$()) {
       var element_3 = _iterator__ex2g4s_4.next_20eer_k$();
@@ -14966,30 +16591,8 @@ function add_0($this, point) {
 function admitRaw($this, timeUs) {
   if ($this.owned_1 && (compare(timeUs, $this.range_1.startUs_1) < 0 || compare(timeUs, $this.range_1.endUs_1) >= 0))
     return false;
-  var tmp;
-  var tmp0_safe_receiver = $this.lastRawUs_1;
-  var tmp_0;
-  if (tmp0_safe_receiver == null) {
-    tmp_0 = null;
-  } else {
-    // Inline function 'kotlin.let' call
-    tmp_0 = compare(timeUs, tmp0_safe_receiver) >= 0;
-  }
-  if (!(tmp_0 === false)) {
-    var tmp1_safe_receiver = $this.mergedThrough_1;
-    var tmp_1;
-    if (tmp1_safe_receiver == null) {
-      tmp_1 = null;
-    } else {
-      // Inline function 'kotlin.let' call
-      tmp_1 = compare(timeUs, tmp1_safe_receiver) >= 0;
-    }
-    tmp = !(tmp_1 === false);
-  } else {
-    tmp = false;
-  }
   // Inline function 'kotlin.require' call
-  if (!tmp) {
+  if (!$this.admits_ahmv1_k$(timeUs)) {
     var message = 'Plot originals must be ordered and disjoint';
     throw IllegalArgumentException_init_$Create$(toString_0(message));
   }
@@ -15041,6 +16644,8 @@ function appendRaw($this, timeUs, point) {
     $this.segment_1 = $this.segment_1 + 1 | 0;
   }
   $this.broken_1 = false;
+  if ($this.firstPoint_1 == null)
+    $this.firstPoint_1 = point;
   $this.previous_1 = point;
   retainViewport($this, new InspectionPlotPoint(point, $this.segment_1));
 }
@@ -15120,6 +16725,28 @@ function flush($this) {
     $this.retained_1.put_4fpzoq_k$(id, point);
   }
   $this.bucket_1.clear_j9egeb_k$();
+}
+function continued($this, points) {
+  var gap = InspectionMetrics_getInstance().plotGapUs_19osnt_k$($this.metric_1);
+  var previous = null;
+  var tmp0_safe_receiver = firstOrNull(points);
+  var tmp1_elvis_lhs = tmp0_safe_receiver == null ? null : tmp0_safe_receiver.segment_1;
+  var segment = tmp1_elvis_lhs == null ? 0 : tmp1_elvis_lhs;
+  // Inline function 'kotlin.collections.map' call
+  // Inline function 'kotlin.collections.mapTo' call
+  var destination = ArrayList_init_$Create$(collectionSizeOrDefault(points, 10));
+  var _iterator__ex2g4s = points.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var item = _iterator__ex2g4s.next_20eer_k$();
+    var old = previous;
+    if (!(old == null) && !(item.segment_1 === old.segment_1) && compare(FixedPoint_instance.subtract_5fxp4c_k$(item.point_1.timeUs_1, old.point_1.timeUs_1), gap) >= 0) {
+      segment = segment + 1 | 0;
+    }
+    previous = item;
+    var tmp$ret$2 = item.copy$default_yasb0s_k$(VOID, segment);
+    destination.add_utx5q5_k$(tmp$ret$2);
+  }
+  return destination;
 }
 function sam$kotlin_Comparator$0_6(function_0) {
   this.function_1 = function_0;
@@ -15260,6 +16887,7 @@ function InspectionPlotReducer(metric, range, buckets, pointLimit, owned, identi
   this.alignedSlotUs_1 = alignedSlotUs;
   this.capacityExceeded_1 = false;
   this.previous_1 = null;
+  this.firstPoint_1 = null;
   this.segment_1 = 0;
   this.broken_1 = false;
   this.firstRawUs_1 = null;
@@ -15275,7 +16903,7 @@ function InspectionPlotReducer(metric, range, buckets, pointLimit, owned, identi
   tmp.bucket_1 = ArrayList_init_$Create$_0();
   var tmp_0 = this;
   // Inline function 'kotlin.collections.linkedMapOf' call
-  tmp_0.retained_1 = LinkedHashMap_init_$Create$();
+  tmp_0.retained_1 = LinkedHashMap_init_$Create$_0();
   var tmp_1;
   var tmp_2;
   var containsArg = this.buckets_1;
@@ -15304,6 +16932,9 @@ function InspectionPlotReducer(metric, range, buckets, pointLimit, owned, identi
     throw IllegalArgumentException_init_$Create$(toString_0(message_0));
   }
 }
+protoOf(InspectionPlotReducer).get_lastPoint_3tq8oc_k$ = function () {
+  return this.previous_1;
+};
 protoOf(InspectionPlotReducer).append_8qydi0_k$ = function (item, selected, interruptionBoundary) {
   // Inline function 'kotlin.require' call
   if (!!InspectionMetrics_getInstance().isProjected_qpvulw_k$(this.metric_1)) {
@@ -15361,6 +16992,31 @@ protoOf(InspectionPlotReducer).appendDistance_46wpt5_k$ = function (boundary) {
   this.segment_1 = boundary.plotSegment_1;
   this.broken_1 = false;
   retainViewport(this, new InspectionPlotPoint(boundary.point_1, boundary.plotSegment_1, boundary.tieKey_1));
+};
+protoOf(InspectionPlotReducer).admits_ahmv1_k$ = function (timeUs) {
+  var tmp;
+  var tmp0_safe_receiver = this.lastRawUs_1;
+  var tmp_0;
+  if (tmp0_safe_receiver == null) {
+    tmp_0 = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp_0 = compare(timeUs, tmp0_safe_receiver) >= 0;
+  }
+  if (!(tmp_0 === false)) {
+    var tmp1_safe_receiver = this.mergedThrough_1;
+    var tmp_1;
+    if (tmp1_safe_receiver == null) {
+      tmp_1 = null;
+    } else {
+      // Inline function 'kotlin.let' call
+      tmp_1 = compare(timeUs, tmp1_safe_receiver) >= 0;
+    }
+    tmp = !(tmp_1 === false);
+  } else {
+    tmp = false;
+  }
+  return tmp;
 };
 protoOf(InspectionPlotReducer).canMerge_si8or5_k$ = function (aggregate) {
   var tmp;
@@ -15481,6 +17137,9 @@ protoOf(InspectionPlotReducer).canMerge_si8or5_k$ = function (aggregate) {
   return tmp_8;
 };
 protoOf(InspectionPlotReducer).merge_3rxb1t_k$ = function (aggregate) {
+  return this.merge_3cfv9g_k$(aggregate, null, null);
+};
+protoOf(InspectionPlotReducer).merge_3cfv9g_k$ = function (aggregate, arrivedFirst, arrivedLast) {
   // Inline function 'kotlin.require' call
   if (!this.canMerge_si8or5_k$(aggregate)) {
     var message = 'Aggregate needs children or raw boundary originals';
@@ -15505,18 +17164,22 @@ protoOf(InspectionPlotReducer).merge_3rxb1t_k$ = function (aggregate) {
       add_0(this, point);
     }
     this.segment_1 = last(aggregate.points_1).segment_1;
-    this.previous_1 = last(aggregate.points_1).point_1;
+    var tmp = this;
+    tmp.previous_1 = arrivedLast == null ? last(aggregate.points_1).point_1 : arrivedLast;
     this.broken_1 = aggregate.trailingBarrier_1;
     return Unit_instance;
   }
   startViewport(this);
-  var tmp = InspectionPlotReducer$merge$lambda;
-  var ordered = sortedWith(aggregate.points_1, new sam$kotlin_Comparator$0_6(tmp));
+  var tmp_0 = InspectionPlotReducer$merge$lambda;
+  var ordered = sortedWith(aggregate.points_1, new sam$kotlin_Comparator$0_6(tmp_0));
   var first_0 = first(ordered);
+  var continued = arrivedFirst == null ? first_0.point_1 : arrivedFirst;
   var old = this.previous_1;
-  if (!(old == null) && (this.broken_1 || aggregate.leadingBarrier_1 || InspectionOrder_instance.startsSegment_6pgbj7_k$(this.metric_1, old, first_0.point_1, true))) {
+  if (!(old == null) && (this.broken_1 || aggregate.leadingBarrier_1 || InspectionOrder_instance.startsSegment_6pgbj7_k$(this.metric_1, old, continued, true))) {
     this.segment_1 = this.segment_1 + 1 | 0;
   }
+  if (this.firstPoint_1 == null)
+    this.firstPoint_1 = continued;
   var offset = this.segment_1 - first_0.segment_1 | 0;
   var _iterator__ex2g4s_0 = ordered.iterator_jk1svi_k$();
   while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
@@ -15524,7 +17187,8 @@ protoOf(InspectionPlotReducer).merge_3rxb1t_k$ = function (aggregate) {
     add_0(this, new InspectionPlotPoint(point_0.point_1, point_0.segment_1 + offset | 0));
   }
   this.segment_1 = last(ordered).segment_1 + offset | 0;
-  this.previous_1 = last(ordered).point_1;
+  var tmp_1 = this;
+  tmp_1.previous_1 = arrivedLast == null ? last(ordered).point_1 : arrivedLast;
   this.broken_1 = aggregate.trailingBarrier_1;
 };
 protoOf(InspectionPlotReducer).result_fgc06b_k$ = function () {
@@ -15547,7 +17211,7 @@ protoOf(InspectionPlotReducer).result_fgc06b_k$ = function () {
   }
   var after = tmp;
   // Inline function 'kotlin.collections.distinctBy' call
-  var this_0 = plus_1(this.retained_1.get_values_ksazhn_k$(), listOfNotNull([this.predecessor_1, after]));
+  var this_0 = plus_2(this.retained_1.get_values_ksazhn_k$(), listOfNotNull([this.predecessor_1, after]));
   var set = HashSet_init_$Create$();
   var list = ArrayList_init_$Create$_0();
   var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
@@ -15564,7 +17228,7 @@ protoOf(InspectionPlotReducer).result_fgc06b_k$ = function () {
   if (points.get_size_woubt6_k$() > this.pointLimit_1) {
     overflow(this);
   }
-  return points;
+  return this.owned_1 || !BatteryConsumptionPolicy_getInstance().isMetric_e9vjr4_k$(this.metric_1) ? points : continued(this, points);
 };
 protoOf(InspectionPlotReducer).aggregate_2wanjz_k$ = function () {
   // Inline function 'kotlin.require' call
@@ -15899,7 +17563,7 @@ function InspectionCacheCodec() {
 }
 protoOf(InspectionCacheCodec).statistics_i756yw_k$ = function (value) {
   // Inline function 'kotlin.collections.mutableMapOf' call
-  var tmp$ret$0 = LinkedHashMap_init_$Create$();
+  var tmp$ret$0 = LinkedHashMap_init_$Create$_0();
   return this.statistics_9btzor_k$(value, tmp$ret$0);
 };
 protoOf(InspectionCacheCodec).statistics_9btzor_k$ = function (value, numbers) {
@@ -16049,7 +17713,7 @@ protoOf(InspectionCacheCodec).readStatistics_5fjddr_k$ = function (text) {
 };
 protoOf(InspectionCacheCodec).plot_vf3gs8_k$ = function (value) {
   // Inline function 'kotlin.collections.mutableMapOf' call
-  var tmp$ret$0 = LinkedHashMap_init_$Create$();
+  var tmp$ret$0 = LinkedHashMap_init_$Create$_0();
   return this.plot_wfjkan_k$(value, tmp$ret$0);
 };
 protoOf(InspectionCacheCodec).plot_wfjkan_k$ = function (value, numbers) {
@@ -16080,7 +17744,7 @@ function InspectionCacheCodec_getInstance() {
 function InspectionCacheEncoding() {
   var tmp = this;
   // Inline function 'kotlin.collections.linkedMapOf' call
-  tmp.numbers_1 = LinkedHashMap_init_$Create$();
+  tmp.numbers_1 = LinkedHashMap_init_$Create$_0();
 }
 protoOf(InspectionCacheEncoding).statistics_i756yw_k$ = function (value) {
   return InspectionCacheCodec_getInstance().statistics_9btzor_k$(value, this.numbers_1);
@@ -16088,14 +17752,509 @@ protoOf(InspectionCacheEncoding).statistics_i756yw_k$ = function (value) {
 protoOf(InspectionCacheEncoding).plot_vf3gs8_k$ = function (value) {
   return InspectionCacheCodec_getInstance().plot_wfjkan_k$(value, this.numbers_1);
 };
-function presentationId(value) {
-  return uuid_0(new Str(value));
+function InspectionPlotSlots() {
+  InspectionPlotSlots_instance = this;
+  this.maximumPoints_1 = 16384;
+  this.secondUs_1 = new Long(1000000, 0);
+}
+protoOf(InspectionPlotSlots).alignedSlotUs_a9mqxs_k$ = function (range, buckets) {
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(1 <= buckets ? buckets <= 512 : false)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  var span = FixedPoint_instance.subtract_5fxp4c_k$(range.endUs_1, range.startUs_1);
+  // Inline function 'kotlin.Long.times' call
+  var this_0 = new Long(1000000, 0);
+  var tmp$ret$3 = multiply(this_0, fromInt(buckets));
+  if (compare(span, tmp$ret$3) < 0)
+    return null;
+  var slot = new Long(1000000, 0);
+  while (compare(FixedPoint_instance.product_3y90b5_k$(slot, fromInt(buckets)), span) < 0)
+    slot = FixedPoint_instance.product_3y90b5_k$(slot, new Long(2, 0));
+  return slot;
+};
+protoOf(InspectionPlotSlots).pointLimit_iax3ot_k$ = function (metrics) {
+  // Inline function 'kotlin.comparisons.maxOf' call
+  return 16384 / Math.max(1, metrics) | 0;
+};
+protoOf(InspectionPlotSlots).buckets_jck5jd_k$ = function (requested, metrics) {
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(1 <= requested ? requested <= 512 : false)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  // Inline function 'kotlin.comparisons.minOf' call
+  var b = (this.pointLimit_iax3ot_k$(metrics) / 4 | 0) - 2 | 0;
+  // Inline function 'kotlin.comparisons.maxOf' call
+  var b_0 = Math.min(requested, b);
+  return Math.max(1, b_0);
+};
+var InspectionPlotSlots_instance;
+function InspectionPlotSlots_getInstance() {
+  if (InspectionPlotSlots_instance == null)
+    new InspectionPlotSlots();
+  return InspectionPlotSlots_instance;
 }
 var static_init_called_11;
 function static_init_11() {
   if (static_init_called_11)
     return Unit_instance;
   static_init_called_11 = true;
+  Form_item_instance = new Form('item', 0);
+  Form_compact_instance = new Form('compact', 1);
+  Form_distance_instance = new Form('distance', 2);
+  Form_compactDistance_instance = new Form('compactDistance', 3);
+}
+var Form_item_instance;
+var Form_compact_instance;
+var Form_distance_instance;
+var Form_compactDistance_instance;
+function Form(name, ordinal) {
+  Enum.call(this, name, ordinal);
+}
+function Input(timeUs, form) {
+  this.timeUs_1 = timeUs;
+  this.form_1 = form;
+}
+function ItemInput(item, boundary) {
+  Input.call(this, item.collectionUs_1, Form_item_getInstance());
+  this.item_1 = item;
+  this.boundary_1 = boundary;
+}
+protoOf(ItemInput).feed_xgayq0_k$ = function (reducer) {
+  return reducer.append_8qydi0_k$(this.item_1, true, this.boundary_1);
+};
+function DistanceInput(boundary) {
+  Input.call(this, boundary.point_1.timeUs_1, Form_distance_getInstance());
+  this.boundary_1 = boundary;
+}
+protoOf(DistanceInput).feed_xgayq0_k$ = function (reducer) {
+  return reducer.appendDistance_46wpt5_k$(this.boundary_1);
+};
+function Reduction(aggregate, first, last) {
+  this.aggregate_1 = aggregate;
+  this.first_1 = first;
+  this.last_1 = last;
+}
+function Slot(index, reduction) {
+  this.index_1 = index;
+  this.reduction_1 = reduction;
+}
+function compact($this) {
+  return equals($this.form_1, Form_compact_getInstance()) || equals($this.form_1, Form_compactDistance_getInstance());
+}
+function merge($this, reducer, reduction) {
+  return reducer.merge_3cfv9g_k$(reduction.aggregate_1, reduction.first_1, reduction.last_1);
+}
+function reduction($this, reducer) {
+  return new Reduction(reducer.aggregate_2wanjz_k$(), reducer.firstPoint_1, reducer.get_lastPoint_3tq8oc_k$());
+}
+function rebound($this, reduction, reducer) {
+  var aggregate = reduction.aggregate_1;
+  if (!compact($this) || aggregate.points_1.isEmpty_y1axqb_k$())
+    return reduction;
+  // Inline function 'kotlin.requireNotNull' call
+  var tmp0 = reducer.identity_1;
+  var tmp$ret$1;
+  $l$block: {
+    // Inline function 'kotlin.requireNotNull' call
+    if (tmp0 == null) {
+      var message = 'Required value was null.';
+      throw IllegalArgumentException_init_$Create$(toString_0(message));
+    } else {
+      tmp$ret$1 = tmp0;
+      break $l$block;
+    }
+  }
+  var identity = tmp$ret$1;
+  // Inline function 'kotlin.collections.map' call
+  var this_0 = aggregate.points_1;
+  // Inline function 'kotlin.collections.mapTo' call
+  var destination = ArrayList_init_$Create$(collectionSizeOrDefault(this_0, 10));
+  var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var item = _iterator__ex2g4s.next_20eer_k$();
+    var tmp$ret$5 = new InspectionPlotPoint(item.point_1.withIdentity_g6n7ce_k$(identity), item.segment_1, item.tieKey_1);
+    destination.add_utx5q5_k$(tmp$ret$5);
+  }
+  var tmp = new InspectionPlotAggregate($this.metric_1, aggregate.range_1, destination, aggregate.firstRawUs_1, aggregate.lastRawUs_1, aggregate.leadingBarrier_1, aggregate.trailingBarrier_1, aggregate.completeSegments_1);
+  var tmp0_safe_receiver = reduction.first_1;
+  var tmp_0 = tmp0_safe_receiver == null ? null : tmp0_safe_receiver.withIdentity_g6n7ce_k$(identity);
+  var tmp1_safe_receiver = reduction.last_1;
+  return new Reduction(tmp, tmp_0, tmp1_safe_receiver == null ? null : tmp1_safe_receiver.withIdentity_g6n7ce_k$(identity));
+}
+function admit_0($this, input) {
+  if ($this.overflowed_1)
+    throw new InspectionCapacityException();
+  // Inline function 'kotlin.require' call
+  if (!($this.form_1 == null || equals($this.form_1, input.form_1))) {
+    var message = 'A plot summary takes one kind of input';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  var last = $this.lastRawUs_1;
+  // Inline function 'kotlin.require' call
+  if (!(last == null || compare(input.timeUs_1, last) >= 0)) {
+    var message_0 = 'Plot originals must be ordered and disjoint';
+    throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+  }
+  var tmp0_elvis_lhs = $this.firstRawUs_1;
+  var first = tmp0_elvis_lhs == null ? input.timeUs_1 : tmp0_elvis_lhs;
+  var tmp0 = $this.slotUs_1;
+  var tmp1_elvis_lhs = InspectionPlotSlots_getInstance().alignedSlotUs_a9mqxs_k$(new AnalysisRange(first, input.timeUs_1), $this.maximumSlots_1);
+  // Inline function 'kotlin.comparisons.maxOf' call
+  var b = tmp1_elvis_lhs == null ? $this.slotUs_1 : tmp1_elvis_lhs;
+  var level = compare(tmp0, b) >= 0 ? tmp0 : b;
+  try {
+    if (!equalsLong(level, $this.slotUs_1)) {
+      coarsen($this, level);
+    }
+    var index = divide(input.timeUs_1, $this.slotUs_1);
+    if (last == null)
+      $this.openIndex_1 = index;
+    else if (!equalsLong(index, $this.openIndex_1)) {
+      $this.completed_1.add_utx5q5_k$(new Slot($this.openIndex_1, reduce($this, slotRange($this, $this.openIndex_1))));
+      $this.open_1 = null;
+      $this.openIndex_1 = index;
+    } else if ($this.buffer_1.get_size_woubt6_k$() >= $this.chunkInputs_1 && compare(input.timeUs_1, last) > 0)
+      $this.open_1 = reduce($this, new AnalysisRange(slotRange($this, $this.openIndex_1).startUs_1, input.timeUs_1));
+    $this.buffer_1.add_utx5q5_k$(input);
+    if ($this.get_retainedPoints_bn4l0w_k$() > $this.pointBudget_1)
+      throw new InspectionCapacityException();
+  } catch ($p) {
+    if ($p instanceof Error) {
+      var failure = $p;
+      $this.overflowed_1 = true;
+      $this.completed_1.clear_j9egeb_k$();
+      $this.open_1 = null;
+      $this.buffer_1.clear_j9egeb_k$();
+      $this.aggregatePoints_1 = 0;
+      throw failure;
+    } else {
+      throw $p;
+    }
+  }
+  $this.form_1 = input.form_1;
+  $this.firstRawUs_1 = first;
+  $this.lastRawUs_1 = input.timeUs_1;
+  var _unary__edvuaz = $this.rawInputs_1;
+  $this.rawInputs_1 = add(_unary__edvuaz, get_ONE());
+}
+function owned($this, range) {
+  return new InspectionPlotReducer($this.metric_1, range, 1, 16384, true, $this.scopedIdentity_1);
+}
+function reduce($this, range) {
+  var reducer = owned($this, range);
+  var tmp0_safe_receiver = $this.open_1;
+  if (tmp0_safe_receiver == null)
+    null;
+  else {
+    // Inline function 'kotlin.let' call
+    merge($this, reducer, tmp0_safe_receiver);
+  }
+  var _iterator__ex2g4s = $this.buffer_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var input = _iterator__ex2g4s.next_20eer_k$();
+    input.feed_xgayq0_k$(reducer);
+  }
+  var reduction_0 = reduction($this, reducer);
+  var tmp = $this;
+  var tmp_0 = $this.aggregatePoints_1;
+  var tmp_1 = reduction_0.aggregate_1.points_1.get_size_woubt6_k$();
+  var tmp1_safe_receiver = $this.open_1;
+  var tmp2_safe_receiver = tmp1_safe_receiver == null ? null : tmp1_safe_receiver.aggregate_1;
+  var tmp3_safe_receiver = tmp2_safe_receiver == null ? null : tmp2_safe_receiver.points_1;
+  var tmp4_elvis_lhs = tmp3_safe_receiver == null ? null : tmp3_safe_receiver.get_size_woubt6_k$();
+  tmp.aggregatePoints_1 = tmp_0 + (tmp_1 - (tmp4_elvis_lhs == null ? 0 : tmp4_elvis_lhs) | 0) | 0;
+  $this.buffer_1.clear_j9egeb_k$();
+  return reduction_0;
+}
+function coarsen($this, level) {
+  var factor = divide(level, $this.slotUs_1);
+  var tmp0_safe_receiver = $this.open_1;
+  var tmp1_safe_receiver = tmp0_safe_receiver == null ? null : tmp0_safe_receiver.aggregate_1;
+  var tmp2_safe_receiver = tmp1_safe_receiver == null ? null : tmp1_safe_receiver.range_1;
+  var tmp3_elvis_lhs = tmp2_safe_receiver == null ? null : tmp2_safe_receiver.endUs_1;
+  var openEnd = tmp3_elvis_lhs == null ? slotRange($this, $this.openIndex_1).startUs_1 : tmp3_elvis_lhs;
+  var children = toList($this.completed_1);
+  // Inline function 'kotlin.collections.mutableListOf' call
+  var siblings = ArrayList_init_$Create$_0();
+  $this.completed_1.clear_j9egeb_k$();
+  $this.slotUs_1 = level;
+  $this.openIndex_1 = divide($this.openIndex_1, factor);
+  var start = 0;
+  while (start < children.get_size_woubt6_k$()) {
+    var parent = divide(children.get_c1px32_k$(start).index_1, factor);
+    var end = start + 1 | 0;
+    while (end < children.get_size_woubt6_k$() && equalsLong(divide(children.get_c1px32_k$(end).index_1, factor), parent)) {
+      end = end + 1 | 0;
+    }
+    // Inline function 'kotlin.collections.map' call
+    var this_0 = children.subList_xle3r2_k$(start, end);
+    // Inline function 'kotlin.collections.mapTo' call
+    var destination = ArrayList_init_$Create$(collectionSizeOrDefault(this_0, 10));
+    var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
+    while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+      var item = _iterator__ex2g4s.next_20eer_k$();
+      var tmp$ret$3 = item.reduction_1;
+      destination.add_utx5q5_k$(tmp$ret$3);
+    }
+    var group = destination;
+    if (equalsLong(parent, $this.openIndex_1)) {
+      // Inline function 'kotlin.collections.plusAssign' call
+      addAll(siblings, group);
+    } else if (group.get_size_woubt6_k$() === 1)
+      $this.completed_1.add_utx5q5_k$(new Slot(parent, group.get_c1px32_k$(0)));
+    else
+      $this.completed_1.add_utx5q5_k$(new Slot(parent, combine($this, slotRange($this, parent), group)));
+    start = end;
+  }
+  // Inline function 'kotlin.collections.isNotEmpty' call
+  if (!siblings.isEmpty_y1axqb_k$())
+    $this.open_1 = combine($this, new AnalysisRange(slotRange($this, $this.openIndex_1).startUs_1, openEnd), plus_2(siblings, listOfNotNull_0($this.open_1)));
+  var tmp = $this;
+  // Inline function 'kotlin.collections.sumOf' call
+  var sum = 0;
+  var _iterator__ex2g4s_0 = $this.completed_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
+    var element = _iterator__ex2g4s_0.next_20eer_k$();
+    var tmp_0 = sum;
+    sum = tmp_0 + element.reduction_1.aggregate_1.points_1.get_size_woubt6_k$() | 0;
+  }
+  var tmp_1 = sum;
+  var tmp4_safe_receiver = $this.open_1;
+  var tmp5_safe_receiver = tmp4_safe_receiver == null ? null : tmp4_safe_receiver.aggregate_1;
+  var tmp6_safe_receiver = tmp5_safe_receiver == null ? null : tmp5_safe_receiver.points_1;
+  var tmp7_elvis_lhs = tmp6_safe_receiver == null ? null : tmp6_safe_receiver.get_size_woubt6_k$();
+  tmp.aggregatePoints_1 = tmp_1 + (tmp7_elvis_lhs == null ? 0 : tmp7_elvis_lhs) | 0;
+}
+function combine($this, range, reductions) {
+  var reducer = owned($this, range);
+  // Inline function 'kotlin.collections.forEach' call
+  var _iterator__ex2g4s = reductions.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var element = _iterator__ex2g4s.next_20eer_k$();
+    merge($this, reducer, element);
+  }
+  return reduction($this, reducer);
+}
+function slotRange($this, index) {
+  var tmp;
+  if (compare(index, new Long(0, 0)) > 0) {
+    // Inline function 'kotlin.let' call
+    var it = FixedPoint_instance.product_3y90b5_k$(index, $this.slotUs_1);
+    tmp = new AnalysisRange(it, FixedPoint_instance.add_lucpy9_k$(it, $this.slotUs_1));
+  } else if (equalsLong(index, new Long(0, 0))) {
+    tmp = new AnalysisRange(subtract(numberToLong(1), $this.slotUs_1), $this.slotUs_1);
+  } else {
+    var tmp_0 = FixedPoint_instance;
+    var tmp_1 = FixedPoint_instance;
+    // Inline function 'kotlin.Long.minus' call
+    var tmp$ret$2 = subtract(index, fromInt(1));
+    tmp = new AnalysisRange(tmp_0.add_lucpy9_k$(tmp_1.product_3y90b5_k$(tmp$ret$2, $this.slotUs_1), new Long(1, 0)), FixedPoint_instance.add_lucpy9_k$(FixedPoint_instance.product_3y90b5_k$(index, $this.slotUs_1), new Long(1, 0)));
+  }
+  return tmp;
+}
+function InspectionPlotSummary$scopedIdentity$lambda(this$0) {
+  return function (it) {
+    // Inline function 'kotlin.checkNotNull' call
+    var tmp0 = this$0.callIdentity_1;
+    var tmp$ret$1;
+    $l$block: {
+      // Inline function 'kotlin.checkNotNull' call
+      if (tmp0 == null) {
+        var message = 'Required value was null.';
+        throw IllegalStateException_init_$Create$(toString_0(message));
+      } else {
+        tmp$ret$1 = tmp0;
+        break $l$block;
+      }
+    }
+    return tmp$ret$1(it);
+  };
+}
+function Form_item_getInstance() {
+  static_init_11();
+  return Form_item_instance;
+}
+function Form_compact_getInstance() {
+  static_init_11();
+  return Form_compact_instance;
+}
+function Form_distance_getInstance() {
+  static_init_11();
+  return Form_distance_instance;
+}
+function Form_compactDistance_getInstance() {
+  static_init_11();
+  return Form_compactDistance_instance;
+}
+function InspectionPlotSummary(metric, maximumSlots, pointBudget, chunkInputs) {
+  maximumSlots = maximumSlots === VOID ? 512 : maximumSlots;
+  pointBudget = pointBudget === VOID ? 16384 : pointBudget;
+  chunkInputs = chunkInputs === VOID ? 64 : chunkInputs;
+  this.metric_1 = metric;
+  this.maximumSlots_1 = maximumSlots;
+  this.pointBudget_1 = pointBudget;
+  this.chunkInputs_1 = chunkInputs;
+  this.form_1 = null;
+  this.callIdentity_1 = null;
+  var tmp = this;
+  tmp.scopedIdentity_1 = InspectionPlotSummary$scopedIdentity$lambda(this);
+  var tmp_0 = this;
+  // Inline function 'kotlin.collections.mutableListOf' call
+  tmp_0.completed_1 = ArrayList_init_$Create$_0();
+  this.openIndex_1 = new Long(0, 0);
+  this.open_1 = null;
+  var tmp_1 = this;
+  // Inline function 'kotlin.collections.mutableListOf' call
+  tmp_1.buffer_1 = ArrayList_init_$Create$_0();
+  this.aggregatePoints_1 = 0;
+  this.slotUs_1 = new Long(1000000, 0);
+  this.firstRawUs_1 = null;
+  this.lastRawUs_1 = null;
+  this.rawInputs_1 = new Long(0, 0);
+  this.overflowed_1 = false;
+  var tmp_2;
+  var tmp_3;
+  var containsArg = this.maximumSlots_1;
+  if (1 <= containsArg ? containsArg <= 512 : false) {
+    var containsArg_0 = this.pointBudget_1;
+    tmp_3 = 1 <= containsArg_0 ? containsArg_0 <= 16384 : false;
+  } else {
+    tmp_3 = false;
+  }
+  if (tmp_3) {
+    tmp_2 = this.chunkInputs_1 >= 1;
+  } else {
+    tmp_2 = false;
+  }
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!tmp_2) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  InspectionMetrics_getInstance().plotGapUs_19osnt_k$(this.metric_1);
+}
+protoOf(InspectionPlotSummary).get_retainedPoints_bn4l0w_k$ = function () {
+  return this.aggregatePoints_1 + this.buffer_1.get_size_woubt6_k$() | 0;
+};
+protoOf(InspectionPlotSummary).append_8qydi0_k$ = function (item, selected, interruptionBoundary) {
+  // Inline function 'kotlin.require' call
+  if (!!InspectionMetrics_getInstance().isProjected_qpvulw_k$(this.metric_1)) {
+    var message = 'Distance plotting requires store segments and numeric point IDs';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  if (!selected || !InspectionMetrics_getInstance().isReading_7iqcsa_k$(item, this.metric_1))
+    return Unit_instance;
+  admit_0(this, new ItemInput(item, interruptionBoundary));
+};
+protoOf(InspectionPlotSummary).append$default_i63xde_k$ = function (item, selected, interruptionBoundary, $super) {
+  selected = selected === VOID ? true : selected;
+  interruptionBoundary = interruptionBoundary === VOID ? false : interruptionBoundary;
+  var tmp;
+  if ($super === VOID) {
+    this.append_8qydi0_k$(item, selected, interruptionBoundary);
+    tmp = Unit_instance;
+  } else {
+    tmp = $super.append_8qydi0_k$.call(this, item, selected, interruptionBoundary);
+  }
+  return tmp;
+};
+protoOf(InspectionPlotSummary).appendDistance_46wpt5_k$ = function (boundary) {
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(InspectionMetrics_getInstance().isProjected_qpvulw_k$(this.metric_1) && Metrics_getInstance().plotValid$default_va0ngu_k$(this.metric_1, boundary.point_1.get_value_j01efc_k$()))) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  admit_0(this, new DistanceInput(boundary));
+};
+protoOf(InspectionPlotSummary).canMergeInto_by46gy_k$ = function (reducer) {
+  if (this.overflowed_1 || !(reducer.metric_1 === this.metric_1))
+    return false;
+  var tmp0_elvis_lhs = reducer.alignedSlotUs_1;
+  var tmp;
+  if (tmp0_elvis_lhs == null) {
+    return false;
+  } else {
+    tmp = tmp0_elvis_lhs;
+  }
+  var slot = tmp;
+  if (!equalsLong(modulo(slot, this.slotUs_1), new Long(0, 0)))
+    return false;
+  var tmp1_elvis_lhs = this.firstRawUs_1;
+  var tmp_0;
+  if (tmp1_elvis_lhs == null) {
+    return true;
+  } else {
+    tmp_0 = tmp1_elvis_lhs;
+  }
+  var first_0 = tmp_0;
+  var tmp_1;
+  if (compare(first_0, reducer.range_1.startUs_1) < 0) {
+    tmp_1 = true;
+  } else {
+    // Inline function 'kotlin.requireNotNull' call
+    var tmp0 = this.lastRawUs_1;
+    var tmp$ret$1;
+    $l$block: {
+      // Inline function 'kotlin.requireNotNull' call
+      if (tmp0 == null) {
+        var message = 'Required value was null.';
+        throw IllegalArgumentException_init_$Create$(toString_0(message));
+      } else {
+        tmp$ret$1 = tmp0;
+        break $l$block;
+      }
+    }
+    var tmp$ret$0 = tmp$ret$1;
+    tmp_1 = compare(tmp$ret$0, reducer.range_1.endUs_1) > 0;
+  }
+  if (tmp_1)
+    return false;
+  if (compact(this) && reducer.identity_1 == null)
+    return false;
+  var tmp2_safe_receiver = firstOrNull(this.completed_1);
+  var tmp3_elvis_lhs = tmp2_safe_receiver == null ? null : tmp2_safe_receiver.reduction_1;
+  var head = tmp3_elvis_lhs == null ? this.open_1 : tmp3_elvis_lhs;
+  return !(head == null) ? reducer.canMerge_si8or5_k$(head.aggregate_1) : reducer.admits_ahmv1_k$(first(this.buffer_1).timeUs_1);
+};
+protoOf(InspectionPlotSummary).mergeInto_9huala_k$ = function (reducer) {
+  // Inline function 'kotlin.require' call
+  if (!this.canMergeInto_by46gy_k$(reducer)) {
+    var message = 'The destination slot must be a multiple of the summary slot over its inputs';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  var _iterator__ex2g4s = this.completed_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var slot = _iterator__ex2g4s.next_20eer_k$();
+    merge(this, reducer, rebound(this, slot.reduction_1, reducer));
+  }
+  var tmp0_safe_receiver = this.open_1;
+  if (tmp0_safe_receiver == null)
+    null;
+  else {
+    // Inline function 'kotlin.let' call
+    merge(this, reducer, rebound(this, tmp0_safe_receiver, reducer));
+  }
+  var _iterator__ex2g4s_0 = this.buffer_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
+    var input = _iterator__ex2g4s_0.next_20eer_k$();
+    input.feed_xgayq0_k$(reducer);
+  }
+};
+function presentationId(value) {
+  return uuid_0(new Str(value));
+}
+var static_init_called_12;
+function static_init_12() {
+  if (static_init_called_12)
+    return Unit_instance;
+  static_init_called_12 = true;
   RideAction_start_instance = new RideAction('start', 0);
   RideAction_pause_instance = new RideAction('pause', 1);
   RideAction_resume_instance = new RideAction('resume', 2);
@@ -16114,7 +18273,7 @@ var RideAction_stopUnconfirmed_instance;
 var RideAction_discard_instance;
 var RideAction_recover_instance;
 function valueOf_4(value) {
-  static_init_11();
+  static_init_12();
   switch (value) {
     case 'start':
       return RideAction_start_getInstance();
@@ -16140,11 +18299,11 @@ function valueOf_4(value) {
 function RideAction(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
-var static_init_called_12;
-function static_init_12() {
-  if (static_init_called_12)
+var static_init_called_13;
+function static_init_13() {
+  if (static_init_called_13)
     return Unit_instance;
-  static_init_called_12 = true;
+  static_init_called_13 = true;
   RideActionSurface_rider_instance = new RideActionSurface('rider', 0);
   RideActionSurface_ownerCommand_instance = new RideActionSurface('ownerCommand', 1);
   RideActionSurface_recovery_instance = new RideActionSurface('recovery', 2);
@@ -16153,7 +18312,7 @@ var RideActionSurface_rider_instance;
 var RideActionSurface_ownerCommand_instance;
 var RideActionSurface_recovery_instance;
 function valueOf_5(value) {
-  static_init_12();
+  static_init_13();
   switch (value) {
     case 'rider':
       return RideActionSurface_rider_getInstance();
@@ -16365,11 +18524,11 @@ protoOf(ExternalControlDecision).equals = function (other) {
     return false;
   return true;
 };
-var static_init_called_13;
-function static_init_13() {
-  if (static_init_called_13)
+var static_init_called_14;
+function static_init_14() {
+  if (static_init_called_14)
     return Unit_instance;
-  static_init_called_13 = true;
+  static_init_called_14 = true;
   PresentationWait_start_instance = new PresentationWait('start', 0);
   PresentationWait_recovery_instance = new PresentationWait('recovery', 1);
   PresentationWait_handoff_instance = new PresentationWait('handoff', 2);
@@ -16378,7 +18537,7 @@ var PresentationWait_start_instance;
 var PresentationWait_recovery_instance;
 var PresentationWait_handoff_instance;
 function valueOf_6(value) {
-  static_init_13();
+  static_init_14();
   switch (value) {
     case 'start':
       return PresentationWait_start_getInstance();
@@ -16473,59 +18632,59 @@ function PresentationTimeouts_getInstance() {
   return PresentationTimeouts_instance;
 }
 function RideAction_start_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_start_instance;
 }
 function RideAction_pause_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_pause_instance;
 }
 function RideAction_resume_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_resume_instance;
 }
 function RideAction_lap_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_lap_instance;
 }
 function RideAction_stop_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_stop_instance;
 }
 function RideAction_stopUnconfirmed_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_stopUnconfirmed_instance;
 }
 function RideAction_discard_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_discard_instance;
 }
 function RideAction_recover_getInstance() {
-  static_init_11();
+  static_init_12();
   return RideAction_recover_instance;
 }
 function RideActionSurface_rider_getInstance() {
-  static_init_12();
+  static_init_13();
   return RideActionSurface_rider_instance;
 }
 function RideActionSurface_ownerCommand_getInstance() {
-  static_init_12();
+  static_init_13();
   return RideActionSurface_ownerCommand_instance;
 }
 function RideActionSurface_recovery_getInstance() {
-  static_init_12();
+  static_init_13();
   return RideActionSurface_recovery_instance;
 }
 function PresentationWait_start_getInstance() {
-  static_init_13();
+  static_init_14();
   return PresentationWait_start_instance;
 }
 function PresentationWait_recovery_getInstance() {
-  static_init_13();
+  static_init_14();
   return PresentationWait_recovery_instance;
 }
 function PresentationWait_handoff_getInstance() {
-  static_init_13();
+  static_init_14();
   return PresentationWait_handoff_instance;
 }
 function ReadingFreshness() {
@@ -16666,11 +18825,11 @@ protoOf(ControllerPreview).view_4te99w_k$ = function (connection, mappedAcquisit
   }
   return new ControllerPreviewView(display, tmp_1, StreamStatus_getInstance().connectionDeadline_t029od_k$(connection, acquired, now));
 };
-var static_init_called_14;
-function static_init_14() {
-  if (static_init_called_14)
+var static_init_called_15;
+function static_init_15() {
+  if (static_init_called_15)
     return Unit_instance;
-  static_init_called_14 = true;
+  static_init_called_15 = true;
   RideFailure_watchLaunchFailed_instance = new RideFailure('watchLaunchFailed', 0, "Power Log couldn't open on your Apple Watch.", 'Unlock your Apple Watch and keep it near your iPhone, then start again.');
   RideFailure_watchNotInstalled_instance = new RideFailure('watchNotInstalled', 1, "Power Log isn't installed on your Apple Watch.", 'Install it from the Watch app on your iPhone, or turn off Use Watch.');
   RideFailure_watchStartUnconfirmed_instance = new RideFailure('watchStartUnconfirmed', 2, "Your Apple Watch didn't confirm the start.", 'Open Power Log on your Apple Watch, keep it unlocked and nearby, then start again.');
@@ -16749,11 +18908,11 @@ var RideFailure_captureRejected_instance;
 var RideFailure_cutoffBeforeStart_instance;
 var RideFailure_unknown_instance;
 function values_6() {
-  static_init_14();
+  static_init_15();
   return [RideFailure_watchLaunchFailed_getInstance(), RideFailure_watchNotInstalled_getInstance(), RideFailure_watchStartUnconfirmed_getInstance(), RideFailure_watchBusy_getInstance(), RideFailure_startUnconfirmed_getInstance(), RideFailure_startCancelled_getInstance(), RideFailure_startExpired_getInstance(), RideFailure_startInterrupted_getInstance(), RideFailure_bikeRequired_getInstance(), RideFailure_ownerUnresolved_getInstance(), RideFailure_rideFinishing_getInstance(), RideFailure_rideActive_getInstance(), RideFailure_actionPending_getInstance(), RideFailure_discardPending_getInstance(), RideFailure_rideChanged_getInstance(), RideFailure_ownerForeign_getInstance(), RideFailure_finishConfirmationRequired_getInstance(), RideFailure_actionUnavailable_getInstance(), RideFailure_finishUnconfirmed_getInstance(), RideFailure_ownerUnconfirmed_getInstance(), RideFailure_recordingInterrupted_getInstance(), RideFailure_sessionUnavailable_getInstance(), RideFailure_syncPending_getInstance(), RideFailure_watchDataRejected_getInstance(), RideFailure_needsAttention_getInstance(), RideFailure_healthDenied_getInstance(), RideFailure_healthLocked_getInstance(), RideFailure_bluetoothDenied_getInstance(), RideFailure_locationDenied_getInstance(), RideFailure_bikeUnavailable_getInstance(), RideFailure_storageBusy_getInstance(), RideFailure_storageFull_getInstance(), RideFailure_storageFailed_getInstance(), RideFailure_rideDeleted_getInstance(), RideFailure_ownerEvidenceRejected_getInstance(), RideFailure_captureRejected_getInstance(), RideFailure_cutoffBeforeStart_getInstance(), RideFailure_unknown_getInstance()];
 }
 function get_entries_6() {
-  static_init_14();
+  static_init_15();
   if ($ENTRIES_6 == null)
     $ENTRIES_6 = enumEntries(values_6());
   return $ENTRIES_6;
@@ -16804,155 +18963,155 @@ function Failures_getInstance() {
   return Failures_instance;
 }
 function RideFailure_watchLaunchFailed_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_watchLaunchFailed_instance;
 }
 function RideFailure_watchNotInstalled_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_watchNotInstalled_instance;
 }
 function RideFailure_watchStartUnconfirmed_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_watchStartUnconfirmed_instance;
 }
 function RideFailure_watchBusy_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_watchBusy_instance;
 }
 function RideFailure_startUnconfirmed_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_startUnconfirmed_instance;
 }
 function RideFailure_startCancelled_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_startCancelled_instance;
 }
 function RideFailure_startExpired_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_startExpired_instance;
 }
 function RideFailure_startInterrupted_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_startInterrupted_instance;
 }
 function RideFailure_bikeRequired_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_bikeRequired_instance;
 }
 function RideFailure_ownerUnresolved_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_ownerUnresolved_instance;
 }
 function RideFailure_rideFinishing_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_rideFinishing_instance;
 }
 function RideFailure_rideActive_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_rideActive_instance;
 }
 function RideFailure_actionPending_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_actionPending_instance;
 }
 function RideFailure_discardPending_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_discardPending_instance;
 }
 function RideFailure_rideChanged_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_rideChanged_instance;
 }
 function RideFailure_ownerForeign_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_ownerForeign_instance;
 }
 function RideFailure_finishConfirmationRequired_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_finishConfirmationRequired_instance;
 }
 function RideFailure_actionUnavailable_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_actionUnavailable_instance;
 }
 function RideFailure_finishUnconfirmed_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_finishUnconfirmed_instance;
 }
 function RideFailure_ownerUnconfirmed_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_ownerUnconfirmed_instance;
 }
 function RideFailure_recordingInterrupted_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_recordingInterrupted_instance;
 }
 function RideFailure_sessionUnavailable_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_sessionUnavailable_instance;
 }
 function RideFailure_syncPending_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_syncPending_instance;
 }
 function RideFailure_watchDataRejected_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_watchDataRejected_instance;
 }
 function RideFailure_needsAttention_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_needsAttention_instance;
 }
 function RideFailure_healthDenied_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_healthDenied_instance;
 }
 function RideFailure_healthLocked_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_healthLocked_instance;
 }
 function RideFailure_bluetoothDenied_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_bluetoothDenied_instance;
 }
 function RideFailure_locationDenied_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_locationDenied_instance;
 }
 function RideFailure_bikeUnavailable_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_bikeUnavailable_instance;
 }
 function RideFailure_storageBusy_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_storageBusy_instance;
 }
 function RideFailure_storageFull_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_storageFull_instance;
 }
 function RideFailure_storageFailed_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_storageFailed_instance;
 }
 function RideFailure_rideDeleted_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_rideDeleted_instance;
 }
 function RideFailure_ownerEvidenceRejected_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_ownerEvidenceRejected_instance;
 }
 function RideFailure_captureRejected_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_captureRejected_instance;
 }
 function RideFailure_cutoffBeforeStart_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_cutoffBeforeStart_instance;
 }
 function RideFailure_unknown_getInstance() {
-  static_init_14();
+  static_init_15();
   return RideFailure_unknown_instance;
 }
 function SourcePresentation(label, detail, tone) {
@@ -17062,11 +19221,11 @@ var PresentationFormatting_instance;
 function PresentationFormatting_getInstance() {
   return PresentationFormatting_instance;
 }
-var static_init_called_15;
-function static_init_15() {
-  if (static_init_called_15)
+var static_init_called_16;
+function static_init_16() {
+  if (static_init_called_16)
     return Unit_instance;
-  static_init_called_15 = true;
+  static_init_called_16 = true;
   ObservationAdmission_replace_instance = new ObservationAdmission('replace', 0);
   ObservationAdmission_earlierDuplicate_instance = new ObservationAdmission('earlierDuplicate', 1);
   ObservationAdmission_retain_instance = new ObservationAdmission('retain', 2);
@@ -17098,15 +19257,15 @@ function ObservationOrder_getInstance() {
   return ObservationOrder_instance;
 }
 function ObservationAdmission_replace_getInstance() {
-  static_init_15();
+  static_init_16();
   return ObservationAdmission_replace_instance;
 }
 function ObservationAdmission_earlierDuplicate_getInstance() {
-  static_init_15();
+  static_init_16();
   return ObservationAdmission_earlierDuplicate_instance;
 }
 function ObservationAdmission_retain_getInstance() {
-  static_init_15();
+  static_init_16();
   return ObservationAdmission_retain_instance;
 }
 function SampleRates() {
@@ -17485,7 +19644,7 @@ protoOf(SetupPresentation).permission_p1a2g7_k$ = function (status, options) {
   var tmp;
   if (healthRequired) {
     var tmp1_elvis_lhs = status.requiredWrites_1;
-    tmp = tmp1_elvis_lhs == null ? plus_1(this.commonWrites_1, phoneGPS ? this.outdoorWrites_1 : emptyList()) : tmp1_elvis_lhs;
+    tmp = tmp1_elvis_lhs == null ? plus_2(this.commonWrites_1, phoneGPS ? this.outdoorWrites_1 : emptyList()) : tmp1_elvis_lhs;
   } else {
     tmp = emptyList();
   }
@@ -17503,7 +19662,7 @@ protoOf(SetupPresentation).permission_p1a2g7_k$ = function (status, options) {
   var writes = destination;
   var tmp_0;
   if (healthRequired && status.healthProvider_1 === 'healthConnect') {
-    var tmp0 = plus_1(plus_1(required, this.connectCommon_1), phoneGPS ? this.connectOutdoor_1 : emptyList());
+    var tmp0 = plus_2(plus_2(required, this.connectCommon_1), phoneGPS ? this.connectOutdoor_1 : emptyList());
     var tmp$ret$3;
     $l$block_0: {
       // Inline function 'kotlin.collections.any' call
@@ -17592,11 +19751,11 @@ function SetupPresentation_getInstance() {
     new SetupPresentation();
   return SetupPresentation_instance;
 }
-var static_init_called_16;
-function static_init_16() {
-  if (static_init_called_16)
+var static_init_called_17;
+function static_init_17() {
+  if (static_init_called_17)
     return Unit_instance;
-  static_init_called_16 = true;
+  static_init_called_17 = true;
   MonitorPresetId_ride_instance = new MonitorPresetId('ride', 0);
   MonitorPresetId_battery_instance = new MonitorPresetId('battery', 1);
   MonitorPresetId_temperature_instance = new MonitorPresetId('temperature', 2);
@@ -17605,11 +19764,11 @@ var MonitorPresetId_ride_instance;
 var MonitorPresetId_battery_instance;
 var MonitorPresetId_temperature_instance;
 function values_7() {
-  static_init_16();
+  static_init_17();
   return [MonitorPresetId_ride_getInstance(), MonitorPresetId_battery_getInstance(), MonitorPresetId_temperature_getInstance()];
 }
 function valueOf_7(value) {
-  static_init_16();
+  static_init_17();
   switch (value) {
     case 'ride':
       return MonitorPresetId_ride_getInstance();
@@ -17623,7 +19782,7 @@ function valueOf_7(value) {
   }
 }
 function get_entries_7() {
-  static_init_16();
+  static_init_17();
   if ($ENTRIES_7 == null)
     $ENTRIES_7 = enumEntries(values_7());
   return $ENTRIES_7;
@@ -17632,11 +19791,11 @@ var $ENTRIES_7;
 function MonitorPresetId(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
-var static_init_called_17;
-function static_init_17() {
-  if (static_init_called_17)
+var static_init_called_18;
+function static_init_18() {
+  if (static_init_called_18)
     return Unit_instance;
-  static_init_called_17 = true;
+  static_init_called_18 = true;
   MonitorRange_seconds30_instance = new MonitorRange('seconds30', 0);
   MonitorRange_seconds120_instance = new MonitorRange('seconds120', 1);
   MonitorRange_seconds600_instance = new MonitorRange('seconds600', 2);
@@ -17745,7 +19904,7 @@ protoOf(MonitorPreferences).get_views_j06d6t_k$ = function () {
   return toMap_0(this.retainedViews_1);
 };
 protoOf(MonitorPreferences).withPreset_pw7rpn_k$ = function (id, preset) {
-  return new MonitorPreferences(this.activeView_1, this.historyView_1, this.historyRange_1, this.speedUnit_1, this.distanceSource_1, this.sampleHz_1, this.workoutOptions_1, plus_2(this.retainedViews_1, to(id, preset)), this.batteryConsumptionSource_1, this.fitPowerSource_1);
+  return new MonitorPreferences(this.activeView_1, this.historyView_1, this.historyRange_1, this.speedUnit_1, this.distanceSource_1, this.sampleHz_1, this.workoutOptions_1, plus_0(this.retainedViews_1, to(id, preset)), this.batteryConsumptionSource_1, this.fitPowerSource_1);
 };
 protoOf(MonitorPreferences).withSelection_qaqi9g_k$ = function (live, history, range) {
   return new MonitorPreferences(live, history, range, this.speedUnit_1, this.distanceSource_1, this.sampleHz_1, this.workoutOptions_1, this.retainedViews_1, this.batteryConsumptionSource_1, this.fitPowerSource_1);
@@ -17945,7 +20104,7 @@ protoOf(Preferences).decode_gmof1w_k$ = function (text) {
     views.closed$default_79brgb_k$('ride battery temperature');
     // Inline function 'kotlin.collections.associateWith' call
     var this_0 = get_entries_7();
-    var result = LinkedHashMap_init_$Create$_0(coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16));
+    var result = LinkedHashMap_init_$Create$(coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16));
     // Inline function 'kotlin.collections.associateWithTo' call
     var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
     while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
@@ -18022,7 +20181,7 @@ protoOf(Preferences).encode_so8nmh_k$ = function (preferences) {
   // Inline function 'kotlin.collections.mapKeys' call
   var this_1 = preferences.get_views_j06d6t_k$();
   // Inline function 'kotlin.collections.mapKeysTo' call
-  var destination = LinkedHashMap_init_$Create$_0(mapCapacity(this_1.get_size_woubt6_k$()));
+  var destination = LinkedHashMap_init_$Create$(mapCapacity(this_1.get_size_woubt6_k$()));
   // Inline function 'kotlin.collections.associateByTo' call
   var _iterator__ex2g4s = this_1.get_entries_p20ztl_k$().iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
@@ -18033,7 +20192,7 @@ protoOf(Preferences).encode_so8nmh_k$ = function (preferences) {
   }
   // Inline function 'kotlin.collections.mapValues' call
   // Inline function 'kotlin.collections.mapValuesTo' call
-  var destination_0 = LinkedHashMap_init_$Create$_0(mapCapacity(destination.get_size_woubt6_k$()));
+  var destination_0 = LinkedHashMap_init_$Create$(mapCapacity(destination.get_size_woubt6_k$()));
   // Inline function 'kotlin.collections.associateByTo' call
   var _iterator__ex2g4s_0 = destination.get_entries_p20ztl_k$().iterator_jk1svi_k$();
   while (_iterator__ex2g4s_0.hasNext_bitz1p_k$()) {
@@ -18104,31 +20263,31 @@ function Preferences_getInstance() {
   return Preferences_instance;
 }
 function MonitorPresetId_ride_getInstance() {
-  static_init_16();
+  static_init_17();
   return MonitorPresetId_ride_instance;
 }
 function MonitorPresetId_battery_getInstance() {
-  static_init_16();
+  static_init_17();
   return MonitorPresetId_battery_instance;
 }
 function MonitorPresetId_temperature_getInstance() {
-  static_init_16();
+  static_init_17();
   return MonitorPresetId_temperature_instance;
 }
 function MonitorRange_seconds30_getInstance() {
-  static_init_17();
+  static_init_18();
   return MonitorRange_seconds30_instance;
 }
 function MonitorRange_seconds120_getInstance() {
-  static_init_17();
+  static_init_18();
   return MonitorRange_seconds120_instance;
 }
 function MonitorRange_seconds600_getInstance() {
-  static_init_17();
+  static_init_18();
   return MonitorRange_seconds600_instance;
 }
 function MonitorRange_all_getInstance() {
-  static_init_17();
+  static_init_18();
   return MonitorRange_all_instance;
 }
 function SourcePresentationInput(phase, selected, bikeReady, controllerStatus, heartStatus, gpsStatus, gpsSource, gpsAccuracy, healthProvider) {
@@ -18318,11 +20477,11 @@ var SourcePresentations_instance;
 function SourcePresentations_getInstance() {
   return SourcePresentations_instance;
 }
-var static_init_called_18;
-function static_init_18() {
-  if (static_init_called_18)
+var static_init_called_19;
+function static_init_19() {
+  if (static_init_called_19)
     return Unit_instance;
-  static_init_called_18 = true;
+  static_init_called_19 = true;
   StartSurface_rider_instance = new StartSurface('rider', 0);
   StartSurface_ownerCommand_instance = new StartSurface('ownerCommand', 1);
   StartSurface_nativeOwner_instance = new StartSurface('nativeOwner', 2);
@@ -18331,7 +20490,7 @@ var StartSurface_rider_instance;
 var StartSurface_ownerCommand_instance;
 var StartSurface_nativeOwner_instance;
 function valueOf_8(value) {
-  static_init_18();
+  static_init_19();
   switch (value) {
     case 'rider':
       return StartSurface_rider_getInstance();
@@ -18418,15 +20577,15 @@ function RideStarts_getInstance() {
   return RideStarts_instance;
 }
 function StartSurface_rider_getInstance() {
-  static_init_18();
+  static_init_19();
   return StartSurface_rider_instance;
 }
 function StartSurface_ownerCommand_getInstance() {
-  static_init_18();
+  static_init_19();
   return StartSurface_ownerCommand_instance;
 }
 function StartSurface_nativeOwner_getInstance() {
-  static_init_18();
+  static_init_19();
   return StartSurface_nativeOwner_instance;
 }
 function ControllerContent() {
@@ -19003,11 +21162,11 @@ function CanonicalNumber_getInstance() {
     new CanonicalNumber();
   return CanonicalNumber_instance;
 }
-var static_init_called_19;
-function static_init_19() {
-  if (static_init_called_19)
+var static_init_called_20;
+function static_init_20() {
+  if (static_init_called_20)
     return Unit_instance;
-  static_init_called_19 = true;
+  static_init_called_20 = true;
   Rejection_invalidTransition_instance = new Rejection('invalidTransition', 0);
   Rejection_unsupportedVersion_instance = new Rejection('unsupportedVersion', 1);
   Rejection_unknownKind_instance = new Rejection('unknownKind', 2);
@@ -19070,7 +21229,7 @@ function ObjectFields(required, optional) {
     }
   }
   tmp.required_1 = destination;
-  this.allowed_1 = toSet(plus_1(this.required_1, split(optional, charArrayOf([_Char___init__impl__6a9atx(32)]))));
+  this.allowed_1 = toSet(plus_2(this.required_1, split(optional, charArrayOf([_Char___init__impl__6a9atx(32)]))));
 }
 function closed($this, required, allowed) {
   var tmp0 = $this.fields_1.get_keys_wop4xp_k$();
@@ -19159,7 +21318,7 @@ protoOf(Obj).closed_gqlwm4_k$ = function (required, optional) {
     }
   }
   var keys = destination;
-  var allowed = plus_1(keys, split(optional, charArrayOf([_Char___init__impl__6a9atx(32)])));
+  var allowed = plus_2(keys, split(optional, charArrayOf([_Char___init__impl__6a9atx(32)])));
   closed(this, keys, allowed);
 };
 protoOf(Obj).closed$default_79brgb_k$ = function (required, optional, $super) {
@@ -19473,7 +21632,7 @@ function Parser(text, fixture, arrayLimit, wireNumbers, binary64) {
   this.index_1 = 0;
   var tmp = this;
   // Inline function 'kotlin.collections.mutableMapOf' call
-  tmp.numbers_1 = LinkedHashMap_init_$Create$();
+  tmp.numbers_1 = LinkedHashMap_init_$Create$_0();
 }
 protoOf(Parser).parse_1rdbjn_k$ = function () {
   var result = this.value_2irneh_k$(0);
@@ -19503,7 +21662,7 @@ protoOf(Parser).value_2irneh_k$ = function (depth) {
   if (tmp0_subject === _Char___init__impl__6a9atx(123)) {
     this.index_1 = this.index_1 + 1 | 0;
     // Inline function 'kotlin.collections.linkedMapOf' call
-    var fields = LinkedHashMap_init_$Create$();
+    var fields = LinkedHashMap_init_$Create$_0();
     if (!this.consume_nbdgo1_k$(_Char___init__impl__6a9atx(125))) {
       $l$loop: do {
         this.whitespace_1njc5v_k$();
@@ -19763,7 +21922,7 @@ protoOf(JsonCodec).parse_ko95ge_k$ = function (text, arrayLimit, byteLimit, wire
 };
 protoOf(JsonCodec).encode_mr1ssb_k$ = function (value) {
   // Inline function 'kotlin.collections.mutableMapOf' call
-  var tmp$ret$0 = LinkedHashMap_init_$Create$();
+  var tmp$ret$0 = LinkedHashMap_init_$Create$_0();
   return this.encode_hittb_k$(value, tmp$ret$0);
 };
 protoOf(JsonCodec).encode_hittb_k$ = function (value, numbers) {
@@ -19843,15 +22002,15 @@ function JsonCodec_getInstance() {
   return JsonCodec_instance;
 }
 function Rejection_unknownField_getInstance() {
-  static_init_19();
+  static_init_20();
   return Rejection_unknownField_instance;
 }
 function Rejection_duplicateKey_getInstance() {
-  static_init_19();
+  static_init_20();
   return Rejection_duplicateKey_instance;
 }
 function Rejection_invalidValue_getInstance() {
-  static_init_19();
+  static_init_20();
   return Rejection_invalidValue_instance;
 }
 function get_uuidGrammar() {
@@ -20188,18 +22347,18 @@ protoOf(BluetoothTrace).exportJson_nx59ai_k$ = function (now) {
   var metadata = tmp.encode_mr1ssb_k$(new Obj(mapOf([tmp_0, tmp_1, tmp_2, to('stopReason', tmp1_elvis_lhs == null ? Nil_getInstance() : tmp1_elvis_lhs), to('eventCount', new Num(state.eventCount_1)), to('byteCount', new Num(state.byteCount_1)), to('notice', new Str('Raw Bluetooth data may contain identifiers. Share only intentionally. No GPS or Health data.'))])));
   return dropLast(metadata, 1) + ',"events":[' + joinToString_0(this.entries_1, ',') + ']}';
 };
-var static_init_called_20;
-function static_init_20() {
-  if (static_init_called_20)
+var static_init_called_21;
+function static_init_21() {
+  if (static_init_called_21)
     return Unit_instance;
-  static_init_called_20 = true;
+  static_init_called_21 = true;
   ControllerRequest_identity_instance = new ControllerRequest('identity', 0);
   ControllerRequest_telemetry_instance = new ControllerRequest('telemetry', 1);
 }
 var ControllerRequest_identity_instance;
 var ControllerRequest_telemetry_instance;
 function valueOf_9(value) {
-  static_init_20();
+  static_init_21();
   switch (value) {
     case 'identity':
       return ControllerRequest_identity_getInstance();
@@ -20281,11 +22440,11 @@ function ControllerRejectedReply(kind, reason) {
   }
 }
 function ControllerRequest_identity_getInstance() {
-  static_init_20();
+  static_init_21();
   return ControllerRequest_identity_instance;
 }
 function ControllerRequest_telemetry_getInstance() {
-  static_init_20();
+  static_init_21();
   return ControllerRequest_telemetry_instance;
 }
 function ExportColumnDeclaration_init_$Init$(key, platforms, consumers, $this) {
@@ -20418,11 +22577,11 @@ function ExportCatalog_getInstance() {
     new ExportCatalog();
   return ExportCatalog_instance;
 }
-var static_init_called_21;
-function static_init_21() {
-  if (static_init_called_21)
+var static_init_called_22;
+function static_init_22() {
+  if (static_init_called_22)
     return Unit_instance;
-  static_init_called_21 = true;
+  static_init_called_22 = true;
   ExportNumericKey_elapsedSeconds_instance = new ExportNumericKey('elapsedSeconds', 0);
   ExportNumericKey_producerSequence_instance = new ExportNumericKey('producerSequence', 1);
   ExportNumericKey_active_instance = new ExportNumericKey('active', 2);
@@ -20521,11 +22680,11 @@ var ExportNumericKey_segment_instance;
 var ExportNumericKey_startSpeed_instance;
 var ExportNumericKey_endSpeed_instance;
 function values_8() {
-  static_init_21();
+  static_init_22();
   return [ExportNumericKey_elapsedSeconds_getInstance(), ExportNumericKey_producerSequence_getInstance(), ExportNumericKey_active_getInstance(), ExportNumericKey_interval_getInstance(), ExportNumericKey_humanPowerW_getInstance(), ExportNumericKey_cadenceRpm_getInstance(), ExportNumericKey_motorInputPowerW_getInstance(), ExportNumericKey_batteryVoltageV_getInstance(), ExportNumericKey_batteryCurrentA_getInstance(), ExportNumericKey_motorCurrentA_getInstance(), ExportNumericKey_motorRpm_getInstance(), ExportNumericKey_pedalTorqueNm_getInstance(), ExportNumericKey_controllerTempC_getInstance(), ExportNumericKey_motorTempC_getInstance(), ExportNumericKey_consumedAh_getInstance(), ExportNumericKey_consumedWh_getInstance(), ExportNumericKey_throttleVoltageV_getInstance(), ExportNumericKey_faultCode_getInstance(), ExportNumericKey_assistLevel_getInstance(), ExportNumericKey_controllerSpeedMps_getInstance(), ExportNumericKey_raceMode_getInstance(), ExportNumericKey_speedRaw_getInstance(), ExportNumericKey_latitude_getInstance(), ExportNumericKey_longitude_getInstance(), ExportNumericKey_altitudeMeters_getInstance(), ExportNumericKey_verticalAccuracyM_getInstance(), ExportNumericKey_originalAltitudeMeters_getInstance(), ExportNumericKey_originalVerticalAccuracyM_getInstance(), ExportNumericKey_horizontalAccuracyM_getInstance(), ExportNumericKey_speedMps_getInstance(), ExportNumericKey_speedAccuracyMps_getInstance(), ExportNumericKey_courseDegrees_getInstance(), ExportNumericKey_courseAccuracyDegrees_getInstance(), ExportNumericKey_distanceBarrier_getInstance(), ExportNumericKey_heartRateBpm_getInstance(), ExportNumericKey_activeEnergyKcal_getInstance(), ExportNumericKey_basalEnergyKcal_getInstance(), ExportNumericKey_distanceMeters_getInstance(), ExportNumericKey_riderPowerW_getInstance(), ExportNumericKey_value_getInstance(), ExportNumericKey_sampleCount_getInstance(), ExportNumericKey_timerSeconds_getInstance(), ExportNumericKey_interrupted_getInstance(), ExportNumericKey_controllerSequence_getInstance(), ExportNumericKey_meters_getInstance(), ExportNumericKey_segment_getInstance(), ExportNumericKey_startSpeed_getInstance(), ExportNumericKey_endSpeed_getInstance()];
 }
 function valueOf_10(value) {
-  static_init_21();
+  static_init_22();
   switch (value) {
     case 'elapsedSeconds':
       return ExportNumericKey_elapsedSeconds_getInstance();
@@ -20631,11 +22790,11 @@ function valueOf_10(value) {
 function ExportNumericKey(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
-var static_init_called_22;
-function static_init_22() {
-  if (static_init_called_22)
+var static_init_called_23;
+function static_init_23() {
+  if (static_init_called_23)
     return Unit_instance;
-  static_init_called_22 = true;
+  static_init_called_23 = true;
   ExportStringKey_timestamp_instance = new ExportStringKey('timestamp', 0);
   ExportStringKey_clockEpoch_instance = new ExportStringKey('clockEpoch', 1);
   ExportStringKey_connection_instance = new ExportStringKey('connection', 2);
@@ -20692,11 +22851,11 @@ var ExportStringKey_observationRevision_instance;
 var ExportStringKey_originalStartTimestamp_instance;
 var ExportStringKey_action_instance;
 function values_9() {
-  static_init_22();
+  static_init_23();
   return [ExportStringKey_timestamp_getInstance(), ExportStringKey_clockEpoch_getInstance(), ExportStringKey_connection_getInstance(), ExportStringKey_producer_getInstance(), ExportStringKey_originalAltitudeDatum_getInstance(), ExportStringKey_identifier_getInstance(), ExportStringKey_unit_getInstance(), ExportStringKey_representation_getInstance(), ExportStringKey_sampleStart_getInstance(), ExportStringKey_provider_getInstance(), ExportStringKey_providerParentId_getInstance(), ExportStringKey_dataOrigin_getInstance(), ExportStringKey_originalEventId_getInstance(), ExportStringKey_originalEndTimestamp_getInstance(), ExportStringKey_memberIndex_getInstance(), ExportStringKey_logicalKey_getInstance(), ExportStringKey_targetEventId_getInstance(), ExportStringKey_originRevision_getInstance(), ExportStringKey_valueBits_getInstance(), ExportStringKey_evidence_getInstance(), ExportStringKey_connectionEpoch_getInstance(), ExportStringKey_channel_getInstance(), ExportStringKey_startUs_getInstance(), ExportStringKey_endUs_getInstance(), ExportStringKey_observationRevision_getInstance(), ExportStringKey_originalStartTimestamp_getInstance(), ExportStringKey_action_getInstance()];
 }
 function valueOf_11(value) {
-  static_init_22();
+  static_init_23();
   switch (value) {
     case 'timestamp':
       return ExportStringKey_timestamp_getInstance();
@@ -20761,310 +22920,310 @@ function ExportStringKey(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
 function ExportNumericKey_elapsedSeconds_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_elapsedSeconds_instance;
 }
 function ExportNumericKey_producerSequence_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_producerSequence_instance;
 }
 function ExportNumericKey_active_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_active_instance;
 }
 function ExportNumericKey_interval_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_interval_instance;
 }
 function ExportNumericKey_humanPowerW_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_humanPowerW_instance;
 }
 function ExportNumericKey_cadenceRpm_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_cadenceRpm_instance;
 }
 function ExportNumericKey_motorInputPowerW_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_motorInputPowerW_instance;
 }
 function ExportNumericKey_batteryVoltageV_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_batteryVoltageV_instance;
 }
 function ExportNumericKey_batteryCurrentA_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_batteryCurrentA_instance;
 }
 function ExportNumericKey_motorCurrentA_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_motorCurrentA_instance;
 }
 function ExportNumericKey_motorRpm_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_motorRpm_instance;
 }
 function ExportNumericKey_pedalTorqueNm_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_pedalTorqueNm_instance;
 }
 function ExportNumericKey_controllerTempC_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_controllerTempC_instance;
 }
 function ExportNumericKey_motorTempC_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_motorTempC_instance;
 }
 function ExportNumericKey_consumedAh_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_consumedAh_instance;
 }
 function ExportNumericKey_consumedWh_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_consumedWh_instance;
 }
 function ExportNumericKey_throttleVoltageV_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_throttleVoltageV_instance;
 }
 function ExportNumericKey_faultCode_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_faultCode_instance;
 }
 function ExportNumericKey_assistLevel_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_assistLevel_instance;
 }
 function ExportNumericKey_controllerSpeedMps_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_controllerSpeedMps_instance;
 }
 function ExportNumericKey_raceMode_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_raceMode_instance;
 }
 function ExportNumericKey_speedRaw_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_speedRaw_instance;
 }
 function ExportNumericKey_latitude_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_latitude_instance;
 }
 function ExportNumericKey_longitude_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_longitude_instance;
 }
 function ExportNumericKey_altitudeMeters_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_altitudeMeters_instance;
 }
 function ExportNumericKey_verticalAccuracyM_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_verticalAccuracyM_instance;
 }
 function ExportNumericKey_originalAltitudeMeters_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_originalAltitudeMeters_instance;
 }
 function ExportNumericKey_originalVerticalAccuracyM_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_originalVerticalAccuracyM_instance;
 }
 function ExportNumericKey_horizontalAccuracyM_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_horizontalAccuracyM_instance;
 }
 function ExportNumericKey_speedMps_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_speedMps_instance;
 }
 function ExportNumericKey_speedAccuracyMps_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_speedAccuracyMps_instance;
 }
 function ExportNumericKey_courseDegrees_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_courseDegrees_instance;
 }
 function ExportNumericKey_courseAccuracyDegrees_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_courseAccuracyDegrees_instance;
 }
 function ExportNumericKey_distanceBarrier_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_distanceBarrier_instance;
 }
 function ExportNumericKey_heartRateBpm_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_heartRateBpm_instance;
 }
 function ExportNumericKey_activeEnergyKcal_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_activeEnergyKcal_instance;
 }
 function ExportNumericKey_basalEnergyKcal_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_basalEnergyKcal_instance;
 }
 function ExportNumericKey_distanceMeters_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_distanceMeters_instance;
 }
 function ExportNumericKey_riderPowerW_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_riderPowerW_instance;
 }
 function ExportNumericKey_value_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_value_instance;
 }
 function ExportNumericKey_sampleCount_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_sampleCount_instance;
 }
 function ExportNumericKey_timerSeconds_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_timerSeconds_instance;
 }
 function ExportNumericKey_interrupted_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_interrupted_instance;
 }
 function ExportNumericKey_controllerSequence_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_controllerSequence_instance;
 }
 function ExportNumericKey_meters_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_meters_instance;
 }
 function ExportNumericKey_segment_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_segment_instance;
 }
 function ExportNumericKey_startSpeed_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_startSpeed_instance;
 }
 function ExportNumericKey_endSpeed_getInstance() {
-  static_init_21();
+  static_init_22();
   return ExportNumericKey_endSpeed_instance;
 }
 function ExportStringKey_timestamp_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_timestamp_instance;
 }
 function ExportStringKey_clockEpoch_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_clockEpoch_instance;
 }
 function ExportStringKey_connection_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_connection_instance;
 }
 function ExportStringKey_producer_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_producer_instance;
 }
 function ExportStringKey_originalAltitudeDatum_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_originalAltitudeDatum_instance;
 }
 function ExportStringKey_identifier_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_identifier_instance;
 }
 function ExportStringKey_unit_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_unit_instance;
 }
 function ExportStringKey_representation_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_representation_instance;
 }
 function ExportStringKey_sampleStart_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_sampleStart_instance;
 }
 function ExportStringKey_provider_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_provider_instance;
 }
 function ExportStringKey_providerParentId_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_providerParentId_instance;
 }
 function ExportStringKey_dataOrigin_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_dataOrigin_instance;
 }
 function ExportStringKey_originalEventId_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_originalEventId_instance;
 }
 function ExportStringKey_originalEndTimestamp_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_originalEndTimestamp_instance;
 }
 function ExportStringKey_memberIndex_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_memberIndex_instance;
 }
 function ExportStringKey_logicalKey_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_logicalKey_instance;
 }
 function ExportStringKey_targetEventId_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_targetEventId_instance;
 }
 function ExportStringKey_originRevision_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_originRevision_instance;
 }
 function ExportStringKey_valueBits_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_valueBits_instance;
 }
 function ExportStringKey_evidence_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_evidence_instance;
 }
 function ExportStringKey_connectionEpoch_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_connectionEpoch_instance;
 }
 function ExportStringKey_channel_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_channel_instance;
 }
 function ExportStringKey_startUs_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_startUs_instance;
 }
 function ExportStringKey_endUs_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_endUs_instance;
 }
 function ExportStringKey_observationRevision_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_observationRevision_instance;
 }
 function ExportStringKey_originalStartTimestamp_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_originalStartTimestamp_instance;
 }
 function ExportStringKey_action_getInstance() {
-  static_init_22();
+  static_init_23();
   return ExportStringKey_action_instance;
 }
-var static_init_called_23;
-function static_init_23() {
-  if (static_init_called_23)
+var static_init_called_24;
+function static_init_24() {
+  if (static_init_called_24)
     return Unit_instance;
-  static_init_called_23 = true;
+  static_init_called_24 = true;
   MetricGroup_Rider_instance = new MetricGroup('Rider', 0);
   MetricGroup_Battery_instance = new MetricGroup('Battery', 1);
   MetricGroup_Motor_instance = new MetricGroup('Motor', 2);
@@ -21079,42 +23238,45 @@ var MetricGroup_Status_instance;
 function MetricGroup(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
-var static_init_called_24;
-function static_init_24() {
-  if (static_init_called_24)
+var static_init_called_25;
+function static_init_25() {
+  if (static_init_called_25)
     return Unit_instance;
-  static_init_called_24 = true;
+  static_init_called_25 = true;
   MetricKind_step_instance = new MetricKind('step', 0);
 }
 var MetricKind_step_instance;
 function MetricKind(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
-var static_init_called_25;
-function static_init_25() {
-  if (static_init_called_25)
+var static_init_called_26;
+function static_init_26() {
+  if (static_init_called_26)
     return Unit_instance;
-  static_init_called_25 = true;
+  static_init_called_26 = true;
   MetricSemantics_cumulative_instance = new MetricSemantics('cumulative', 0);
   MetricSemantics_counter_instance = new MetricSemantics('counter', 1);
   MetricSemantics_distance_instance = new MetricSemantics('distance', 2);
   MetricSemantics_category_instance = new MetricSemantics('category', 3);
   MetricSemantics_circular_instance = new MetricSemantics('circular', 4);
+  MetricSemantics_ratio_instance = new MetricSemantics('ratio', 5);
 }
 var MetricSemantics_cumulative_instance;
 var MetricSemantics_counter_instance;
 var MetricSemantics_distance_instance;
 var MetricSemantics_category_instance;
 var MetricSemantics_circular_instance;
+var MetricSemantics_ratio_instance;
 function MetricSemantics(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
-function MetricDeclaration(id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description) {
+function MetricDeclaration(id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description, plotGapSeconds) {
   scale = scale === VOID ? 1.0 : scale;
   kind = kind === VOID ? null : kind;
   zero = zero === VOID ? null : zero;
   semantics = semantics === VOID ? null : semantics;
   description = description === VOID ? null : description;
+  plotGapSeconds = plotGapSeconds === VOID ? null : plotGapSeconds;
   this.id_1 = id;
   this.label_1 = label;
   this.shortLabel_1 = shortLabel;
@@ -21128,11 +23290,12 @@ function MetricDeclaration(id, label, shortLabel, unit, group, color, decimals, 
   this.zero_1 = zero;
   this.semantics_1 = semantics;
   this.description_1 = description;
+  this.plotGapSeconds_1 = plotGapSeconds;
 }
-protoOf(MetricDeclaration).copy_daqzr_k$ = function (id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description) {
-  return new MetricDeclaration(id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description);
+protoOf(MetricDeclaration).copy_v1uvdq_k$ = function (id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description, plotGapSeconds) {
+  return new MetricDeclaration(id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description, plotGapSeconds);
 };
-protoOf(MetricDeclaration).copy$default_a9xrxo_k$ = function (id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description, $super) {
+protoOf(MetricDeclaration).copy$default_kai8sc_k$ = function (id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description, plotGapSeconds, $super) {
   id = id === VOID ? this.id_1 : id;
   label = label === VOID ? this.label_1 : label;
   shortLabel = shortLabel === VOID ? this.shortLabel_1 : shortLabel;
@@ -21146,10 +23309,11 @@ protoOf(MetricDeclaration).copy$default_a9xrxo_k$ = function (id, label, shortLa
   zero = zero === VOID ? this.zero_1 : zero;
   semantics = semantics === VOID ? this.semantics_1 : semantics;
   description = description === VOID ? this.description_1 : description;
-  return $super === VOID ? this.copy_daqzr_k$(id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description) : $super.copy_daqzr_k$.call(this, id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description);
+  plotGapSeconds = plotGapSeconds === VOID ? this.plotGapSeconds_1 : plotGapSeconds;
+  return $super === VOID ? this.copy_v1uvdq_k$(id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description, plotGapSeconds) : $super.copy_v1uvdq_k$.call(this, id, label, shortLabel, unit, group, color, decimals, gapSeconds, scale, kind, zero, semantics, description, plotGapSeconds);
 };
 protoOf(MetricDeclaration).toString = function () {
-  return 'MetricDeclaration(id=' + this.id_1 + ', label=' + this.label_1 + ', shortLabel=' + this.shortLabel_1 + ', unit=' + this.unit_1 + ', group=' + this.group_1.toString() + ', color=' + this.color_1 + ', decimals=' + this.decimals_1 + ', gapSeconds=' + this.gapSeconds_1 + ', scale=' + this.scale_1 + ', kind=' + toString_1(this.kind_1) + ', zero=' + this.zero_1 + ', semantics=' + toString_1(this.semantics_1) + ', description=' + this.description_1 + ')';
+  return 'MetricDeclaration(id=' + this.id_1 + ', label=' + this.label_1 + ', shortLabel=' + this.shortLabel_1 + ', unit=' + this.unit_1 + ', group=' + this.group_1.toString() + ', color=' + this.color_1 + ', decimals=' + this.decimals_1 + ', gapSeconds=' + this.gapSeconds_1 + ', scale=' + this.scale_1 + ', kind=' + toString_1(this.kind_1) + ', zero=' + this.zero_1 + ', semantics=' + toString_1(this.semantics_1) + ', description=' + this.description_1 + ', plotGapSeconds=' + this.plotGapSeconds_1 + ')';
 };
 protoOf(MetricDeclaration).hashCode = function () {
   var result = getStringHashCode(this.id_1);
@@ -21165,6 +23329,7 @@ protoOf(MetricDeclaration).hashCode = function () {
   result = imul(result, 31) + (this.zero_1 == null ? 0 : getBooleanHashCode(this.zero_1)) | 0;
   result = imul(result, 31) + (this.semantics_1 == null ? 0 : this.semantics_1.hashCode()) | 0;
   result = imul(result, 31) + (this.description_1 == null ? 0 : getStringHashCode(this.description_1)) | 0;
+  result = imul(result, 31) + (this.plotGapSeconds_1 == null ? 0 : getNumberHashCode(this.plotGapSeconds_1)) | 0;
   return result;
 };
 protoOf(MetricDeclaration).equals = function (other) {
@@ -21197,6 +23362,8 @@ protoOf(MetricDeclaration).equals = function (other) {
   if (!equals(this.semantics_1, other.semantics_1))
     return false;
   if (!(this.description_1 == other.description_1))
+    return false;
+  if (!equals(this.plotGapSeconds_1, other.plotGapSeconds_1))
     return false;
   return true;
 };
@@ -21295,11 +23462,60 @@ function increment($this, value) {
   digits[i] = Char__plus_impl_qi7pgj(digits[i], 1);
   return concatToString(digits);
 }
+function reachesHalf($this, magnitude, decimals, whole) {
+  var bits = toBits(magnitude);
+  var exponent = convertToInt(shiftRightUnsigned(bits, 52));
+  var significand = bitwiseOr(bitwiseAnd(bits, new Long(-1, 1048575)), exponent === 0 ? new Long(0, 0) : new Long(0, 1048576));
+  var power = exponent === 0 ? -1074 : exponent - 1075 | 0;
+  var five = _ULong___init__impl__c78o9k(new Long(1, 0));
+  // Inline function 'kotlin.repeat' call
+  var inductionVariable = 0;
+  if (inductionVariable < decimals)
+    do {
+      var index = inductionVariable;
+      inductionVariable = inductionVariable + 1 | 0;
+      var tmp0 = five;
+      // Inline function 'kotlin.ULong.times' call
+      var other = _ULong___init__impl__c78o9k(new Long(5, 0));
+      five = _ULong___init__impl__c78o9k(multiply(_ULong___get_data__impl__fggpzb(tmp0), _ULong___get_data__impl__fggpzb(other)));
+    }
+     while (inductionVariable < decimals);
+  var tmp = Companion_getInstance();
+  // Inline function 'kotlin.Long.plus' call
+  var this_0 = multiply(numberToLong(2), whole);
+  // Inline function 'kotlin.toULong' call
+  var this_1 = add(this_0, fromInt(1));
+  var tmp$ret$4 = _ULong___init__impl__c78o9k(this_1);
+  var half = tmp.of_dv8fiv_k$(tmp$ret$4).shiftLeft_qqh5sf_k$(-((power + decimals | 0) + 1 | 0) | 0);
+  var tmp_0 = Companion_getInstance();
+  // Inline function 'kotlin.toULong' call
+  var tmp$ret$5 = _ULong___init__impl__c78o9k(significand);
+  return tmp_0.product_iynsz3_k$(tmp$ret$5, five).compareTo_de8glj_k$(half) >= 0;
+}
 function MetricCatalog() {
   MetricCatalog_instance = this;
-  this.declarations_1 = listOf([new MetricDeclaration('humanPowerW', 'Rider power', 'Rider', 'W', MetricGroup_Rider_getInstance(), '#ff8735', 0, 6.0, 1.0, null, true, null), new MetricDeclaration('cadenceRpm', 'Cadence', 'Cadence', 'rpm', MetricGroup_Rider_getInstance(), '#ad98e4', 0, 6.0, 1.0, null, true, null), new MetricDeclaration('heartRateBpm', 'Heart rate', 'Heart rate', 'bpm', MetricGroup_Rider_getInstance(), '#fb7185', 0, 15.0, 1.0, null, null, null), new MetricDeclaration('pedalTorqueNm', 'Pedal torque', 'Torque', 'Nm', MetricGroup_Rider_getInstance(), '#e9b65a', 1, 6.0, 1.0, null, true, null), new MetricDeclaration('activeEnergyKcal', 'Active energy', 'Active energy', 'kcal', MetricGroup_Rider_getInstance(), '#f6b26b', 0, 120.0, 1.0, null, true, null), new MetricDeclaration('basalEnergyKcal', 'Resting energy', 'Resting energy', 'kcal', MetricGroup_Rider_getInstance(), '#b8a184', 0, 120.0, 1.0, null, true, null), new MetricDeclaration('batteryVoltageV', 'Battery voltage', 'Voltage', 'V', MetricGroup_Battery_getInstance(), '#f4cf5b', 2, 6.0, 1.0, null, null, null), new MetricDeclaration('batteryCurrentA', 'Battery current', 'Battery current', 'A', MetricGroup_Battery_getInstance(), '#57c6f5', 1, 6.0, 1.0, null, true, null), new MetricDeclaration('motorInputPowerW', 'Battery input power', 'Battery input', 'W', MetricGroup_Battery_getInstance(), '#3d8bfd', 0, 6.0, 1.0, null, true, null, 'Calculated by Power Log as battery voltage \xD7 current; electrical input, not mechanical motor output.'), new MetricDeclaration('consumedAh', 'Charge counter (controller)', 'Charge counter (controller)', 'Ah', MetricGroup_Battery_getInstance(), '#cbb48f', 2, 6.0, 1.0, null, true, MetricSemantics_counter_getInstance(), 'Original controller counter; may include consumption from earlier rides.'), new MetricDeclaration('consumedWh', 'Energy counter (controller)', 'Energy counter (controller)', 'Wh', MetricGroup_Battery_getInstance(), '#e2ae71', 1, 6.0, 1.0, null, true, MetricSemantics_counter_getInstance(), 'Original controller counter; may include consumption from earlier rides.'), new MetricDeclaration('motorCurrentA', 'Motor current', 'Motor current', 'A', MetricGroup_Motor_getInstance(), '#e693c1', 1, 6.0, 1.0, null, true, null), new MetricDeclaration('motorTempC', 'Motor temperature', 'Motor', '\xB0C', MetricGroup_Motor_getInstance(), '#ff9875', 1, 6.0, 1.0, null, null, null), new MetricDeclaration('controllerTempC', 'Controller temperature', 'Controller', '\xB0C', MetricGroup_Motor_getInstance(), '#6bd4c5', 1, 6.0, 1.0, null, null, null), new MetricDeclaration('motorRpm', 'Motor speed', 'Motor speed', 'rpm', MetricGroup_Motor_getInstance(), '#84b1f5', 0, 6.0, 1.0, null, true, null), new MetricDeclaration('throttleVoltageV', 'Throttle voltage', 'Throttle', 'V', MetricGroup_Motor_getInstance(), '#d3a8e6', 2, 6.0, 1.0, null, null, null), new MetricDeclaration('speedMps', 'GPS speed', 'GPS', 'km/h', MetricGroup_Route_getInstance(), '#91c77a', 1, 10.0, 3.6, null, true, null), new MetricDeclaration('controllerSpeedMps', 'Controller speed', 'Controller', 'km/h', MetricGroup_Route_getInstance(), '#8799ac', 1, 6.0, 3.6, null, true, null), new MetricDeclaration('distanceMeters', 'Ride distance', 'Distance', 'km', MetricGroup_Route_getInstance(), '#aed195', 2, 120.0, 0.001, null, true, MetricSemantics_distance_getInstance()), new MetricDeclaration('gpsDistanceMeters', 'Distance (GPS)', 'Distance (GPS)', 'km', MetricGroup_Route_getInstance(), '#a9d18e', 2, 2.5, 0.001, VOID, true, MetricSemantics_distance_getInstance(), 'Calculated by Power Log from accepted phone GPS positions.'), new MetricDeclaration('controllerDistanceMeters', 'Distance (controller)', 'Distance (controller)', 'km', MetricGroup_Route_getInstance(), '#6dbab7', 2, 2.5, 0.001, VOID, true, MetricSemantics_distance_getInstance(), 'Calculated by Power Log from controller speed; not a controller odometer.'), new MetricDeclaration('controllerEnergyWh', 'Energy used (controller)', 'Energy used (controller)', 'Wh', MetricGroup_Battery_getInstance(), '#f3c260', 2, 2.5, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Ride consumption from changes in the controller energy counter, starting at zero.'), new MetricDeclaration('controllerChargeAh', 'Charge used (controller)', 'Charge used (controller)', 'Ah', MetricGroup_Battery_getInstance(), '#e0b36a', 3, 2.5, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Ride consumption from changes in the controller charge counter, starting at zero.'), new MetricDeclaration('calculatedEnergyWh', 'Energy used (calc)', 'Energy used (calc)', 'Wh', MetricGroup_Battery_getInstance(), '#8dbfdf', 2, 2.5, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Calculated by Power Log by integrating positive battery voltage \xD7 current during this ride.'), new MetricDeclaration('calculatedChargeAh', 'Charge used (calc)', 'Charge used (calc)', 'Ah', MetricGroup_Battery_getInstance(), '#9eafd9', 3, 2.5, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Calculated by Power Log by integrating positive battery current during this ride.'), new MetricDeclaration('altitudeMeters', 'Altitude', 'Altitude', 'm', MetricGroup_Route_getInstance(), '#b6bcd0', 0, 10.0, 1.0, null, null, null), new MetricDeclaration('horizontalAccuracyM', 'GPS accuracy', 'GPS accuracy', 'm', MetricGroup_Route_getInstance(), '#94a3b8', 1, 10.0, 1.0, null, true, null), new MetricDeclaration('verticalAccuracyM', 'Altitude accuracy', 'Altitude accuracy', 'm', MetricGroup_Route_getInstance(), '#acb4ce', 1, 10.0, 1.0, null, true, null), new MetricDeclaration('courseDegrees', 'Course', 'Course', '\xB0', MetricGroup_Route_getInstance(), '#73aaa7', 0, 10.0, 1.0, null, null, MetricSemantics_circular_getInstance()), new MetricDeclaration('assistLevel', 'Assist level', 'Assist', '', MetricGroup_Status_getInstance(), '#dcad77', 0, 6.0, 1.0, MetricKind_step_getInstance(), true, null), new MetricDeclaration('raceMode', 'Race mode', 'Race mode', '', MetricGroup_Status_getInstance(), '#ed9c94', 0, 6.0, 1.0, MetricKind_step_getInstance(), true, null), new MetricDeclaration('faultCode', 'Controller fault code', 'Fault code', '', MetricGroup_Status_getInstance(), '#d7dde5', 0, 6.0, 1.0, MetricKind_step_getInstance(), true, null), new MetricDeclaration('speedRaw', 'Controller speed signal (uncalibrated)', 'Speed signal', 'raw', MetricGroup_Route_getInstance(), '#8799ac', 2, 6.0, 1.0, null, null, null)]);
+  this.declarations_1 = listOf([new MetricDeclaration('humanPowerW', 'Rider power', 'Rider', 'W', MetricGroup_Rider_getInstance(), '#ff8735', 0, 6.0, 1.0, null, true, null), new MetricDeclaration('cadenceRpm', 'Cadence', 'Cadence', 'rpm', MetricGroup_Rider_getInstance(), '#ad98e4', 0, 6.0, 1.0, null, true, null), new MetricDeclaration('heartRateBpm', 'Heart rate', 'Heart rate', 'bpm', MetricGroup_Rider_getInstance(), '#fb7185', 0, 15.0, 1.0, null, null, null, VOID, 30.0), new MetricDeclaration('pedalTorqueNm', 'Pedal torque', 'Torque', 'Nm', MetricGroup_Rider_getInstance(), '#e9b65a', 1, 6.0, 1.0, null, true, null), new MetricDeclaration('activeEnergyKcal', 'Active energy', 'Active energy', 'kcal', MetricGroup_Rider_getInstance(), '#f6b26b', 0, 120.0, 1.0, null, true, null), new MetricDeclaration('basalEnergyKcal', 'Resting energy', 'Resting energy', 'kcal', MetricGroup_Rider_getInstance(), '#b8a184', 0, 120.0, 1.0, null, true, null), new MetricDeclaration('batteryVoltageV', 'Battery voltage', 'Voltage', 'V', MetricGroup_Battery_getInstance(), '#f4cf5b', 2, 6.0, 1.0, null, null, null), new MetricDeclaration('batteryCurrentA', 'Battery current', 'Battery current', 'A', MetricGroup_Battery_getInstance(), '#57c6f5', 1, 6.0, 1.0, null, true, null), new MetricDeclaration('motorInputPowerW', 'Battery input power', 'Battery input', 'W', MetricGroup_Battery_getInstance(), '#3d8bfd', 0, 6.0, 1.0, null, true, null, 'Calculated by Power Log as battery voltage \xD7 current; electrical input, not mechanical motor output.'), new MetricDeclaration('consumedAh', 'Charge counter (controller)', 'Charge counter (controller)', 'Ah', MetricGroup_Battery_getInstance(), '#cbb48f', 2, 6.0, 1.0, null, true, MetricSemantics_counter_getInstance(), 'Original controller counter; may include consumption from earlier rides.'), new MetricDeclaration('consumedWh', 'Energy counter (controller)', 'Energy counter (controller)', 'Wh', MetricGroup_Battery_getInstance(), '#e2ae71', 1, 6.0, 1.0, null, true, MetricSemantics_counter_getInstance(), 'Original controller counter; may include consumption from earlier rides.'), new MetricDeclaration('motorCurrentA', 'Motor current', 'Motor current', 'A', MetricGroup_Motor_getInstance(), '#e693c1', 1, 6.0, 1.0, null, true, null), new MetricDeclaration('motorTempC', 'Motor temperature', 'Motor', '\xB0C', MetricGroup_Motor_getInstance(), '#ff9875', 1, 6.0, 1.0, null, null, null), new MetricDeclaration('controllerTempC', 'Controller temperature', 'Controller', '\xB0C', MetricGroup_Motor_getInstance(), '#6bd4c5', 1, 6.0, 1.0, null, null, null), new MetricDeclaration('motorRpm', 'Motor speed', 'Motor speed', 'rpm', MetricGroup_Motor_getInstance(), '#84b1f5', 0, 6.0, 1.0, null, true, null), new MetricDeclaration('throttleVoltageV', 'Throttle voltage', 'Throttle', 'V', MetricGroup_Motor_getInstance(), '#d3a8e6', 2, 6.0, 1.0, null, null, null), new MetricDeclaration('speedMps', 'GPS speed', 'GPS', 'km/h', MetricGroup_Route_getInstance(), '#91c77a', 1, 10.0, 3.6, null, true, null), new MetricDeclaration('controllerSpeedMps', 'Controller speed', 'Controller', 'km/h', MetricGroup_Route_getInstance(), '#8799ac', 1, 6.0, 3.6, null, true, null), new MetricDeclaration('distanceMeters', 'Ride distance', 'Distance', 'km', MetricGroup_Route_getInstance(), '#aed195', 2, 120.0, 0.001, null, true, MetricSemantics_distance_getInstance()), new MetricDeclaration('gpsDistanceMeters', 'Distance (GPS)', 'Distance (GPS)', 'km', MetricGroup_Route_getInstance(), '#a9d18e', 2, 2.5, 0.001, VOID, true, MetricSemantics_distance_getInstance(), 'Calculated by Power Log from accepted phone GPS positions.'), new MetricDeclaration('controllerDistanceMeters', 'Distance (controller)', 'Distance (controller)', 'km', MetricGroup_Route_getInstance(), '#6dbab7', 2, 2.5, 0.001, VOID, true, MetricSemantics_distance_getInstance(), 'Calculated by Power Log from controller speed; not a controller odometer.'), new MetricDeclaration('controllerEnergyWh', 'Energy used (controller)', 'Energy used (controller)', 'Wh', MetricGroup_Battery_getInstance(), '#f3c260', 2, 6.0, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Ride consumption from changes in the controller energy counter, starting at zero.'), new MetricDeclaration('controllerChargeAh', 'Charge used (controller)', 'Charge used (controller)', 'Ah', MetricGroup_Battery_getInstance(), '#e0b36a', 3, 6.0, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Ride consumption from changes in the controller charge counter, starting at zero.'), new MetricDeclaration('calculatedEnergyWh', 'Energy used (calc)', 'Energy used (calc)', 'Wh', MetricGroup_Battery_getInstance(), '#8dbfdf', 2, 6.0, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Calculated by Power Log by integrating positive battery voltage \xD7 current during this ride.'), new MetricDeclaration('calculatedChargeAh', 'Charge used (calc)', 'Charge used (calc)', 'Ah', MetricGroup_Battery_getInstance(), '#9eafd9', 3, 6.0, 1.0, VOID, true, MetricSemantics_cumulative_getInstance(), 'Calculated by Power Log by integrating positive battery current during this ride.'), new MetricDeclaration('batteryWhPerKm', 'Battery consumption', 'Battery consumption', 'Wh/km', MetricGroup_Battery_getInstance(), '#3d8bfd', 1, 6.0, VOID, VOID, true, MetricSemantics_ratio_getInstance(), 'Battery power divided by speed; ride average uses the selected battery energy and distance.'), new MetricDeclaration('riderWhPerKm', 'Rider contribution', 'Rider contribution', 'Wh/km', MetricGroup_Rider_getInstance(), '#ff8735', 1, 6.0, VOID, VOID, true, MetricSemantics_ratio_getInstance(), 'Rider power divided by speed; ride average uses accumulated pedalling work and distance.'), new MetricDeclaration('altitudeMeters', 'Altitude', 'Altitude', 'm', MetricGroup_Route_getInstance(), '#b6bcd0', 0, 10.0, 1.0, null, null, null), new MetricDeclaration('horizontalAccuracyM', 'GPS accuracy', 'GPS accuracy', 'm', MetricGroup_Route_getInstance(), '#94a3b8', 1, 10.0, 1.0, null, true, null), new MetricDeclaration('verticalAccuracyM', 'Altitude accuracy', 'Altitude accuracy', 'm', MetricGroup_Route_getInstance(), '#acb4ce', 1, 10.0, 1.0, null, true, null), new MetricDeclaration('courseDegrees', 'Course', 'Course', '\xB0', MetricGroup_Route_getInstance(), '#73aaa7', 0, 10.0, 1.0, null, null, MetricSemantics_circular_getInstance()), new MetricDeclaration('assistLevel', 'Assist level', 'Assist', '', MetricGroup_Status_getInstance(), '#dcad77', 0, 6.0, 1.0, MetricKind_step_getInstance(), true, null), new MetricDeclaration('raceMode', 'Race mode', 'Race mode', '', MetricGroup_Status_getInstance(), '#ed9c94', 0, 6.0, 1.0, MetricKind_step_getInstance(), true, null), new MetricDeclaration('faultCode', 'Controller fault code', 'Fault code', '', MetricGroup_Status_getInstance(), '#d7dde5', 0, 6.0, 1.0, MetricKind_step_getInstance(), true, null), new MetricDeclaration('speedRaw', 'Controller speed signal (uncalibrated)', 'Speed signal', 'raw', MetricGroup_Route_getInstance(), '#8799ac', 2, 6.0, 1.0, null, null, null)]);
   this.exactIntegerPattern_1 = Regex_init_$Create$('-?(0|[1-9][0-9]*)');
   this.exactScalePattern_1 = Regex_init_$Create$('[0-9]+(\\.[0-9]+)?');
+  var tmp = this;
+  var tmp_0 = 0;
+  var tmp_1 = new Float64Array(23);
+  while (tmp_0 < 23) {
+    tmp_1[tmp_0] = 1.0;
+    tmp_0 = tmp_0 + 1 | 0;
+  }
+  // Inline function 'kotlin.also' call
+  var inductionVariable = 1;
+  var last = tmp_1.length;
+  if (inductionVariable < last)
+    do {
+      var i = inductionVariable;
+      inductionVariable = inductionVariable + 1 | 0;
+      tmp_1[i] = tmp_1[i - 1 | 0] * 10;
+    }
+     while (inductionVariable < last);
+  tmp.powersOfTen_1 = tmp_1;
+  this.fastFixedLimit_1 = toNumber(new Long(0, 1048576));
 }
 protoOf(MetricCatalog).get_all_18j9hk_k$ = function () {
   return toList(this.declarations_1);
@@ -21358,7 +23574,7 @@ protoOf(MetricCatalog).presentationMetric_590asq_k$ = function (id, speedUnit) {
       scale = metric.scale_1;
       break;
   }
-  return metric.copy$default_a9xrxo_k$(VOID, VOID, VOID, speedUnit, VOID, VOID, VOID, VOID, scale);
+  return metric.copy$default_kai8sc_k$(VOID, VOID, VOID, speedUnit, VOID, VOID, VOID, VOID, scale);
 };
 protoOf(MetricCatalog).formatExact_4pcsxe_k$ = function (id, original, speedUnit) {
   var metric = this.presentationMetric_590asq_k$(id, speedUnit);
@@ -21413,6 +23629,30 @@ protoOf(MetricCatalog).formatDifference_yjnvko_k$ = function (id, a, b, aExact, 
   return isFinite(delta) ? (delta > 0 ? '+' : '') + this.fixed_w8db7h_k$(delta, metric.decimals_1) : '\u2014';
 };
 protoOf(MetricCatalog).fixed_w8db7h_k$ = function (value, decimals) {
+  var tmp0_elvis_lhs = this.fastFixed_rjsr5r_k$(value, decimals);
+  return tmp0_elvis_lhs == null ? this.exactFixed_luruci_k$(value, decimals) : tmp0_elvis_lhs;
+};
+protoOf(MetricCatalog).fastFixed_rjsr5r_k$ = function (value, decimals) {
+  if (!(0 <= decimals ? decimals <= (this.powersOfTen_1.length - 1 | 0) : false))
+    return null;
+  // Inline function 'kotlin.math.abs' call
+  var magnitude = Math.abs(value);
+  var scaled = magnitude * this.powersOfTen_1[decimals];
+  if (!(scaled < this.fastFixedLimit_1))
+    return null;
+  // Inline function 'kotlin.math.floor' call
+  var whole = Math.floor(scaled);
+  var fraction = scaled - whole;
+  var up = !(fraction === 0.5) ? fraction > 0.5 : reachesHalf(this, magnitude, decimals, numberToLong(whole));
+  var tmp0 = numberToLong(whole);
+  // Inline function 'kotlin.Long.plus' call
+  var other = up ? 1 : 0;
+  var tmp$ret$2 = add(tmp0, fromInt(other));
+  var digits = padStart(tmp$ret$2.toString(), decimals + 1 | 0, _Char___init__impl__6a9atx(48));
+  var text = decimals === 0 ? digits : dropLast(digits, decimals) + '.' + takeLast(digits, decimals);
+  return (value < 0 ? '-' : '') + text;
+};
+protoOf(MetricCatalog).exactFixed_luruci_k$ = function (value, decimals) {
   if (!isFinite(value))
     return value > 0 ? 'Infinity' : '-Infinity';
   // Inline function 'kotlin.math.abs' call
@@ -21458,50 +23698,54 @@ function MetricCatalog_getInstance() {
   return MetricCatalog_instance;
 }
 function MetricGroup_Rider_getInstance() {
-  static_init_23();
+  static_init_24();
   return MetricGroup_Rider_instance;
 }
 function MetricGroup_Battery_getInstance() {
-  static_init_23();
+  static_init_24();
   return MetricGroup_Battery_instance;
 }
 function MetricGroup_Motor_getInstance() {
-  static_init_23();
+  static_init_24();
   return MetricGroup_Motor_instance;
 }
 function MetricGroup_Route_getInstance() {
-  static_init_23();
+  static_init_24();
   return MetricGroup_Route_instance;
 }
 function MetricGroup_Status_getInstance() {
-  static_init_23();
+  static_init_24();
   return MetricGroup_Status_instance;
 }
 function MetricKind_step_getInstance() {
-  static_init_24();
+  static_init_25();
   return MetricKind_step_instance;
 }
 function MetricSemantics_cumulative_getInstance() {
-  static_init_25();
+  static_init_26();
   return MetricSemantics_cumulative_instance;
 }
 function MetricSemantics_counter_getInstance() {
-  static_init_25();
+  static_init_26();
   return MetricSemantics_counter_instance;
 }
 function MetricSemantics_distance_getInstance() {
-  static_init_25();
+  static_init_26();
   return MetricSemantics_distance_instance;
 }
 function MetricSemantics_circular_getInstance() {
-  static_init_25();
+  static_init_26();
   return MetricSemantics_circular_instance;
 }
-var static_init_called_26;
-function static_init_26() {
-  if (static_init_called_26)
+function MetricSemantics_ratio_getInstance() {
+  static_init_26();
+  return MetricSemantics_ratio_instance;
+}
+var static_init_called_27;
+function static_init_27() {
+  if (static_init_called_27)
     return Unit_instance;
-  static_init_called_26 = true;
+  static_init_called_27 = true;
   TelemetryRejection_identity_instance = new TelemetryRejection('identity', 0);
   TelemetryRejection_retainedMetrics_instance = new TelemetryRejection('retainedMetrics', 1);
   TelemetryRejection_invalidEvidence_instance = new TelemetryRejection('invalidEvidence', 2);
@@ -21517,11 +23761,11 @@ function TelemetryException(reason) {
   captureStack(this, TelemetryException);
   this.reason_1 = reason;
 }
-var static_init_called_27;
-function static_init_27() {
-  if (static_init_called_27)
+var static_init_called_28;
+function static_init_28() {
+  if (static_init_called_28)
     return Unit_instance;
-  static_init_called_27 = true;
+  static_init_called_28 = true;
   TelemetryMetric_humanPowerW_instance = new TelemetryMetric('humanPowerW', 0);
   TelemetryMetric_cadenceRpm_instance = new TelemetryMetric('cadenceRpm', 1);
   TelemetryMetric_heartRateBpm_instance = new TelemetryMetric('heartRateBpm', 2);
@@ -21578,11 +23822,11 @@ var TelemetryMetric_raceMode_instance;
 var TelemetryMetric_faultCode_instance;
 var TelemetryMetric_speedRaw_instance;
 function values_10() {
-  static_init_27();
+  static_init_28();
   return [TelemetryMetric_humanPowerW_getInstance(), TelemetryMetric_cadenceRpm_getInstance(), TelemetryMetric_heartRateBpm_getInstance(), TelemetryMetric_pedalTorqueNm_getInstance(), TelemetryMetric_activeEnergyKcal_getInstance(), TelemetryMetric_basalEnergyKcal_getInstance(), TelemetryMetric_batteryVoltageV_getInstance(), TelemetryMetric_batteryCurrentA_getInstance(), TelemetryMetric_motorInputPowerW_getInstance(), TelemetryMetric_consumedAh_getInstance(), TelemetryMetric_consumedWh_getInstance(), TelemetryMetric_motorCurrentA_getInstance(), TelemetryMetric_motorTempC_getInstance(), TelemetryMetric_controllerTempC_getInstance(), TelemetryMetric_motorRpm_getInstance(), TelemetryMetric_throttleVoltageV_getInstance(), TelemetryMetric_speedMps_getInstance(), TelemetryMetric_controllerSpeedMps_getInstance(), TelemetryMetric_distanceMeters_getInstance(), TelemetryMetric_altitudeMeters_getInstance(), TelemetryMetric_horizontalAccuracyM_getInstance(), TelemetryMetric_verticalAccuracyM_getInstance(), TelemetryMetric_courseDegrees_getInstance(), TelemetryMetric_assistLevel_getInstance(), TelemetryMetric_raceMode_getInstance(), TelemetryMetric_faultCode_getInstance(), TelemetryMetric_speedRaw_getInstance()];
 }
 function valueOf_12(value) {
-  static_init_27();
+  static_init_28();
   switch (value) {
     case 'humanPowerW':
       return TelemetryMetric_humanPowerW_getInstance();
@@ -21644,7 +23888,7 @@ function valueOf_12(value) {
   }
 }
 function get_entries_8() {
-  static_init_27();
+  static_init_28();
   if ($ENTRIES_8 == null)
     $ENTRIES_8 = enumEntries(values_10());
   return $ENTRIES_8;
@@ -21886,119 +24130,119 @@ protoOf(TelemetryReading).hashCode = function () {
   return tmp + (tmp1_elvis_lhs == null ? 0 : tmp1_elvis_lhs) | 0;
 };
 function TelemetryRejection_identity_getInstance() {
-  static_init_26();
+  static_init_27();
   return TelemetryRejection_identity_instance;
 }
 function TelemetryRejection_retainedMetrics_getInstance() {
-  static_init_26();
+  static_init_27();
   return TelemetryRejection_retainedMetrics_instance;
 }
 function TelemetryMetric_humanPowerW_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_humanPowerW_instance;
 }
 function TelemetryMetric_cadenceRpm_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_cadenceRpm_instance;
 }
 function TelemetryMetric_heartRateBpm_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_heartRateBpm_instance;
 }
 function TelemetryMetric_pedalTorqueNm_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_pedalTorqueNm_instance;
 }
 function TelemetryMetric_activeEnergyKcal_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_activeEnergyKcal_instance;
 }
 function TelemetryMetric_basalEnergyKcal_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_basalEnergyKcal_instance;
 }
 function TelemetryMetric_batteryVoltageV_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_batteryVoltageV_instance;
 }
 function TelemetryMetric_batteryCurrentA_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_batteryCurrentA_instance;
 }
 function TelemetryMetric_motorInputPowerW_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_motorInputPowerW_instance;
 }
 function TelemetryMetric_consumedAh_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_consumedAh_instance;
 }
 function TelemetryMetric_consumedWh_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_consumedWh_instance;
 }
 function TelemetryMetric_motorCurrentA_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_motorCurrentA_instance;
 }
 function TelemetryMetric_motorTempC_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_motorTempC_instance;
 }
 function TelemetryMetric_controllerTempC_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_controllerTempC_instance;
 }
 function TelemetryMetric_motorRpm_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_motorRpm_instance;
 }
 function TelemetryMetric_throttleVoltageV_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_throttleVoltageV_instance;
 }
 function TelemetryMetric_speedMps_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_speedMps_instance;
 }
 function TelemetryMetric_controllerSpeedMps_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_controllerSpeedMps_instance;
 }
 function TelemetryMetric_distanceMeters_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_distanceMeters_instance;
 }
 function TelemetryMetric_altitudeMeters_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_altitudeMeters_instance;
 }
 function TelemetryMetric_horizontalAccuracyM_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_horizontalAccuracyM_instance;
 }
 function TelemetryMetric_verticalAccuracyM_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_verticalAccuracyM_instance;
 }
 function TelemetryMetric_courseDegrees_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_courseDegrees_instance;
 }
 function TelemetryMetric_assistLevel_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_assistLevel_instance;
 }
 function TelemetryMetric_raceMode_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_raceMode_instance;
 }
 function TelemetryMetric_faultCode_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_faultCode_instance;
 }
 function TelemetryMetric_speedRaw_getInstance() {
-  static_init_27();
+  static_init_28();
   return TelemetryMetric_speedRaw_instance;
 }
 function RestoredTelemetry(identity, reading) {
@@ -22010,7 +24254,7 @@ function TelemetryRestoration() {
   this.decoders_1 = listOf_0(new CycControllerDecoder());
 }
 protoOf(TelemetryRestoration).restore_hk15p_k$ = function (controllerModel, firmwareLabel, controllerProtocol, metrics, restorers) {
-  var tmp0 = plus_1(this.decoders_1, restorers);
+  var tmp0 = plus_2(this.decoders_1, restorers);
   var tmp$ret$0;
   $l$block_0: {
     // Inline function 'kotlin.collections.singleOrNull' call
@@ -22232,10 +24476,10 @@ function StorageColumns() {
   this.androidLocation_1 = listOf(['speedMps', 'altitudeMeters', 'horizontalAccuracyM', 'verticalAccuracyM', 'courseDegrees', 'latitude', 'longitude', 'speedAccuracyMps']);
   this.health_1 = listOf(['heartRateBpm', 'activeEnergyKcal', 'basalEnergyKcal', 'distanceMeters', 'riderPowerW', 'cadenceRpm', 'speedMps', 'value', 'sampleCount']);
   this.sampleIdentity_1 = listOf(['controllerModel', 'firmwareLabel', 'controllerProtocol']);
-  this.requiredSample_1 = plus_1(listOf(['timestamp', 'elapsedSeconds', 'sequence']), dropLast_0(this.telemetry_1, 1));
+  this.requiredSample_1 = plus_2(listOf(['timestamp', 'elapsedSeconds', 'sequence']), dropLast_0(this.telemetry_1, 1));
   var tmp = this;
   // Inline function 'kotlin.collections.mapIndexed' call
-  var this_0 = plus_1(plus_1(this.telemetry_1, this.androidLocation_1), listOf(['gpsDistanceMeters', 'controllerDistanceMeters', 'heartRateBpm', 'activeEnergyKcal', 'controllerEnergyWh', 'controllerChargeAh', 'calculatedEnergyWh', 'calculatedChargeAh']));
+  var this_0 = plus_2(plus_2(this.telemetry_1, this.androidLocation_1), listOf(['gpsDistanceMeters', 'controllerDistanceMeters', 'heartRateBpm', 'activeEnergyKcal', 'controllerEnergyWh', 'controllerChargeAh', 'calculatedEnergyWh', 'calculatedChargeAh']));
   // Inline function 'kotlin.collections.mapIndexedTo' call
   var destination = ArrayList_init_$Create$(collectionSizeOrDefault(this_0, 10));
   var index = 0;
@@ -22372,11 +24616,11 @@ protoOf(TelemetryDiscovery).equals = function (other) {
     return false;
   return true;
 };
-var static_init_called_28;
-function static_init_28() {
-  if (static_init_called_28)
+var static_init_called_29;
+function static_init_29() {
+  if (static_init_called_29)
     return Unit_instance;
-  static_init_called_28 = true;
+  static_init_called_29 = true;
   TelemetryStage_idle_instance = new TelemetryStage('idle', 0);
   TelemetryStage_connecting_instance = new TelemetryStage('connecting', 1);
   TelemetryStage_services_instance = new TelemetryStage('services', 2);
@@ -22393,7 +24637,7 @@ var TelemetryStage_notifications_instance;
 var TelemetryStage_identity_instance;
 var TelemetryStage_ready_instance;
 function valueOf_13(value) {
-  static_init_28();
+  static_init_29();
   switch (value) {
     case 'idle':
       return TelemetryStage_idle_getInstance();
@@ -22417,11 +24661,11 @@ function valueOf_13(value) {
 function TelemetryStage(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
-var static_init_called_29;
-function static_init_29() {
-  if (static_init_called_29)
+var static_init_called_30;
+function static_init_30() {
+  if (static_init_called_30)
     return Unit_instance;
-  static_init_called_29 = true;
+  static_init_called_30 = true;
   TelemetryTransportAction_none_instance = new TelemetryTransportAction('none', 0);
   TelemetryTransportAction_advanced_instance = new TelemetryTransportAction('advanced', 1);
   TelemetryTransportAction_beginRetry_instance = new TelemetryTransportAction('beginRetry', 2);
@@ -22716,71 +24960,71 @@ function TelemetryTransport_getInstance() {
   return TelemetryTransport_instance;
 }
 function TelemetryStage_idle_getInstance() {
-  static_init_28();
+  static_init_29();
   return TelemetryStage_idle_instance;
 }
 function TelemetryStage_connecting_getInstance() {
-  static_init_28();
+  static_init_29();
   return TelemetryStage_connecting_instance;
 }
 function TelemetryStage_services_getInstance() {
-  static_init_28();
+  static_init_29();
   return TelemetryStage_services_instance;
 }
 function TelemetryStage_characteristics_getInstance() {
-  static_init_28();
+  static_init_29();
   return TelemetryStage_characteristics_instance;
 }
 function TelemetryStage_notifications_getInstance() {
-  static_init_28();
+  static_init_29();
   return TelemetryStage_notifications_instance;
 }
 function TelemetryStage_identity_getInstance() {
-  static_init_28();
+  static_init_29();
   return TelemetryStage_identity_instance;
 }
 function TelemetryStage_ready_getInstance() {
-  static_init_28();
+  static_init_29();
   return TelemetryStage_ready_instance;
 }
 function TelemetryTransportAction_none_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_none_instance;
 }
 function TelemetryTransportAction_advanced_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_advanced_instance;
 }
 function TelemetryTransportAction_beginRetry_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_beginRetry_instance;
 }
 function TelemetryTransportAction_responseTimeout_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_responseTimeout_instance;
 }
 function TelemetryTransportAction_writeTimeout_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_writeTimeout_instance;
 }
 function TelemetryTransportAction_attemptTimeout_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_attemptTimeout_instance;
 }
 function TelemetryTransportAction_cancellationTimeout_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_cancellationTimeout_instance;
 }
 function TelemetryTransportAction_replyAccepted_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_replyAccepted_instance;
 }
 function TelemetryTransportAction_replyExpired_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_replyExpired_instance;
 }
 function TelemetryTransportAction_replyRejected_getInstance() {
-  static_init_29();
+  static_init_30();
   return TelemetryTransportAction_replyRejected_instance;
 }
 function get_protocolName() {
@@ -22890,11 +25134,11 @@ function _init_properties_Decoder_kt__j583ji() {
     protocolName = Regex_init_$Create$('[0-9]+\\.[0-9]+');
   }
 }
-var static_init_called_30;
-function static_init_30() {
-  if (static_init_called_30)
+var static_init_called_31;
+function static_init_31() {
+  if (static_init_called_31)
     return Unit_instance;
-  static_init_called_30 = true;
+  static_init_called_31 = true;
   CycRejection_identity_instance = new CycRejection('identity', 0);
   CycRejection_telemetryCommandOrLength_instance = new CycRejection('telemetryCommandOrLength', 1);
   CycRejection_telemetryMask_instance = new CycRejection('telemetryMask', 2);
@@ -22914,11 +25158,11 @@ function CycException(reason) {
   captureStack(this, CycException);
   this.reason_1 = reason;
 }
-var static_init_called_31;
-function static_init_31() {
-  if (static_init_called_31)
+var static_init_called_32;
+function static_init_32() {
+  if (static_init_called_32)
     return Unit_instance;
-  static_init_called_31 = true;
+  static_init_called_32 = true;
   CycRequest_identity_instance = new CycRequest('identity', 0, 111);
   CycRequest_selective_instance = new CycRequest('selective', 1, 50);
 }
@@ -23137,7 +25381,7 @@ protoOf(CycProtocol).restoreReading_vseuz0_k$ = function (metrics, identity) {
   }
   // Inline function 'kotlin.collections.mapKeys' call
   // Inline function 'kotlin.collections.mapKeysTo' call
-  var destination = LinkedHashMap_init_$Create$_0(mapCapacity(metrics.get_size_woubt6_k$()));
+  var destination = LinkedHashMap_init_$Create$(mapCapacity(metrics.get_size_woubt6_k$()));
   // Inline function 'kotlin.collections.associateByTo' call
   var _iterator__ex2g4s = metrics.get_entries_p20ztl_k$().iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
@@ -23254,7 +25498,7 @@ protoOf(CycProtocol).withIdentity_mp28nd_k$ = function (reading, identity) {
   var values = plus_5(tmp, tmp_0);
   // Inline function 'kotlin.collections.mapKeys' call
   // Inline function 'kotlin.collections.mapKeysTo' call
-  var destination = LinkedHashMap_init_$Create$_0(mapCapacity(values.get_size_woubt6_k$()));
+  var destination = LinkedHashMap_init_$Create$(mapCapacity(values.get_size_woubt6_k$()));
   // Inline function 'kotlin.collections.associateByTo' call
   var _iterator__ex2g4s = values.get_entries_p20ztl_k$().iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
@@ -23439,7 +25683,7 @@ protoOf(CycProtocol).telemetry_9pip5z_k$ = function (payload) {
   var this_0 = this.layout_1;
   var capacity = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16);
   // Inline function 'kotlin.collections.associateTo' call
-  var destination = LinkedHashMap_init_$Create$_0(capacity);
+  var destination = LinkedHashMap_init_$Create$(capacity);
   var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
     var element = _iterator__ex2g4s.next_20eer_k$();
@@ -23569,31 +25813,31 @@ protoOf(CycFrameDecoder).feed_7nij5u_k$ = function (bytes) {
   return packets;
 };
 function CycRejection_identity_getInstance() {
-  static_init_30();
+  static_init_31();
   return CycRejection_identity_instance;
 }
 function CycRejection_telemetryCommandOrLength_getInstance() {
-  static_init_30();
+  static_init_31();
   return CycRejection_telemetryCommandOrLength_instance;
 }
 function CycRejection_telemetryMask_getInstance() {
-  static_init_30();
+  static_init_31();
   return CycRejection_telemetryMask_instance;
 }
 function CycRejection_unknownPacket_getInstance() {
-  static_init_30();
+  static_init_31();
   return CycRejection_unknownPacket_instance;
 }
 function CycRejection_retainedMetrics_getInstance() {
-  static_init_30();
+  static_init_31();
   return CycRejection_retainedMetrics_instance;
 }
 function CycRequest_identity_getInstance() {
-  static_init_31();
+  static_init_32();
   return CycRequest_identity_instance;
 }
 function CycRequest_selective_getInstance() {
-  static_init_31();
+  static_init_32();
   return CycRequest_selective_instance;
 }
 function analyticsTimeUs(seconds) {
@@ -24138,7 +26382,7 @@ protoOf(AnalyticsItem).core_k5vi3e_k$ = function () {
   var this_0 = get_indices(this.metricIds);
   var capacity = coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16);
   // Inline function 'kotlin.collections.associateTo' call
-  var destination = LinkedHashMap_init_$Create$_0(capacity);
+  var destination = LinkedHashMap_init_$Create$(capacity);
   var inductionVariable = this_0.first_1;
   var last = this_0.last_1;
   if (inductionVariable <= last)
@@ -25365,7 +27609,7 @@ function completionObject(value, keys, depth) {
     throw IllegalArgumentException_init_$Create$(toString_0(message_0));
   }
   // Inline function 'kotlin.collections.mutableMapOf' call
-  var fields = LinkedHashMap_init_$Create$();
+  var fields = LinkedHashMap_init_$Create$_0();
   var _iterator__ex2g4s = (keys == null ? asList(get_completionObjectKeys()(value)) : keys).iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
     var key = _iterator__ex2g4s.next_20eer_k$();
@@ -25582,6 +27826,106 @@ function consumptionTime(value) {
 function js(_this__u8e3s4) {
   return new AnalyticsConsumptionInterval(_this__u8e3s4.metric_1, _this__u8e3s4.startUs_1.toString(), _this__u8e3s4.endUs_1.toString(), _this__u8e3s4.startValue_1, _this__u8e3s4.endValue_1, _this__u8e3s4.rate0__1, _this__u8e3s4.rate1__1, _this__u8e3s4.indivisible_1, _this__u8e3s4.segment_1, _this__u8e3s4.activeInterval_1, _this__u8e3s4.baseline_1);
 }
+function analyticsEnergyContextSeconds(seconds) {
+  return EnergyPerDistancePolicy_getInstance().contextSeconds_lbfwc8_k$(seconds);
+}
+function analyticsEnergyCheckpointMarginUs() {
+  return '2500000';
+}
+function AnalyticsEnergyPerDistanceCheckpoint(core) {
+  this.core_1 = core;
+  this.throughUs = this.core_1.throughUs_1.toString();
+}
+protoOf(AnalyticsEnergyPerDistanceCheckpoint).get_core_9sstj7_k$ = function () {
+  return this.core_1;
+};
+protoOf(AnalyticsEnergyPerDistanceCheckpoint).get_throughUs_ca342u_k$ = function () {
+  return this.throughUs;
+};
+function AnalyticsEnergyPerDistance(startUs, endUs, buckets, timerUs, controllerSpeed, smoothingSeconds, includeTotals, checkpoint, alignedSlotUs) {
+  includeTotals = includeTotals === VOID ? true : includeTotals;
+  checkpoint = checkpoint === VOID ? null : checkpoint;
+  alignedSlotUs = alignedSlotUs === VOID ? null : alignedSlotUs;
+  var tmp = this;
+  var tmp_0;
+  if (!(alignedSlotUs == null)) {
+    // Inline function 'kotlin.require' call
+    if (!(!(buckets == null) && checkpoint == null)) {
+      var message = 'An aligned energy/distance series needs buckets';
+      throw IllegalArgumentException_init_$Create$(toString_0(message));
+    }
+    tmp_0 = EnergyPerDistanceQuery_init_$Create$_0(toLong(startUs), toLong(endUs), buckets, toLong(alignedSlotUs), toLong(timerUs), controllerSpeed, smoothingSeconds, includeTotals);
+  } else if (!(checkpoint == null)) {
+    // Inline function 'kotlin.require' call
+    if (!(buckets == null)) {
+      var message_0 = 'A resumed energy/distance query has no series';
+      throw IllegalArgumentException_init_$Create$(toString_0(message_0));
+    }
+    tmp_0 = EnergyPerDistanceQuery_init_$Create$_2(checkpoint.core_1, toLong(startUs), toLong(endUs), toLong(timerUs), controllerSpeed, smoothingSeconds, includeTotals);
+  } else if (buckets == null) {
+    tmp_0 = EnergyPerDistanceQuery_init_$Create$_1(toLong(startUs), toLong(endUs), toLong(timerUs), controllerSpeed, smoothingSeconds, includeTotals);
+  } else {
+    tmp_0 = EnergyPerDistanceQuery_init_$Create$(toLong(startUs), toLong(endUs), buckets, toLong(timerUs), controllerSpeed, smoothingSeconds, includeTotals);
+  }
+  tmp.core_1 = tmp_0;
+}
+protoOf(AnalyticsEnergyPerDistance).distance = function (start, end, meters, speed0, speed1) {
+  return this.core_1.appendDistance_q89x5b_k$(toLong(start), toLong(end), meters, speed0, speed1);
+};
+protoOf(AnalyticsEnergyPerDistance).battery = function (start, end, wh, rate0, rate1, indivisible, timestamp) {
+  return this.core_1.appendBattery_3h1ada_k$(toLong(start), toLong(end), wh, rate0, rate1, indivisible, timestamp);
+};
+protoOf(AnalyticsEnergyPerDistance).speed = function (time, mps, accuracy, active) {
+  return this.core_1.appendSpeed_xpn85i_k$(toLong(time), mps, accuracy, active);
+};
+protoOf(AnalyticsEnergyPerDistance).telemetry = function (time, watts, batteryWatts, speedMps, active, continuity, timestamp) {
+  return this.core_1.appendTelemetry_ttdkmw_k$(toLong(time), watts, batteryWatts, speedMps, active, continuity, timestamp);
+};
+protoOf(AnalyticsEnergyPerDistance).checkpoint = function () {
+  return new AnalyticsEnergyPerDistanceCheckpoint(this.core_1.checkpoint_8bc41k_k$());
+};
+protoOf(AnalyticsEnergyPerDistance).resultJson = function () {
+  return this.core_1.resultJson_9gmyqj_k$();
+};
+function AnalyticsEnergyPerDistanceSeries(controllerSpeed, smoothingSeconds, includeTotals, pointBudget) {
+  pointBudget = pointBudget === VOID ? 16384 : pointBudget;
+  this.core_1 = new EnergyPerDistanceSeries(controllerSpeed, smoothingSeconds, includeTotals, pointBudget);
+}
+protoOf(AnalyticsEnergyPerDistanceSeries).get_valid_j01e4z_k$ = function () {
+  return this.core_1.get_valid_j01e4z_k$();
+};
+protoOf(AnalyticsEnergyPerDistanceSeries).get_throughUs_ca342u_k$ = function () {
+  return this.core_1.get_throughUs_ca342u_k$().toString();
+};
+protoOf(AnalyticsEnergyPerDistanceSeries).get_retainedPoints_bn4l0w_k$ = function () {
+  return this.core_1.get_retainedPoints_bn4l0w_k$();
+};
+protoOf(AnalyticsEnergyPerDistanceSeries).begin = function (endUs, timerUs, buckets, alignedSlotUs) {
+  var tmp = toLong(endUs);
+  var tmp_0 = toLong(timerUs);
+  return new AnalyticsEnergyPerDistanceSeriesRead(this.core_1.begin_65at3q_k$(tmp, tmp_0, buckets, alignedSlotUs == null ? null : toLong(alignedSlotUs)));
+};
+function AnalyticsEnergyPerDistanceSeriesRead(core) {
+  this.core_1 = core;
+}
+protoOf(AnalyticsEnergyPerDistanceSeriesRead).distance = function (start, end, meters, speed0, speed1) {
+  return this.core_1.appendDistance_q89x5b_k$(toLong(start), toLong(end), meters, speed0, speed1);
+};
+protoOf(AnalyticsEnergyPerDistanceSeriesRead).battery = function (start, end, wh, rate0, rate1, indivisible, timestamp) {
+  return this.core_1.appendBattery_3h1ada_k$(toLong(start), toLong(end), wh, rate0, rate1, indivisible, timestamp);
+};
+protoOf(AnalyticsEnergyPerDistanceSeriesRead).speed = function (time, mps, accuracy, active) {
+  return this.core_1.appendSpeed_xpn85i_k$(toLong(time), mps, accuracy, active);
+};
+protoOf(AnalyticsEnergyPerDistanceSeriesRead).telemetry = function (time, watts, batteryWatts, speedMps, active, continuity, timestamp) {
+  return this.core_1.appendTelemetry_ttdkmw_k$(toLong(time), watts, batteryWatts, speedMps, active, continuity, timestamp);
+};
+protoOf(AnalyticsEnergyPerDistanceSeriesRead).cut = function () {
+  return this.core_1.cut_y94t5a_k$();
+};
+protoOf(AnalyticsEnergyPerDistanceSeriesRead).resultJson = function () {
+  return this.core_1.resultJson_9gmyqj_k$();
+};
 function controllerStreamStatus(requested, phase, age) {
   return StreamStatus_getInstance().controller_906e5m_k$(requested, phase, age);
 }
@@ -26194,7 +28538,7 @@ protoOf(InspectionOriginalInput).renderedPoint_yuc6ds_k$ = function (metric) {
   if (tmp0_elvis_lhs == null) {
     // Inline function 'kotlin.collections.mutableMapOf' call
     // Inline function 'kotlin.also' call
-    var this_0 = LinkedHashMap_init_$Create$();
+    var this_0 = LinkedHashMap_init_$Create$_0();
     this.rendered_1 = this_0;
     tmp = this_0;
   } else {
@@ -26272,6 +28616,9 @@ function InspectionPlotQuery(metric, startUs, endUs, buckets, pointLimit, aligne
   var tmp_0 = new AnalysisRange(toLong(startUs), toLong(endUs));
   tmp.reducer_1 = new InspectionPlotReducer(metric, tmp_0, buckets, pointLimit, VOID, VOID, alignedSlotUs == null ? null : toLong(alignedSlotUs));
 }
+protoOf(InspectionPlotQuery).get_reducer_3vqcpu_k$ = function () {
+  return this.reducer_1;
+};
 protoOf(InspectionPlotQuery).append_pg6rx_k$ = function (item, selected, interruptionBoundary) {
   return this.reducer_1.append_8qydi0_k$(item.core_k5vi3e_k$(), selected, interruptionBoundary);
 };
@@ -26308,6 +28655,78 @@ protoOf(InspectionPlotQuery).result = function () {
   }
   // Inline function 'kotlin.collections.toTypedArray' call
   return copyToArray(destination);
+};
+function inspectionPlotSlotUs(startUs, endUs, buckets) {
+  var tmp0_safe_receiver = InspectionPlotSlots_getInstance().alignedSlotUs_a9mqxs_k$(new AnalysisRange(toLong(startUs), toLong(endUs)), buckets);
+  return tmp0_safe_receiver == null ? null : tmp0_safe_receiver.toString();
+}
+function inspectionPlotBuckets(requested, metrics) {
+  return InspectionPlotSlots_getInstance().buckets_jck5jd_k$(requested, metrics);
+}
+function inspectionPlotPointLimit(metrics) {
+  return InspectionPlotSlots_getInstance().pointLimit_iax3ot_k$(metrics);
+}
+function InspectionPlotSlotSummary(metric, maximumSlots, pointBudget) {
+  maximumSlots = maximumSlots === VOID ? 512 : maximumSlots;
+  pointBudget = pointBudget === VOID ? 16384 : pointBudget;
+  this.summary_1 = new InspectionPlotSummary(metric, maximumSlots, pointBudget);
+}
+protoOf(InspectionPlotSlotSummary).get_slotUs_jj9qo5_k$ = function () {
+  return this.summary_1.slotUs_1.toString();
+};
+protoOf(InspectionPlotSlotSummary).get_firstRawUs_n1gqjl_k$ = function () {
+  var tmp0_safe_receiver = this.summary_1.firstRawUs_1;
+  return tmp0_safe_receiver == null ? null : tmp0_safe_receiver.toString();
+};
+protoOf(InspectionPlotSlotSummary).get_lastRawUs_tfe8jd_k$ = function () {
+  var tmp0_safe_receiver = this.summary_1.lastRawUs_1;
+  return tmp0_safe_receiver == null ? null : tmp0_safe_receiver.toString();
+};
+protoOf(InspectionPlotSlotSummary).get_rawInputs_rxj2pk_k$ = function () {
+  return this.summary_1.rawInputs_1.toString();
+};
+protoOf(InspectionPlotSlotSummary).get_retainedPoints_bn4l0w_k$ = function () {
+  return this.summary_1.get_retainedPoints_bn4l0w_k$();
+};
+protoOf(InspectionPlotSlotSummary).get_overflowed_fvuduy_k$ = function () {
+  return this.summary_1.overflowed_1;
+};
+protoOf(InspectionPlotSlotSummary).append_pg6rx_k$ = function (item, selected, interruptionBoundary) {
+  return this.summary_1.append_8qydi0_k$(item.core_k5vi3e_k$(), selected, interruptionBoundary);
+};
+protoOf(InspectionPlotSlotSummary).append = function (item, selected, interruptionBoundary, $super) {
+  interruptionBoundary = interruptionBoundary === VOID ? false : interruptionBoundary;
+  var tmp;
+  if ($super === VOID) {
+    this.append_pg6rx_k$(item, selected, interruptionBoundary);
+    tmp = Unit_instance;
+  } else {
+    tmp = $super.append_pg6rx_k$.call(this, item, selected, interruptionBoundary);
+  }
+  return tmp;
+};
+protoOf(InspectionPlotSlotSummary).appendOriginal_k1qhtc_k$ = function (item, selected, interruptionBoundary) {
+  return this.summary_1.append_8qydi0_k$(item.core_1, selected, interruptionBoundary);
+};
+protoOf(InspectionPlotSlotSummary).appendOriginal = function (item, selected, interruptionBoundary, $super) {
+  interruptionBoundary = interruptionBoundary === VOID ? false : interruptionBoundary;
+  var tmp;
+  if ($super === VOID) {
+    this.appendOriginal_k1qhtc_k$(item, selected, interruptionBoundary);
+    tmp = Unit_instance;
+  } else {
+    tmp = $super.appendOriginal_k1qhtc_k$.call(this, item, selected, interruptionBoundary);
+  }
+  return tmp;
+};
+protoOf(InspectionPlotSlotSummary).appendDistance = function (point) {
+  return this.summary_1.appendDistance_46wpt5_k$(point.point_1);
+};
+protoOf(InspectionPlotSlotSummary).canMergeInto = function (query) {
+  return this.summary_1.canMergeInto_by46gy_k$(query.reducer_1);
+};
+protoOf(InspectionPlotSlotSummary).mergeInto = function (query) {
+  return this.summary_1.mergeInto_9huala_k$(query.reducer_1);
 };
 function InspectionRequestContext(sourceId, revision, distanceSelection, interactionEpoch, interactionSequence) {
   this.sourceId = sourceId;
@@ -27246,7 +29665,7 @@ function controllerRestoreReading(metrics, identity) {
   // Inline function 'kotlin.collections.associate' call
   var capacity = coerceAtLeast(mapCapacity(metrics.length), 16);
   // Inline function 'kotlin.collections.associateTo' call
-  var destination_0 = LinkedHashMap_init_$Create$_0(capacity);
+  var destination_0 = LinkedHashMap_init_$Create$(capacity);
   var inductionVariable_0 = 0;
   var last_0 = metrics.length;
   while (inductionVariable_0 < last_0) {
@@ -27562,6 +29981,7 @@ function CoreMetricDeclaration(core) {
   var tmp0_safe_receiver_0 = core.semantics_1;
   tmp_0.semantics = tmp0_safe_receiver_0 == null ? null : tmp0_safe_receiver_0.name_1;
   this.description = core.description_1;
+  this.plotGapSeconds = core.plotGapSeconds_1;
 }
 protoOf(CoreMetricDeclaration).get_id_kntnx8_k$ = function () {
   return this.id;
@@ -27601,6 +30021,9 @@ protoOf(CoreMetricDeclaration).get_semantics_6wurek_k$ = function () {
 };
 protoOf(CoreMetricDeclaration).get_description_emjre5_k$ = function () {
   return this.description;
+};
+protoOf(CoreMetricDeclaration).get_plotGapSeconds_4j8x9p_k$ = function () {
+  return this.plotGapSeconds;
 };
 function coreMetricDeclarations() {
   // Inline function 'kotlin.collections.map' call
@@ -27716,8 +30139,17 @@ defineProp(protoOf(AnalyticsGPSKernel), 'segment', protoOf(AnalyticsGPSKernel).g
 defineProp(protoOf(AnalyticsGPSKernel), 'altitudeSegments', protoOf(AnalyticsGPSKernel).get_altitudeSegments_rqg4ph_k$);
 defineProp(protoOf(CompletionSnapshotFields), 'historyIdentity', protoOf(CompletionSnapshotFields).get_historyIdentity_ietwtz_k$);
 defineProp(protoOf(CompletionSnapshotFields), 'controlIdentity', protoOf(CompletionSnapshotFields).get_controlIdentity_1uix0u_k$);
+defineProp(protoOf(AnalyticsEnergyPerDistanceSeries), 'valid', protoOf(AnalyticsEnergyPerDistanceSeries).get_valid_j01e4z_k$);
+defineProp(protoOf(AnalyticsEnergyPerDistanceSeries), 'throughUs', protoOf(AnalyticsEnergyPerDistanceSeries).get_throughUs_ca342u_k$);
+defineProp(protoOf(AnalyticsEnergyPerDistanceSeries), 'retainedPoints', protoOf(AnalyticsEnergyPerDistanceSeries).get_retainedPoints_bn4l0w_k$);
 defineProp(protoOf(InspectionMetricCheckpoint), 'payload', protoOf(InspectionMetricCheckpoint).get_payload_bqtt23_k$);
 defineProp(protoOf(InspectionPlotCache), 'payload', protoOf(InspectionPlotCache).get_payload_bqtt23_k$);
+defineProp(protoOf(InspectionPlotSlotSummary), 'slotUs', protoOf(InspectionPlotSlotSummary).get_slotUs_jj9qo5_k$);
+defineProp(protoOf(InspectionPlotSlotSummary), 'firstRawUs', protoOf(InspectionPlotSlotSummary).get_firstRawUs_n1gqjl_k$);
+defineProp(protoOf(InspectionPlotSlotSummary), 'lastRawUs', protoOf(InspectionPlotSlotSummary).get_lastRawUs_tfe8jd_k$);
+defineProp(protoOf(InspectionPlotSlotSummary), 'rawInputs', protoOf(InspectionPlotSlotSummary).get_rawInputs_rxj2pk_k$);
+defineProp(protoOf(InspectionPlotSlotSummary), 'retainedPoints', protoOf(InspectionPlotSlotSummary).get_retainedPoints_bn4l0w_k$);
+defineProp(protoOf(InspectionPlotSlotSummary), 'overflowed', protoOf(InspectionPlotSlotSummary).get_overflowed_fvuduy_k$);
 defineProp(protoOf(ControllerPreviewResult), 'display', protoOf(ControllerPreviewResult).get_display_swvnix_k$);
 defineProp(protoOf(ControllerPreviewResult), 'faultCode', protoOf(ControllerPreviewResult).get_faultCode_xxn2iu_k$);
 defineProp(protoOf(ControllerPreviewResult), 'nextDeadline', protoOf(ControllerPreviewResult).get_nextDeadline_4de98s_k$);
@@ -27947,6 +30379,10 @@ export {
   AnalyticsDistanceReducer as AnalyticsDistanceReducer,
   AnalyticsEnergy as AnalyticsEnergy,
   AnalyticsEnergyOrigins as AnalyticsEnergyOrigins,
+  AnalyticsEnergyPerDistance as AnalyticsEnergyPerDistance,
+  AnalyticsEnergyPerDistanceCheckpoint as AnalyticsEnergyPerDistanceCheckpoint,
+  AnalyticsEnergyPerDistanceSeries as AnalyticsEnergyPerDistanceSeries,
+  AnalyticsEnergyPerDistanceSeriesRead as AnalyticsEnergyPerDistanceSeriesRead,
   AnalyticsFitStatistics as AnalyticsFitStatistics,
   AnalyticsGPSKernel as AnalyticsGPSKernel,
   AnalyticsHealthSelection as AnalyticsHealthSelection,
@@ -27999,6 +30435,7 @@ export {
   InspectionPlotCache as InspectionPlotCache,
   InspectionPlotOriginal as InspectionPlotOriginal,
   InspectionPlotQuery as InspectionPlotQuery,
+  InspectionPlotSlotSummary as InspectionPlotSlotSummary,
   InspectionQueryResult as InspectionQueryResult,
   InspectionRequestContext as InspectionRequestContext,
   InspectionRequestGate as InspectionRequestGate,
@@ -28033,6 +30470,8 @@ export {
   analyticsDistanceSelection as analyticsDistanceSelection,
   analyticsDivide as analyticsDivide,
   analyticsEnergyAvailable as analyticsEnergyAvailable,
+  analyticsEnergyCheckpointMarginUs as analyticsEnergyCheckpointMarginUs,
+  analyticsEnergyContextSeconds as analyticsEnergyContextSeconds,
   analyticsGPSDistance as analyticsGPSDistance,
   analyticsHealthSource as analyticsHealthSource,
   analyticsProfileTotals as analyticsProfileTotals,
@@ -28062,6 +30501,9 @@ export {
   inspectionContextsMatch as inspectionContextsMatch,
   inspectionDistanceOriginal as inspectionDistanceOriginal,
   inspectionHeldTail as inspectionHeldTail,
+  inspectionPlotBuckets as inspectionPlotBuckets,
+  inspectionPlotPointLimit as inspectionPlotPointLimit,
+  inspectionPlotSlotUs as inspectionPlotSlotUs,
   inspectionRenderedOriginal as inspectionRenderedOriginal,
   inspectionRenderedSegment as inspectionRenderedSegment,
   presentationConnectionLabel as presentationConnectionLabel,

@@ -1,5 +1,5 @@
 {
-  "provenance": "Saved simulator qualification failures with acquisition normalized to 100 seconds; generated readings, no device identifiers.",
+  "provenance": "Saved simulator qualification failures; acquisition normalized to 100 seconds and expiry-relative times to the 21 s bike and 30 s heart-rate holds; generated readings, no device identifiers.",
   "cases": {
     "A": {
       "acquired": 100,
@@ -15,22 +15,22 @@
         {
           "sequence": 4,
           "now": 100.181488,
-          "staleDate": 106.0,
+          "staleDate": 121.0,
           "flag": true,
           "bike": "200",
           "heart": "150"
         },
         {
           "sequence": 5,
-          "now": 106.020506,
-          "staleDate": 115.0,
+          "now": 121.020506,
+          "staleDate": 130.0,
           "flag": true,
           "bike": "—",
           "heart": "150"
         },
         {
           "sequence": 6,
-          "now": 115.01624,
+          "now": 130.01624,
           "staleDate": -1.0,
           "flag": true,
           "bike": "—",
@@ -73,7 +73,7 @@
         {
           "sequence": 4,
           "now": 100.208642,
-          "staleDate": 106.0,
+          "staleDate": 121.0,
           "flag": false,
           "bike": "200",
           "heart": "150"
@@ -81,30 +81,30 @@
         {
           "sequence": 4,
           "now": 100.208968,
-          "staleDate": 106.0,
+          "staleDate": 121.0,
           "flag": false,
           "bike": "200",
           "heart": "150"
         },
         {
           "sequence": 5,
-          "now": 106.038755,
-          "staleDate": 115.0,
+          "now": 121.038755,
+          "staleDate": 130.0,
           "flag": false,
           "bike": "—",
           "heart": "150"
         },
         {
           "sequence": 5,
-          "now": 106.03906,
-          "staleDate": 115.0,
+          "now": 121.03906,
+          "staleDate": 130.0,
           "flag": false,
           "bike": "—",
           "heart": "150"
         },
         {
           "sequence": 6,
-          "now": 115.030734,
+          "now": 130.030734,
           "staleDate": -1.0,
           "flag": false,
           "bike": "—",
@@ -112,7 +112,7 @@
         },
         {
           "sequence": 6,
-          "now": 115.031026,
+          "now": 130.031026,
           "staleDate": -1.0,
           "flag": false,
           "bike": "—",
@@ -126,15 +126,15 @@
       },
       "frames": [
         {
-          "capturedAt": 106.879135,
-          "deadline": 106.0,
+          "capturedAt": 121.879135,
+          "deadline": 121.0,
           "panelText": ["(No Bike unavailable", "W", "150bpm", "Il Pause", "Finish"],
           "surface": "dynamicIsland",
           "visible": true
         },
         {
-          "capturedAt": 115.882934,
-          "deadline": 115.0,
+          "capturedAt": 130.882934,
+          "deadline": 130.0,
           "panelText": ["(N Bike unavailable", "- W", "bpm", "Il Pause", "Finish"],
           "surface": "dynamicIsland",
           "visible": true
@@ -155,7 +155,7 @@
         {
           "sequence": 4,
           "now": 100.071384,
-          "staleDate": 106.0,
+          "staleDate": 121.0,
           "flag": true,
           "bike": "200",
           "heart": "150"
@@ -197,7 +197,7 @@
         {
           "sequence": 4,
           "now": 100.094214,
-          "staleDate": 106.0,
+          "staleDate": 121.0,
           "flag": false,
           "bike": "200",
           "heart": "150"
@@ -205,7 +205,7 @@
         {
           "sequence": 4,
           "now": 100.094541,
-          "staleDate": 106.0,
+          "staleDate": 121.0,
           "flag": false,
           "bike": "200",
           "heart": "150"
@@ -218,8 +218,8 @@
       },
       "frames": [
         {
-          "capturedAt": 106.878739,
-          "deadline": 106.0,
+          "capturedAt": 121.878739,
+          "deadline": 121.0,
           "panelText": ["Gro Recording", "200 w", "150 bpm", "Il Pause", "Finish"],
           "surface": "dynamicIsland",
           "visible": true
@@ -240,15 +240,15 @@
         {
           "sequence": 4,
           "now": 100.192806,
-          "staleDate": 105.999999,
+          "staleDate": 120.999999,
           "flag": true,
           "bike": "200",
           "heart": "150"
         },
         {
           "sequence": 5,
-          "now": 106.006315,
-          "staleDate": 115.0,
+          "now": 121.006315,
+          "staleDate": 130.0,
           "flag": true,
           "bike": "—",
           "heart": "150"
@@ -290,7 +290,7 @@
         {
           "sequence": 4,
           "now": 100.21348,
-          "staleDate": 105.999999,
+          "staleDate": 120.999999,
           "flag": false,
           "bike": "200",
           "heart": "150"
@@ -298,37 +298,37 @@
         {
           "sequence": 4,
           "now": 100.213949,
-          "staleDate": 105.999999,
+          "staleDate": 120.999999,
           "flag": false,
           "bike": "200",
           "heart": "150"
         },
         {
           "sequence": 5,
-          "now": 106.028663,
-          "staleDate": 115.0,
+          "now": 121.028663,
+          "staleDate": 130.0,
           "flag": false,
           "bike": "—",
           "heart": "150"
         },
         {
           "sequence": 5,
-          "now": 106.029028,
-          "staleDate": 115.0,
+          "now": 121.029028,
+          "staleDate": 130.0,
           "flag": false,
           "bike": "—",
           "heart": "150"
         }
       ],
       "lifecycle": {
-        "backgroundedAt": 106.685035,
+        "backgroundedAt": 121.685035,
         "method": "os-background",
-        "suspendedAt": 111.446301
+        "suspendedAt": 126.446301
       },
       "frames": [
         {
-          "capturedAt": 115.865783,
-          "deadline": 115.0,
+          "capturedAt": 130.865783,
+          "deadline": 130.0,
           "panelText": ["- W", "Bike unavailable", "150bpm", "Il Pause", "Finish"],
           "surface": "dynamicIsland",
           "visible": true

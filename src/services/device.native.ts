@@ -40,6 +40,7 @@ export const deviceAdapter: TelemetryAdapter = {
   },
   getState: () => bridge?.getState() ?? Promise.resolve(idleState()),
   getDiagnostics: bridge ? () => native().getDiagnostics() : undefined,
+  readConnectionDiagnostics: bridge ? () => native().readConnectionDiagnostics() : undefined,
   startScan: () => native().startScan(),
   stopScan: () => native().stopScan(),
   connect: options => native().connect(options),

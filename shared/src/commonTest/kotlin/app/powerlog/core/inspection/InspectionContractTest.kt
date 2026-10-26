@@ -413,6 +413,31 @@ class InspectionContractTest {
     }
 
     @Test
+    fun batteryPlotsJoinStoredSegmentsOnlyAcrossGapsShorterThanThePlotGap() {
+        fun point(seconds: Double, segment: Int, value: Double): DistanceInspectionPoint {
+            val timeUs = FixedPoint.timeUs(seconds)
+            val id = "energy-$seconds"
+            return DistanceInspectionPoint(
+                InspectionPoint(timeUs, Original(id, id, "", seconds, Scalar.Real64(value)), Continuity()),
+                segment,
+                timeUs,
+                timeUs,
+                timeUs,
+            )
+        }
+        val points =
+            listOf(point(1.0, 0, 0.0), point(1.5, 0, 0.1), point(6.5, 1, 0.1), point(7.0, 1, 0.2), point(13.0, 2, 0.2))
+        fun segments(owned: Boolean): List<Int> {
+            val range = AnalysisRange(0, 20000000)
+            val reducer = InspectionPlotReducer("calculatedEnergyWh", range, if (owned) 1 else 512, owned = owned)
+            points.forEach(reducer::appendDistance)
+            return reducer.result().map { it.segment }
+        }
+        assertEquals(listOf(0, 0, 0, 0, 1), segments(owned = false))
+        assertEquals(listOf(0, 0, 1, 1, 2), segments(owned = true))
+    }
+
+    @Test
     fun inspectionCompactParentFixtures() {
         for (row in inspectionFixture("compact")["cases"].list()) {
             val metric = row["metric"].text()
@@ -988,7 +1013,8 @@ class InspectionContractTest {
     fun plotGapsMatchTheCatalogAndNonCatalogMetrics() {
         for (row in fixture("telemetry/metrics.json")["metrics"].list()) {
             val metric = row["id"].text()
-            assertEquals((row["gapSeconds"].double() * 1000000).toLong(), InspectionMetrics.plotGapUs(metric), metric)
+            val seconds = row["plotGapSeconds"].optionalDouble() ?: row["gapSeconds"].double()
+            assertEquals((seconds * 1000000).toLong(), InspectionMetrics.plotGapUs(metric), metric)
         }
         assertFailsWith<IllegalArgumentException> { InspectionMetrics.plotGapUs("totalEnergyKcal") }
         assertEquals(10000000L, InspectionMetrics.plotGapUs("speedAccuracyMps"))
@@ -1004,7 +1030,7 @@ class InspectionContractTest {
         assertEquals(InspectionChannel.location, InspectionMetrics.policy("courseDegrees").channel)
         assertEquals(6000000L, InspectionMetrics.policy("humanPowerW").plotGapUs)
         assertEquals(2500000L, InspectionMetrics.policy("humanPowerW").statistics.gapUs)
-        assertEquals(15000000L, InspectionMetrics.policy("heartRateBpm").plotGapUs)
+        assertEquals(30000000L, InspectionMetrics.policy("heartRateBpm").plotGapUs)
         assertEquals(10000000L, InspectionMetrics.policy("heartRateBpm").statistics.gapUs)
         assertFailsWith<IllegalArgumentException> { InspectionMetrics.policy("distanceMeters") }
         assertFailsWith<IllegalArgumentException> { InspectionMetrics.policy("unknown") }

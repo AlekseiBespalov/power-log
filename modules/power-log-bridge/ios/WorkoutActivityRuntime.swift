@@ -77,7 +77,7 @@ final class WorkoutActivityCoordinator: @unchecked Sendable {
     else { return true }
     guard key.rideID != nil else { return false }
     let shown = delivered?.rideID == key.rideID
-    return uptime() - (shown ? deliveredUptime : forwarded.uptime) >= 5
+    return uptime() - (shown ? deliveredUptime : forwarded.uptime) >= ActivityPresentations.shared.refreshSeconds
       || WorkoutActivityUpdateGate.deadlineReached(shown ? delivered?.staleDate : nil, at: now())
   }
   func publish(_ snapshot: WorkoutActivitySnapshot) {
@@ -257,7 +257,7 @@ final class WorkoutActivityPresenter {
     latest = content
     forcedUpdate = forcedUpdate || force
     if content == nil || controlChanged || force || WorkoutActivityUpdateGate.deadlineReached(lastStaleDate, at: now())
-      || uptime() - lastReconcileUptime >= 5
+      || uptime() - lastReconcileUptime >= ActivityPresentations.shared.refreshSeconds
     {
       schedule()
     }

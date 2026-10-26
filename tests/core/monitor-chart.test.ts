@@ -158,6 +158,8 @@ describe('monitor plot geometry', () => {
       'controllerTempC',
       'humanPowerW',
       'motorInputPowerW',
+      'batteryWhPerKm',
+      'riderWhPerKm',
       'altitudeMeters',
       'horizontalAccuracyM',
       'verticalAccuracyM',
@@ -174,6 +176,7 @@ describe('monitor plot geometry', () => {
       ['faultCode'],
       ['motorTempC', 'controllerTempC'],
       ['humanPowerW', 'motorInputPowerW'],
+      ['batteryWhPerKm', 'riderWhPerKm'],
       ['altitudeMeters'],
       ['horizontalAccuracyM', 'verticalAccuracyM'],
     ]);

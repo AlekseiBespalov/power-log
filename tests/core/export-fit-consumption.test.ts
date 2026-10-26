@@ -33,7 +33,7 @@ it.each(['controller', 'calculated'] as const)(
   },
 );
 
-it('rebaselines counters at a reconnect and pause while retaining supported consumption', async () => {
+it('rebaselines counters at an impossible reconnect jump and a pause while retaining supported consumption', async () => {
   const { bytes } = await runFit({
     end: 7,
     pageSize: 1,

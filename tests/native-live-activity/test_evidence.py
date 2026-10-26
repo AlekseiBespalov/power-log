@@ -46,14 +46,14 @@ sys.exit(1 if any(result["qualification"] == "failed" for result in results.valu
         self.optimized_saved_failures([], {**os.environ, "PYTHONOPTIMIZE": "1"})
 
     def evidence(self, case="A"):
-        publication = [dict(sequence=1, now=105, staleDate=106, flag=False, bike="200", heart="150")]
+        publication = [dict(sequence=1, now=105, staleDate=121, flag=False, bike="200", heart="150")]
         if case != "B":
-            publication.append(dict(sequence=2, now=106.01, staleDate=115, flag=True, bike="—", heart="150"))
+            publication.append(dict(sequence=2, now=121.01, staleDate=130, flag=True, bike="—", heart="150"))
         if case == "A":
-            publication.append(dict(sequence=3, now=115.01, staleDate=-1, flag=True, bike="—", heart="—"))
-        deadlines = [106, 115] if case == "A" else [106 if case == "B" else 115]
+            publication.append(dict(sequence=3, now=130.01, staleDate=-1, flag=True, bike="—", heart="—"))
+        deadlines = [121, 130] if case == "A" else [121 if case == "B" else 130]
         renders = [dict(now=deadline + 0.1, flag=case != "A", bike="—",
-                        heart="150" if case == "A" and deadline == 106 else "—") for deadline in deadlines]
+                        heart="150" if case == "A" and deadline == 121 else "—") for deadline in deadlines]
         frames = [dict(deadline=deadline, capturedAt=deadline + 0.2, surface="dynamicIsland", visible=True,
                        bikeText=["— W"], heartText=[row["heart"] + " bpm"],
                        panelText=["Bike unavailable", "— W", row["heart"] + " bpm"])
@@ -62,7 +62,7 @@ sys.exit(1 if any(result["qualification"] == "failed" for result in results.valu
             for frame in frames:
                 frame.update(bikeText=[], heartText=[], panelText=["Open Power Log"])
         lifecycle = dict(
-            unsuspendedAtHeartExpiry=True, method="os-background", suspendedAt=105.5 if case == "B" else 110,
+            unsuspendedAtHeartExpiry=True, method="os-background", suspendedAt=105.5 if case == "B" else 125,
         )
         return publication, renders, lifecycle, frames
 
@@ -92,12 +92,12 @@ sys.exit(1 if any(result["qualification"] == "failed" for result in results.valu
 
     def test_expired_reading_fails_even_with_other_on_time_renders(self):
         values = self.evidence()
-        values[1].append(dict(now=116, flag=False, bike="—", heart="150"))
+        values[1].append(dict(now=131, flag=False, bike="—", heart="150"))
         self.assertEqual(qualify("A", 100, *values)["expiry"]["result"], "failed")
 
     def test_delayed_unavailable_render_fails_timing(self):
         values = self.evidence()
-        values[1][-1]["now"] = 116.01
+        values[1][-1]["now"] = 131.01
         self.assertEqual(qualify("A", 100, *values)["expiry"]["result"], "failed")
 
     def test_foreground_sigstop_does_not_qualify_os_suspension(self):
@@ -124,7 +124,7 @@ sys.exit(1 if any(result["qualification"] == "failed" for result in results.valu
 
     def test_suspension_after_expiry_is_not_the_requested_case(self):
         values = self.evidence("C")
-        values[2]["suspendedAt"] = 116
+        values[2]["suspendedAt"] = 131
         self.assertEqual(qualify("C", 100, *values)["suspension"]["result"], "failed")
 
 

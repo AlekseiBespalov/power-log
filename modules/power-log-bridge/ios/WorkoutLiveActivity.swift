@@ -82,7 +82,7 @@
               Task { @MainActor in
                 let app = UIApplication.shared
                 let task = app.beginBackgroundTask(withName: "Activity qualification")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 25) { app.endBackgroundTask(task) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 40) { app.endBackgroundTask(task) }
               }
             }
             self.coordinator.refreshAtDeadline()

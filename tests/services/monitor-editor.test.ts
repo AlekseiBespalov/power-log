@@ -33,7 +33,8 @@ describe('monitor editor choices', () => {
     expect(toggleMonitorMetric(chosen, 'unknown')).toEqual(chosen);
   });
   it('searches the selectable catalog by label, group and unit', () => {
-    expect(searchMonitorMetrics('')).toHaveLength(31);
+    expect(searchMonitorMetrics('')).toHaveLength(33);
+    expect(searchMonitorMetrics('Wh/km').map(metric => metric.id)).toEqual(['batteryWhPerKm', 'riderWhPerKm']);
     expect(searchMonitorMetrics('Resting energy')).toEqual([]);
     expect(searchMonitorMetrics('temperature').map(metric => metric.id)).toEqual(['motorTempC', 'controllerTempC']);
     expect(searchMonitorMetrics('  BATTERY current ').map(metric => metric.id)).toEqual([

@@ -182,7 +182,7 @@ internal class RideDistance(private val store: RideStore) {
                 anchor(row),
             ),
         )
-        store.analytics.changed(ride, time, listOf(column))
+        store.analytics.intervalChanged(ride, startUs, endUs, listOf(column))
         store.writableDatabase.execSQL(
             "UPDATE rides SET metrics=metrics|? WHERE id=?",
             arrayOf(availabilityBits(listOf(column)), ride),

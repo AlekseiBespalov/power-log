@@ -14,7 +14,11 @@ import {
   type RideLocationRow,
   type RideTile,
 } from '../../src/services/browser-ride-store';
-import { browserWorkoutMonitorSource, registerBrowserWorkoutClock } from '../../src/services/browser-workout-monitor';
+import {
+  browserPlotWindow,
+  browserWorkoutMonitorSource,
+  registerBrowserWorkoutClock,
+} from '../../src/services/browser-workout-monitor';
 import { BrowserWorkoutRecorder } from '../../src/services/browser-workout-recorder';
 import type { AdapterEvents } from '../../src/services/adapter';
 import { TestTelemetryAdapter } from '../support/telemetry-adapter';
@@ -24,6 +28,9 @@ import { syntheticSample } from '../fixtures/synthetic-sample';
 import { secondsUs } from '../../src/services/browser-storage-keys';
 import { browserMemoryStore } from '../support/browser-memory-store';
 import { browserRide, browserRow } from '../support/browser-ride';
+import { isEnergyPerDistanceMetric } from '../../src/core/energy-per-distance';
+import { inspectionPoint } from '../../src/core/monitor-inspection';
+import planRule from '../fixtures/contract/inspection/aligned-slots.json';
 
 vi.mock('../../src/services/browser-distance-store', async importOriginal => ({
   ...(await importOriginal<typeof import('../../src/services/browser-distance-store')>()),
@@ -395,6 +402,61 @@ function fixture(
 
   return { store, record, rows, source: browserWorkoutMonitorSource(id, false, store) };
 }
+
+describe('whole-ride plot rule', () => {
+  it('chooses whole-ride slots and per-metric budgets from the shared plot rule fixtures', () => {
+    for (const row of planRule.slots) {
+      if ('invalid' in row || row.startUs !== '0' || BigInt(row.endUs) < 10_000_000n) continue;
+      const elapsed = Number(row.endUs) / 1_000_000;
+      expect(
+        browserPlotWindow({ startSeconds: 0, endSeconds: elapsed + 1, buckets: row.buckets }, elapsed, 1),
+        row.id,
+      ).toMatchObject({ start: 0, end: elapsed, whole: true, buckets: row.buckets, slotUs: row.slotUs });
+    }
+    for (const row of planRule.budgets) {
+      if ('invalid' in row) continue;
+      expect(browserPlotWindow({ startSeconds: 30, buckets: row.requested }, 600, row.metrics), row.id).toMatchObject({
+        whole: false,
+        buckets: row.buckets,
+        pointLimit: row.pointLimit,
+        slotUs: null,
+      });
+    }
+  });
+  it('plots a whole ride on the aligned grid of the per-metric budget and keeps tile slots for partial ranges', async () => {
+    const h = fixture(
+      Array.from({ length: 601 }, (_, time) => ({ time, power: 100 + ((time * 37) % 200), cadence: 60 + (time % 30) })),
+    );
+    const metrics = MONITOR_METRICS.map(metric => metric.id)
+      .filter(id => !isDistanceMetric(id) && !isConsumptionMetric(id) && !isEnergyPerDistanceMetric(id))
+      .slice(0, 25);
+    expect(metrics).toHaveLength(25);
+    h.record.availableMetrics = ['humanPowerW'];
+    const description = await h.source.describeSource({ generation: 1 });
+    const query = { generation: 1, expectedRevision: description.revision, metrics, buckets: 400 };
+    const expected = (start: number, end: number, slotUs: string) => {
+      const reducer = new InspectionPlotQuery('humanPowerW', secondsUs(start), secondsUs(end), 161, 655, slotUs);
+      for (const row of h.rows.filter(row => row.elapsedSeconds >= start && row.elapsedSeconds <= end))
+        reducer.append(browserInspectionItem(row), true, false);
+      let previous: number | undefined;
+      return reducer.result().map(value => {
+        const startsSegment = value.segment !== previous;
+        previous = value.segment;
+        return { ...inspectionPoint(value.original), startsSegment };
+      });
+    };
+    for (const [window, slotUs] of [
+      [{ startSeconds: 0, endSeconds: 640 }, '4000000'],
+      [{ startSeconds: 100, endSeconds: 500 }, '16000000'],
+    ] as const) {
+      const plot = await h.source.readPlot({ ...query, ...window });
+      if (plot.status !== 'ok') throw new Error('Unexpected retry');
+      expect(plot.series.humanPowerW).toEqual(
+        expected(window.startSeconds, Math.min(window.endSeconds, h.record.elapsedSeconds), slotUs),
+      );
+    }
+  });
+});
 
 describe('browser monitor projections', () => {
   it('shares pinned boundary pages across metric statistics', async () => {

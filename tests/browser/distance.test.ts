@@ -33,6 +33,131 @@ async function run<T>(work: (page: Page) => Promise<T>) {
 }
 
 describe('controller distance with real IndexedDB', () => {
+  it('graphs the first moving frame before any distance interval exists', async () =>
+    run(async page => {
+      const result = await page.evaluate(async () => {
+        const api = window.distanceTests;
+        const ride = await api.store.begin(
+          'owner',
+          { indoor: true, recordGPS: false, sampleHz: 4, distanceSource: 'controller' },
+          '2026-01-01T00:00:00Z',
+        );
+        const row = {
+          ...api.browserRow(1, 1, '2026-01-01T00:00:01Z'),
+          recordingId: ride.id,
+          humanPowerW: 180,
+          motorInputPowerW: 1800,
+          batteryVoltageV: 50,
+          batteryCurrentA: 36,
+          controllerSpeedMps: 5,
+          speedRaw: 18,
+          controllerModel: 'X6',
+          controllerProtocol: '5.3',
+          firmwareLabel: '20260101',
+        };
+        await api.store.append(ride.id, 'owner', [row], 1, 1, row.timestamp);
+        const monitor = api.monitor(ride.id);
+        await api.ensureBrowserDistance(ride.id);
+        return api.readSettledLatest(monitor, {
+          generation: 1,
+          metrics: ['batteryWhPerKm', 'riderWhPerKm'],
+        });
+      });
+      if (result.status !== 'ok') throw new Error('Unexpected retry');
+      expect(result.points.batteryWhPerKm?.value).toBeCloseTo(100);
+      expect(result.points.riderWhPerKm?.value).toBeCloseTo(10);
+      expect(result.averages?.batteryWhPerKm).toBeNull();
+    }));
+
+  it('charts selected battery consumption and rider work with exact A–B averages', async () =>
+    run(async page => {
+      const result = await page.evaluate(async () => {
+        const api = window.distanceTests;
+        const ride = await api.store.begin(
+          'owner',
+          {
+            indoor: true,
+            recordGPS: false,
+            sampleHz: 4,
+            distanceSource: 'controller',
+            batteryConsumptionSource: 'calculated',
+          },
+          '2026-01-01T00:00:00Z',
+        );
+        const rows = Array.from({ length: 121 }, (_, t) => ({
+          ...api.browserRow(t, t, new Date(Date.UTC(2026, 0, 1) + t * 1000).toISOString()),
+          recordingId: ride.id,
+          humanPowerW: 180,
+          controllerSpeedMps: t <= 60 ? 5 : 10,
+          speedRaw: t <= 60 ? 18 : 36,
+          controllerModel: 'X6',
+          controllerProtocol: '5.3',
+          firmwareLabel: '20260101',
+          batteryVoltageV: 50,
+          batteryCurrentA: 36,
+          motorInputPowerW: 1800,
+          consumedWh: 100 + 2 * t,
+        }));
+        for (let offset = 0; offset < rows.length; offset += 64) {
+          const batch = rows.slice(offset, offset + 64);
+          const last = batch.at(-1)!;
+          await api.store.append(ride.id, 'owner', batch, last.elapsedSeconds, last.elapsedSeconds, last.timestamp);
+        }
+        const monitor = api.monitor(ride.id);
+        await api.ensureBrowserDistance(ride.id);
+        const description = await monitor.describeSource({ generation: 1 });
+        const request = {
+          generation: 1,
+          expectedRevision: description.revision,
+          metrics: ['batteryWhPerKm', 'riderWhPerKm'],
+          startSeconds: 0,
+          endSeconds: 120,
+          buckets: 64,
+        };
+        return {
+          description,
+          plot: await monitor.readPlot(request),
+          stats: await monitor.rangeStats({ ...request, includeEndpoints: true }),
+          inspect: await monitor.inspectAt({ ...request, seconds: 30 }),
+          instant: await monitor.inspectAt({ ...request, seconds: 61 }),
+          smooth: await monitor.inspectAt({ ...request, seconds: 61, energySmoothingSeconds: 5 }),
+          longer: await Promise.all(
+            ([30, 60] as const).map(energySmoothingSeconds =>
+              monitor.inspectAt({ ...request, seconds: 61, energySmoothingSeconds }),
+            ),
+          ),
+          latest: await api.readSettledLatest(monitor, request),
+          partial: await monitor.rangeStats({ ...request, startSeconds: 60, endSeconds: 120 }),
+        };
+      });
+      expect(result.description.availableMetrics).toEqual(expect.arrayContaining(['batteryWhPerKm', 'riderWhPerKm']));
+      if (
+        result.plot.status !== 'ok' ||
+        result.stats.status !== 'ok' ||
+        result.inspect.status !== 'ok' ||
+        result.instant.status !== 'ok' ||
+        result.smooth.status !== 'ok' ||
+        result.latest.status !== 'ok' ||
+        result.partial.status !== 'ok'
+      )
+        throw new Error('Unexpected retry');
+      expect(result.instant.points.batteryWhPerKm?.value).toBe(50);
+      expect(result.smooth.points.batteryWhPerKm?.value).toBeCloseTo(95, 8);
+      result.longer.forEach((value, index) => {
+        if (value.status !== 'ok') throw new Error('Unexpected retry');
+        expect(value.points.batteryWhPerKm?.value).toBeCloseTo(100 - 25 / [30, 60][index]!, 8);
+      });
+      expect(result.latest.averages?.batteryWhPerKm?.value).toBeCloseTo(60 / 0.8975, 8);
+      expect(result.latest.points.batteryWhPerKm?.value).toBe(50);
+      expect(result.stats.statistics.batteryWhPerKm?.ratio).toBeCloseTo(60 / 0.8975, 8);
+      expect(result.stats.statistics.riderWhPerKm?.ratio).toBeCloseTo(6 / 0.8975, 8);
+      expect(result.partial.statistics.batteryWhPerKm?.ratio).toBeCloseTo(30 / 0.5975, 8);
+      expect(result.inspect.points.batteryWhPerKm?.value).toBeCloseTo(100, 8);
+      expect(result.inspect.points.riderWhPerKm?.value).toBeCloseTo(10, 8);
+      expect(result.plot.series.batteryWhPerKm?.some(point => point.value < 50.3)).toBe(true);
+      expect(result.plot.series.batteryWhPerKm?.some(point => point.value > 99.9)).toBe(true);
+    }));
+
   it('keeps consumption unavailable outside observed intervals while admitting a valid zero baseline', async () =>
     run(async page => {
       const result = await page.evaluate(async () => {

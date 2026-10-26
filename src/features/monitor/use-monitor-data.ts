@@ -62,6 +62,10 @@ export function useMonitorData(
     [controller],
   );
   const setReference = useCallback((seconds: number | null) => controller.setReference(seconds), [controller]);
+  const setVisibleMetrics = useCallback(
+    (metrics: readonly string[] | null) => controller.setVisibleMetrics(metrics),
+    [controller],
+  );
   const changeViewport = useCallback(
     (next: ChartViewport, interacting = false) => controller.changeViewport(next, interacting),
     [controller],
@@ -71,6 +75,7 @@ export function useMonitorData(
     error: Object.values(state.errors).find(Boolean) ?? null,
     inspect,
     setReference,
+    setVisibleMetrics,
     changeViewport,
     resume: () => controller.resume(),
     refresh: () => controller.refresh(),

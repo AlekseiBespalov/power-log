@@ -1,3 +1,4 @@
+import type { DistanceSource } from '../../src/core/distance';
 import { describe, expect, it, vi } from 'vitest';
 import { presentationFailure } from '../../shared/js';
 import { MonotonicClock } from '../../src/services/monotonic-clock';
@@ -6,7 +7,13 @@ import { TelemetryMonitor } from '../../src/core/monitor-data';
 import { currentMonitorPoint, metricById, type MonitorSource, type MonitorPlotResult } from '../../src/core/monitor';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 import { monitorRasterScene, monitorRasterSelection } from '../../src/core/monitor-raster';
-import { groupMonitorMetrics, monitorScale, monitorSelection, monitorTailSeconds } from '../../src/core/monitor-chart';
+import {
+  groupMonitorMetrics,
+  monitorChartData,
+  monitorScale,
+  monitorSelection,
+  monitorTailSeconds,
+} from '../../src/core/monitor-chart';
 import { reads } from '../../src/services/read-scheduler';
 const sample = (seconds: number, value = seconds) => ({
   ...syntheticSample(seconds, seconds, new Date(Date.UTC(2026, 0, 1) + seconds * 1000).toISOString()),
@@ -444,7 +451,7 @@ describe('independent monitor reads', () => {
         readoutGate = new Promise<void>(resolve => {
           releaseReadouts = resolve;
         });
-      function source(selection: string, value: number, delayed = false): MonitorSource {
+      function source(selection: DistanceSource, value: number, delayed = false): MonitorSource {
         const revision = selection === 'auto' ? '7' : `distance:${selection}:7`;
         const info = {
           source: selection === 'auto' ? 'gps:watch' : selection,
@@ -466,6 +473,7 @@ describe('independent monitor reads', () => {
           key: 'workout:policy-test',
           live: false,
           semanticKey: `distance:${selection}`,
+          distanceSelection: selection,
           describeSource: async r => ({
             ...envelope(r.generation),
             startedAt: '2026-01-01T00:00:00Z',
@@ -581,7 +589,7 @@ describe('independent monitor reads', () => {
       releaseInspect = resolve;
     });
     const anchors: (string | undefined)[] = [];
-    function source(selection: string, value: number): MonitorSource {
+    function source(selection: DistanceSource, value: number): MonitorSource {
       const delayed = selection !== 'auto',
         revision = delayed ? `distance:${selection}:7` : '7';
       const point = { value, elapsedSeconds: 1, timestamp: '2026-01-01T00:00:01Z', observationId: `${selection}:1` };
@@ -601,6 +609,7 @@ describe('independent monitor reads', () => {
         key: 'workout:pending-policy',
         live: false,
         semanticKey: `distance:${selection}`,
+        distanceSelection: selection,
         describeSource: async r => {
           if (delayed) await descriptionGate;
           return {
@@ -695,7 +704,7 @@ describe('independent monitor reads', () => {
     await settle();
     const nextSource = Object.assign(
       new TelemetryMonitor('workout:same-ride', false, [sample(0, 200), sample(1, 200), sample(2, 200)]),
-      { semanticKey: 'distance:controller' },
+      { semanticKey: 'distance:controller', distanceSelection: 'controller' as const },
     );
     controller.updateSource(nextSource);
     complete();
@@ -1073,6 +1082,130 @@ describe('independent monitor reads', () => {
       vi.useRealTimers();
     }
   });
+  it.each([true, false])(
+    'reads raw controller speed only when the source lacks normalized speed: normalized=%s',
+    async normalized => {
+      const source = new TelemetryMonitor(
+        'controller-speed',
+        false,
+        [0, 1, 2].map(t => ({ ...sample(t), speedRaw: 18, ...(normalized ? { controllerSpeedMps: 5 } : {}) })),
+      );
+      const spies = (['readLatest', 'readPlot', 'rangeStats', 'inspectAt'] as const).map(name =>
+        vi.spyOn(source, name),
+      );
+      const controller = new MonitorReadController(source);
+      try {
+        controller.configure(['controllerSpeedMps', 'humanPowerW'], 'all');
+        controller.refresh();
+        await settle();
+        controller.inspect(1);
+        await settle();
+        const requested = spies.flatMap(spy => spy.mock.calls.map(([request]) => request.metrics));
+        expect(requested).toHaveLength(4);
+        expect(new Set(requested.map(metrics => metrics.join(',')))).toEqual(
+          new Set([normalized ? 'controllerSpeedMps,humanPowerW' : 'controllerSpeedMps,speedRaw,humanPowerW']),
+        );
+      } finally {
+        controller.dispose();
+      }
+    },
+  );
+  it('stops reading raw controller speed when normalized speed appears without resetting the selection', async () => {
+    const source = new TelemetryMonitor(
+      'controller-speed-live',
+      true,
+      [0, 1, 2].map(t => ({ ...sample(t), speedRaw: 18 })),
+    );
+    const plot = vi.spyOn(source, 'readPlot'),
+      latest = vi.spyOn(source, 'readLatest');
+    const controller = new MonitorReadController(source);
+    try {
+      controller.configure(['controllerSpeedMps', 'humanPowerW'], 'all');
+      controller.refresh();
+      await settle();
+      controller.inspect(1);
+      await settle();
+      expect(plot.mock.calls.at(-1)![0].metrics).toEqual(['controllerSpeedMps', 'speedRaw', 'humanPowerW']);
+      const version = controller.getSnapshot().interactionVersion;
+      source.append({ ...sample(3), speedRaw: 18, controllerSpeedMps: 5 });
+      controller.refresh();
+      await settle();
+      expect(plot.mock.calls.at(-1)![0].metrics).toEqual(['controllerSpeedMps', 'humanPowerW']);
+      expect(latest.mock.calls.at(-1)![0].metrics).toEqual(['controllerSpeedMps', 'humanPowerW']);
+      expect(controller.getSnapshot().data!.series.controllerSpeedMps!.map(point => point.value)).toEqual([5]);
+      expect(controller.getSnapshot().interactionVersion).toBe(version);
+      expect(controller.getSnapshot().cursorSeconds).toBe(1);
+    } finally {
+      controller.dispose();
+    }
+  });
+  it('reads live whole-ride statistics only for displayed voltage minimums while following', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
+    const source = new TelemetryMonitor(
+      'live-statistics',
+      true,
+      Array.from({ length: 31 }, (_, i) => sample(i)),
+    );
+    const statistics = vi.spyOn(source, 'rangeStats');
+    const controller = new MonitorReadController(source);
+    try {
+      controller.configure(['humanPowerW', 'batteryVoltageV', 'motorTempC', 'throttleVoltageV'], 'all');
+      controller.refresh();
+      await settle();
+      expect(statistics.mock.calls.map(([request]) => request.metrics)).toEqual([
+        ['batteryVoltageV', 'throttleVoltageV'],
+      ]);
+      expect(Object.keys(controller.getSnapshot().data!.statistics)).toEqual(['batteryVoltageV', 'throttleVoltageV']);
+      controller.configure(['humanPowerW', 'motorTempC'], 'all');
+      await settle();
+      expect(statistics).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot().data!.statistics).toEqual({});
+      expect(controller.getSnapshot().data!.statisticsPending).toBe(false);
+      controller.changeViewport({ start: 0, end: 20 });
+      await settle();
+      expect(statistics).toHaveBeenCalledTimes(2);
+      expect(statistics.mock.calls[1]![0].metrics).toEqual(['humanPowerW', 'motorTempC']);
+      expect(controller.getSnapshot().data!.statistics.motorTempC?.count).toBeGreaterThan(0);
+      controller.resume();
+      await settle();
+      expect(statistics).toHaveBeenCalledTimes(2);
+      expect(controller.getSnapshot().data!.statistics).toEqual({});
+    } finally {
+      controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+  it('reads live voltage statistics at the passive Wh/km cadence while explicit range changes read every metric', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
+    const source = new TelemetryMonitor('long-ride', true, [sample(0), sample(3600)]);
+    const controller = new MonitorReadController(source);
+    try {
+      controller.configure(['batteryWhPerKm', 'batteryVoltageV'], 'all');
+      controller.refresh();
+      await settle();
+      const statistics = vi.spyOn(source, 'rangeStats'),
+        plots = vi.spyOn(source, 'readPlot');
+      for (let t = 1; t < 30; t++) {
+        await vi.advanceTimersByTimeAsync(1000);
+        source.append(sample(3600 + t));
+        controller.refresh();
+        await settle();
+      }
+      expect(statistics).not.toHaveBeenCalled();
+      expect(plots.mock.calls.length).toBeGreaterThan(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      await settle();
+      expect(statistics).toHaveBeenCalledTimes(1);
+      expect(statistics.mock.calls[0]![0].metrics).toEqual(['batteryVoltageV']);
+      controller.changeViewport({ start: 3500, end: 3600 });
+      await settle();
+      expect(statistics).toHaveBeenCalledTimes(2);
+      expect(statistics.mock.calls[1]![0].metrics).toEqual(['batteryWhPerKm', 'batteryVoltageV']);
+    } finally {
+      controller.dispose();
+      vi.useRealTimers();
+    }
+  });
   it('admits a queued comparison at a newer revision and publishes its exact endpoints together', async () => {
     const { source, controller } = setup();
     await settle();
@@ -1227,6 +1360,172 @@ describe('independent monitor reads', () => {
     } finally {
       controller.dispose();
       vi.useRealTimers();
+    }
+  });
+  it('reads the visible charts as one snapshot and keeps the last drawing of charts that leave without resetting the cursor', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
+    const source = new TelemetryMonitor(
+      'visible-live',
+      true,
+      Array.from({ length: 31 }, (_, i) => sample(i)),
+    );
+    const plots = vi.spyOn(source, 'readPlot'),
+      statistics = vi.spyOn(source, 'rangeStats'),
+      inspect = vi.spyOn(source, 'inspectAt');
+    const controller = new MonitorReadController(source);
+    try {
+      controller.configure(['humanPowerW', 'cadenceRpm', 'batteryVoltageV', 'motorTempC'], 'all');
+      controller.setVisibleMetrics(['humanPowerW', 'batteryVoltageV']);
+      controller.refresh();
+      await settle();
+      expect(plots.mock.calls.map(([request]) => request.metrics)).toEqual([['humanPowerW', 'batteryVoltageV']]);
+      expect(statistics.mock.calls.map(([request]) => request.metrics)).toEqual([['batteryVoltageV']]);
+      expect(Object.keys(controller.getSnapshot().data!.series)).toEqual(['humanPowerW', 'batteryVoltageV']);
+      controller.inspect(10);
+      await settle();
+      const version = controller.getSnapshot().interactionVersion;
+      controller.setVisibleMetrics(['cadenceRpm']);
+      await vi.advanceTimersByTimeAsync(100);
+      await settle();
+      expect(plots.mock.calls.at(-1)![0].metrics).toEqual(['cadenceRpm']);
+      expect(statistics.mock.calls.at(-1)![0].metrics).toEqual(['cadenceRpm']);
+      source.append(sample(31));
+      controller.refresh();
+      await settle();
+      expect(plots.mock.calls.at(-1)![0].metrics).toEqual(['cadenceRpm']);
+      const state = controller.getSnapshot();
+      expect(state.cursorSeconds).toBe(10);
+      expect(state.interactionVersion).toBe(version);
+      expect(Object.keys(state.data!.series)).toEqual(['humanPowerW', 'cadenceRpm', 'batteryVoltageV']);
+      expect(state.data!.drawings).toMatchObject({
+        humanPowerW: { revision: '31', current: false },
+        cadenceRpm: { current: true },
+      });
+      for (const metric of ['humanPowerW', 'cadenceRpm']) {
+        const point = state.data!.series[metric]!.find(point => point.elapsedSeconds === 12)!,
+          revision = state.data!.drawings![metric]!.revision;
+        inspect.mockClear();
+        controller.inspect(12, false, { key: 'native:1', sourceId: 'visible-live', revision, metric, point });
+        await settle();
+        expect(inspect.mock.calls[0]![0].anchor, metric).toEqual(
+          metric === 'cadenceRpm' ? { metric, observationId: point.observationId } : undefined,
+        );
+      }
+    } finally {
+      controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+  it('rereads no geometry when new samples change only metrics outside the visible charts', async () => {
+    const source = new TelemetryMonitor(
+      'visible-changes',
+      true,
+      Array.from({ length: 31 }, (_, i) => sample(i)),
+    );
+    const controller = new MonitorReadController(source);
+    try {
+      controller.configure(['humanPowerW', 'heartRateBpm'], 'all');
+      controller.setVisibleMetrics(['humanPowerW']);
+      controller.refresh();
+      await settle();
+      controller.changeViewport({ start: 5, end: 25 });
+      await settle();
+      const plots = vi.spyOn(source, 'readPlot'),
+        geometry = controller.getSnapshot().data!.series;
+      const { humanPowerW: _power, ...heart } = sample(12);
+      source.append({ ...heart, observationId: 'heart:12', heartRateBpm: 120 } as unknown as ReturnType<typeof sample>);
+      controller.refresh();
+      await settle();
+      expect(plots).not.toHaveBeenCalled();
+      expect(controller.getSnapshot().data!.revision).toBe('32');
+      expect(controller.getSnapshot().data!.series).toBe(geometry);
+      expect(controller.getSnapshot().data!.drawings!.humanPowerW).toMatchObject({ revision: '31', current: true });
+      const inspect = vi.spyOn(source, 'inspectAt'),
+        point = geometry.humanPowerW!.find(point => point.elapsedSeconds === 10)!;
+      controller.inspect(10, false, {
+        key: 'native:1',
+        sourceId: 'visible-changes',
+        revision: '31',
+        metric: 'humanPowerW',
+        point,
+      });
+      await settle();
+      expect(inspect.mock.calls[0]![0].anchor).toEqual({ metric: 'humanPowerW', observationId: point.observationId });
+      expect(controller.getSnapshot().data!.selectionRevision).toBe('32');
+      controller.inspect(null);
+      await settle();
+      source.append({ ...sample(13, 700), observationId: 'power:13' });
+      controller.refresh();
+      await settle();
+      expect(plots).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot().data!.series.humanPowerW!.some(point => point.value === 700)).toBe(true);
+    } finally {
+      controller.dispose();
+    }
+  });
+  it.each(['changed', 'added'] as const)(
+    'draws and snaps every line of an overlay chart when one line is %s beside an unchanged line',
+    async kind => {
+      const source = new TelemetryMonitor(
+        'overlay-lines',
+        true,
+        Array.from({ length: 31 }, (_, i) => sample(i)),
+      );
+      const both = ['humanPowerW', 'motorInputPowerW'];
+      const controller = new MonitorReadController(source);
+      try {
+        controller.configure(kind === 'added' ? ['humanPowerW'] : both, 'all');
+        controller.refresh();
+        await settle();
+        controller.changeViewport({ start: 5, end: 25 });
+        await settle();
+        if (kind === 'added') controller.configure(both, 'all');
+        else {
+          const { humanPowerW: _power, ...motor } = sample(12);
+          source.append({ ...motor, observationId: 'motor:12', motorInputPowerW: 999 } as unknown as ReturnType<
+            typeof sample
+          >);
+          controller.refresh();
+        }
+        await settle();
+        const data = controller.getSnapshot().data!;
+        expect(data.drawings!.humanPowerW!.generation).toBeLessThan(data.drawings!.motorInputPowerW!.generation);
+        const chart = monitorChartData(data, groupMonitorMetrics(both)[0]!.metrics);
+        expect(Object.keys(chart.series)).toEqual(both);
+        expect(Object.values(chart.drawings!).map(drawing => drawing.current)).toEqual([true, true]);
+        expect(chart.series.humanPowerW).toBe(data.series.humanPowerW);
+        const inspect = vi.spyOn(source, 'inspectAt'),
+          point = chart.series.humanPowerW!.find(point => point.elapsedSeconds === 10)!;
+        controller.inspect(10, false, {
+          key: 'native:1',
+          sourceId: 'overlay-lines',
+          revision: chart.revision!,
+          metric: 'humanPowerW',
+          point,
+        });
+        await settle();
+        expect(inspect.mock.calls[0]![0].anchor).toEqual({ metric: 'humanPowerW', observationId: point.observationId });
+      } finally {
+        controller.dispose();
+      }
+    },
+  );
+  it('composes number-only views without plot reads', async () => {
+    const source = new TelemetryMonitor('numbers-only', false, [sample(0), sample(1)]);
+    const plots = vi.spyOn(source, 'readPlot'),
+      statistics = vi.spyOn(source, 'rangeStats');
+    const controller = new MonitorReadController(source);
+    try {
+      controller.configure(['humanPowerW', 'cadenceRpm'], 'all');
+      controller.setVisibleMetrics([]);
+      controller.refresh();
+      await settle();
+      expect(plots).not.toHaveBeenCalled();
+      expect(statistics).not.toHaveBeenCalled();
+      expect(controller.getSnapshot().data!.series).toEqual({});
+      expect(controller.getSnapshot().latest!.humanPowerW!.elapsedSeconds).toBe(1);
+    } finally {
+      controller.dispose();
     }
   });
   it('keeps landscape and tablet plot requests within the native bucket limit', async () => {
@@ -1614,10 +1913,10 @@ describe('independent monitor reads', () => {
         published.push({
           revision: state.data.revision,
           statsRevision: state.data.statisticsRevision,
-          count: state.data.statistics.humanPowerW?.count,
+          count: state.data.statistics.batteryVoltageV?.count,
         });
     });
-    controller.configure(['humanPowerW'], 'all');
+    controller.configure(['humanPowerW', 'batteryVoltageV'], 'all');
     controller.refresh();
     let tick = 0;
     const capture = setInterval(() => {

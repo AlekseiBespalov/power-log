@@ -44,7 +44,7 @@ query that archive; FIT and raw ZIP exports read it through bounded, revision-ch
 | Apple queries and rendering | `modules/power-log-bridge/ios/WorkoutAnalysis.swift`, `WorkoutDistanceStore.swift`, `MonitorData.swift`, `MonitorInspection.swift`, `MonitorRaster*.swift` |
 | Android recording and storage | `modules/power-log-bridge/android/src/main/java/app/powerlog/bridge/RecordingEngine.kt`, `RecordingService.kt`, `TelemetryCapture.kt`, `RideStore.kt` |
 | Android Health | `modules/power-log-bridge/android/src/main/java/app/powerlog/bridge/HealthExport.kt`, `HealthPublicationWorker.kt`, `HealthReadback.kt`, `HealthReadings.kt`, `HealthRecords.kt`, `HealthConnectAccess.kt` |
-| Android queries and rendering | `modules/power-log-bridge/android/src/main/java/app/powerlog/bridge/RideAnalysis.kt`, `RideDistance.kt`, `MetricCache.kt`, `RideSummaryCache.kt`, `RideMonitor.kt`, `MonitorRasterView.kt` |
+| Android queries and rendering | `modules/power-log-bridge/android/src/main/java/app/powerlog/bridge/RideAnalysis.kt`, `RideDistance.kt`, `MetricCache.kt`, `RideSummaryCache.kt`, `RideMonitor.kt`, `RidePlotSummaries.kt`, `MonitorRasterView.kt` |
 | Browser recording and queries | `src/services/browser-workout-recorder.ts`, `browser-ride-store.ts`, `browser-gps.ts`, `browser-distance-store.ts`, `browser-analytics.ts`, `browser-workout-monitor.ts` |
 | Charts and read scheduling | `src/components/monitor-charts.tsx`, `src/features/monitor/`, `src/core/monitor*.ts`, `src/services/read-scheduler.ts` |
 | History and controls | `src/features/history/`, `src/features/workout/`, `src/services/workout-context.tsx`, `ride-control-actions.ts`, `workout-external-actions.ts` |
@@ -58,7 +58,19 @@ query that archive; FIT and raw ZIP exports read it through bounded, revision-ch
 Routes stay thin in `src/app/`; domain logic lives in `src/core/`, feature UI in `src/features/`, primitives in
 `src/components/`, and platform access in `src/services/` and the native bridge. Charts share the metric catalog,
 MonitorSource query interface and multi-lane chart component. Derived caches remain rebuildable; unreadable original
-stores fail visibly. Export revision checks and deletion protection remain independent of Health saving.
+stores fail visibly. On iPhone, chart projections, summaries and distance generations are extended rather than rebuilt
+while everything committed since they were built is a later append; that proof uses per-ride change marks, which also
+name the metrics of every original a correction or deletion replaces, and scans of the new rows, never the bounded
+change feed. Whole-ride plots merge one shared-core slot summary per chart, kept per distance generation for distance
+and battery charts, so a live refresh reads only new originals; zoomed plots use projections and pyramids. A chart whose
+summary outgrows its point budget is read in full, without another summary attempt, until a change other than an
+append. Whole-ride statistics merge one shared-core checkpoint per channel that ends on a 16 s boundary at least 64 s
+behind the data end, extended under the same proof and an unchanged timeline before its end, so a read reduces only the
+rows after it. Android extends its in-memory whole-ride plot summaries and Wh/km totals checkpoints under
+the same rule, proven by the revisions of new rows, derived intervals and lifecycle events. In the browser, the
+recording ride's whole-ride plot summaries and Wh/km totals checkpoints are extended only while every row committed
+since, found through the revision index, follows what they already hold and the distance generation is unchanged.
+Export revision checks and deletion protection remain independent of Health saving.
 
 Expo prebuild regenerates `ios/` and `android/`; maintained sources stay in `modules/` and `apple/`. Tests never enter
 application source phases. Metro selects native/web implementations, and native delegates/autolinking are entry

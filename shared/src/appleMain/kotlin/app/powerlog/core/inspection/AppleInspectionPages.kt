@@ -29,6 +29,17 @@ object AppleInspectionPages {
         InspectionNumericPages.plot(reducer, AppleInspectionInput(data, evidence, producers))
     }
 
+    @Throws(IllegalArgumentException::class, ArithmeticException::class, InspectionCapacityException::class)
+    fun summary(
+        summary: InspectionPlotSummary,
+        data: NSData,
+        evidence: List<Continuity>,
+        producers: List<String>,
+        identity: (Long) -> String,
+    ) {
+        InspectionNumericPages.summary(summary, AppleInspectionInput(data, evidence, producers), identity)
+    }
+
     @Throws(IllegalArgumentException::class, ArithmeticException::class)
     fun query(reducer: InspectionQuery, data: NSData, evidence: List<Continuity>, producers: List<String>) {
         InspectionNumericPages.query(reducer, AppleInspectionInput(data, evidence, producers))

@@ -210,12 +210,15 @@ final class WorkoutDistanceStore {
     }
   }
 
+  private static let currentSnapshot =
+    "json_type(CAST(value AS TEXT),'$.battery') IS 'object' AND json_extract(CAST(value AS TEXT),'$.counterEdgeUs')="
+    + String(BatteryConsumptionPolicy.shared.maximumCounterEdgeUs)
   func cachedSnapshot(id: String, revision: Int64, selection: String = "auto") throws -> WorkoutDistanceSnapshot? {
     try validate(selection)
     let value = try read { db -> Data? in
       try store.requireWorkoutAvailable(id: id)
       return try db.rows(
-        "SELECT value FROM distance_snapshots WHERE collection_id=? AND revision=? AND json_type(CAST(value AS TEXT),'$.battery') IS 'object'",
+        "SELECT value FROM distance_snapshots WHERE collection_id=? AND revision=? AND \(Self.currentSnapshot)",
         [.text(id), .integer(revision)],
         limit: 1
       ).first?.data("value")
@@ -228,7 +231,7 @@ final class WorkoutDistanceStore {
     let value = try read { db -> Data? in
       try store.requireWorkoutAvailable(id: id)
       return try db.rows(
-        "SELECT value FROM distance_snapshots WHERE collection_id=? AND json_type(CAST(value AS TEXT),'$.battery') IS 'object' ORDER BY revision DESC LIMIT 1",
+        "SELECT value FROM distance_snapshots WHERE collection_id=? AND \(Self.currentSnapshot) ORDER BY revision DESC LIMIT 1",
         [.text(id)],
         limit: 1
       ).first?.data("value")
@@ -250,7 +253,7 @@ final class WorkoutDistanceStore {
       try store.requireWorkoutAvailable(id: id)
       let phase = try db.rows("SELECT phase FROM collections WHERE id=?", [.text(id)], limit: 1).first?.string("phase")
       let newest = try db.rows(
-        "SELECT value FROM distance_snapshots WHERE collection_id=? AND json_type(CAST(value AS TEXT),'$.battery') IS 'object' ORDER BY revision DESC LIMIT 1",
+        "SELECT value FROM distance_snapshots WHERE collection_id=? AND \(Self.currentSnapshot) ORDER BY revision DESC LIMIT 1",
         [.text(id)],
         limit: 1
       ).first?.data("value")
@@ -462,6 +465,20 @@ final class WorkoutDistanceStore {
         [.integer(snapshot.storageID), .text(source), .integer(snapshot.maximumPointID)] + ids.map { .integer($0) },
         limit: 256
       ).map { point($0, snapshot: snapshot) }
+    }
+  }
+  /// Whether every point of the snapshot's source numbered above the cursor lies at or after its time.
+  func chartAppendsFollow(snapshot: WorkoutDistanceSnapshot, after cursor: WorkoutDistanceCursor) throws -> Bool {
+    guard let source = snapshot.source else { return true }
+    return try store.read { db in
+      try require(snapshot, db)
+      // Unary plus keeps SQLite on the primary-key range of the new points instead of the time index.
+      return try db.scalarInt(
+        "SELECT 1 FROM distance_points WHERE generation_id=? AND point_id>? AND point_id<=? AND +source=? AND +elapsed_seconds<? LIMIT 1",
+        [
+          .integer(snapshot.storageID), .integer(cursor.pointID), .integer(snapshot.maximumPointID), .text(source),
+          .real(cursor.time),
+        ]) == nil
     }
   }
 
@@ -780,7 +797,8 @@ final class WorkoutDistanceStore {
       "startedAt", "endedAt", "stopElapsedSeconds", "indoor", "watchEnabled", "distanceSource",
       "batteryConsumptionSource",
     ]
-    let fixed = Dictionary(uniqueKeysWithValues: keys.compactMap { key in metadata[key].map { (key, $0) } })
+    var fixed = Dictionary(uniqueKeysWithValues: keys.compactMap { key in metadata[key].map { (key, $0) } })
+    fixed["counterEdgeUs"] = BatteryConsumptionPolicy.shared.maximumCounterEdgeUs
     let fingerprint = String(
       data: try JSONSerialization.data(withJSONObject: fixed, options: [.sortedKeys]), encoding: .utf8)!
     return Context(
@@ -822,12 +840,6 @@ final class WorkoutDistanceStore {
     guard state.fingerprint == context.fingerprint, state.hasActiveIntervals || context.active.isEmpty else {
       return false
     }
-    let count = try read(priority: .background) { db in
-      try db.scalarInt(
-        "SELECT count(*) FROM collection_changes WHERE collection_id=? AND revision>? AND revision<=?",
-        [.text(context.id), .integer(state.revision), .integer(context.revision)]) ?? 0
-    }
-    guard count == context.revision - state.revision, count <= 512 else { return false }
     var cursor = (revision: state.revision, id: Int64(0))
     var appends = true
     while appends {
@@ -872,22 +884,7 @@ final class WorkoutDistanceStore {
     guard let previous, let snapshot = try? decoder.decode(WorkoutDistanceSnapshot.self, from: previous),
       snapshot.endSeconds == context.end, snapshot.activeIntervals == context.active
     else { return [] }
-    guard context.revision > old.revision, context.revision - old.revision <= 512 else { return [] }
-    var journalRevision = old.revision
-    while journalRevision < context.revision {
-      let changes = try read(priority: .background) { db in
-        try db.rows(
-          "SELECT revision,kind FROM collection_changes WHERE collection_id=? AND revision>? AND revision<=? ORDER BY revision LIMIT 128",
-          [.text(context.id), .integer(journalRevision), .integer(context.revision)], limit: 128)
-      }
-      guard !changes.isEmpty else { return [] }
-      for change in changes {
-        guard change.int("revision") == journalRevision + 1,
-          ["append", "semantics"].contains(change.string("kind") ?? "")
-        else { return [] }
-        journalRevision += 1
-      }
-    }
+    guard context.revision > old.revision else { return [] }
     var changed = Set<String>()
     var representedRevisions = Set<Int64>()
     var cursor = (revision: old.revision, id: Int64(0))

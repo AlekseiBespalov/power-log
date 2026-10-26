@@ -10,6 +10,7 @@ import {
   MonitorHitAdmission,
   monitorHitScene,
   monitorHitTargets,
+  type MonitorHitScene,
   type MonitorRasterReady,
 } from '../core/monitor-hit-test';
 import type { MonitorRasterProps } from './monitor-raster.types';
@@ -39,6 +40,7 @@ export function MonitorRaster({
   cursor,
   reference,
   tailTime,
+  snappable,
 }: MonitorRasterProps) {
   const [error, setError] = useState<string | null>(null);
   const geometryView = data.plotViewport ?? data.domain;
@@ -89,6 +91,8 @@ export function MonitorRaster({
   const admission = useRef(new MonitorHitAdmission());
   const acceptedGeneration = useSharedValue(-1);
   const currentBinding = useSharedValue('');
+  const admittedScene = useSharedValue<MonitorHitScene | null>(null);
+  const snapping = useSharedValue(snappable);
   useLayoutEffect(() => {
     expected.current = { packet, binding };
     admission.current.request(packet, binding);
@@ -97,9 +101,17 @@ export function MonitorRaster({
     scheduleOnUI((binding: string) => {
       'worklet';
       currentBinding.value = binding;
+      admittedScene.value = null;
       hitScene.value = null;
     }, binding);
-  }, [binding, currentBinding, hitScene]);
+  }, [binding, currentBinding, admittedScene, hitScene]);
+  useLayoutEffect(() => {
+    scheduleOnUI((value: boolean) => {
+      'worklet';
+      snapping.value = value;
+      hitScene.value = value ? admittedScene.value : null;
+    }, snappable);
+  }, [snappable, snapping, admittedScene, hitScene]);
   const selection = useMemo(() => {
     return JSON.stringify({
       ...nativeMonitorRasterSelection(Platform.OS, data, group, cursor, reference, tailTime),
@@ -150,14 +162,15 @@ export function MonitorRaster({
           // acceptances for the current configuration, or clear an unbound table.
           if (currentBinding.value === binding && next.generation > acceptedGeneration.value) {
             acceptedGeneration.value = next.generation;
-            hitScene.value = next.scene;
+            admittedScene.value = next.scene;
+            hitScene.value = snapping.value ? next.scene : null;
           }
         },
         binding,
         accepted,
       );
     },
-    [acceptedGeneration, currentBinding, hitScene],
+    [acceptedGeneration, currentBinding, admittedScene, snapping, hitScene],
   );
   return (
     <View pointerEvents="none" style={{ height }}>

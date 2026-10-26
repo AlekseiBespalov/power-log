@@ -96,6 +96,41 @@ func originalFingerprint() throws -> [Data] {
   }
 }
 
+do {
+  var clock = TelemetryCaptureClock(origin: 100, wallOrigin: start)
+  monitor.beginLive(startedAt: timestamp(0), monotonic: 100)
+  func frame(_ time: Double, speed: Double) throws {
+    let sample = try clock.observation(
+      testGeneratedTelemetryReading([
+        "humanPowerW": 180, "cadenceRpm": 80, "motorInputPowerW": 1800, "controllerSpeedMps": speed,
+      ]),
+      connectionEpoch: clock.epochID, monotonic: 100 + time, wall: start.addingTimeInterval(time))
+    do { try monitor.appendLive(sample, elapsedSeconds: time) } catch { fatalError("Preview append failed: \(error)") }
+  }
+  func read(_ time: Double, smooth: Int = 0) throws -> [String: Any] {
+    var request = MonitorRequest(source: "live", startSeconds: time, endSeconds: time)
+    request.energySmoothingSeconds = smooth
+    do { return try monitor.readEnergyPerDistance(request) } catch {
+      fatalError("Preview energy query failed: \(error)")
+    }
+  }
+  try frame(1, speed: 5)
+  let first = try read(1)
+  check(selected(first, metric: "batteryWhPerKm")?["value"] as? Double == 100, "preview graphs first battery frame")
+  check(selected(first, metric: "riderWhPerKm")?["value"] as? Double == 10, "preview graphs first rider frame")
+  try frame(2, speed: 10)
+  for smooth in [0, 5, 30, 60] {
+    let value = try read(2, smooth: smooth)
+    check(selected(value, metric: "batteryWhPerKm") != nil, "preview graph supports smoothing")
+    check(
+      (value["averages"] as? [String: Any])?["batteryWhPerKm"] is NSNull,
+      "preview never manufactures a whole-ride average")
+    check(statistics(value, metric: "batteryWhPerKm")?["ratio"] == nil, "preview does not accumulate a ride ratio")
+  }
+  try frame(3, speed: 0)
+  check(try selected(read(3), metric: "batteryWhPerKm") == nil, "stationary preview has no Wh/km sample")
+}
+
 func exportedMeters(_ id: String, distanceSource: String = "auto") throws -> Double? {
   let snapshot = try distance.snapshot(id: id, selection: distanceSource)
   guard snapshot.source != nil else { return nil }
@@ -594,7 +629,7 @@ for offset in stride(from: 0, to: 2048, by: 256) {
 }
 _ = try distance.snapshot(id: pagedGPS)
 let pagedMonitor = MonitorDataStore(root: root)
-let pagedPlot = try pagedMonitor.readPlot(request(pagedGPS, from: 0, to: 256))
+let pagedPlot = try pagedMonitor.readPlot(request(pagedGPS, from: 0, to: 255))
 check(pagedPlot["status"] as? String == "ok", "Stored paged GPS chart reads the admitted distance projection")
 check(
   pagedMonitor.projectionDiagnostics()["distanceScannedPoints", default: 0] >= 2048,
@@ -706,6 +741,67 @@ print("Native Monitor distance checks passed: \(assertions) assertions")
 // Every ride-derived series shares one pinned projection and remains independently selectable.
 do {
   let ride = try archive.create(
+    startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false,
+    recordGPS: false, sampleHz: 4, distanceSource: "controller", batteryConsumptionSource: "calculated")
+  for t in 0...120 {
+    try append(
+      ride.id, time: Double(t), kind: "telemetry", source: "controller",
+      payload: [
+        "humanPowerW": .number(180), "cadenceRpm": .number(80),
+        "controllerSpeedMps": .number(t <= 60 ? 5 : 10), "batteryVoltageV": .number(50),
+        "batteryCurrentA": .number(36), "motorInputPowerW": .number(1800), "consumedWh": .number(100 + Double(t) * 2),
+        "controllerModel": .string("X6"), "controllerProtocol": .string("5.3"),
+        "captureSessionID": .string(ride.id), "connectionEpoch": .string("connection"),
+        "clockEpoch": .string("clock"), "observationSequence": .string(String(t + 1)),
+        "monotonicSeconds": .number(Double(t)),
+      ])
+  }
+  let value = try monitor.readEnergyPerDistance(request(ride.id, metrics: [], from: 0, to: 120))
+  let statistics = value["statistics"] as! [String: [String: Any]]
+  check(
+    abs((statistics["batteryWhPerKm"]?["ratio"] as? Double ?? -1) - 60 / 0.8975) < 1e-8,
+    "energy/distance uses selected calculated energy rather than the controller counter")
+  check(
+    abs((statistics["riderWhPerKm"]?["ratio"] as? Double ?? -1) - 6 / 0.8975) < 1e-8,
+    "human work shares the selected distance")
+  check((value["series"] as? [String: Any])?.isEmpty == true, "a totals read builds no graph series")
+  var graphRequest = try request(ride.id, metrics: [], from: 0, to: 120)
+  graphRequest.energyTotals = false
+  let series = try monitor.readEnergyPerDistance(graphRequest)["series"] as! [String: [[String: Any]]]
+  check(
+    series["batteryWhPerKm"]!.contains { ($0["value"] as! Double) > 99.9 },
+    "instantaneous graph retains early consumption")
+  check(
+    series["batteryWhPerKm"]!.contains { ($0["value"] as! Double) < 50.3 },
+    "instantaneous graph reveals lower consumption")
+  var instantRequest = try request(ride.id, metrics: [], from: 61, to: 61)
+  let instant = try monitor.readEnergyPerDistance(instantRequest)
+  let instantPoints = instant["points"] as! [String: [String: Any]]
+  check(instantPoints["batteryWhPerKm"]?["value"] as? Double == 50, "speed transition immediately changes Wh/km")
+  instantRequest.energySmoothingSeconds = 5
+  let smooth = try monitor.readEnergyPerDistance(instantRequest)
+  let smoothPoints = smooth["points"] as! [String: [String: Any]]
+  check(smoothPoints["batteryWhPerKm"]?["value"] as? Double == 95, "optional smoothing uses five seconds")
+  for seconds in [30, 60] {
+    instantRequest.energySmoothingSeconds = seconds
+    instantRequest.energyTotals = false
+    let smoothed = try monitor.readEnergyPerDistance(instantRequest)
+    let points = smoothed["points"] as! [String: [String: Any]]
+    check(
+      abs((points["batteryWhPerKm"]!["value"] as! Double) - (100 - 25 / Double(seconds))) < 0.000001,
+      "single-point smoothing loads full context")
+    check((smoothed["averages"] as! [String: Any])["batteryWhPerKm"] is NSNull, "graph query skips totals")
+  }
+
+  let selected = try monitor.readEnergyPerDistance(request(ride.id, metrics: [], from: 60, to: 120))
+  let selectedStats = selected["statistics"] as! [String: [String: Any]]
+  check(
+    abs((selectedStats["batteryWhPerKm"]?["ratio"] as? Double ?? -1) - 30 / 0.5975) < 1e-8,
+    "A-B recomputes the ratio of totals")
+}
+
+do {
+  let ride = try archive.create(
     startedAt: start, indoor: false, watchEnabled: true, saveToHealth: false,
     recordGPS: true, sampleHz: 8, distanceSource: "gps:phone", batteryConsumptionSource: "calculated")
   let id = ride.id
@@ -727,9 +823,14 @@ do {
   for metric in WorkoutDistanceStore.batteryMetrics {
     check(initial.battery[metric]?.total == 0, "first valid input supplies zero for " + metric)
   }
-  for index in 0...2 { try location(id, time: Double(index), longitude: Double(index) * 0.00005) }
+  for index in 0...2 { try location(id, time: Double(index), longitude: Double(index) * 0.00005, speed: 2) }
   try batteryFrame(1, 25.1, 1002)
   try batteryFrame(2, 25.2, 1004)
+  let consumption = try monitor.readEnergyPerDistance(request(id, metrics: [], from: 1, to: 1))
+  let consumptionPoints = consumption["points"] as! [String: [String: Any]]
+  check(
+    consumptionPoints["batteryWhPerKm"]?["value"] as? Double == 25,
+    "instantaneous consumption uses selected GPS speed rather than controller speed or chord speed")
   let all = ["distanceMeters", "gpsDistanceMeters", "controllerDistanceMeters"] + WorkoutDistanceStore.batteryMetrics
   let chart = try settledPlot(request(id, metrics: all, from: 0, to: 2))
   for metric in all { check(!points(chart, metric: metric).isEmpty, "independent derived plot " + metric) }
@@ -769,7 +870,7 @@ do {
   let full = try distance.snapshot(id: id)
   check(
     abs((full.battery["controllerEnergyWh"]?.total ?? -1) - 6) < 1e-9,
-    "counter reconnect rebases without catch-up")
+    "an impossible counter jump at a reconnect rebases without catch-up")
   try store.transaction { db in
     try db.execute(
       "DELETE FROM distance_points WHERE generation_id IN (SELECT storage_id FROM distance_generations WHERE collection_id=?)",
@@ -785,6 +886,43 @@ do {
     startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false,
     recordGPS: false, sampleHz: 8)
   check(try distance.snapshot(id: next.id).battery.isEmpty, "new ride never inherits old consumption")
+}
+do {
+  let ride = try archive.create(
+    startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false,
+    recordGPS: false, sampleHz: 8)
+  func frame(_ time: Double, _ ah: Double, _ wh: Double, connection: String) throws {
+    try append(
+      ride.id, time: time, kind: "telemetry", source: "controller",
+      payload: [
+        "humanPowerW": .number(100), "cadenceRpm": .number(80),
+        "consumedAh": .number(ah), "consumedWh": .number(wh), "batteryCurrentA": .number(3.6),
+        "batteryVoltageV": .number(50), "motorInputPowerW": .number(180), "controllerSpeedMps": .number(5),
+        "controllerModel": .string("X6"), "controllerProtocol": .string("5.3"),
+        "captureSessionID": .string(ride.id), "connectionEpoch": .string(connection),
+        "clockEpoch": .string("clock"), "observationSequence": .string(String(Int(time * 8) + 1)),
+        "monotonicSeconds": .number(time),
+      ])
+  }
+  try frame(0, 25, 1000, connection: "first")
+  try frame(1, 25.02, 1001, connection: "first")
+  try frame(6, 25.08, 1004, connection: "second")
+  try frame(7, 25.1, 1005, connection: "second")
+  _ = try archive.finish(id: ride.id, endedAt: start.addingTimeInterval(7))
+  let bridged = try distance.snapshot(id: ride.id)
+  check(
+    abs((bridged.battery["controllerEnergyWh"]?.total ?? -1) - 5) < 1e-9,
+    "a short link loss keeps the energy counter's own increase")
+  check(
+    abs((bridged.battery["controllerChargeAh"]?.total ?? -1) - 0.1) < 1e-9,
+    "a short link loss keeps the charge counter's own increase")
+  check(
+    abs((bridged.battery["calculatedEnergyWh"]?.total ?? -1) - 0.1) < 1e-9,
+    "calculated energy still excludes the link loss")
+  let crossing = try monitor.rangeStats(request(ride.id, metrics: ["controllerEnergyWh"], from: 3, to: 7))
+  check(
+    statistics(crossing, metric: "controllerEnergyWh")?["unresolvedBoundary"] as? Bool == true,
+    "a range starting inside the link loss cannot split the counter increase")
 }
 print("Swift derived distance/consumption regressions passed")
 

@@ -229,6 +229,22 @@ expect(
   try MetricCatalog.shared.format(id: "humanPowerW", value: nil) == metricsContract["unavailableText"] as! String,
   "an absent Kotlin value formats as unavailable")
 
+let logContract = try contractFixture("diagnostic-log")
+expect(
+  logContract["maximumFileBytes"] as? Int == TelemetryDiagnosticLog.maximumFileBytes,
+  "diagnostic files keep the shared size")
+expect(
+  logContract["events"] as? [String] == TelemetryDiagnosticEvent.allCases.map(\.rawValue)
+    && logContract["reasons"] as? [String] == TelemetryDiagnosticReason.allCases.map(\.rawValue),
+  "diagnostic events and reasons match Android")
+expect(
+  Set(logContract["numbers"] as! [String]) == TelemetryDiagnosticLog.numberFields
+    && Set(logContract["booleans"] as! [String]) == TelemetryDiagnosticLog.booleanFields
+    && (logContract["strings"] as! [String: [String]]).mapValues(Set.init) == TelemetryDiagnosticLog.stringFields
+    && Set(logContract["errorDomains"] as! [String]) == TelemetryDiagnosticLog.errorDomains
+    && TelemetryDiagnosticLog.safeErrorDomain("Unknown") == logContract["unknownErrorDomain"] as? String,
+  "diagnostic fields match Android")
+
 let sessionContract = try contractFixture("session")
 let neutralSession = TelemetrySession(protocol: try FixtureControllerProtocol(sessionContract))
 expect(

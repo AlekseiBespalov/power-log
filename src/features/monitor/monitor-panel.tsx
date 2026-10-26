@@ -1,5 +1,7 @@
+import type { EnergySmoothingSeconds } from '../../core/energy-per-distance';
+import { withEnergySmoothing } from '../../services/energy-per-distance-monitor';
 import { isConsumptionMetric } from '../../core/consumption';
-import { memo, useMemo, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { ModalDialog } from '../../components/modal-dialog';
 import { MonitorCharts } from '../../components/monitor-charts';
@@ -7,7 +9,6 @@ import { Icon } from '../../components/icon';
 import { Body, Card, colors, Label, Metric, Pressable, type, lineHeight } from '../../components/ui';
 import {
   controllerSpeedPreferenceId,
-  monitorQueryMetrics,
   resolveMonitorMetrics,
   currentMonitorPoint,
   formatMetric,
@@ -18,6 +19,8 @@ import {
   type MonitorSource,
   type MonitorViewId,
 } from '../../core/monitor';
+import { groupMonitorMetrics } from '../../core/monitor-chart';
+import { monitorChartEstimate, monitorChartVisibility, monitorGroupMetrics } from '../../core/monitor-visibility';
 import { useMonitorPreferences } from '../../services/monitor-preferences';
 import { MonitorEditor } from './monitor-editor';
 import { useMonitorData } from './use-monitor-data';
@@ -76,8 +79,13 @@ function MonitorPanelContent({
   const desktop = Platform.OS === 'web' && size.width >= 760;
   const sidebar = desktop && size.width >= 1100 && view.charts.length > 0 && view.numbers.length > 0;
   const range = source.live ? view.range : preferences.historyRange;
-  const metrics = useMemo(() => monitorQueryMetrics([...view.numbers, ...view.charts]), [view.numbers, view.charts]);
-  const monitor = useMonitorData(source, metrics, range, plotWidth);
+  const metrics = useMemo(() => [...new Set([...view.numbers, ...view.charts])], [view.numbers, view.charts]);
+  const [energySmoothingSeconds, setEnergySmoothingSeconds] = useState<EnergySmoothingSeconds>(0);
+  const displaySource = useMemo(
+    () => withEnergySmoothing(source, energySmoothingSeconds),
+    [source, energySmoothingSeconds],
+  );
+  const monitor = useMonitorData(displaySource, metrics, range, plotWidth);
   const rawSpeedFallback =
     !!monitor.description?.availableMetrics.includes('speedRaw') &&
     !monitor.description.availableMetrics.includes('controllerSpeedMps');
@@ -88,6 +96,25 @@ function MonitorPanelContent({
   const chartIds = useMemo(
     () => resolveMonitorMetrics(view.charts, rawSpeedFallback ? ['speedRaw'] : []),
     [view.charts, rawSpeedFallback],
+  );
+  const chartKey = chartIds.join(',');
+  const firstScreen = useMemo(() => {
+    const groups = groupMonitorMetrics(chartIds, preferences.speedUnit);
+    const ids = groups.map(group => group.id);
+    return monitorGroupMetrics(
+      groups,
+      monitorChartVisibility(ids, new Map(), size.height, monitorChartEstimate(140)).read,
+    );
+  }, [chartIds, preferences.speedUnit, size.height]);
+  const [reportedMetrics, setReportedMetrics] = useState<{ charts: string; metrics: string[] }>();
+  const visibleMetrics = reportedMetrics?.charts === chartKey ? reportedMetrics.metrics : firstScreen;
+  const { setVisibleMetrics } = monitor;
+  useEffect(() => {
+    setVisibleMetrics(visibleMetrics);
+  }, [setVisibleMetrics, visibleMetrics]);
+  const reportVisibleMetrics = useCallback(
+    (visible: string[]) => setReportedMetrics({ charts: chartKey, metrics: visible }),
+    [chartKey],
   );
   const columns = sidebar
     ? 1
@@ -236,8 +263,8 @@ function MonitorPanelContent({
       {numberIds.map(id => {
         const metric = metricById(id, preferences.speedUnit)!;
         const point = currentMonitorPoint(
-          monitor.latest?.[id],
-          source.live && metric.semantics !== 'distance' && !isConsumptionMetric(id),
+          metric.semantics === 'ratio' ? monitor.averages?.[id] : monitor.latest?.[id],
+          source.live && metric.semantics !== 'distance' && metric.semantics !== 'ratio' && !isConsumptionMetric(id),
           monitor.monotonicAt,
           metric.gapSeconds,
           monitor.liveAcquiredAt[id],
@@ -245,6 +272,7 @@ function MonitorPanelContent({
         );
         const bike =
           metric.semantics !== 'distance' &&
+          metric.semantics !== 'ratio' &&
           !isConsumptionMetric(id) &&
           ![
             'heartRateBpm',
@@ -271,7 +299,7 @@ function MonitorPanelContent({
             <Metric
               label={metric.label}
               value={formatMetricPoint(metric, source.live && bike && !bikeAvailable ? null : point)}
-              unit={metric.unit}
+              unit={metric.semantics === 'ratio' ? `${metric.unit} · ride avg` : metric.unit}
               color={metric.color}
               style={{ flexBasis: 'auto' }}
             />
@@ -284,6 +312,8 @@ function MonitorPanelContent({
     <>
       {monitor.data && (!!view.charts.length || emptyState) && (
         <MonitorCharts
+          energySmoothingSeconds={energySmoothingSeconds}
+          onEnergySmoothingChange={setEnergySmoothingSeconds}
           emptyState={emptyState}
           resetKey={monitor.interactionVersion}
           data={monitor.data}
@@ -303,6 +333,7 @@ function MonitorPanelContent({
           availableHeight={desktop ? size.height - (embedded ? 420 : sidebar ? 246 : 340) : undefined}
           onReorderCharts={ids => updateView(view.id, { charts: ids.map(controllerSpeedPreferenceId) })}
           onPlotWidthChange={setPlotWidth}
+          onVisibleMetricsChange={reportVisibleMetrics}
         />
       )}
       {!monitor.data && emptyState && <Card>{emptyState}</Card>}
@@ -319,10 +350,16 @@ function MonitorPanelContent({
               .map(id => {
                 const metric = metricById(id, preferences.speedUnit)!,
                   stats = monitor.intervalStatistics[id]!;
-                if (metric.semantics === 'distance' || metric.semantics === 'cumulative')
+                if (
+                  metric.semantics === 'distance' ||
+                  metric.semantics === 'cumulative' ||
+                  metric.semantics === 'ratio'
+                )
                   return (
                     <Text key={id} style={{ color: colors.muted, fontSize: type.caption }}>
-                      {metric.label} A–B · {formatMetric(metric, stats.amount ?? stats.distance)} {metric.unit}
+                      {metric.label} A–B · {formatMetric(metric, stats.ratio ?? stats.amount ?? stats.distance)}{' '}
+                      {metric.unit}
+                      {metric.semantics === 'ratio' && stats.partial ? ' · partial' : ''}
                     </Text>
                   );
                 if (!metricAllowsMean(metric)) return null;
@@ -357,7 +394,7 @@ function MonitorPanelContent({
         >
           {!!view.numbers.length && (
             <View style={{ width: sidebar ? 208 : '100%', gap: 12 }}>
-              <Label>{source.live ? 'Latest readings' : 'Final readings'}</Label>
+              <Label>Readings</Label>
               {numbers}
             </View>
           )}

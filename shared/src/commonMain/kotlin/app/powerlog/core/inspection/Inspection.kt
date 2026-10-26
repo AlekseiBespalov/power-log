@@ -25,7 +25,7 @@ object InspectionMetrics {
             BatteryConsumptionPolicy.isMetric(metric)
 
     private val plotGapsUs: Map<String, Long> =
-        MetricCatalog.all.associate { it.id to FixedPoint.timeUs(it.gapSeconds) }
+        MetricCatalog.all.associate { it.id to FixedPoint.timeUs(it.plotGapSeconds ?: it.gapSeconds) }
 
     @Throws(IllegalArgumentException::class)
     fun policy(metric: String): InspectionPolicy {
@@ -130,6 +130,19 @@ private constructor(
         get() = reference?.reference ?: original.observationId
 
     internal fun identity(): String = retainedOriginal?.observationId ?: requireNotNull(reference).observationId()
+
+    internal fun withIdentity(identity: (Long) -> String): InspectionPoint =
+        reference?.let {
+            InspectionPoint(
+                timeUs,
+                null,
+                continuity,
+                producer,
+                sequence,
+                MetricValueReference(it.reference, it.value, identity),
+                interruptionBoundary,
+            )
+        } ?: this
 
     override fun equals(other: Any?): Boolean =
         other is InspectionPoint &&
@@ -601,11 +614,17 @@ constructor(
     val buckets: Int,
     val pointLimit: Int = 16384,
     val owned: Boolean = false,
-    private val identity: ((Long) -> String)? = null,
+    internal val identity: ((Long) -> String)? = null,
     val alignedSlotUs: Long? = null,
 ) {
     private var capacityExceeded = false
     private var previous: InspectionPoint? = null
+    internal var firstPoint: InspectionPoint? = null
+        private set
+
+    internal val lastPoint: InspectionPoint?
+        get() = previous
+
     private var segment = 0
     private var broken = false
     private var firstRawUs: Long? = null
@@ -703,11 +722,12 @@ constructor(
         retainViewport(InspectionPlotPoint(admitted, plotSegment, tieKey))
     }
 
+    internal fun admits(timeUs: Long): Boolean =
+        lastRawUs?.let { timeUs >= it } != false && mergedThrough?.let { timeUs >= it } != false
+
     private fun admitRaw(timeUs: Long): Boolean {
         if (owned && (timeUs < range.startUs || timeUs >= range.endUs)) return false
-        require(lastRawUs?.let { timeUs >= it } != false && mergedThrough?.let { timeUs >= it } != false) {
-            "Plot originals must be ordered and disjoint"
-        }
+        require(admits(timeUs)) { "Plot originals must be ordered and disjoint" }
         if (firstRawUs == null) firstRawUs = timeUs
         lastRawUs = timeUs
         return true
@@ -744,6 +764,7 @@ constructor(
         val old = previous
         if (old != null && (broken || InspectionOrder.startsSegment(metric, old, point, course = true))) segment++
         broken = false
+        if (firstPoint == null) firstPoint = point
         previous = point
         retainViewport(InspectionPlotPoint(point, segment))
     }
@@ -790,7 +811,15 @@ constructor(
     }
 
     @Throws(IllegalArgumentException::class, ArithmeticException::class, InspectionCapacityException::class)
-    fun merge(aggregate: InspectionPlotAggregate) {
+    fun merge(aggregate: InspectionPlotAggregate) = merge(aggregate, null, null)
+
+    // An aggregate keeps coincident originals in plot order, so only the caller that reduced it knows which of them
+    // arrived first and last; course segments continue from those originals' values.
+    internal fun merge(
+        aggregate: InspectionPlotAggregate,
+        arrivedFirst: InspectionPoint?,
+        arrivedLast: InspectionPoint?,
+    ) {
         require(canMerge(aggregate)) { "Aggregate needs children or raw boundary originals" }
         mergedThrough = aggregate.range.endUs
         if (aggregate.firstRawUs == null) return
@@ -806,7 +835,7 @@ constructor(
         if (InspectionMetrics.isProjected(metric)) {
             for (point in aggregate.points) add(point)
             segment = aggregate.points.last().segment
-            previous = aggregate.points.last().point
+            previous = arrivedLast ?: aggregate.points.last().point
             broken = aggregate.trailingBarrier
             return
         }
@@ -818,18 +847,20 @@ constructor(
                     ?: plotOrder(a, b)
             }
         val first = ordered.first()
+        val continued = arrivedFirst ?: first.point
         val old = previous
         if (
             old != null &&
                 (broken ||
                     aggregate.leadingBarrier ||
-                    InspectionOrder.startsSegment(metric, old, first.point, course = true))
+                    InspectionOrder.startsSegment(metric, old, continued, course = true))
         )
             segment++
+        if (firstPoint == null) firstPoint = continued
         val offset = segment - first.segment
         for (point in ordered) add(InspectionPlotPoint(point.point, point.segment + offset))
         segment = ordered.last().segment + offset
-        previous = ordered.last().point
+        previous = arrivedLast ?: ordered.last().point
         broken = aggregate.trailingBarrier
     }
 
@@ -901,7 +932,26 @@ constructor(
         }
         val points = (retained.values + listOfNotNull(predecessor, after)).distinctBy { it.key }.sortedWith(::plotOrder)
         if (points.size > pointLimit) overflow()
-        return points
+        return if (owned || !BatteryConsumptionPolicy.isMetric(metric)) points else continued(points)
+    }
+
+    // Battery totals restart their segment at every reconnect. Only the drawn result joins segments across short
+    // gaps: aggregates keep the stored segments, so a merge flushes at the same boundaries as a direct reduction.
+    private fun continued(points: List<InspectionPlotPoint>): List<InspectionPlotPoint> {
+        val gap = InspectionMetrics.plotGapUs(metric)
+        var previous: InspectionPlotPoint? = null
+        var segment = points.firstOrNull()?.segment ?: 0
+        return points.map { point ->
+            val old = previous
+            if (
+                old != null &&
+                    point.segment != old.segment &&
+                    FixedPoint.subtract(point.point.timeUs, old.point.timeUs) >= gap
+            )
+                segment++
+            previous = point
+            point.copy(segment = segment)
+        }
     }
 
     @Throws(IllegalArgumentException::class, InspectionCapacityException::class)

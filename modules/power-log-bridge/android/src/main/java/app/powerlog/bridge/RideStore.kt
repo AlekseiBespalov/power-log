@@ -119,6 +119,7 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
 
     private val path = name?.let { context.getDatabasePath(it).path } ?: ":memory:"
     val analytics = RideAnalytics(this)
+    val energy = RideEnergyPerDistance(this)
     val summaries = RideSummaryCache(name?.let { File("$path.summaries") })
 
     fun publishSummary(pin: AnalysisPin, summary: Payload) {
@@ -1199,7 +1200,11 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
                 }
             }
         }
-            .also { summaries.remove(id) }
+            .also {
+                summaries.remove(id)
+                analytics.summaries.forget(id)
+                energy.forget(id)
+            }
         if (discard) removeRecords() else synchronized(healthExecutorLock) { removeRecords() }
     }
 

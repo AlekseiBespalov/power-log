@@ -6,6 +6,7 @@ import {
   GPS,
   HEART_RATE,
   RecordEmitter,
+  fitRecords,
   TELEMETRY,
   WitnessTie,
   mergeWitnesses,
@@ -173,7 +174,7 @@ function replay(prefix: WitnessRows[], tied: WitnessRows[], interval: number, as
     message: (_: string, values: Float64Array, developer: Float64Array) => written.push([...values, ...developer]),
     drain: async () => undefined,
   } as unknown as FitWriter;
-  const emitter = new RecordEmitter(writer, clock(), interval, () => undefined);
+  const emitter = new RecordEmitter(fitRecords(writer, clock()), clock(), interval, () => undefined);
   const planner = new WitnessSeconds();
   for (const item of prefix) {
     emitter.witnesses(item, 0, 1);

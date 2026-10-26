@@ -937,6 +937,61 @@ export declare namespace AnalyticsConsumptionReducer {
         const constructor: abstract new () => AnalyticsConsumptionReducer;
     }
 }
+export declare function analyticsEnergyContextSeconds(seconds: number): number;
+export declare function analyticsEnergyCheckpointMarginUs(): string;
+export declare class AnalyticsEnergyPerDistanceCheckpoint {
+    private constructor();
+    get throughUs(): string;
+}
+export declare namespace AnalyticsEnergyPerDistanceCheckpoint {
+    /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
+    namespace $metadata$ {
+        const constructor: abstract new () => AnalyticsEnergyPerDistanceCheckpoint;
+    }
+}
+export declare class AnalyticsEnergyPerDistance {
+    constructor(startUs: string, endUs: string, buckets: Nullable<number>, timerUs: string, controllerSpeed: boolean, smoothingSeconds: number, includeTotals?: boolean, checkpoint?: Nullable<AnalyticsEnergyPerDistanceCheckpoint>, alignedSlotUs?: Nullable<string>);
+    distance(start: string, end: string, meters: number, speed0: Nullable<number>, speed1: Nullable<number>): void;
+    battery(start: string, end: string, wh: number, rate0: Nullable<number>, rate1: Nullable<number>, indivisible: boolean, timestamp: string): void;
+    speed(time: string, mps: Nullable<number>, accuracy: Nullable<number>, active: Nullable<number>): void;
+    telemetry(time: string, watts: Nullable<number>, batteryWatts: Nullable<number>, speedMps: Nullable<number>, active: Nullable<number>, continuity: Nullable<string>, timestamp: string): void;
+    checkpoint(): AnalyticsEnergyPerDistanceCheckpoint;
+    resultJson(): string;
+}
+export declare namespace AnalyticsEnergyPerDistance {
+    /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
+    namespace $metadata$ {
+        const constructor: abstract new () => AnalyticsEnergyPerDistance;
+    }
+}
+export declare class AnalyticsEnergyPerDistanceSeries {
+    constructor(controllerSpeed: boolean, smoothingSeconds: number, includeTotals: boolean, pointBudget?: number);
+    get valid(): boolean;
+    get throughUs(): string;
+    get retainedPoints(): number;
+    begin(endUs: string, timerUs: string, buckets: number, alignedSlotUs: Nullable<string>): AnalyticsEnergyPerDistanceSeriesRead;
+}
+export declare namespace AnalyticsEnergyPerDistanceSeries {
+    /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
+    namespace $metadata$ {
+        const constructor: abstract new () => AnalyticsEnergyPerDistanceSeries;
+    }
+}
+export declare class AnalyticsEnergyPerDistanceSeriesRead {
+    private constructor();
+    distance(start: string, end: string, meters: number, speed0: Nullable<number>, speed1: Nullable<number>): void;
+    battery(start: string, end: string, wh: number, rate0: Nullable<number>, rate1: Nullable<number>, indivisible: boolean, timestamp: string): void;
+    speed(time: string, mps: Nullable<number>, accuracy: Nullable<number>, active: Nullable<number>): void;
+    telemetry(time: string, watts: Nullable<number>, batteryWatts: Nullable<number>, speedMps: Nullable<number>, active: Nullable<number>, continuity: Nullable<string>, timestamp: string): void;
+    cut(): void;
+    resultJson(): string;
+}
+export declare namespace AnalyticsEnergyPerDistanceSeriesRead {
+    /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
+    namespace $metadata$ {
+        const constructor: abstract new () => AnalyticsEnergyPerDistanceSeriesRead;
+    }
+}
 export declare function controllerStreamStatus(requested: boolean, phase: string, age: Nullable<number>): string;
 export declare function gpsStreamStatus(requested: boolean, phase: string, age: Nullable<number>, accuracy: Nullable<number>, providerStatus: Nullable<string>): string;
 export declare class HealthEnergyConsumption {
@@ -1185,6 +1240,29 @@ export declare namespace InspectionPlotQuery {
     /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
     namespace $metadata$ {
         const constructor: abstract new () => InspectionPlotQuery;
+    }
+}
+export declare function inspectionPlotSlotUs(startUs: string, endUs: string, buckets: number): Nullable<string>;
+export declare function inspectionPlotBuckets(requested: number, metrics: number): number;
+export declare function inspectionPlotPointLimit(metrics: number): number;
+export declare class InspectionPlotSlotSummary {
+    constructor(metric: string, maximumSlots?: number, pointBudget?: number);
+    get slotUs(): string;
+    get firstRawUs(): Nullable<string>;
+    get lastRawUs(): Nullable<string>;
+    get rawInputs(): string;
+    get retainedPoints(): number;
+    get overflowed(): boolean;
+    append(item: AnalyticsItem, selected: boolean, interruptionBoundary?: boolean): void;
+    appendOriginal(item: InspectionOriginalInput, selected: boolean, interruptionBoundary?: boolean): void;
+    appendDistance(point: InspectionDistanceBoundary): void;
+    canMergeInto(query: InspectionPlotQuery): boolean;
+    mergeInto(query: InspectionPlotQuery): void;
+}
+export declare namespace InspectionPlotSlotSummary {
+    /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
+    namespace $metadata$ {
+        const constructor: abstract new () => InspectionPlotSlotSummary;
     }
 }
 export declare class InspectionRequestContext {
@@ -1711,6 +1789,7 @@ export declare class CoreMetricDeclaration {
     get zero(): Nullable<boolean>;
     get semantics(): Nullable<string>;
     get description(): Nullable<string>;
+    get plotGapSeconds(): Nullable<number>;
 }
 export declare namespace CoreMetricDeclaration {
     /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */

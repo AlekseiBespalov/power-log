@@ -87,7 +87,7 @@ internal class RideConsumption(private val store: RideStore) {
                     store.revision(ride),
                 ),
             )
-            store.analytics.changed(ride, interval.endUs / 1_000_000.0, listOf(interval.metric))
+            store.analytics.intervalChanged(ride, interval.startUs, interval.endUs, listOf(interval.metric))
         }
         store.writableDatabase.execSQL(
             "INSERT OR REPLACE INTO battery_state VALUES(?,?,?)",
@@ -202,7 +202,7 @@ internal class RideConsumption(private val store: RideStore) {
         // Only crossing intervals need numerical clipping; fully contained intervals use cumulative prefixes.
         for (boundary in listOf(a, b).distinct()) store.select(
             "SELECT * FROM battery_intervals WHERE ride=? AND metric=? AND end_us>? AND end_us<=? AND start_us<? AND ${visible(revision)} ORDER BY end_us,to_id",
-            arrayOf(id, metric, boundary, boundary + DistancePolicy.maximumControllerIntervalUs, boundary),
+            arrayOf(id, metric, boundary, boundary + BatteryConsumptionPolicy.maximumCounterEdgeUs, boundary),
         ) { c ->
             while (c.moveToNext()) {
                 val interval = c.interval()
@@ -238,8 +238,8 @@ internal class RideConsumption(private val store: RideStore) {
 
     fun boundaries(id: String, metric: String, startUs: Long, endUs: Long): List<DistanceInspectionPoint> {
         val upper =
-            if (endUs > Long.MAX_VALUE - DistancePolicy.maximumControllerIntervalUs) Long.MAX_VALUE
-            else endUs + DistancePolicy.maximumControllerIntervalUs
+            if (endUs > Long.MAX_VALUE - BatteryConsumptionPolicy.maximumCounterEdgeUs) Long.MAX_VALUE
+            else endUs + BatteryConsumptionPolicy.maximumCounterEdgeUs
         return store.select(
             "SELECT d.*,a.event_id AS start_event,a.timestamp AS start_stamp,a.time AS start_time,b.event_id AS end_event,b.timestamp AS end_stamp,b.time AS end_time FROM battery_intervals d JOIN observations a ON a.id=d.from_id JOIN observations b ON b.id=d.to_id WHERE d.ride=? AND d.metric=? AND d.end_us>=? AND d.end_us<=? AND d.start_us<=? AND d.revision<=? AND (d.retired_revision IS NULL OR d.retired_revision>?) ORDER BY d.end_us,d.to_id",
             arrayOf(id, metric, startUs, upper, endUs, store.readRevision(id), store.readRevision(id)),

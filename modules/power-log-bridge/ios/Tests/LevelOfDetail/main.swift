@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import PowerLogCore
 
 try runStoredPyramidPersistenceFixture()
 
@@ -29,7 +30,7 @@ for offset in stride(from: 0, to: 32_000, by: 256) {
   _ = try db.appendBatch(events)
 }
 let reader = MonitorDataStore(root: root)
-func q(_ start: Double = 0, _ end: Double = 3999.875, _ buckets: Int = 64) -> MonitorRequest {
+func q(_ start: Double = 0.01, _ end: Double = 3999.875, _ buckets: Int = 64) -> MonitorRequest {
   MonitorRequest(
     source: "workout", id: ride.id, startSeconds: start, endSeconds: end, metrics: ["humanPowerW"], buckets: buckets)
 }
@@ -95,15 +96,16 @@ check(
   constrainedAfter["pyramidOriginalPoints"] == constrainedBefore["pyramidOriginalPoints"],
   "exact statistics never evict navigation summaries under memory pressure")
 check(
-  constrainedAfter["pyramidEntries"] == 1 && constrainedAfter["nativeAdapterBytes"]! <= 512 * 1024,
+  constrainedAfter["pyramidEntries"] == 1
+    && constrainedAfter["nativeAdapterBytes"]! <= constrainedAfter["nativeAdapterByteLimit"]!,
   "exact reads stream within the native adapter storage limit")
 let beforeAppend = reader.projectionDiagnostics()["pyramidOriginalPoints"]!
 _ = try db.appendBatch((0..<8).map { try event(4000 + Double($0) / 8, value: 77) })
-_ = try points(q(0, 4000.875, 62))
+_ = try points(q(0.01, 4000.875, 62))
 check(
   reader.projectionDiagnostics()["pyramidOriginalPoints"]! - beforeAppend == 8, "live append extends only the new tail")
 try archive.append(event(2222.0125, value: -1000))
-let corrected = try points(q(0, 4000.875, 61))
+let corrected = try points(q(0.01, 4000.875, 61))
 check(
   corrected.contains { $0["value"] as? Double == -1000 && $0["elapsedSeconds"] as? Double == 2222.0125 },
   "late submillisecond extrema rebuild affected hierarchy")
@@ -115,7 +117,7 @@ check(
   ((exact["points"] as? [String: [String: Any]])?["humanPowerW"])?["value"] as? Double == -1000,
   "cursor still reads original values")
 _ = try archive.finish(id: ride.id, endedAt: origin.addingTimeInterval(4001))
-_ = try points(q(0, 4000.875, 60))
+_ = try points(q(0.01, 4000.875, 60))
 PowerLogStore.evictSharedForTesting(databaseURL: archive.store.databaseURL)
 let reopened = MonitorDataStore(root: root)
 let restored = try reopened.readPlot(q(0.02, 3999.8, 63))
@@ -378,7 +380,9 @@ func checkBarriers(_ monitor: MonitorDataStore, _ message: String) throws {
   check(!rows.contains { ($0["value"] as! Double) == 0 }, "Invalid heart readings are barriers without plotted zeros")
 }
 try checkBarriers(reader, "Pyramid keeps missing-only and invalid-only leaf barriers")
-let barrierKey = "lod|workout:" + barriersRide.id + "|heartRateBpm|phone|raw"
+let barrierKey =
+  "lod|workout:" + barriersRide.id + "|heartRateBpm|phone|raw|"
+  + String(try InspectionMetrics.shared.plotGapUs(metric: "heartRateBpm"))
 let barrierBytes = try db.read { sql in
   try sql.rows("SELECT value FROM derived_cache WHERE key=?", [.text(barrierKey)], limit: 1).first!.data("value")!
 }

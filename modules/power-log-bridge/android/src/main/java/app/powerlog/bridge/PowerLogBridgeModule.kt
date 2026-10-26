@@ -190,8 +190,10 @@ class PowerLogBridgeModule internal constructor(private val engineProvider: (() 
         OnNewIntent { intent -> notificationIntent(intent) }
         OnActivityEntersForeground {
             engine.foreground()
+            engine.handler.post { engine.bluetooth.setBackground(false) }
             notificationIntent(appContext.currentActivity?.intent)
         }
+        OnActivityEntersBackground { engine.handler.post { engine.bluetooth.setBackground(true) } }
         AsyncFunction("finishExternalWorkoutAction") { input: Payload, discard: Boolean, promise: Promise ->
             submit(promise, "finish") { engine.externalAction(externalRequest(input), true, discard) }
         }
@@ -252,6 +254,11 @@ class PowerLogBridgeModule internal constructor(private val engineProvider: (() 
         }
         AsyncFunction("readBluetoothTrace") { promise: Promise ->
             submit(promise, "read") { engine.bluetooth.readBluetoothTrace() }
+        }
+        AsyncFunction("readConnectionDiagnostics") { promise: Promise ->
+            submit(promise, engine.reads::execute, "read") {
+                mapOf("log" to engine.bluetooth.diagnosticLog.read(), "device" to diagnosticDevice(engine.context))
+            }
         }
         AsyncFunction("startScan") { promise: Promise ->
             permissions(false, false, promise, "bike") {
@@ -374,6 +381,7 @@ class PowerLogBridgeModule internal constructor(private val engineProvider: (() 
                 "readMonitorPlot" to MonitorOperation.Plot,
                 "inspectMonitorAt" to MonitorOperation.Inspect,
                 "readMonitorRangeStats" to MonitorOperation.Stats,
+                "readMonitorEnergyPerDistance" to MonitorOperation.EnergyPerDistance,
                 "monitorChangesSince" to MonitorOperation.Changes,
             )
             .forEach { (name, kind) ->
@@ -382,7 +390,7 @@ class PowerLogBridgeModule internal constructor(private val engineProvider: (() 
                         val input = BridgeInputs.monitor(kind, options)
                         val cancellationId =
                             options["cancellationId"] as? String ?: java.util.UUID.randomUUID().toString()
-                        engine.monitorReads.submit(summaryOwner, cancellationId, kind, promise) {
+                        engine.monitorReads.submit(summaryOwner, cancellationId, input, promise) {
                             engine.awaitReady()
                             engine.monitorQuery(input)
                         }
