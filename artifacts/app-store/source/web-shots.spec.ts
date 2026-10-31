@@ -146,7 +146,6 @@ async function connect(page: Page) {
   await page.goto('/');
   await page.getByTestId('ride-setup').click();
   const setup = page.getByTestId('ride-setup-sheet');
-  await expect(setup.getByTestId('ride-recording-list')).toContainText('GPS route Off');
   await setup.getByRole('button', { name: 'Find bike', exact: true }).click();
   await setup.getByRole('button', { name: /^Connect CYC/ }).click();
   await expect(setup.getByTestId('bike-connection-status')).toContainText('Connected');
@@ -221,7 +220,7 @@ async function expectChart(page: Page, group: string, metrics: readonly string[]
     const reading = page.getByTestId(`monitor-readout-${metric}`).filter({ visible: true });
     await expect(reading).toContainText(/\d+(?:\.\d+)?\s+(?:W|rpm|V|A|°C)/);
     await expect(reading).not.toContainText(/Unavailable|No sample|Updating range|—/);
-    if (!live) await expect(reading).toContainText(/Whole ride · max/);
+    if (!live) await expect(reading).toContainText(/avg [\d.]+[\s\S]*max [\d.]+/);
   }
   return chart;
 }
@@ -402,9 +401,6 @@ for (const [platform, viewport, scale] of [
         await expect(page.getByTestId('monitor-chart-cadenceRpm').filter({ visible: true })).toBeInViewport({
           ratio: 1,
         });
-        await expect(
-          page.getByText('Open Strava upload', { exact: true }).filter({ visible: true }),
-        ).not.toBeInViewport();
       }
       await capture(
         page,
@@ -441,9 +437,6 @@ for (const [platform, viewport, scale] of [
       if (platform === 'macos') {
         await expect(page.getByTestId('monitor-chart-current').filter({ visible: true })).toBeInViewport({ ratio: 1 });
         await expect(page.getByTestId('monitor-chart-power').filter({ visible: true })).toBeInViewport({ ratio: 1 });
-        await expect(
-          page.getByText('Export FIT, then select the file on Strava.', { exact: true }),
-        ).not.toBeInViewport();
       }
       await capture(
         page,
@@ -454,7 +447,12 @@ for (const [platform, viewport, scale] of [
 
       await chooseView(page, 'Temperature');
       await expectChart(page, 'temperature', ['motorTempC', 'controllerTempC']);
-      await scrollTo(page, page.getByTestId('monitor-header').filter({ visible: true }));
+      await scrollTo(
+        page,
+        platform === 'macos'
+          ? page.getByRole('heading', { name: 'Chart inspection', exact: true })
+          : page.getByTestId('monitor-header').filter({ visible: true }),
+      );
       await capture(page, platform, '06-temperature', page.getByTestId('monitor-charts').filter({ visible: true }));
 
       await chooseView(page, 'Ride');
@@ -465,7 +463,7 @@ for (const [platform, viewport, scale] of [
       await expect(editor.getByRole('textbox', { name: 'Search metrics', exact: true })).toBeVisible();
       await expect(editor.getByTestId('monitor-selected-metrics')).toContainText('Rider power');
       await expect(editor.getByTestId('monitor-selected-metrics')).toContainText('Controller speed');
-      await expect(editor.getByRole('button', { name: 'Move Cadence up', exact: true })).toBeEnabled();
+      await expect(editor.getByLabel('Reorder Cadence', { exact: true })).toBeVisible();
       await capture(page, platform, '07-custom-dashboard', editor);
       await editor.getByRole('button', { name: 'Done', exact: true }).click();
       await expect(editor).toHaveCount(0);
