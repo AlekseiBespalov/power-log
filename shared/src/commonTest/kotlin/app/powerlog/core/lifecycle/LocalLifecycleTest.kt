@@ -150,6 +150,22 @@ class LocalLifecycleTest {
     }
 
     @Test
+    fun captureFlushesAtEightFramesOrOneSecondAfterTheOldest() {
+        assertEquals(0.0, CaptureBatch.flushDelaySeconds(8, 0.0))
+        assertEquals(0.75, CaptureBatch.flushDelaySeconds(1, 0.25))
+        assertEquals(0.0, CaptureBatch.flushDelaySeconds(1, 1.0))
+        assertEquals(0.0, CaptureBatch.flushDelaySeconds(7, 3.0))
+    }
+
+    @Test
+    fun onlyPreparingRunningAndPausedRidesRecord() {
+        assertEquals(
+            listOf("preparing", "running", "paused"),
+            LifecyclePhase.entries.map { it.name }.filter(app.powerlog.core.RideActions::recording),
+        )
+    }
+
+    @Test
     fun backwardWallClockDoesNotBlockLocalControlsOrFinish() {
         val state = running()
         val shifted = clock(10).copy(timestamp = Timestamps.parse("2025-12-31T23:59:00Z"))

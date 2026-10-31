@@ -104,6 +104,28 @@ class BluetoothPollingTest {
     }
 
     @Test
+    fun aBackgroundPreviewPollsAtOneHertzWhileARideKeepsItsRate() {
+        val handler = Handler(Looper.getMainLooper())
+        var recording = false
+        fun pollDelay(bluetooth: ControllerBluetooth) =
+            ControllerBluetooth::class
+                .java
+                .getDeclaredField("nextPollAt")
+                .apply { isAccessible = true }
+                .getLong(bluetooth) - SystemClock.elapsedRealtime()
+        ControllerAdapterFixture(handler, recording = { recording }).use { adapter ->
+            adapter.bluetooth.setBackground(true)
+            adapter.identity()
+            assertEquals(1000L, pollDelay(adapter.bluetooth))
+            adapter.bluetooth.setBackground(false)
+            assertEquals(250L, pollDelay(adapter.bluetooth))
+            recording = true
+            adapter.bluetooth.setBackground(true)
+            assertEquals(250L, pollDelay(adapter.bluetooth))
+        }
+    }
+
+    @Test
     fun repliesQueuedBehindCaptureKeepTheirOriginalRequestOwnership() {
         val handler = Handler(Looper.getMainLooper())
         val readings = mutableListOf<TelemetryReading>()

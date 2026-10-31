@@ -182,6 +182,7 @@ class RecordingEngineNotificationTest : RecordingEngineTestBase() {
         command {
             start()
             telemetry()
+            tick()
         }
         openNotificationService()
         assertEquals(
@@ -192,6 +193,7 @@ class RecordingEngineNotificationTest : RecordingEngineTestBase() {
             advanceTo(2)
             telemetry()
             engine.flush()
+            tick()
         }
         idleNotifications()
         command { advanceTo(21) }
@@ -221,6 +223,7 @@ class RecordingEngineNotificationTest : RecordingEngineTestBase() {
         val id = command {
             val id = start()
             telemetry()
+            tick()
             id
         }
         openNotificationService()
@@ -230,7 +233,10 @@ class RecordingEngineNotificationTest : RecordingEngineTestBase() {
         assertEquals("120 W · — bpm · 00:20", postedNotification().extras.getCharSequence(Notification.EXTRA_TEXT))
         val before = notificationPublications().size
         ShadowSystemClock.advanceBy(Duration.ofMillis(50))
-        command { telemetry(power = newPower) }
+        command {
+            telemetry(power = newPower)
+            tick()
+        }
         idleNotifications()
         assertEquals(before, notificationPublications().size)
         assertEquals("120 W · — bpm · 00:20", postedNotification().extras.getCharSequence(Notification.EXTRA_TEXT))
@@ -253,17 +259,39 @@ class RecordingEngineNotificationTest : RecordingEngineTestBase() {
         command {
             start()
             telemetry()
+            tick()
         }
         openNotificationService()
         val posted = notificationPublications().size
         ShadowSystemClock.advanceBy(Duration.ofMillis(14999))
-        command { telemetry(power = 200.0) }
+        command {
+            telemetry(power = 200.0)
+            tick()
+        }
         idleNotifications()
         assertEquals(posted, notificationPublications().size)
         assertEquals("120 W · — bpm", postedNotification().extras.getCharSequence(Notification.EXTRA_TEXT))
         ShadowSystemClock.advanceBy(Duration.ofMillis(1))
         idleNotifications()
         assertEquals(posted + 1, notificationPublications().size)
+        assertEquals("200 W · — bpm", postedNotification().extras.getCharSequence(Notification.EXTRA_TEXT))
+    }
+
+    @Test
+    fun aBackgroundTickRefreshesTheNotification() {
+        command { start() }
+        engine.setBackground(true)
+        command {
+            telemetry()
+            tick()
+        }
+        openNotificationService()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(15000))
+        command {
+            telemetry(power = 200.0)
+            tick()
+        }
+        idleNotifications()
         assertEquals("200 W · — bpm", postedNotification().extras.getCharSequence(Notification.EXTRA_TEXT))
     }
 
@@ -388,7 +416,10 @@ class RecordingEngineNotificationTest : RecordingEngineTestBase() {
         assertEquals("Bike unavailable", postedNotification().extras.getCharSequence(Notification.EXTRA_TITLE))
         val token = command { engine.state().str("controlToken") }
         ShadowSystemClock.advanceBy(Duration.ofMillis(1))
-        command { telemetry() }
+        command {
+            telemetry()
+            tick()
+        }
         idleNotifications()
         assertEquals("Recording", postedNotification().extras.getCharSequence(Notification.EXTRA_TITLE))
         assertEquals("120 W · — bpm", postedNotification().extras.getCharSequence(Notification.EXTRA_TEXT))

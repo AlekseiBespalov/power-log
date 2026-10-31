@@ -36,9 +36,7 @@ func frame(_ at: Double, sequence: Int) throws -> PowerLogCaptureFrame {
       "humanPowerW": 100.0 + Double(sequence), "cadenceRpm": 81.5,
       "batteryVoltageV": 52.8, "batteryCurrentA": Double(sequence) / 8, "motorInputPowerW": 211.2,
     ]), connectionEpoch: live, monotonic: at, wall: date)
-  return PowerLogCaptureFrame(
-    sample: sample, liveID: live, liveStartedAt: WorkoutCoding.timestamp(start), liveOrigin: origin,
-    liveElapsed: Double(sequence) / 8)
+  return PowerLogCaptureFrame(sample: sample, liveID: live, liveElapsed: Double(sequence) / 8)
 }
 func telemetry(_ archive: WorkoutArchive, _ id: String) throws -> [WorkoutEvent] {
   var events: [WorkoutEvent] = []
@@ -151,6 +149,9 @@ do {
     check(response == nil, "receiving Watch Start does not itself confirm recording")
     check(engine.state()["phase"] as? String == "preparing", "Watch Start waits for its native handshake")
     let sent = transport.sent.last { $0.kind == .start }!
+    check(
+      ControllerEngine.shared.queue.sync { ControllerEngine.shared.samplingOwner } == sent.rideID,
+      "a preparing ride owns the controller rate")
     check(sent.startRequestID == request, "Watch Start preserves its request identity through the handshake")
     transport.startCompletion?(
       .success(
@@ -519,9 +520,51 @@ do {
     check(stateBuilds == 0 && delivered == 1, "a background publish skips the bridge state")
     check(
       WorkoutLiveActivity.shared.published(id) == activity + 2, "undelivered publishes still refresh the Live Activity")
+    WorkoutLiveActivity.shared.publishes = false
+    transport.changed?()
+    WorkoutLiveActivity.shared.publishes = true
+    check(
+      WorkoutLiveActivity.shared.published(id) == activity + 2,
+      "a publication the Live Activity would not show is not built")
     engine.setBackground(false)
     check(stateBuilds == 1 && delivered == 2, "returning to the foreground delivers one fresh state")
   }
+  _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
+}
+for (failure, interrupts) in [
+  (PowerLogStorageError.busy as Error, false), (WorkoutDataError.invalid("Rejected sample"), false),
+  (PowerLogStorageError.sqlite(10, "disk I/O error"), true), (CocoaError(.fileWriteOutOfSpace), true),
+  (CocoaError(.coderInvalidValue), false),
+] {
+  let (engine, archive) = try make()
+  let id = try start(engine)
+  let at = try WorkoutCoding.date(archive.metadata(id: id).startedAt)
+  archive.store.beforeCommitForTesting = { throw failure }
+  engine.queue.sync {
+    WorkoutNativeHealth.latest.observation?(
+      id,
+      WorkoutCompanionObservation(
+        id: UUID().uuidString.lowercased(), timestamp: at, start: at, metric: "heartRateBpm",
+        identifier: "HKQuantityTypeIdentifierHeartRate", unit: "bpm", value: 121, cumulative: false))
+  }
+  archive.store.beforeCommitForTesting = nil
+  let phase = engine.queue.sync { engine.state()["phase"] as? String }
+  check(phase == (interrupts ? "interrupted" : "running"), "only storage errors interrupt a ride: \(failure)")
+  check(
+    ControllerEngine.shared.queue.sync { ControllerEngine.shared.samplingOwner } == (interrupts ? nil : id),
+    "an interrupted ride releases the controller rate: \(failure)")
+  _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
+}
+do {
+  let (engine, _) = try make()
+  let id = try start(engine)
+  _ = try engine.queue.sync { try engine.pause(expectedID: id) }
+  check(WorkoutLocation.latest.paused == true, "Pause lowers GPS accuracy")
+  check(
+    ControllerEngine.shared.queue.sync { ControllerEngine.shared.samplingOwner } == id,
+    "a paused ride keeps the controller rate")
+  _ = try engine.queue.sync { try engine.resume(expectedID: id) }
+  check(WorkoutLocation.latest.paused == false, "Resume restores GPS accuracy")
   _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
 }
 print(

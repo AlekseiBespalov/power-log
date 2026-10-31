@@ -1017,4 +1017,17 @@ class RecordingEngineLiveTest : RecordingEngineTestBase() {
         assertEquals(next, requireNotNull(engine.notificationState).rideId)
         assertNotEquals(running.controlToken, requireNotNull(engine.notificationState).controlToken)
     }
+
+    @Test
+    fun backgroundWithholdsBridgeEventsAndForegroundResendsTheLatestState() {
+        val events = mutableListOf<String>()
+        command { start() }
+        engine.listeners.add { name, _ -> events.add(name) }
+        engine.setBackground(true)
+        command { telemetry() }
+        assertEquals(emptyList<String>(), events)
+        engine.setBackground(false)
+        command {}
+        assertEquals(listOf("onSample", "onState", "onWorkoutState"), events)
+    }
 }

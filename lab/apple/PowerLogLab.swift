@@ -125,9 +125,7 @@ enum PowerLogLab {
           ]
           try await onEngine { engine in
             try engine.admitController(
-              PowerLogCaptureFrame(
-                sample: sample, liveID: live,
-                liveStartedAt: WorkoutCoding.timestamp(now), liveOrigin: uptime, liveElapsed: Double(index) / 8))
+              PowerLogCaptureFrame(sample: sample, liveID: live, liveElapsed: Double(index) / 8))
           }
           try await Task.sleep(nanoseconds: 125_000_000)
         }

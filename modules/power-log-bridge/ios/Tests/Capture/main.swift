@@ -20,7 +20,7 @@ func frame(_ seconds: Double) throws -> PowerLogCaptureFrame {
     ]), connectionEpoch: epoch,
     monotonic: 100 + seconds, wall: start.addingTimeInterval(seconds))
   return PowerLogCaptureFrame(
-    sample: sample, liveID: live, liveStartedAt: WorkoutCoding.timestamp(start), liveOrigin: 100, liveElapsed: seconds)
+    sample: sample, liveID: live, liveElapsed: seconds)
 }
 let archive = try WorkoutArchive(rootURL: root)
 let ride = try archive.create(
@@ -68,6 +68,57 @@ check(events.count == 258, "every 8 Hz original is retained")
 check(events[1].elapsedSeconds == 0.125, "sub-second time remains exact")
 check(events[1].number("humanPowerW") == 123.125, "sub-second values are never downsampled")
 check(events.last?.number("batteryCurrentA") == 4, "secondary controller quantities remain recorded")
+let racing = try archive.create(
+  startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 8)
+let racingRecorder = PowerLogCaptureRecorder(store: archive.store)
+racingRecorder.setDestination(PowerLogCaptureDestination(id: racing.id, generation: UUID(), timeline: anchor))
+let racingGate = DispatchSemaphore(value: 0)
+racingRecorder.queue.async { racingGate.wait() }
+for index in 0..<16 { try racingRecorder.admit(frame(40 + Double(index) / 8)) }
+var admittedDuringCommit = false
+archive.store.beforeCommitForTesting = {
+  guard !admittedDuringCommit else { return }
+  admittedDuringCommit = true
+  try racingRecorder.admit(frame(42))
+}
+racingGate.signal()
+let racingDeadline = Date().addingTimeInterval(5)
+while !racingRecorder.inbox.isEmpty && Date() < racingDeadline { usleep(10_000) }
+archive.store.beforeCommitForTesting = nil
+check(racingRecorder.inbox.isEmpty, "a frame admitted while the drain commits is drained without a barrier")
+try racingRecorder.barrier()
+check(try archive.metadata(id: racing.id).eventCount == 17, "the frame admitted during the commit is recorded")
+let barrierRide = try archive.create(
+  startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 8)
+let barrierInbox = PowerLogCaptureInbox()
+barrierInbox.setDestination(PowerLogCaptureDestination(id: barrierRide.id, generation: UUID(), timeline: anchor))
+for index in 0..<16 { _ = try barrierInbox.admit(frame(50 + Double(index) / 8)) }
+let barrierRecorder = PowerLogCaptureRecorder(store: archive.store, inbox: barrierInbox)
+var admittedDuringBarrier = false
+archive.store.beforeCommitForTesting = {
+  guard !admittedDuringBarrier else { return }
+  admittedDuringBarrier = true
+  try barrierRecorder.admit(frame(52))
+}
+try barrierRecorder.barrier()
+let barrierDeadline = Date().addingTimeInterval(5)
+while !barrierInbox.isEmpty && Date() < barrierDeadline { usleep(10_000) }
+archive.store.beforeCommitForTesting = nil
+check(barrierInbox.isEmpty, "a frame admitted while a barrier commits is drained without another barrier")
+let skipped = try archive.create(
+  startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 8)
+let skipping = PowerLogCaptureRecorder(store: archive.store)
+skipping.setDestination(PowerLogCaptureDestination(id: skipped.id, generation: UUID(), timeline: anchor))
+var rejected: [Error] = []
+skipping.failed = { rejected.append($0) }
+var unrecordable = try frame(54).sample
+unrecordable["sequence"] = 1.5
+try skipping.admit(
+  PowerLogCaptureFrame(sample: unrecordable, liveID: live, liveElapsed: 54))
+try skipping.admit(frame(54.125))
+try skipping.barrier()
+check(rejected.count == 1 && skipping.inbox.isEmpty, "a frame that cannot be recorded is reported and skipped")
+check(try archive.metadata(id: skipped.id).eventCount == 1, "frames after an unrecordable one are still recorded")
 let bounded = PowerLogCaptureInbox()
 for index in 0..<PowerLogCaptureInbox.maximumFrames { _ = try bounded.admit(frame(100 + Double(index) / 8)) }
 do {

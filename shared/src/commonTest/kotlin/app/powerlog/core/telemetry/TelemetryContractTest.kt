@@ -1161,6 +1161,27 @@ class TelemetryContractTest {
     }
 
     @Test
+    fun telemetryDiscoveryAndPollIntervalFixtures() {
+        val transport = telemetryFixture("transport")
+        for (case in transport["discovery"].list()) assertEquals(
+            case["retry"].bool(),
+            TelemetryReconnectPolicy.retriesDiscovery(
+                case["platformError"].bool(),
+                case["active"].bool(),
+                case["known"].bool(),
+            ),
+        )
+        for (case in transport["pollIntervals"].list()) assertEquals(
+            case["seconds"].double(),
+            TelemetryTiming.pollIntervalSeconds(
+                case["hz"].double(),
+                case["background"].bool(),
+                case["recording"].bool(),
+            ),
+        )
+    }
+
+    @Test
     fun telemetryPollingScheduleFixtures() {
         for (case in telemetryFixture("transport")["polling"].list()) assertEquals(
             case["expected"].double(),

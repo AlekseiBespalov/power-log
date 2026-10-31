@@ -70,6 +70,8 @@ object RideActions {
         )
     }
 
+    fun recording(phase: String): Boolean = phase in setOf("preparing", "running", "paused")
+
     fun recoveryStopOffered(phase: String, pendingAction: String?): Boolean =
         pendingAction != "discard" &&
             (phase in setOf("preparing", "interrupted", "finishing") ||

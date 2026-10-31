@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.location.*
 import android.os.*
 import androidx.core.content.ContextCompat
+import app.powerlog.core.RideActions
 import app.powerlog.core.StreamStatus
 import app.powerlog.core.gps.*
 import app.powerlog.core.lifecycle.*
@@ -89,6 +90,10 @@ private constructor(
     private var lastLocationValues: Map<String, Double> = emptyMap()
     private var gpsUnavailable = false
     private var wake: PowerManager.WakeLock? = null
+    @Volatile private var background = false
+    private var latestSample: Payload? = null
+    private var sampleFailure: String? = null
+    private var recordingError: String? = null
     private var publishedSnapshot: RideSnapshot? = null
     private var publishedReadWorkoutIds: List<String> = emptyList()
 
@@ -195,7 +200,7 @@ private constructor(
         return decision.admitted
     }
 
-    val bluetooth = ControllerBluetooth(context, handler, ::emit, ::telemetry) { ride != null }
+    val bluetooth = ControllerBluetooth(context, handler, ::emit, ::telemetry) { RideActions.recording(phase) }
     @Volatile
     var notificationState: ActivityPresentation? = null
         private set
@@ -213,7 +218,9 @@ private constructor(
             override fun run() {
                 try {
                     flush()
-                    if (ride != null) publish()
+                    if (ride != null) {
+                        if (background) refreshNotification(snapshot(readStorage = false)) else publish()
+                    }
                 } catch (error: Exception) {
                     if (!storageBusy(error)) captureFailed(error)
                 } finally {
@@ -837,17 +844,35 @@ private constructor(
         gpsActive = false
         boundaries.clear()
         locations.removeUpdates(locationListener)
-        if (wake?.isHeld == true) wake?.release()
-        wake = null
+        releaseWake()
         distance.retainOnly(live)
         context.stopService(Intent(context, RecordingService::class.java))
     }
 
-    private fun telemetry(
-        reading: TelemetryReading,
-        epoch: String,
-        clockReading: RecordingClockReading,
-    ) {
+    private fun recordingResult(error: Exception?) {
+        val failure = error?.let { RideFailures.classify(it, "capture").name }
+        if (failure == recordingError) return
+        recordingError = failure
+        handler.post { bluetooth.recordingResult(failure != null) }
+    }
+
+    private fun releaseWake() {
+        if (wake?.isHeld == true) wake?.release()
+        wake = null
+    }
+
+    private fun telemetry(reading: TelemetryReading, epoch: String, clockReading: RecordingClockReading) {
+        try {
+            captureTelemetry(reading, epoch, clockReading)
+            sampleFailure = null
+        } catch (error: Exception) {
+            if (storageBusy(error) || error.toString() == sampleFailure) return
+            sampleFailure = error.toString()
+            captureFailed(error)
+        }
+    }
+
+    private fun captureTelemetry(reading: TelemetryReading, epoch: String, clockReading: RecordingClockReading) {
         val acquiredAt = clockReading.monotonicMillis
         val timestamp = clockReading.timestamp
         val identity = requireNotNull(reading.identity)
@@ -938,11 +963,10 @@ private constructor(
                     ),
                     presentationClock(clockReading),
                 )
-            refreshNotification(snapshot(readStorage = false))
         }
         previousTelemetryClock = clockReading
         try {
-            if (pending.count { current == null || it.ride != live } >= 8) flush()
+            if (pending.size >= CaptureBatch.targetFrames) flush()
         } catch (error: Exception) {
             if (!storageBusy(error)) {
                 captureFailed(error)
@@ -952,8 +976,7 @@ private constructor(
         val now = SystemClock.elapsedRealtime()
         if (now - lastSampleEvent >= 250) {
             lastSampleEvent = now
-            emit(
-                "onSample",
+            val sample =
                 values +
                     mapOf(
                         "timestamp" to timestamp,
@@ -965,8 +988,9 @@ private constructor(
                         "controllerProtocol" to identity.controllerProtocol,
                         "connectionEpoch" to epoch,
                         "interruptionIndex" to 0,
-                    ),
-            )
+                    )
+            latestSample = sample
+            emit("onSample", sample)
         }
     }
 
@@ -1100,6 +1124,7 @@ private constructor(
         }
 
     fun flush(clockReading: RecordingClockReading = clock.read()) {
+        if (pending.isEmpty() && captureBatch.originals.isEmpty() && captureBatch.fault == null) return
         val preview = pending.firstOrNull()?.ride?.startsWith("live-") == true
         val store = if (preview) previewStore else this.store
         val distance = if (preview) previewDistance else this.distance
@@ -1227,6 +1252,7 @@ private constructor(
             adoptLifecycle(ack.state)
         } else adoptLifecycle(next)
         pending.clear()
+        recordingResult(null)
         committed.forEach { (row, p, metrics) ->
             p.telemetry?.let { (if (preview) previewCapture else telemetryCapture).committed(it) }
             monitor.committedLiveObservation(p.ride, row, p.acquiredAt, metrics)
@@ -1250,7 +1276,7 @@ private constructor(
 
     private fun captureFailed(error: Exception, kind: LifecycleStorageError) {
         android.util.Log.w("PowerLog", "Capture failed ($kind)", error)
-        handler.post { bluetooth.recordingFailed() }
+        recordingResult(error)
         val fault =
             captureBatch.fault
                 ?: CaptureFault(
@@ -1269,9 +1295,10 @@ private constructor(
         if (failed.haltCapture) {
             gpsActive = false
             locations.removeUpdates(locationListener)
+            releaseWake()
             if (bluetooth.state["status"] == "reconnecting") bluetooth.disconnect()
-            runCatching { store.persistStorage(lifecycle, captureBatch) }
         }
+        runCatching { store.persistStorage(lifecycle, captureBatch) }
         refreshControlIdentity()
         publishSnapshot(faultSnapshot())
     }
@@ -1372,7 +1399,20 @@ private constructor(
         }
     }
 
+    fun setBackground(value: Boolean) {
+        background = value
+        handler.post {
+            bluetooth.setBackground(value)
+            if (!value && initialized) {
+                latestSample?.let { emit("onSample", it) }
+                emit("onState", bluetooth.state)
+                publish()
+            }
+        }
+    }
+
     fun emit(event: String, value: Payload) {
+        if (background) return
         listeners.forEach { runCatching { it(event, value) } }
     }
 

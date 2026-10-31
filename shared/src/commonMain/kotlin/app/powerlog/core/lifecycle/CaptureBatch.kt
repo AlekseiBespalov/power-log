@@ -74,6 +74,11 @@ constructor(originals: List<CaptureOriginal> = emptyList(), val fault: CaptureFa
 
     companion object {
         const val maximumFrames = 64
+        const val targetFrames = 8
+        const val maximumAgeSeconds = 1.0
+
+        fun flushDelaySeconds(frames: Int, ageSeconds: Double): Double =
+            if (frames >= targetFrames) 0.0 else maxOf(0.0, maximumAgeSeconds - ageSeconds)
     }
 }
 

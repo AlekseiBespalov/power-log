@@ -46,6 +46,7 @@
       #endif
       coordinator.publish(snapshot)
     }
+    func needsPublication(_ key: WorkoutActivityKey) -> Bool { coordinator.needsPublication(key) }
     func state(_ body: [String: Any]) -> [String: Any] { externalActions.state(body) }
     func refreshControls() {
       refreshPresentation()

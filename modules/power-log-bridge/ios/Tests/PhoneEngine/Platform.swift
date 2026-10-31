@@ -95,7 +95,9 @@ final class WorkoutLocation {
     permissionRequests += 1
     if deferPermission { permissionCompletion = completion } else { completion("authorized") }
   }
+  var paused: Bool?
   func start() {}
+  func setPaused(_ paused: Bool) { self.paused = paused }
   func stop() {}
 }
 final class ControllerEngine {
@@ -103,15 +105,18 @@ final class ControllerEngine {
   let queue = DispatchQueue(label: "test.controller")
   var status = "idle"
   var requestedRates: [Double] = []
+  var samplingOwner: String?
   func state() -> [String: Any] { ["status": status] }
   func setSampleRate(_ rate: Double) throws { requestedRates.append(rate) }
-  func setWorkoutSamplingOwner(_ id: String?, rate: Double?) {}
+  func setWorkoutSamplingOwner(_ id: String?, rate: Double?) { samplingOwner = id }
   func captureResult(_ error: Error?) {}
 }
 final class WorkoutLiveActivity {
   static let shared = WorkoutLiveActivity()
   private let lock = NSLock()
   private var counts: [String: Int] = [:]
+  var publishes = true
+  func needsPublication(_ key: WorkoutActivityKey) -> Bool { publishes }
   func publish(_ snapshot: WorkoutActivitySnapshot) {
     guard let id = snapshot.rideID else { return }
     lock.lock()

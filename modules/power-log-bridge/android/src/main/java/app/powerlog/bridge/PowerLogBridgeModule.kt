@@ -190,10 +190,10 @@ class PowerLogBridgeModule internal constructor(private val engineProvider: (() 
         OnNewIntent { intent -> notificationIntent(intent) }
         OnActivityEntersForeground {
             engine.foreground()
-            engine.handler.post { engine.bluetooth.setBackground(false) }
+            engine.setBackground(false)
             notificationIntent(appContext.currentActivity?.intent)
         }
-        OnActivityEntersBackground { engine.handler.post { engine.bluetooth.setBackground(true) } }
+        OnActivityEntersBackground { engine.setBackground(true) }
         AsyncFunction("finishExternalWorkoutAction") { input: Payload, discard: Boolean, promise: Promise ->
             submit(promise, "finish") { engine.externalAction(externalRequest(input), true, discard) }
         }

@@ -122,7 +122,7 @@ internal class ControllerBluetooth(
 
     fun startBluetoothTrace() {
         bluetoothTrace.start(now())
-        trace("capture_started", "platform=android; status=${state["status"]}; requests=111,50")
+        trace("capture_started") { "platform=android; status=${state["status"]}; requests=111,50" }
     }
 
     fun stopBluetoothTrace() = bluetoothTrace.stop()
@@ -131,8 +131,9 @@ internal class ControllerBluetooth(
 
     fun readBluetoothTrace(): String = bluetoothTrace.exportJson(now())
 
-    private fun trace(event: String, detail: String, bytes: ByteArray? = null) =
-        bluetoothTrace.record(now(), event, detail, bytes)
+    private inline fun trace(event: String, bytes: ByteArray? = null, detail: () -> String) {
+        if (bluetoothTrace.status(now()).capturing) bluetoothTrace.record(now(), event, detail(), bytes)
+    }
 
     private fun note(
         event: TelemetryDiagnosticEvent,
@@ -161,11 +162,10 @@ internal class ControllerBluetooth(
                 "reason" to reason?.wire,
             )
         data.putAll(fields)
-        trace(
-            event.wire,
+        trace(event.wire) {
             "stage=${session.state.stage.name}; reason=${reason?.wire ?: "none"}; " +
-                "rejection=${fields["rejection"] ?: "none"}; error=${fields["errorCode"] ?: 0}",
-        )
+                "rejection=${fields["rejection"] ?: "none"}; error=${fields["errorCode"] ?: 0}"
+        }
         diagnosticLog.append(event, maxOf(0.0, at - diagnosticStarted), data)
     }
 
@@ -195,13 +195,14 @@ internal class ControllerBluetooth(
         if (background == value) return
         background = value
         note(TelemetryDiagnosticEvent.backgroundChanged)
+        repace()
     }
 
-    fun recordingFailed() =
+    fun recordingResult(failed: Boolean) =
         note(
             TelemetryDiagnosticEvent.recordingError,
             TelemetryDiagnosticReason.storageFailure,
-            mapOf("recordingFailed" to true),
+            mapOf("recordingFailed" to failed),
         )
 
     private fun requestDisconnect(reason: TelemetryDiagnosticReason) {
@@ -215,13 +216,20 @@ internal class ControllerBluetooth(
 
     fun setHz(value: Int) {
         BridgeInputs.sampleHz(value)
+        hz = value
+        repace()
+    }
+
+    private fun pollIntervalMillis() =
+        (TelemetryTiming.pollIntervalSeconds(hz.toDouble(), background, recording()) * 1000).roundToLong()
+
+    private fun repace() {
         nextPollAt =
             maxOf(
                 SystemClock.elapsedRealtime(),
                 ((pendingSince ?: lastSample.takeIf { it > 0 }?.div(1000.0) ?: now()) * 1000).roundToLong() +
-                    1000L / value,
+                    pollIntervalMillis(),
             )
-        hz = value
         schedule()
     }
 
@@ -242,11 +250,9 @@ internal class ControllerBluetooth(
                         )
                             return@post
                         val device = result.device
-                        trace(
-                            "advertisement",
-                            "name=${result.scanRecord?.deviceName}; rssi=${result.rssi}; services=${result.scanRecord?.serviceUuids}",
-                            result.scanRecord?.bytes,
-                        )
+                        trace("advertisement", result.scanRecord?.bytes) {
+                            "name=${result.scanRecord?.deviceName}; rssi=${result.rssi}; services=${result.scanRecord?.serviceUuids}"
+                        }
                         devices[device.address] = device
                         emit(
                             "onDevice",
@@ -443,12 +449,11 @@ internal class ControllerBluetooth(
                         override fun onServicesDiscovered(connection: BluetoothGatt, status: Int) =
                             event(connection) {
                                 for (service in connection.services) {
-                                    trace("service", service.uuid.toString())
+                                    trace("service") { service.uuid.toString() }
                                     for (characteristic in service.characteristics) {
-                                        trace(
-                                            "characteristic",
-                                            "service=${service.uuid}; uuid=${characteristic.uuid}; properties=${characteristic.properties}",
-                                        )
+                                        trace("characteristic") {
+                                            "service=${service.uuid}; uuid=${characteristic.uuid}; properties=${characteristic.properties}"
+                                        }
                                     }
                                 }
                                 if (session.state.stage != TelemetryStage.services) return@event
@@ -469,11 +474,18 @@ internal class ControllerBluetooth(
                                 val descriptor =
                                     notify?.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
                                 if (writer == null || notify == null || descriptor == null) {
+                                    val retry =
+                                        TelemetryReconnectPolicy.retriesDiscovery(
+                                            false,
+                                            recording(),
+                                            selected?.address?.let { it in knownControllers } == true,
+                                        )
                                     failed(
-                                        "This bike does not provide the controller telemetry service.",
+                                        if (retry) "Could not read the bike's services. Reconnecting…"
+                                        else "This bike does not provide the controller telemetry service.",
                                         if (service == null) TelemetryDiagnosticReason.serviceDiscovery
                                         else TelemetryDiagnosticReason.characteristicDiscovery,
-                                        terminal = true,
+                                        terminal = !retry,
                                     )
                                     return@event
                                 }
@@ -585,7 +597,7 @@ internal class ControllerBluetooth(
 
     private fun handle(action: TelemetryTransportAction): Boolean {
         if (action != TelemetryTransportAction.none)
-            trace("transport", "action=${action.name}; stage=${session.state.stage.name}")
+            trace("transport") { "action=${action.name}; stage=${session.state.stage.name}" }
         val (message, reason) =
             when (action) {
                 TelemetryTransportAction.attemptTimeout ->
@@ -632,7 +644,7 @@ internal class ControllerBluetooth(
             else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         try {
             val bytes = session.request(read)
-            trace("write", "request=${read.name}; characteristic=${characteristic.uuid}; writeType=$type", bytes)
+            trace("write", bytes) { "request=${read.name}; characteristic=${characteristic.uuid}; writeType=$type" }
             val owner = ControllerRequestOwnership(session.state.generation, read, sentAt)
             // A notification can arrive before the native write call returns.
             requestOwnership = owner
@@ -651,7 +663,7 @@ internal class ControllerBluetooth(
                 nativeWritePending = true
                 pendingSince = sentAt
                 writeBlockedAt = null
-                if (read == ControllerRequest.telemetry) nextPollAt = sentAtMillis + 1000L / hz
+                if (read == ControllerRequest.telemetry) nextPollAt = sentAtMillis + pollIntervalMillis()
             } else if (result == BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY) {
                 if (writeBlockedAt == null) writeBlockedAt = sentAt
             } else
@@ -673,22 +685,18 @@ internal class ControllerBluetooth(
     }
 
     private fun receive(bytes: ByteArray, receipt: RecordingClockReading, owner: ControllerRequestOwnership?) {
-        trace(
-            "notification",
-            "characteristic=${ControllerGatt.NOTIFY}; stage=${session.state.stage.name}; request=${owner?.role?.name}",
-            bytes,
-        )
+        trace("notification", bytes) {
+            "characteristic=${ControllerGatt.NOTIFY}; stage=${session.state.stage.name}; request=${owner?.role?.name}"
+        }
         if (owner == null || owner !== requestOwnership) return
         val receivedAt = receipt.monotonicMillis
         val decision = session.notifications(owner.generation, owner.role, bytes, owner.sentAt, receivedAt / 1000.0)
-        trace(
-            "decoder",
-            "action=${decision.action.name}; discardedBytes=${decision.discardedBytes}; pendingBytes=${decision.pendingBytes}",
-        )
-        for (reply in decision.replies.filterIsInstance<ControllerRejectedReply>()) trace(
-            "rejected",
-            "request=${reply.kind.name}; reason=${reply.reason}",
-        )
+        trace("decoder") {
+            "action=${decision.action.name}; discardedBytes=${decision.discardedBytes}; pendingBytes=${decision.pendingBytes}"
+        }
+        for (reply in decision.replies.filterIsInstance<ControllerRejectedReply>()) trace("rejected") {
+            "request=${reply.kind.name}; reason=${reply.reason}"
+        }
         decision.replies.filterIsInstance<ControllerRejectedReply>().firstOrNull()?.let {
             note(TelemetryDiagnosticEvent.transportError, fields = mapOf("rejection" to it.reason))
         }
@@ -756,7 +764,7 @@ internal class ControllerBluetooth(
         terminal: Boolean = false,
         error: Payload = emptyMap(),
     ) {
-        trace("error", message)
+        trace("error") { message }
         val at = now()
         if (reason == TelemetryDiagnosticReason.responseTimeout || reason == TelemetryDiagnosticReason.expiredReply)
             metrics.timedOut()
@@ -896,8 +904,7 @@ internal class ControllerBluetooth(
             "connectionAttempts" to metrics.connectionAttempts,
             "reconnects" to metrics.reconnects,
             "recentSampleHz" to metrics.recentSampleHz(now()),
-            "lastSampleAgeSeconds" to
-                if (lastSample > 0) (SystemClock.elapsedRealtime() - lastSample) / 1000.0 else null,
+            "lastSampleAgeSeconds" to metrics.sampleAge(now()),
             "lastGapSeconds" to metrics.lastGapSeconds,
         )
 }

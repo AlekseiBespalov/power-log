@@ -87,6 +87,7 @@ final class EngineHarness {
   }
 
   func connect() throws {
+    engine.setBackground(false)
     CBCentralManager.peripherals = [peripheral]
     try engine.startScan()
     try engine.connect(deviceID: peripheral.identifier.uuidString, rate: 8)

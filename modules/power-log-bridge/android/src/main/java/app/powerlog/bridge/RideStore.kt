@@ -371,6 +371,7 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
     override fun onConfigure(db: SQLiteDatabase) {
         db.setForeignKeyConstraintsEnabled(true)
         db.execSQL("PRAGMA synchronous=FULL")
+        db.rawQuery("PRAGMA wal_autocheckpoint=1000", null).use { it.moveToFirst() }
     }
 
     override fun onOpen(db: SQLiteDatabase) {
@@ -523,7 +524,6 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
             "CREATE TABLE health_read_deferrals(ride TEXT PRIMARY KEY REFERENCES rides(id) ON DELETE CASCADE,token TEXT NOT NULL)"
         )
         for (table in listOf("observations", "lifecycle")) {
-            db.execSQL("CREATE INDEX ${table}_producer ON $table(ride,producer,producer_sequence)")
             db.execSQL("CREATE INDEX ${table}_revision ON $table(ride,revision,id)")
             db.execSQL("CREATE INDEX ${table}_elapsed ON $table(ride,elapsed_us,producer,producer_sequence,id)")
         }
@@ -1382,14 +1382,16 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
                     .maxOfOrNull { it.getJSONObject("original").getString("producerSequence").toLong() } ?: 0
             persistLifecycleEvent(event, reserved)
         }
-        state.ride?.let {
-            update(
-                it.key.rideId,
-                it.phase.name,
-                RideTiming(it.timing.elapsedSeconds, it.timing.timerSeconds, it.timing.timestamp.original),
-                mapOf("interrupted" to true),
-            )
-        }
+        state.ride
+            ?.takeIf { it.storageInterrupted }
+            ?.let {
+                update(
+                    it.key.rideId,
+                    it.phase.name,
+                    RideTiming(it.timing.elapsedSeconds, it.timing.timerSeconds, it.timing.timestamp.original),
+                    mapOf("interrupted" to true),
+                )
+            }
     }
 
     fun exists(id: String): Boolean = select("SELECT 1 FROM rides WHERE id=?", arrayOf(id)) { it.moveToFirst() }

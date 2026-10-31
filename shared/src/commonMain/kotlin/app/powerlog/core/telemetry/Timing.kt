@@ -9,6 +9,10 @@ object TelemetryTiming {
     const val cancellationGraceSeconds = 5.0
     const val displayHoldSeconds = StreamStatus.controllerStaleSeconds
     const val stableTelemetrySeconds = 30.0
+    const val backgroundPreviewHz = 1.0
+
+    fun pollIntervalSeconds(hz: Double, background: Boolean, recording: Boolean): Double =
+        1 / if (background && !recording) minOf(hz, backgroundPreviewHz) else hz
 
     fun replyExpired(sentAt: Double, now: Double): Boolean = now - sentAt >= telemetryTimeoutSeconds
 
@@ -85,6 +89,9 @@ object TelemetryReconnectPolicy {
                 (systemIsReconnecting || systemAttemptPending || (!callbackCompleted && !peripheralIsDisconnected))
         return TelemetryRetryPlan(delay, adopt, cancel)
     }
+
+    fun retriesDiscovery(platformError: Boolean, activeRide: Boolean, knownController: Boolean): Boolean =
+        platformError || activeRide && knownController
 }
 
 data class TelemetryDiscovery(val generation: Long, val deadline: Double) {

@@ -119,15 +119,18 @@ internal fun installControllerService(gatt: BluetoothGatt): BluetoothGattCharact
     return notify
 }
 
-internal class ControllerAdapterFixture(private val handler: Handler, sample: (TelemetryReading) -> Unit = {}) :
-    AutoCloseable {
+internal class ControllerAdapterFixture(
+    private val handler: Handler,
+    sample: (TelemetryReading) -> Unit = {},
+    recording: () -> Boolean = { true },
+) : AutoCloseable {
     val bluetooth =
         ControllerBluetooth(
             org.robolectric.RuntimeEnvironment.getApplication(),
             handler,
             { _, _ -> },
             { reading, _, _ -> sample(reading) },
-            { true },
+            recording,
         )
     val gatt: BluetoothGatt
     val notify: BluetoothGattCharacteristic

@@ -38,6 +38,8 @@ decision record; N labels are the analytics rules that tests cite.
 
 - **Only requests 111 (identity) and 50 (selective telemetry).** No drive, configuration, calibration, firmware,
   full-values or keepalive command, and no general Bluetooth write API.
+- **A backgrounded app without a recording ride polls at 1 Hz.** The link stays up for a Watch Start; a preparing,
+  running or paused ride keeps its frozen rate in the background, and the foreground uses the selected rate.
 - **Raw Bluetooth diagnostics require an explicit capture.** Retain rejected packets before decoding in bounded,
   temporary memory, separately from rides and routine connection logs. Export is a rider action with notice that raw
   bytes can include serials. Diagnostic capture never bypasses ride admission or adds controller commands.
@@ -108,7 +110,8 @@ decision record; N labels are the analytics rules that tests cite.
   of unfinished commands. Existing native Health sessions are recovered only for cleanup, never to invent a new ride.
 - **Bounded capture.** Keep atomic commits and bounded queues, with honest storage failures. Losing uncommitted
   observations is acceptable; corrupted committed data, fabricated zeros and silent erasure are not. Queue limits
-  are not a guarantee of a one-second crash-loss bound.
+  are not a guarantee of a one-second crash-loss bound. Only storage failures interrupt a ride; a busy store retries,
+  and any other recording error is shown without interrupting the ride.
 - **Preview is temporary.** Before Start, live data stays in bounded memory. Once recording, dashboards and History
   query the same ride archive. Previous recorded rides remain in History.
 

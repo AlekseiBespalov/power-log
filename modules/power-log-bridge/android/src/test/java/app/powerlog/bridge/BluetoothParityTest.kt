@@ -282,6 +282,36 @@ class BluetoothParityTest {
     }
 
     @Test
+    fun missingControllerServiceFollowsTheSharedDiscoveryRule() {
+        val rows = telemetryFixture("transport").getJSONArray("discovery")
+        @Suppress("UNCHECKED_CAST") val known = field("knownControllers") as MutableMap<String, ControllerIdentity>
+        for (index in 0 until rows.length()) {
+            val row = rows.getJSONObject(index)
+            if (row.getBoolean("platformError")) continue
+            recording = row.getBoolean("active")
+            known.clear()
+            if (row.getBoolean("known")) known[id] = CycProtocol.restoreIdentity("X6", "20250725", "5.3")
+            bluetooth.connect(id, 4) {}
+            val gatt = field("gatt") as BluetoothGatt
+            shadowOf(gatt)
+                .addDiscoverableService(
+                    BluetoothGattService(UUID.randomUUID(), BluetoothGattService.SERVICE_TYPE_PRIMARY)
+                )
+            shadowOf(gatt)
+                .gattCallback
+                .onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_CONNECTED)
+            advance(0)
+            assertEquals(
+                row.toString(),
+                if (row.getBoolean("retry")) "reconnecting" else "error",
+                bluetooth.state["status"],
+            )
+            bluetooth.disconnect()
+            completeCancellation(bluetooth, handler)
+        }
+    }
+
+    @Test
     fun connectionDeadlineUsesFiveRetriesThenStopsUnlessARideIsActive() {
         for (active in listOf(false, true)) {
             recording = active

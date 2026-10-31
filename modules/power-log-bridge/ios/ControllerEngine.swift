@@ -165,10 +165,10 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     }
   }
 
-  private func trace(_ event: String, _ detail: String, bytes: Data? = nil) {
+  private func trace(_ event: String, _ detail: @autoclosure () -> String, bytes: @autoclosure () -> Data? = nil) {
     guard bluetoothTrace.status(now: now).capturing else { return }
     bluetoothTrace.record(
-      now: now, event: event, detail: detail, bytes: bytes.map { WorkoutCoreCodec.bytes($0) })
+      now: now, event: event, detail: detail(), bytes: bytes().map { WorkoutCoreCodec.bytes($0) })
   }
 
   private func note(
@@ -339,10 +339,8 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
   func setSampleRate(_ rate: Double) throws {
     hz = try WorkoutRecordingPolicy.sampleHz(rate)
-    nextPoll = max(now, (pending?.sent ?? lastSample ?? now) + 1 / rate)
     defaults.set(rate, forKey: "PowerLog.pollHz")
-    paceNextPoll()
-    scheduleNextTick()
+    repace()
     emitState()
   }
 
@@ -354,11 +352,19 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     if previous != nil, id == nil, status == "reconnecting" { try? disconnect() }
     if let admitted = workoutSampling.rate, hz != admitted {
       hz = admitted
-      nextPoll = max(now, (pending?.sent ?? lastSample ?? now) + 1 / hz)
       defaults.set(hz, forKey: "PowerLog.pollHz")
-      paceNextPoll()
-      scheduleNextTick()
     }
+    repace()
+  }
+
+  private var pollInterval: Double {
+    TelemetryTiming.shared.pollIntervalSeconds(hz: hz, background: background, recording: workoutSampling.id != nil)
+  }
+
+  private func repace() {
+    nextPoll = max(now, (pending?.sent ?? lastSample ?? now) + pollInterval)
+    paceNextPoll()
+    scheduleNextTick()
   }
 
   func disconnect() throws {
@@ -377,6 +383,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     recoveryErrorMessage = nil
     note(.sessionStopped, reason: .manualDisconnect)
     stopTimerIfIdle()
+    updateBackgroundHold()
     emitState()
   }
 
@@ -435,6 +442,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       central?.stopScan()
       scanIfReady()
     }
+    repace()
     tick()
     if !background {
       if let latestSample { emitSample(latestSample) }
@@ -450,7 +458,9 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       let wanted = background && shouldConnect && !verified
       guard wanted != backgroundHoldWanted else { return }
       backgroundHoldWanted = wanted
-      DispatchQueue.main.async { ControllerBackgroundHold.shared.set(active: wanted) }
+      DispatchQueue.main.async {
+        ControllerBackgroundHold.shared.set(active: wanted) { self.queue.async { self.backgroundHoldWanted = false } }
+      }
     }
   #else
     private func updateBackgroundHold() {}
@@ -604,7 +614,12 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       send(request)
       return
     }
-    if verified, pending == nil, current >= nextPoll { send(.telemetry) }
+    guard verified, pending == nil, current >= nextPoll else { return }
+    if selected?.state == .disconnected {
+      retry("Bike disconnected. Reconnecting…", reason: .linkDisconnected)
+    } else {
+      send(.telemetry)
+    }
   }
 
   private func scheduleNextTick() {
@@ -678,7 +693,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     replyPoll = nil
     let sent = now
     pending = (request, sent)
-    nextPoll = sent + 1 / hz
+    nextPoll = sent + pollInterval
     trace("write", "request=\(request.name); characteristic=\(writer.uuid.uuidString); withoutResponse", bytes: frame)
     selected.writeValue(frame, for: writer, type: .withoutResponse)
   }
@@ -858,7 +873,10 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   }
 
   private func discoveryFailed(_ peripheral: CBPeripheral, reason: TelemetryDiagnosticReason, error: Error?) {
-    if error != nil || workoutSampling.id != nil && knownControllers[peripheral.identifier.uuidString] != nil {
+    if TelemetryReconnectPolicy.shared.retriesDiscovery(
+      platformError: error != nil, activeRide: workoutSampling.id != nil,
+      knownController: knownControllers[peripheral.identifier.uuidString] != nil)
+    {
       retry("Could not read the bike's services. Reconnecting…", reason: reason, error: error)
     } else {
       fail("This bike does not provide the controller telemetry service.", reason: reason)
@@ -1035,8 +1053,11 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   private func receive(
     _ reading: TelemetryReading, at current: Double, responseSeconds: Double
   ) {
-    status = "connected"
-    recoveryErrorMessage = nil
+    if status != "connected" {
+      status = "connected"
+      recoveryErrorMessage = nil
+      emitState()
+    }
     if let gap = diagnosticMetrics.receivedSample(at: current, responseSeconds: responseSeconds) {
       note(.telemetryGap, fields: ["gapSeconds": gap])
     }
@@ -1058,9 +1079,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       #if os(iOS)
         try WorkoutEngine.shared.admitController(
           PowerLogCaptureFrame(
-            sample: sample, liveID: captureClock.sessionID,
-            liveStartedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), liveOrigin: sessionStarted,
-            liveElapsed: current - sessionStarted))
+            sample: sample, liveID: captureClock.sessionID, liveElapsed: current - sessionStarted))
       #else
         try MonitorDataStore.shared.appendLive(sample, elapsedSeconds: current - sessionStarted)
       #endif
@@ -1072,7 +1091,6 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     if !background, current - lastPresentation >= 0.25 {
       lastPresentation = current
       emitSample(sample)
-      emitState()
     }
     updateBackgroundHold()
   }
@@ -1109,10 +1127,11 @@ extension ControllerEngine {
   final class ControllerBackgroundHold {
     static let shared = ControllerBackgroundHold()
     private var task: UIBackgroundTaskIdentifier = .invalid
-    func set(active: Bool) {
+    func set(active: Bool, expired: @escaping () -> Void = {}) {
       if active, task == .invalid {
         task = UIApplication.shared.beginBackgroundTask(withName: "Power Log bike reconnect") { [weak self] in
           self?.set(active: false)
+          expired()
         }
       } else if !active, task != .invalid {
         UIApplication.shared.endBackgroundTask(task)

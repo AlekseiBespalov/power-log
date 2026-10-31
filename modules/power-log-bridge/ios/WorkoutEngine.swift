@@ -29,7 +29,7 @@
     private var activeOrigin: Double?
     private var error: String?
     private var healthState = "notSaved"
-    private var healthID: String?
+    private var rideWatch = false
     private var startAttempt: String?
     private var startCompletion: ((Result<[String: Any], Error>) -> Void)?
     private var live = WorkoutLivePresentation()
@@ -72,6 +72,7 @@
         capture?.flushed = { ControllerEngine.shared.queue.async { ControllerEngine.shared.captureResult(nil) } }
         if let interrupted = try archive.list(limit: 100).first(where: { $0.phase == "interrupted" }) {
           id = interrupted.id
+          rideWatch = interrupted.watchEnabled
           phase = "interrupted"
           stateRevision += 1
           elapsedBase = interrupted.elapsedSeconds
@@ -175,10 +176,14 @@
       publishActivity()
     }
     func publishActivity() {
+      let pendingAction = phase == "preparing" ? "start" : nil
+      let key = WorkoutActivityKey(
+        rideID: id, phase: phase, pendingAction: pendingAction, controlToken: activityToken, confirmationPending: true)
+      guard WorkoutLiveActivity.shared.needsPublication(key) else { return }
       WorkoutLiveActivity.shared.publish(
         WorkoutActivitySnapshot(
           rideID: id, phase: phase,
-          pendingAction: phase == "preparing" ? "start" : nil, timerSeconds: active, observedAt: Date(),
+          pendingAction: pendingAction, timerSeconds: active, observedAt: Date(),
           observedUptime: clock,
           bikeSampleAgeSeconds: live.controllerFreshness.age(at: clock),
           heartSampleAgeSeconds: live.heartFreshness.age(at: clock),
@@ -246,6 +251,7 @@
           batteryConsumptionSource: preferences.batteryConsumptionSource)
         _ = try archive.update(id: id, phase: "preparing", healthKitState: saveToHealth ? "pending" : "notRequested")
         self.id = id
+        rideWatch = useWatch
         phase = "preparing"
         stateRevision += 1
         error = nil
@@ -268,6 +274,7 @@
         startAttempt = UUID().uuidString.lowercased()
         startCompletion = completion
         activityToken = UUID().uuidString.lowercased()
+        setCaptureDestination()
         let attempt = startAttempt!
         let begin: () -> Void = {
           self.queue.async {
@@ -381,7 +388,7 @@
       capture?.setDestination(
         phase == "running" && id != nil && timeline != nil
           ? PowerLogCaptureDestination(id: id!, generation: generation, timeline: timeline!) : nil)
-      let target = rideInProgress ? id : nil
+      let target = RideActions.shared.recording(phase: phase) ? id : nil
       let rate = options == nil ? nil : frozenSampleHz
       ControllerEngine.shared.queue.async { ControllerEngine.shared.setWorkoutSamplingOwner(target, rate: rate) }
     }
@@ -410,6 +417,7 @@
       stateRevision += 1
       healthSeconds.boundary()
       gpsBarrier = true
+      location.setPaused(true)
       if watch { sendState(id: id) } else { health.pause() }
       setCaptureDestination()
       publish()
@@ -429,6 +437,7 @@
       stateRevision += 1
       activeOrigin = clock
       gpsBarrier = true
+      location.setPaused(false)
       if watch { sendState(id: id) } else { health.resume() }
       setCaptureDestination()
       publish()
@@ -551,7 +560,7 @@
     }
     private func forwardSeconds(force: Bool = false, paced: Bool = true, watch forcedWatch: Bool? = nil) {
       guard let id, let options, phase == "running" || force else { return }
-      let watch = forcedWatch ?? ((try? archive?.metadata(id: id).watchEnabled) == true)
+      let watch = forcedWatch ?? rideWatch
       if !force && paced {
         guard clock - lastRoutineSend >= (watch ? Self.watchRoutineSeconds : 1) else { return }
         lastRoutineSend = clock
@@ -588,8 +597,10 @@
       }
     }
     private func captureFailed(_ failure: Error) {
+      ControllerEngine.shared.queue.async { ControllerEngine.shared.captureResult(failure) }
+      guard let kind = Self.storageError(failure) else { return }
       error = failure.localizedDescription
-      if ["running", "paused"].contains(phase) {
+      if LifecycleStorage.shared.qualifies(error: kind), ["running", "paused"].contains(phase) {
         activeBase = active
         activeOrigin = nil
         elapsedBase = elapsed
@@ -600,8 +611,15 @@
         setCaptureDestination()
         location.stop()
       }
-      ControllerEngine.shared.queue.async { ControllerEngine.shared.captureResult(failure) }
       publish()
+    }
+    private static func storageError(_ failure: Error) -> LifecycleStorageError? {
+      switch failure {
+      case PowerLogStorageError.busy: return nil
+      case PowerLogStorageError.sqlite: return .sqlite
+      case let error as CocoaError where error.isFileError: return .cocoa
+      default: return (failure as NSError).domain == NSPOSIXErrorDomain ? .posix : .operation
+      }
     }
     private func appendLifecycle(_ action: String, at: Date = Date(), elapsed: Double? = nil) throws {
       guard let id, let archive else { return }
@@ -835,7 +853,6 @@
       let stored = try archive.update(id: id, healthKitState: state, healthKitUUID: healthID, healthReason: reason)
       if self.id == id {
         healthState = stored.healthKitState
-        self.healthID = stored.healthKitUUID
       }
       publish()
     }
@@ -848,7 +865,7 @@
         elapsedSeconds: elapsed, onlyIfChanged: true)
     }
     private func synchronizeCompanion() {
-      guard let id, companion.reachable, (try? archive?.metadata(id: id).watchEnabled) == true else { return }
+      guard let id, companion.reachable, rideWatch else { return }
       if phase == "running" {
         forwardSeconds()
         return

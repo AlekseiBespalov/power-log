@@ -82,6 +82,7 @@ final class EngineHarness {
   }
 
   func connect() throws {
+    engine.setBackground(false)
     CBCentralManager.peripherals = [peripheral]
     try engine.startScan()
     try engine.connect(deviceID: peripheral.identifier.uuidString, rate: 8)
@@ -392,6 +393,7 @@ try fragments.engine.queue.sync {
 let cancelledBackoff = EngineHarness()
 try cancelledBackoff.engine.queue.sync {
   try cancelledBackoff.connect()
+  cancelledBackoff.engine.setBackground(true)
   cancelledBackoff.respond = false
   cancelledBackoff.replies = []
   cancelledBackoff.now += 2.500001
@@ -718,6 +720,52 @@ try refused.engine.queue.sync {
   check(
     shown == WorkoutRideFailure("bikeUnavailable").message, "a failed connection shows plain text: \(shown ?? "none")")
   try refused.finish()
+}
+
+let backgroundPreview = EngineHarness(timerDelay: 0)
+try backgroundPreview.engine.queue.sync {
+  try backgroundPreview.connect()
+  func requests(for seconds: Double) -> Int {
+    let started = backgroundPreview.now
+    backgroundPreview.advance(to: started + seconds)
+    return backgroundPreview.sent.filter { $0 > started }.count
+  }
+  backgroundPreview.engine.setBackground(true)
+  let preview = requests(for: 10)
+  check(preview <= 11, "a background preview polls at 1 Hz (\(preview) requests in 10 s)")
+  backgroundPreview.engine.setWorkoutSamplingOwner("synthetic-ride", rate: 8)
+  let ride = requests(for: 10)
+  check(ride >= 75, "a background ride polls at its rate (\(ride) requests in 10 s)")
+  backgroundPreview.engine.setWorkoutSamplingOwner(nil, rate: 8)
+  backgroundPreview.engine.setBackground(false)
+  let foreground = requests(for: 10)
+  check(foreground >= 75, "a foreground preview polls at the selected rate (\(foreground) requests in 10 s)")
+  try backgroundPreview.finish()
+}
+
+let steadyState = EngineHarness(timerDelay: 0)
+try steadyState.engine.queue.sync {
+  try steadyState.connect()
+  steadyState.advance(to: steadyState.now + 1)
+  var states = 0
+  steadyState.engine.addSink(id: UUID()) { event, _ in if event == "onState" { states += 1 } }
+  steadyState.advance(to: steadyState.now + 10)
+  check(states == 0, "steady telemetry does not repeat an unchanged controller state (\(states) events)")
+  try steadyState.finish()
+}
+
+let silentLoss = EngineHarness(timerDelay: 0)
+try silentLoss.engine.queue.sync {
+  try silentLoss.connect()
+  silentLoss.advance(to: silentLoss.now + 1)
+  if let reply = silentLoss.replies.map(\.due).min() { silentLoss.advance(to: reply) }
+  silentLoss.peripheral.state = .disconnected
+  silentLoss.advance(to: silentLoss.now + 0.5)
+  check(
+    silentLoss.engine.state()["status"] as? String == "reconnecting",
+    "a link lost without a disconnect callback reconnects instead of polling a dead peripheral: \(silentLoss.engine.state())"
+  )
+  try silentLoss.finish()
 }
 
 print("Engine pacing: \(checks - failures) passed, \(failures) failed")

@@ -220,5 +220,57 @@
       "scanning": false,
       "expected": 5
     }
+  ],
+  "discovery": [
+    {
+      "platformError": true,
+      "active": false,
+      "known": false,
+      "retry": true
+    },
+    {
+      "platformError": false,
+      "active": false,
+      "known": true,
+      "retry": false
+    },
+    {
+      "platformError": false,
+      "active": true,
+      "known": false,
+      "retry": false
+    },
+    {
+      "platformError": false,
+      "active": true,
+      "known": true,
+      "retry": true
+    }
+  ],
+  "pollIntervals": [
+    {
+      "hz": 8,
+      "background": false,
+      "recording": false,
+      "seconds": 0.125
+    },
+    {
+      "hz": 8,
+      "background": true,
+      "recording": true,
+      "seconds": 0.125
+    },
+    {
+      "hz": 8,
+      "background": true,
+      "recording": false,
+      "seconds": 1
+    },
+    {
+      "hz": 2,
+      "background": true,
+      "recording": false,
+      "seconds": 1
+    }
   ]
 }

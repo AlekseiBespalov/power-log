@@ -753,4 +753,102 @@ class RecordingEngineCaptureTest : RecordingEngineTestBase() {
         assertEquals(1000000L, original.elapsedUs)
         assertEquals(iso(fix.time), original.timestamp)
     }
+
+    @Test
+    fun aSampleTheEngineCannotRecordIsReportedWithoutEndingTheRide() = command {
+        val id = start()
+        RecordingEngine::class
+            .java
+            .getDeclaredMethod(
+                "telemetry",
+                TelemetryReading::class.java,
+                String::class.java,
+                RecordingClockReading::class.java,
+            )
+            .apply { isAccessible = true }
+            .invoke(
+                engine,
+                TelemetryReading(mapOf(TelemetryMetric.humanPowerW to 120.0)),
+                "40000000-0000-4000-8000-000000000001",
+                RecordingClockReading(iso(), SystemClock.elapsedRealtime()),
+            )
+        assertEquals("running", engine.state().str("phase"))
+        assertNotNull(engine.state()["failure"])
+        assertEquals(false, engine.store.metadata(id)["interrupted"])
+    }
+
+    @Test
+    fun aRepeatedCaptureFailureIsLoggedOnce() {
+        command {
+            start()
+            repeat(2) { failCapture() }
+        }
+        command {}
+        val failures =
+            engine.bluetooth.diagnosticLog
+                .read()
+                .lines()
+                .filter { it.isNotEmpty() }
+                .map(::JSONObject)
+                .filter { it.getString("event") == "recording_error" }
+        assertEquals(listOf(true), failures.map { it.getBoolean("recordingFailed") })
+    }
+
+    @Test
+    fun theStoreCheckpointsItsLogEveryThousandPages() {
+        val db = engine.store.writableDatabase
+        db.beginTransactionNonExclusive()
+        val pages =
+            try {
+                db.rawQuery("PRAGMA wal_autocheckpoint", null).use {
+                    it.moveToFirst()
+                    it.getInt(0)
+                }
+            } finally {
+                db.endTransaction()
+            }
+        assertEquals(1000, pages)
+    }
+
+    @Test
+    fun aStorageHaltReleasesTheWakeLockAndTheRideRate() = command {
+        val id = start()
+        assertNotNull(field("wake"))
+        failCapture()
+        assertEquals("interrupted", engine.state().str("phase"))
+        assertEquals(true, engine.store.metadata(id)["interrupted"])
+        assertNull(field("wake"))
+        @Suppress("UNCHECKED_CAST")
+        val recording =
+            ControllerBluetooth::class
+                .java
+                .getDeclaredField("recording")
+                .apply { isAccessible = true }
+                .get(engine.bluetooth) as () -> Boolean
+        assertFalse(recording())
+    }
+
+    @Test
+    fun telemetryCommitsAtEightSamplesOrOnTheNextTick() = command {
+        val id = start(sampleHz = 8)
+        fun sample() {
+            ShadowSystemClock.advanceBy(Duration.ofMillis(125))
+            telemetry()
+        }
+        repeat(7) { sample() }
+        assertEquals(0, engine.store.page(id).size)
+        sample()
+        assertEquals(8, engine.store.page(id).size)
+        sample()
+        tick()
+        assertEquals(9, engine.store.page(id).size)
+        var transactions = 0
+        engine.store.beforeTransactionEnd = { transactions++ }
+        try {
+            tick()
+        } finally {
+            engine.store.beforeTransactionEnd = null
+        }
+        assertEquals(0, transactions)
+    }
 }

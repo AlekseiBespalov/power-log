@@ -79,6 +79,12 @@
       onStatus?("waiting")
     }
 
+    func setPaused(_ paused: Bool) {
+      DispatchQueue.main.async {
+        self.manager?.desiredAccuracy = paused ? kCLLocationAccuracyThreeKilometers : kCLLocationAccuracyBest
+      }
+    }
+
     func stop() {
       DispatchQueue.main.async {
         self.recording = false

@@ -24507,6 +24507,7 @@ function TelemetryTiming() {
   this.cancellationGraceSeconds_1 = 5.0;
   this.displayHoldSeconds_1 = 6.0;
   this.stableTelemetrySeconds_1 = 30.0;
+  this.backgroundPreviewHz_1 = 1.0;
 }
 protoOf(TelemetryTiming).replyExpired_cmt7hh_k$ = function (sentAt, now) {
   return now - sentAt >= 2.5;

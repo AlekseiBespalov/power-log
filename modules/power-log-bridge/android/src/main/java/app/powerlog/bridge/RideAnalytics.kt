@@ -151,14 +151,16 @@ internal class RideAnalytics(private val store: RideStore) {
                     }
                 val origin = healthOrigins[id]?.get(measure)
                 val query = queries.getOrPut(id to metric) { store.metricQuery(id, metric, elapsedOrder = true) }
-                val raw = raws.getOrPut(query) { rawRows(id, query, start, start + BLOCK) }
+                val projected = projectedMetric(metric)
+                val raw =
+                    if (projected) emptyList() else raws.getOrPut(query) { rawRows(id, query, start, start + BLOCK) }
                 val range = AnalysisRange(elapsedUs(start), elapsedUs(start + BLOCK))
                 val plotMetric = if (metric.endsWith("DistanceMeters")) "distanceMeters" else metric
                 val timeline = timelines.getOrPut(id) { RideAnalysis(store).timeline(id) }
                 val plot =
                     try {
                         val reducer = InspectionPlotReducer(plotMetric, range, 1, owned = true)
-                        if (projectedMetric(metric))
+                        if (projected)
                             RideDistanceInspection(store)
                                 .boundaries(id, metric, range.startUs, range.endUs)
                                 .forEach(reducer::appendDistance)
@@ -171,7 +173,7 @@ internal class RideAnalytics(private val store: RideStore) {
                         null
                     }
                 val checkpoint =
-                    if (projectedMetric(metric)) null
+                    if (projected) null
                     else {
                         val predecessor =
                             if (query in predecessors) predecessors[query]
@@ -193,8 +195,8 @@ internal class RideAnalytics(private val store: RideStore) {
                         metric,
                         bucket,
                         revisions.getOrPut(id) { store.revision(id) },
-                        raw.firstOrNull()?.time ?: start,
-                        raw.lastOrNull()?.time ?: start,
+                        if (projected) edgeTime(id, query, start, last = false) else raw.firstOrNull()?.time ?: start,
+                        if (projected) edgeTime(id, query, start, last = true) else raw.lastOrNull()?.time ?: start,
                         payload.toString(),
                     ),
                 )
@@ -717,6 +719,16 @@ internal class RideAnalytics(private val store: RideStore) {
             if (rows.isEmpty()) return
             rows.forEach(body)
             after = rows.last()
+        }
+    }
+
+    private fun edgeTime(id: String, query: String, start: Double, last: Boolean): Double {
+        val order = if (last) "DESC" else "ASC"
+        return store.select(
+            "SELECT time FROM ($query) WHERE elapsed_us>=? AND elapsed_us<? ORDER BY elapsed_us $order,producer $order,producer_sequence $order,id $order LIMIT 1",
+            arrayOf<Any>(id, elapsedUs(start), elapsedUs(start + BLOCK)),
+        ) { c ->
+            if (c.moveToFirst()) c.getDouble(0) else start
         }
     }
 

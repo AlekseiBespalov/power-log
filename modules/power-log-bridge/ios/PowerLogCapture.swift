@@ -4,8 +4,6 @@ import PowerLogCore
 struct PowerLogCaptureFrame {
   let sample: [String: Any]
   let liveID: String
-  let liveStartedAt: String
-  let liveOrigin: Double
   let liveElapsed: Double
   var ride: PowerLogCaptureDestination? = nil
   var admission: Int64 = 0
@@ -156,8 +154,8 @@ struct PowerLogCaptureRecord {
 
 /// Destination and mapping are frozen before buffering. Failed commits retain the identical batch.
 final class PowerLogCaptureBatch {
-  static let targetFrames = 8
-  static let maximumFrames = 64
+  static let targetFrames = Int(CaptureBatch.companion.targetFrames)
+  static let maximumFrames = Int(CaptureBatch.companion.maximumFrames)
   private(set) var records: [PowerLogCaptureRecord] = []
   private(set) var oldestAdmission: Double?
   var isEmpty: Bool { records.isEmpty }
@@ -233,6 +231,7 @@ final class PowerLogCaptureRecorder {
   }
   func barrier() throws {
     try queue.sync {
+      defer { if !inbox.isEmpty { queue.async { self.pump() } } }
       try drain(limit: inbox.count)
       try flush()
     }
@@ -245,9 +244,11 @@ final class PowerLogCaptureRecorder {
   }
   private func pump() {
     do {
-      try drain(limit: inbox.count)
-      if batch.records.count >= PowerLogCaptureBatch.targetFrames { try flush() }
-      if !batch.isEmpty { schedule(after: max(0, 1 - (now() - (batch.oldestAdmission ?? now())))) }
+      try drain()
+      guard let oldest = batch.oldestAdmission else { return }
+      let delay = CaptureBatch.companion.flushDelaySeconds(
+        frames: Int32(batch.records.count), ageSeconds: now() - oldest)
+      if delay == 0 { try flush() } else if due == nil { schedule(after: delay) }
     } catch {
       failed?(error)
       schedule(after: 1)
@@ -259,7 +260,7 @@ final class PowerLogCaptureRecorder {
       guard let self else { return }
       self.due = nil
       do {
-        try self.drain(limit: self.inbox.count)
+        try self.drain()
         try self.flush()
       } catch {
         self.failed?(error)
@@ -269,25 +270,31 @@ final class PowerLogCaptureRecorder {
     due = work
     queue.asyncAfter(deadline: .now() + delay, execute: work)
   }
-  private func drain(limit: Int) throws {
+  private func drain(limit: Int = .max) throws {
     var remaining = limit
     while remaining > 0, let frame = inbox.first {
       if batch.available == 0 { try flush() }
-      var timeline = frame.ride?.timeline
-      if let latest = inbox.currentDestination, latest.id == frame.ride?.id, latest.generation == frame.ride?.generation
-      {
-        timeline = latest.timeline
-      }
-      if frame.ride.map({ !discarded.contains($0.id) }) == true, let elapsed = try frame.rideElapsed(timeline: timeline)
-      {
-        let record = try PowerLogCaptureRecord(frame: frame, rideElapsed: elapsed)
-        try batch.append(record, at: now())
-      } else if frame.ride == nil {
-        try MonitorDataStore.shared.appendLive(frame.sample, elapsedSeconds: frame.liveElapsed)
+      do {
+        try stage(frame)
+      } catch PowerLogStorageError.busy {
+        throw PowerLogStorageError.busy
+      } catch {
+        failed?(error)
       }
       _ = inbox.take(upTo: 1)
       remaining -= 1
       if batch.records.count >= PowerLogCaptureBatch.targetFrames { try flush() }
+    }
+  }
+  private func stage(_ frame: PowerLogCaptureFrame) throws {
+    var timeline = frame.ride?.timeline
+    if let latest = inbox.currentDestination, latest.id == frame.ride?.id, latest.generation == frame.ride?.generation {
+      timeline = latest.timeline
+    }
+    if frame.ride.map({ !discarded.contains($0.id) }) == true, let elapsed = try frame.rideElapsed(timeline: timeline) {
+      try batch.append(PowerLogCaptureRecord(frame: frame, rideElapsed: elapsed), at: now())
+    } else if frame.ride == nil {
+      try MonitorDataStore.shared.appendLive(frame.sample, elapsedSeconds: frame.liveElapsed)
     }
   }
   private func flush() throws {

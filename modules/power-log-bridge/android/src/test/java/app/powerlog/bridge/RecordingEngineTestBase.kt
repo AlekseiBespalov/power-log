@@ -282,6 +282,12 @@ abstract class RecordingEngineTestBase {
         RecordingEngine::class.java.getDeclaredMethod("publish").apply { isAccessible = true }.invoke(engine)
     }
 
+    internal fun tick() {
+        val tick = field("tick") as Runnable
+        tick.run()
+        engine.handler.removeCallbacks(tick)
+    }
+
     internal fun failCapture() {
         RecordingEngine::class
             .java
@@ -425,7 +431,7 @@ abstract class RecordingEngineTestBase {
         RecordingEngine::class
             .java
             .getDeclaredMethod(
-                "telemetry",
+                "captureTelemetry",
                 TelemetryReading::class.java,
                 String::class.java,
                 RecordingClockReading::class.java,
