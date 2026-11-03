@@ -50,7 +50,9 @@ export interface NativeState {
   deviceId?: string;
   controllerModel?: string;
   firmwareLabel?: string;
+  controllerProtocol?: string;
   error?: string;
+  errorCode?: string;
   /** Only a transient connection error may wait for the display hold to expire. */
   recoverableConnectionError?: boolean;
 }

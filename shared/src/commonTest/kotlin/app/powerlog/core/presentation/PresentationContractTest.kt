@@ -1042,6 +1042,29 @@ class PresentationContractTest {
     }
 
     @Test
+    fun presentationResetOnlyOfferedForUnreadablePreferencesAndSavesDefaults() {
+        val previous =
+            Preferences.defaults()
+                .withSelection(MonitorPresetId.temperature, MonitorPresetId.battery, MonitorRange.seconds120)
+        for (readable in
+            listOf(
+                Preferences.load(previous, null),
+                Preferences.load(previous, Preferences.encode(previous)),
+            )) assertFalse(readable.resetOffered)
+        for (unreadable in listOf(Preferences.load(previous, "bad JSON"), Preferences.load(previous, null, "Denied"))) {
+            assertTrue(unreadable.resetOffered)
+            assertTrue(Preferences.change(unreadable, previous).resetOffered)
+        }
+        val reset = Preferences.reset()
+        assertEquals(Preferences.encode(Preferences.defaults()), Preferences.encode(reset.preferences))
+        assertNull(reset.error)
+        assertTrue(reset.writable)
+        assertTrue(reset.shouldSave)
+        assertFalse(reset.resetOffered)
+        assertTrue(Preferences.change(reset, previous).shouldSave)
+    }
+
+    @Test
     fun presentationAutomaticGPSPreference() {
         val preferences = Preferences.defaults().withOptions(RequestedRideOptions(true, false, true))
         val reopened = Preferences.decode(Preferences.encode(preferences))
@@ -1076,7 +1099,7 @@ class PresentationContractTest {
                     "healthConnect",
                 )
             )
-        assertEquals("Backfilled heart rate", active.heartRate.label)
+        assertEquals("Heart rate from Health Connect", active.heartRate.label)
         assertEquals("neutral", active.heartRate.tone)
         assertEquals("Phone · ±6 m", active.gps.detail)
         assertEquals("Receiving samples", active.bike.label)

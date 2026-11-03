@@ -1076,6 +1076,7 @@
         "total_timer_time": 35.1,
         "total_distance": 51.89,
         "total_calories": 19,
+        "avg_speed": 1.573,
         "max_speed": 6.9,
         "avg_heart_rate": 119,
         "max_heart_rate": 129,
@@ -1090,7 +1091,8 @@
         "total_work": 5594,
         "avg_lev_motor_power": 13,
         "max_lev_motor_power": 303,
-        "enhanced_max_speed": 6.9
+        "enhanced_max_speed": 6.9,
+        "enhanced_avg_speed": 1.573
       }
     },
     {
@@ -1565,6 +1567,7 @@
         "total_timer_time": 28,
         "total_distance": 14.15,
         "total_calories": 15,
+        "avg_speed": 1.573,
         "max_speed": 3,
         "max_heart_rate": 130,
         "avg_cadence": 80,
@@ -1576,7 +1579,8 @@
         "first_lap_index": 0,
         "num_laps": 3,
         "total_work": 4259,
-        "enhanced_max_speed": 3
+        "enhanced_max_speed": 3,
+        "enhanced_avg_speed": 1.573
       }
     },
     {

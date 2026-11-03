@@ -5,8 +5,8 @@ import kotlin.test.assertEquals
 
 class DistanceCheckpointTest {
     @Test
-    fun intervalReadBoundsMatchInclusiveKernelAdmission() {
-        assertEquals(2500000L, DistancePolicy.maximumControllerIntervalUs)
+    fun intervalReadBoundsMatchKernelAdmission() {
+        assertEquals(6000000L, DistancePolicy.maximumControllerEdgeUs)
         assertEquals(10000000L, DistancePolicy.maximumGPSIntervalUs)
         assertEquals(true, DistancePolicy.edge(DistancePolicy.maximumGPSIntervalUs, 0.0))
         assertEquals(false, DistancePolicy.edge(DistancePolicy.maximumGPSIntervalUs + 1, 0.0))
@@ -25,15 +25,54 @@ class DistanceCheckpointTest {
                 false,
                 Original("o$time", "e$time", "2026-01-01T00:00:00Z", time / 1000000.0, Scalar.Real64(5.0)),
             )
-        for (duration in
-            listOf(DistancePolicy.maximumControllerIntervalUs, DistancePolicy.maximumControllerIntervalUs + 1)) {
+        for (duration in listOf(DistancePolicy.maximumControllerEdgeUs - 1, DistancePolicy.maximumControllerEdgeUs)) {
             val kernel = ControllerDistanceKernel()
             kernel.append(evidence(0))
-            assertEquals(
-                duration == DistancePolicy.maximumControllerIntervalUs,
-                kernel.append(evidence(duration)) != null,
-            )
+            assertEquals(duration < DistancePolicy.maximumControllerEdgeUs, kernel.append(evidence(duration)) != null)
         }
+    }
+
+    @Test
+    fun shortReconnectJoinsOnlyTheSameControllerInOneActiveInterval() {
+        fun evidence(time: Long, identity: String = "bike", connection: String = "first", active: Int = 0) =
+            ControllerDistanceEvidence(
+                time,
+                time / 1000000.0,
+                5.0,
+                "X6",
+                "5.3",
+                identity,
+                connection,
+                active,
+                null,
+                null,
+                false,
+                Original("o$time", "e$time", "2026-01-01T00:00:00Z", time / 1000000.0, Scalar.Real64(5.0)),
+            )
+        fun join(next: ControllerDistanceEvidence): Pair<DistanceInterval, DistanceInterval?> {
+            val kernel = ControllerDistanceKernel()
+            kernel.append(evidence(0))
+            return requireNotNull(kernel.append(evidence(1000000))) to kernel.append(next)
+        }
+        val (before, next) = join(evidence(5000000, connection = "second"))
+        val joined = requireNotNull(next)
+        assertEquals(
+            DistanceInterval(
+                1000000,
+                5000000,
+                20000000,
+                before.segment,
+                0,
+                before.end,
+                joined.end,
+                5000000,
+                5000000,
+                originalMeters = 20.0,
+            ),
+            joined,
+        )
+        assertEquals(null, join(evidence(5000000, identity = "other", connection = "second")).second)
+        assertEquals(null, join(evidence(5000000, active = 1)).second)
     }
 
     @Test

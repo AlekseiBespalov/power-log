@@ -101,16 +101,17 @@ object SourcePresentations {
                     "restricted" ->
                         SourcePresentation(
                             if (heartStatus == "denied") "Heart-rate access denied" else "Heart-rate access restricted",
-                            "Health Connect readback",
+                            "Allow heart rate for Power Log in Health Connect.",
                             "warning",
                         )
                     "receiving",
-                    "backfilled" -> SourcePresentation("Backfilled heart rate", "Health Connect readback", "neutral")
+                    "backfilled" ->
+                        SourcePresentation("Heart rate from Health Connect", "Read after the ride", "neutral")
                     "waiting",
                     "notDetermined" ->
                         SourcePresentation(
-                            "Waiting for backfill",
-                            "Heart rate can appear after Health Connect readback.",
+                            "Heart rate comes later",
+                            "Power Log reads it from Health Connect after the ride.",
                             "neutral",
                         )
                     else -> heart

@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import PowerLogCore
 
 try runDistanceContractFixtures()
 
@@ -182,6 +183,25 @@ for saves in [true, false] {
   try archive.appendBatch([gps(id, 0), gps(id, 1)])
   near(try service.snapshot(id: id).totalMeters, 5, "Health saving does not change GPS")
 }
+let unjoined = try ride()
+try archive.appendBatch([controller(unjoined, 0), controller(unjoined, 1)])
+let unjoinedSnapshot = try service.snapshot(id: unjoined)
+let joinLimit = String(DistancePolicy.shared.maximumControllerEdgeUs)
+try store.transaction { db in
+  try db.execute(
+    "UPDATE distance_snapshots SET value=CAST(json_remove(CAST(value AS TEXT),'$.controllerEdgeUs') AS BLOB) WHERE collection_id=?",
+    [.text(unjoined)])
+  try db.execute(
+    #"UPDATE distance_generations SET state=CAST(replace(CAST(state AS TEXT),'\"controllerEdgeUs\":\#(joinLimit),','') AS BLOB) WHERE collection_id=?"#,
+    [.text(unjoined)])
+}
+check(
+  try service.cachedSnapshot(id: unjoined, revision: unjoinedSnapshot.revision) == nil,
+  "a snapshot stored without the controller distance join limit is not current")
+try archive.append(controller(unjoined, 2))
+check(
+  try service.snapshot(id: unjoined).generation != unjoinedSnapshot.generation,
+  "a generation built without the controller distance join limit is rebuilt, not extended")
 let alternate = try ride()
 try archive.appendBatch([gps(alternate, 0), gps(alternate, 0, source: "phone"), gps(alternate, 1, source: "phone")])
 check(try service.snapshot(id: alternate).source == "gps:phone", "alternate GPS selected when owner has no interval")
@@ -233,13 +253,17 @@ for missing in ["captureSessionID", "connectionEpoch", "clockEpoch"] {
       try service.snapshot(id: id).totalMeters, 4, "missing continuity evidence cannot bridge to current observations")
   }
 }
-let reconnect = try ride(indoor: true)
-try archive.appendBatch([
-  controller(reconnect, 0), controller(reconnect, 1),
-  controller(reconnect, 2, extra: ["connectionEpoch": .string("reconnected")]),
-  controller(reconnect, 3, extra: ["connectionEpoch": .string("reconnected")]),
-])
-near(try service.snapshot(id: reconnect).totalMeters, 8, "connection epochs break controller integration")
+for (resumed, meters) in [(2.0, 12.0), (7.0, 8.0)] {
+  let reconnect = try ride(indoor: true)
+  try archive.appendBatch([
+    controller(reconnect, 0), controller(reconnect, 1),
+    controller(reconnect, resumed, extra: ["connectionEpoch": .string("reconnected")]),
+    controller(reconnect, resumed + 1, extra: ["connectionEpoch": .string("reconnected")]),
+  ])
+  near(
+    try service.snapshot(id: reconnect).totalMeters, meters,
+    "a reconnect joins controller integration only across a loss shorter than six seconds")
+}
 
 let healthID = try ride(saves: true)
 let uuid = UUID().uuidString.lowercased()
@@ -275,15 +299,18 @@ try archive.appendBatch([gps(legacy, 0), gps(legacy, 10)])
 try archive.update(id: legacy, stopElapsedSeconds: 10)
 _ = try archive.finish(id: legacy, endedAt: start.addingTimeInterval(10))
 near(try service.snapshot(id: legacy).totalMeters, 50, "legacy stop-only lifecycle starts at ride origin")
-let controllerBarrier = try ride(indoor: true, watch: false)
-try archive.appendBatch([
-  controller(controllerBarrier, 0), controller(controllerBarrier, 1),
-  controller(controllerBarrier, 2, extra: ["clockEpoch": .string("new-epoch")]),
-  controller(controllerBarrier, 3, extra: ["clockEpoch": .string("new-epoch")]),
-])
-near(
-  try service.snapshot(id: controllerBarrier).totalMeters, 8,
-  "epoch reset breaks controller continuity even with same connection")
+for (discontinuity, meters) in [(false, 12.0), (true, 4.0)] {
+  let controllerBarrier = try ride(indoor: true, watch: false)
+  var reset: [String: WorkoutJSON] = ["clockEpoch": .string("new-epoch")]
+  if discontinuity { reset["clockDiscontinuitySeconds"] = .number(1) }
+  try archive.appendBatch([
+    controller(controllerBarrier, 0), controller(controllerBarrier, 1), controller(controllerBarrier, 2, extra: reset),
+    controller(controllerBarrier, 3, extra: ["clockEpoch": .string("new-epoch")]),
+  ])
+  near(
+    try service.snapshot(id: controllerBarrier).totalMeters, meters,
+    "only a clock discontinuity, not a new clock epoch, breaks controller continuity on one connection")
+}
 var counterAccumulator = WorkoutControllerDistanceAccumulator()
 func counter(_ time: Double, _ counter: Double) -> WorkoutControllerDistanceSample {
   WorkoutControllerDistanceSample(

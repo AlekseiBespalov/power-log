@@ -336,7 +336,7 @@ for selection in WorkoutDistancePolicy.sources {
 }
 let identity = digest.finalize().map { String(format: "%02x", $0) }.joined()
 check(
-  identity == "f3d0793ea6a9c979591409aca42fd5772d0c8cf9a9c8e223ab2a1236743a28a7",
+  identity == "26e377844df3f064e88442016be5a5a1b2adedc3e09024727bc92970a55ff0ed",
   "profiles, points, intervals and snapshot fields match their recorded digest: \(identity) over \(lines) lines")
 check(
   appended.generation == cold.generation && delayed.generation == cold.generation

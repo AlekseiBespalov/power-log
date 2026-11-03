@@ -169,6 +169,23 @@ describe('rider-facing action failures', () => {
     expect(archive.snapshot().get('csv')?.error).toBe("Power Log couldn't open this CSV.");
     expect(archive.snapshot().get('csv-storage')?.error).toBe(presentationFailure('storageFull').text);
   });
+
+  it('shows an unreadable ride page or a lost export position as a plain sentence, not the internal detail', async () => {
+    const archive = new ArchiveActions(() => {});
+    await archive.run('page', async () => {
+      throw new ExportError(
+        'page',
+        'The ride data could not be read for export: a telemetry page has no valid cursor.',
+      );
+    });
+    await archive.run('cursor', async () => {
+      throw new ExportError('cursor', 'The telemetry cursor changed its shape.');
+    });
+    expect(archive.snapshot().get('page')?.error).toBe(
+      "Power Log couldn't read this ride for export. Export it again, and report it if this keeps happening.",
+    );
+    expect(archive.snapshot().get('cursor')?.error).toBe('The export lost its place in the ride. Export it again.');
+  });
 });
 
 describe('independent archive actions', () => {

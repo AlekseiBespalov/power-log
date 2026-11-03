@@ -221,6 +221,7 @@ object CacheIdentity {
                 pin.metadata.healthOutcome?.name ?: "",
                 pin.metadata.healthReadbackPending.toString(),
                 pin.distanceSelection,
+                DistancePolicy.maximumControllerEdgeUs.toString(),
             )
         )
 

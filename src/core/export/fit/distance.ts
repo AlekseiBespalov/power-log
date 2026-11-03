@@ -42,6 +42,9 @@ function intervalTime(value: string): bigint {
 }
 
 export class DistancePoints {
+  // Four values per point: elapsed seconds, cumulative meters, activity interval and controller speed (NaN for GPS).
+  values = new Float64Array(0);
+  count = 0;
   private readonly total = new AnalyticsDistanceReducer('0', '2678400000000');
   private previousEnd: bigint | null = null;
   private previousSegment = NaN;
@@ -61,29 +64,51 @@ export class DistancePoints {
     }));
   }
 
-  add(interval: DistanceInterval, out: Float64Array, at: number): number {
-    const { meters, segment } = interval;
+  clear(): void {
+    this.count = 0;
+  }
+
+  add(interval: DistanceInterval): number {
+    const { meters, segment, startSpeed, endSpeed } = interval;
     const start = intervalTime(interval.startUs);
     const end = intervalTime(interval.endUs);
     if (!Number.isFinite(meters) || start < 0n || end <= start || meters < 0) throw malformed('is not a valid span');
     if (this.started && start < this.previousEnd!) throw malformed('overlaps the previous one');
     const activity = this.containing(start, end);
-    let added = 0;
-    if (!this.started || !sameSegment(segment, this.previousSegment) || start !== this.previousEnd) {
-      out[at] = Number(start) / 1e6;
-      out[at + 1] = this.total.result('0').distanceMeters;
-      out[at + 2] = activity;
-      added++;
+    const controller = this.kind === 'controller';
+    const first = this.count;
+    if (!this.started || !sameSegment(segment, this.previousSegment) || start !== this.previousEnd)
+      this.push(start, this.total.result('0').distanceMeters, activity, controller ? startSpeed : NaN);
+    const item = coreInterval(interval, this.kind, activity);
+    if (controller && end - start > 1000000n) {
+      const { distanceQ, coveredUs } = this.total.result('0');
+      for (let at = start + 1000000n; at < end; at += 1000000n) {
+        const reached = new AnalyticsDistanceReducer('0', at.toString(), distanceQ, coveredUs);
+        reached.append(item);
+        const share = Number(at - start) / Number(end - start);
+        this.push(at, reached.result('0').distanceMeters, activity, startSpeed + (endSpeed - startSpeed) * share);
+      }
     }
-    this.total.append(coreInterval(interval, this.kind, activity));
-    out[at + 3 * added] = Number(end) / 1e6;
-    out[at + 3 * added + 1] = this.total.result('0').distanceMeters;
-    out[at + 3 * added + 2] = activity;
-    added++;
+    this.total.append(item);
+    this.push(end, this.total.result('0').distanceMeters, activity, controller ? endSpeed : NaN);
     this.started = true;
     this.previousEnd = end;
     this.previousSegment = segment;
-    return added;
+    return this.count - first;
+  }
+
+  private push(time: bigint, meters: number, activity: number, speed: number): void {
+    const at = 4 * this.count;
+    if (at === this.values.length) {
+      const grown = new Float64Array(Math.max(1024, 2 * this.values.length));
+      grown.set(this.values);
+      this.values = grown;
+    }
+    this.values[at] = Number(time) / 1e6;
+    this.values[at + 1] = meters;
+    this.values[at + 2] = activity;
+    this.values[at + 3] = speed;
+    this.count++;
   }
 
   private containing(start: bigint, end: bigint): number {
@@ -156,7 +181,7 @@ export class DistanceRanges {
 
   averageSpeed(): number {
     const result = this.session.result(this.timeline.timerUs);
-    return result.partial || result.coveredUs === '0' ? NaN : analyticsDivide(result.distanceQ, result.coveredUs);
+    return result.coveredUs === '0' ? NaN : analyticsDivide(result.distanceQ, result.coveredUs);
   }
 
   private range(reducer: AnalyticsDistanceReducer, timerUs: string): DistanceRange {

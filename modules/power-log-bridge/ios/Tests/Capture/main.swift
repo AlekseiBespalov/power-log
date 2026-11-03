@@ -167,4 +167,79 @@ check(done.wait(timeout: .now() + 5) == .success, "stalled flush completes")
 check(
   try archive.metadata(id: fenced.id).eventCount == 5,
   "Stop fence survives destination clearing and excludes later queued originals inside the storage transaction")
+let reclaimArchive = try WorkoutArchive(rootURL: root.appendingPathComponent("reclaim"))
+let doomed = try reclaimArchive.create(
+  startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 8)
+var doomedBatch: [WorkoutEvent] = []
+for sample in 0..<4096 {
+  doomedBatch.append(
+    try WorkoutEvent(
+      workoutId: doomed.id, kind: "telemetry", source: "controller",
+      timestamp: start.addingTimeInterval(Double(sample) / 8), elapsedSeconds: Double(sample) / 8,
+      payload: [
+        "humanPowerW": .number(Double(100 + sample % 211)), "cadenceRpm": .number(80),
+        "batteryCurrentA": .number(Double(sample % 97) / 4),
+      ]))
+  if doomedBatch.count == 512 {
+    _ = try reclaimArchive.appendBatch(doomedBatch)
+    doomedBatch.removeAll()
+  }
+}
+_ = try reclaimArchive.update(id: doomed.id, phase: "completed")
+let recording = try reclaimArchive.create(
+  startedAt: start, indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 8)
+_ = try reclaimArchive.store.markWorkoutDeleted(id: doomed.id)
+while try !reclaimArchive.cleanupDeletedWorkoutPage(id: doomed.id) {}
+let reclaimRecorder = PowerLogCaptureRecorder(store: reclaimArchive.store)
+reclaimRecorder.setDestination(PowerLogCaptureDestination(id: recording.id, generation: UUID(), timeline: anchor))
+let captureState = NSCondition()
+var captureCommits = 0
+var captureFailures: [Error] = []
+var reclaimFinished = false
+reclaimRecorder.failed = { error in
+  captureState.lock()
+  captureFailures.append(error)
+  captureState.unlock()
+}
+let capturing = DispatchGroup()
+DispatchQueue.global().async(group: capturing) {
+  var second = 0.0
+  while captureState.withLock({ !reclaimFinished }) {
+    do {
+      for index in 0..<8 { try reclaimRecorder.admit(frame(70 + second + Double(index) / 8)) }
+      try reclaimRecorder.barrier()
+      captureState.withLock {
+        captureCommits += 1
+        captureState.broadcast()
+      }
+    } catch {
+      captureState.withLock { captureFailures.append(error) }
+    }
+    second += 1
+  }
+}
+var commitWhileReclaiming: Bool?
+reclaimArchive.store.reclaimStepObserverForTesting = { action in
+  guard action == .reclaim, commitWhileReclaiming == nil else { return }
+  captureState.lock()
+  let before = captureCommits
+  let deadline = Date().addingTimeInterval(5)
+  while captureCommits == before, captureState.wait(until: deadline) {}
+  commitWhileReclaiming = captureCommits > before
+  captureState.unlock()
+}
+let reclaimed = reclaimArchive.store.reclaimSpace()
+reclaimArchive.store.reclaimStepObserverForTesting = nil
+captureState.withLock { reclaimFinished = true }
+capturing.wait()
+try reclaimRecorder.barrier()
+check(reclaimed.failure == nil && reclaimed.steps > 1, "the deleted ride is reclaimed in several steps")
+check(commitWhileReclaiming == true, "a capture batch commits while the reclaim is between steps")
+check(captureFailures.isEmpty, "no capture batch fails while space is reclaimed")
+check(
+  try reclaimArchive.metadata(id: recording.id).eventCount == 8 * captureCommits,
+  "every capture batch committed during the reclaim is retained")
+check(
+  try reclaimArchive.store.read { try $0.rows("PRAGMA integrity_check", limit: 1).first?.string("integrity_check") }
+    == "ok", "capture during reclaim keeps the store intact")
 print("Phone canonical capture: \(checks) checks passed")

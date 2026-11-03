@@ -18,6 +18,7 @@
     "bluetooth_state",
     "telemetry_summary",
     "telemetry_gap",
+    "request_resent",
     "background_changed",
     "recording_error",
     "restored",

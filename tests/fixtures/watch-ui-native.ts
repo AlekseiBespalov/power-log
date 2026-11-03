@@ -61,6 +61,8 @@ export function seed(os: 'ios' | 'android' | 'web', phase: WorkoutState['phase']
   };
 }
 const bridge = {
+  getBluetoothTrace: async () => ({ capturing: false, eventCount: 0, byteCount: 0, stopReason: null, lastEvent: null }),
+  readConnectionDiagnostics: async () => ({ log: '', device: {} }),
   refreshWorkoutHealth: async (id: string) => {
     calls.refresh.push(id);
     return state;

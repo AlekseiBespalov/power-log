@@ -302,6 +302,32 @@ class RideDistanceTest {
         }
     }
 
+    @Test
+    fun inspectionInsideAJoinedControllerLossFindsBothOfItsReadings() {
+        RideStore(RuntimeEnvironment.getApplication(), "joined-${UUID.randomUUID()}.sqlite").use { store ->
+            val id =
+                store.create(
+                    RideOptions(indoor = false, saveToHealth = false, recordGPS = false),
+                    SystemRecordingClock.read(),
+                )
+            val distance = RideDistance(store)
+            store.transaction {
+                for ((time, epoch) in listOf(0.0 to "first", 1.0 to "first", 6.5 to "second", 7.5 to "second")) {
+                    val values = mapOf("controllerSpeedMps" to 10.0)
+                    val row = store.insert(id, time, iso(), "telemetry", true, 0, values, "X6|bike|5.3", epoch)
+                    distance.append(id, row, time, values, true, 0, epoch, "X6|bike|5.3", false)
+                }
+            }
+            assertEquals(75.0 to 7.5, distance.total(id, "controller"))
+            val boundaries =
+                RideDistanceInspection(store).boundaries(id, "controllerDistanceMeters", elapsedUs(2.0), elapsedUs(2.0))
+            assertEquals(
+                listOf(elapsedUs(1.0) to 10.0, elapsedUs(6.5) to 65.0),
+                boundaries.map { it.point.timeUs to it.point.original.value.real() },
+            )
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     @Test
     fun coveredGpsIntervalLongerThanTheDisplayGapStaysConnected() {

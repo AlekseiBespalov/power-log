@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
+import android.text.format.DateFormat
 import app.powerlog.core.presentation.ExternalControlRequest
 import app.powerlog.core.presentation.RideFailure
 import expo.modules.kotlin.Promise
@@ -228,6 +229,7 @@ class PowerLogBridgeModule internal constructor(private val engineProvider: (() 
         }
         AsyncFunction("getState") { promise: Promise -> submit(promise, "read") { engine.bluetooth.state } }
         AsyncFunction("getMonotonicSeconds") { SystemClock.elapsedRealtime() / 1000.0 }
+        Function("usesTwentyFourHourClock") { appContext.reactContext?.let { DateFormat.is24HourFormat(it) } }
         AsyncFunction("getDiagnostics") { promise: Promise ->
             submit(promise, "read") { engine.bluetooth.diagnostics() }
         }

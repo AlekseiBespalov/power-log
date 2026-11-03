@@ -10,6 +10,7 @@
   final class WorkoutEngine {
     static let shared = WorkoutEngine()
     static let watchRoutineSeconds = 2.0
+    static let healthConfirmationSeconds = 3600.0
     let queue = DispatchQueue(label: "app.powerlog.workout", qos: .userInitiated)
     let fileQueue = DispatchQueue(label: "app.powerlog.workout.analysis", qos: .utility)
     private var archive: WorkoutArchive?
@@ -38,7 +39,8 @@
     private var locations: [WorkoutCompanionLocation] = []
     private var healthSeconds = WorkoutHealthSeconds()
     private var telemetrySequence: Int64 = 0
-    private var stateRevision: Int64 = 0
+    // Keeps rising across app launches: the Watch ignores states with a lower revision.
+    private var stateRevision = Int64(Date().timeIntervalSince1970 * 1_000_000)
     private var finalHealthSeconds: [WorkoutCompanionSecond] = []
     private var finalLocations: [WorkoutCompanionLocation] = []
     private var processingCompanionCommand = false
@@ -61,6 +63,7 @@
     private var active: Double { activeBase + (activeOrigin.map { max(0, clock - $0) } ?? 0) }
 
     init(archive suppliedArchive: WorkoutArchive? = nil) {
+      var records: [WorkoutMetadata] = []
       do {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
           .appendingPathComponent("PowerLog/workouts", isDirectory: true)
@@ -70,7 +73,8 @@
         capture?.mapped = { [weak self] event in self?.queue.async { self?.observeController(event) } }
         capture?.failed = { [weak self] failure in self?.queue.async { self?.captureFailed(failure) } }
         capture?.flushed = { ControllerEngine.shared.queue.async { ControllerEngine.shared.captureResult(nil) } }
-        if let interrupted = try archive.list(limit: 100).first(where: { $0.phase == "interrupted" }) {
+        records = try archive.list(limit: 100)
+        if let interrupted = records.first(where: { $0.phase == "interrupted" }) {
           id = interrupted.id
           rideWatch = interrupted.watchEnabled
           phase = "interrupted"
@@ -125,6 +129,8 @@
       ticker.setEventHandler { [weak self] in self?.tick() }
       self.ticker = ticker
       ticker.resume()
+      queue.async { [records] in for record in records { self.settleHealth(record) } }
+      resumeDeletions()
     }
 
     func addSink(id: UUID, sink: @escaping ([String: Any]) -> Void) {
@@ -335,11 +341,11 @@
           if let error = response.error {
             self.startFailed(WorkoutDataError.invalid(error))
           } else if response.rideID != options.id || response.commandID != attempt {
-            self.startFailed(WorkoutDataError.invalid("The Watch Start response changed."))
+            self.startFailed(WorkoutRideFailure("watchStartUnconfirmed"))
           } else if response.phase == "running" {
             self.beginRunning()
           } else {
-            self.startFailed(WorkoutDataError.invalid("The Watch did not confirm Start."))
+            self.startFailed(WorkoutRideFailure("watchStartUnconfirmed"))
           }
         case .failure(let error): self.startFailed(error)
         }
@@ -393,9 +399,9 @@
       ControllerEngine.shared.queue.async { ControllerEngine.shared.setWorkoutSamplingOwner(target, rate: rate) }
     }
     private func require(_ expected: String?, phases: [String]) throws {
-      guard expected == nil || expected == id else { throw WorkoutDataError.invalid("The selected ride changed.") }
+      guard expected == nil || expected == id else { throw WorkoutRideFailure("rideChanged") }
       guard id != nil, phases.contains(phase) else {
-        throw WorkoutDataError.invalid("That action is unavailable for this ride.")
+        throw WorkoutRideFailure("actionUnavailable")
       }
     }
     func pause(expectedID: String? = nil) throws -> [String: Any] {
@@ -525,11 +531,11 @@
         self.id = nil
         options = nil
         phase = "idle"
-        cleanup(id)
+        cleanup([id])
       } else {
         try? WorkoutSummaryReads.shared.warm(archive: archive, record: archive.metadata(id: id))
         if options?.saveToHealth == true || watch {
-          for delay in [2.0, 900, 3600] {
+          for delay in [2.0, 900, Self.healthConfirmationSeconds] {
             queue.asyncAfter(deadline: .now() + delay) { self.refreshHealth(id) { _ in } }
           }
         }
@@ -729,7 +735,7 @@
         return
       }
       if let expiry = message.expiresAt, expiry < Date() {
-        reply(WorkoutCompanionMessage(kind: .acknowledgement, error: "The action expired."))
+        reply(WorkoutCompanionMessage(kind: .acknowledgement, error: WorkoutRideFailure("actionUnavailable").message))
         return
       }
       if message.kind == .cancelStart {
@@ -771,14 +777,14 @@
       }
       do {
         guard let target = message.rideID, let archive else {
-          throw WorkoutDataError.invalid("Unknown companion ride.")
+          throw WorkoutRideFailure("rideChanged")
         }
         if try archive.store.isWorkoutDeleted(id: target) {
           reply(WorkoutCompanionMessage(kind: .acknowledgement, rideID: target))
           return
         }
         guard try archive.metadata(id: target).watchEnabled else {
-          throw WorkoutDataError.invalid("Unknown companion ride.")
+          throw WorkoutRideFailure("rideChanged")
         }
         if message.kind == .measurements {
           if target == id, let heart = message.readings?["heartRateBpm"], let at = message.sampleTime,
@@ -799,7 +805,7 @@
           return
         }
         guard message.kind == .command, target == id else {
-          throw WorkoutDataError.invalid("The selected ride changed.")
+          throw WorkoutRideFailure("rideChanged")
         }
         processingCompanionCommand = true
         defer { processingCompanionCommand = false }
@@ -809,7 +815,7 @@
         case "lap": _ = try lap(expectedID: target)
         case "stop": _ = try stop(expectedID: target)
         case "discard": _ = try stop(expectedID: target, discard: true)
-        default: throw WorkoutDataError.invalid("Unknown companion action.")
+        default: throw WorkoutRideFailure("actionUnavailable")
         }
         let terminal =
           ["stop", "discard"].contains(message.action ?? "") && pendingTerminal?.rideID == target
@@ -855,6 +861,19 @@
         healthState = stored.healthKitState
       }
       publish()
+    }
+    private func settleHealth(_ record: WorkoutMetadata) {
+      guard record.phase == "completed", record.healthKitState == "pending", let end = record.endedAt,
+        let ended = try? WorkoutCoding.date(end)
+      else { return }
+      health.savedWorkout(rideID: record.id) { result in
+        guard case .success(let workout) = result else { return }
+        if let workout {
+          try? self.setHealth(id: record.id, state: "saved", healthID: workout, reason: nil)
+        } else if Date().timeIntervalSince(ended) >= Self.healthConfirmationSeconds {
+          try? self.setHealth(id: record.id, state: "unknown", healthID: nil, reason: "ambiguous")
+        }
+      }
     }
     private func persist() throws {
       guard let id else { return }
@@ -941,6 +960,7 @@
         guard record.phase == "completed", let end = record.endedAt else {
           throw WorkoutDataError.invalid("Finish the ride before refreshing Health.")
         }
+        settleHealth(record)
         let start = try WorkoutCoding.date(record.startedAt)
         health.readback(
           start: start, end: try WorkoutCoding.date(end),
@@ -968,16 +988,31 @@
         options = nil
         phase = "idle"
       }
-      cleanup(requestedID)
+      cleanup([requestedID])
       publish()
       return state()
     }
-    private func cleanup(_ id: String) {
+    private func cleanup(_ ids: [String]) {
       fileQueue.async { [weak self] in
         guard let archive = self?.archive else { return }
-        do { while try !archive.cleanupDeletedWorkoutPage(id: id) {} } catch {
-          self?.queue.async { self?.error = error.localizedDescription }
+        for id in ids {
+          do { while try !archive.cleanupDeletedWorkoutPage(id: id) {} } catch {
+            self?.queue.async { self?.error = error.localizedDescription }
+          }
         }
+        archive.store.reclaimSpace()
+      }
+    }
+    private func resumeDeletions() {
+      fileQueue.async { [weak self] in
+        guard let store = self?.archive?.store else { return }
+        var pending: [String] = []
+        var after = ""
+        while let page = try? store.deletionPage(after: after, limit: 128), let last = page.last {
+          pending += page.filter { !$0.cleanupComplete }.map(\.id)
+          after = last.id
+        }
+        if !pending.isEmpty { self?.cleanup(pending) }
       }
     }
   }

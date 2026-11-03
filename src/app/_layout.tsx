@@ -11,6 +11,7 @@ import { MonitorPreferencesProvider } from '../services/monitor-preferences';
 import { AppHeader } from '../components/app-header';
 import { TabBar } from '../components/tab-bar';
 import { PrivacyPolicy } from '../features/privacy/privacy-screen';
+export { ErrorScreen as ErrorBoundary } from '../components/error-screen';
 
 const native = Platform.OS !== 'web';
 const subscribe = () => () => {};

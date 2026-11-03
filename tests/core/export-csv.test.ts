@@ -7,6 +7,7 @@ import {
   FIT_START,
   MemorySink,
   MemorySource,
+  controllerLossRide,
   readFit,
   records,
   runCsv,
@@ -96,6 +97,22 @@ describe('one-file CSV export', () => {
     expect(csv.result).toMatchObject({ uri: 'memory://power-log-ride-1.csv', rows: csv.rows.length });
     expect(csv.kinds).toEqual(['csv']);
     expect(csv.source.closed).toBeGreaterThan(0);
+  });
+
+  it('takes speed and the joined distance of a controller ride from the controller', async () => {
+    const ride = controllerLossRide(5, true);
+    const csv = await runCsv(ride);
+    expect(csv.rows.slice(6, 12).map(row => [row.elapsedSeconds, row.distanceMeters, row.speedMps])).toEqual([
+      ['6', '30', '5'],
+      ['7', '35.2', '5.4'],
+      ['8', '40.8', '5.8'],
+      ['9', '46.8', '6.2'],
+      ['10', '53.2', '6.6'],
+      ['11', '60', '7'],
+    ]);
+    expect(csv.rows.map(row => Math.round(Number(row.speedMps) * 1000))).toEqual(
+      records(readFit((await runFit(ride)).bytes)).map(record => record.fields.get(73)),
+    );
   });
 
   it('counts laps and leaves paused seconds out', async () => {

@@ -307,10 +307,7 @@ describe('browser rides with real IndexedDB and Web Locks', () => {
         };
       });
       expect(result).toEqual({
-        failed: {
-          code: 'bikeUnavailable',
-          message: "Your bike isn't connected. Turn on Bluetooth and the bike, keep it nearby, then try again.",
-        },
+        failed: { code: 'bikeUnavailable', message: presentationFailure('bikeUnavailable').text },
         rides: 0,
         state: { id: null, phase: 'idle', failure: null },
         started: 'running',

@@ -63,6 +63,8 @@ import {
 import { distanceMetricSource } from '../core/distance';
 import type { EnergyPerDistanceResult } from '../core/energy-per-distance';
 const PROFILE_SOURCES = ['controller', 'gps:phone', ...CONSUMPTION_METRICS] as const;
+// A browser ride records one bike.
+const RIDE_CONTROLLER = 'ride-controller';
 type ProfileSource = (typeof PROFILE_SOURCES)[number];
 type ConsumptionIntervalData = {
   metric: string;
@@ -943,7 +945,7 @@ async function buildGeneration(
       previous ? (prepared.activeInterval(browserAnalysisItem(previous)) ?? null) : null,
       previous?.controllerModel ?? null,
       previous?.controllerProtocol ?? null,
-      previous?.connectionEpoch ?? null,
+      RIDE_CONTROLLER,
       previous ? JSON.stringify([previous.connectionEpoch, previous.interval, previous.interruptionIndex]) : null,
       checkpoint.segment,
     );
@@ -1101,7 +1103,7 @@ async function buildGeneration(
               active,
               original.controllerModel ?? null,
               original.controllerProtocol ?? null,
-              original.connectionEpoch,
+              RIDE_CONTROLLER,
               JSON.stringify([original.connectionEpoch, original.interval, original.interruptionIndex]),
               null,
               null,

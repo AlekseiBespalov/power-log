@@ -1,9 +1,10 @@
 import bridge from '../../modules/power-log-bridge';
+import { RideFailureError } from '../core/failures';
 import { nativeMonotonicClock, subscribeNativeClock } from './native-monotonic-clock';
 import { idleState, type TelemetryAdapter } from './adapter';
 
 function native() {
-  if (!bridge) throw new Error('Bluetooth needs an installed Power Log native build.');
+  if (!bridge) throw new RideFailureError('bluetoothUnavailable');
   return bridge;
 }
 export const deviceAdapter: TelemetryAdapter = {

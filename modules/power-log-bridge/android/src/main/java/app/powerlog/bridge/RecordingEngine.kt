@@ -35,6 +35,7 @@ private constructor(
     val store = RideStore.shared(context)
     val health = HealthExport(context, store, healthAccess, { timeUs(clock.read().timestamp) })
     val healthTasks = Executors.newSingleThreadExecutor { task -> Thread(task, "PowerLogHealthWork") }
+    val storageTasks = Executors.newSingleThreadExecutor { task -> Thread(task, "PowerLogStorage") }
     private val healthOperations = mutableSetOf<String>()
     private val workPublishPending = java.util.concurrent.atomic.AtomicBoolean()
     private val previewStore = RideStore(context, null)
@@ -97,14 +98,10 @@ private constructor(
     private var publishedSnapshot: RideSnapshot? = null
     private var publishedReadWorkoutIds: List<String> = emptyList()
 
-    private data class ForegroundRequest(
-        val key: LifecycleKey,
-        val id: String,
-        val waitForReady: Boolean,
-        val ready: java.util.concurrent.CompletableFuture<Unit> = java.util.concurrent.CompletableFuture(),
-    )
+    private data class ForegroundRequest(val key: LifecycleKey, val id: String)
 
     @Volatile private var foregroundRequest: ForegroundRequest? = null
+    private val pendingServiceStart = java.util.concurrent.atomic.AtomicReference<String?>()
 
     private data class Boundary(val time: Double, val active: Boolean, val segment: Int)
 
@@ -183,20 +180,11 @@ private constructor(
                 membership(rows.firstOrNull { !it.ride.startsWith("live-") }),
                 json(mapOf("rows" to rows.map { it.payload() })).toString(),
             )
-        val fault =
-            CaptureFault(
-                java.util.UUID.randomUUID().toString(),
-                lifecycle.ride?.key,
-                Timestamps.parse(first.timestamp),
-                first.original.eventId,
-                RideFailure.recordingInterrupted.name,
-            )
-        val decision = LifecycleCapture.admit(captureBatch, original, fault)
+        val decision = LifecycleCapture.admit(captureBatch, original)
         captureBatch = decision.batch
         if (decision.admitted)
             pending.addAll(rows.filter { it.ride.startsWith("live-") || decision.batch.originals.last().ride != null })
-        if (decision.outcome == "overflow")
-            captureFailed(IllegalStateException(fault.error), LifecycleStorageError.captureInterrupted)
+        if (decision.outcome == "overflow") recordingResult(RideFailureException(RideFailure.storageBusy))
         return decision.admitted
     }
 
@@ -461,8 +449,9 @@ private constructor(
                 store.commitLifecycle(before, decision)
             } catch (error: Exception) {
                 if (
-                    error is android.database.sqlite.SQLiteException ||
-                        error is expo.modules.kotlin.exception.CodedException
+                    !storageBusy(error) &&
+                        (error is android.database.sqlite.SQLiteException ||
+                            error is expo.modules.kotlin.exception.CodedException)
                 )
                     captureFailed(error)
                 throw error
@@ -668,6 +657,7 @@ private constructor(
         adoptLifecycle(decision.afterCommit(true).state)
         livePresentation = LivePresentation.empty()
         cleanup()
+        storageTasks.execute { store.reclaimSpace() }
     }
 
     fun foreground() {
@@ -693,21 +683,14 @@ private constructor(
         }
     }
 
-    private fun beginForegroundCapture(waitForReady: Boolean = false) {
-        val request =
-            ForegroundRequest(requireNotNull(lifecycle.ride).key, java.util.UUID.randomUUID().toString(), waitForReady)
+    private fun beginForegroundCapture() {
+        val request = ForegroundRequest(requireNotNull(lifecycle.ride).key, java.util.UUID.randomUUID().toString())
         foregroundRequest = request
+        pendingServiceStart.set(request.id)
         ContextCompat.startForegroundService(
             context,
             Intent(context, RecordingService::class.java).putExtra(RecordingService.FOREGROUND_REQUEST, request.id),
         )
-        if (waitForReady) {
-            try {
-                request.ready.get(PresentationTimeouts.recoveryUs, java.util.concurrent.TimeUnit.MICROSECONDS)
-            } catch (error: java.util.concurrent.ExecutionException) {
-                throw (error.cause as? Exception ?: error)
-            }
-        }
         if (wake?.isHeld != true) {
             val acquired =
                 context
@@ -725,29 +708,23 @@ private constructor(
 
     internal fun foregroundReady(requestId: String?, rideId: String, error: Exception? = null) {
         val request = foregroundRequest ?: return
-        if (request.key.rideId != rideId || requestId != null && request.id != requestId) return
-        val waiting = request.waitForReady && !request.ready.isDone
-        if (error == null) request.ready.complete(Unit)
-        else {
-            request.ready.completeExceptionally(error)
-            if (!waiting)
-                handler.post {
-                    if (foregroundRequest === request && lifecycle.ride?.key == request.key) {
-                        cleanup()
-                        captureFailed(error, LifecycleStorageError.captureInterrupted)
-                    }
-                }
+        if (error == null || request.key.rideId != rideId || requestId != null && request.id != requestId) return
+        handler.post {
+            if (foregroundRequest === request && lifecycle.ride?.key == request.key) {
+                cleanup()
+                captureFailed(error, LifecycleStorageError.captureInterrupted)
+            }
         }
     }
 
-    internal val awaitingForeground: Boolean
-        get() = foregroundRequest?.let { it.waitForReady && !it.ready.isDone } == true
+    internal val foregroundRequestId: String?
+        get() = foregroundRequest?.id
 
     private fun requestLifecycle(request: LifecycleRequest): LifecycleTransition =
         try {
             store.requestLifecycle(lifecycle, request)
         } catch (error: Exception) {
-            captureFailed(error)
+            if (!storageBusy(error)) captureFailed(error)
             throw error
         }
 
@@ -784,6 +761,7 @@ private constructor(
 
     fun delete(id: String): Payload {
         store.deleteHistorical(id, lifecycle)
+        storageTasks.execute { store.reclaimSpace() }
         if (selectedRide == id) selectedRide = null
         if (lifecycle.ride?.key?.rideId == id) adoptLifecycle(store.lifecycleState())
         publish()
@@ -846,14 +824,19 @@ private constructor(
         locations.removeUpdates(locationListener)
         releaseWake()
         distance.retainOnly(live)
-        context.stopService(Intent(context, RecordingService::class.java))
+        // Stopping a service before it calls startForeground crashes the app; a pending start stops itself.
+        if (pendingServiceStart.get() == null) context.stopService(Intent(context, RecordingService::class.java))
+    }
+
+    internal fun serviceStarted(requestId: String) {
+        pendingServiceStart.updateAndGet { if (it == requestId) null else it }
     }
 
     private fun recordingResult(error: Exception?) {
         val failure = error?.let { RideFailures.classify(it, "capture").name }
         if (failure == recordingError) return
         recordingError = failure
-        handler.post { bluetooth.recordingResult(failure != null) }
+        handler.post { bluetooth.recordingResult(failure) }
     }
 
     private fun releaseWake() {
@@ -1242,7 +1225,7 @@ private constructor(
                 }
             } catch (error: Exception) {
                 captureBatch = LifecycleCapture.committed(captureBatch, attempted, false).batch
-                if (!storageBusy(error)) captureFailed(error)
+                if (storageBusy(error)) recordingResult(error) else captureFailed(error)
                 throw error
             }
         captureBatch = LifecycleCapture.committed(captureBatch, attempted, true).batch
@@ -1259,9 +1242,7 @@ private constructor(
         }
     }
 
-    private fun storageBusy(error: Exception) =
-        error is android.database.sqlite.SQLiteDatabaseLockedException ||
-            (error as? expo.modules.kotlin.exception.CodedException)?.code == "ERR_STORAGE_BUSY"
+    private fun storageBusy(error: Exception) = RideFailures.classify(error) == RideFailure.storageBusy
 
     private fun captureFailed(error: Exception) =
         captureFailed(

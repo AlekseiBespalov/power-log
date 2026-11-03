@@ -91,14 +91,14 @@ initMetadataForClass(AbstractCollection, 'AbstractCollection', VOID, VOID, [Coll
 initMetadataForClass(AbstractMutableCollection, 'AbstractMutableCollection', VOID, AbstractCollection, [Collection]);
 initMetadataForClass(IteratorImpl, 'IteratorImpl');
 initMetadataForClass(ListIteratorImpl, 'ListIteratorImpl', VOID, IteratorImpl);
-initMetadataForClass(AbstractMutableList, 'AbstractMutableList', VOID, AbstractMutableCollection, [KtList, Collection]);
+initMetadataForClass(AbstractMutableList, 'AbstractMutableList', VOID, AbstractMutableCollection, [Collection, KtList]);
 initMetadataForInterface(RandomAccess, 'RandomAccess');
 initMetadataForClass(SubList, 'SubList', VOID, AbstractMutableList, [RandomAccess]);
 initMetadataForClass(AbstractMap, 'AbstractMap', VOID, VOID, [KtMap]);
 initMetadataForClass(AbstractMutableMap, 'AbstractMutableMap', VOID, AbstractMap, [KtMap]);
 initMetadataForClass(AbstractMutableSet, 'AbstractMutableSet', VOID, AbstractMutableCollection, [KtSet, Collection]);
 initMetadataForCompanion(Companion_3);
-initMetadataForClass(ArrayList, 'ArrayList', ArrayList_init_$Create$, AbstractMutableList, [KtList, Collection, RandomAccess]);
+initMetadataForClass(ArrayList, 'ArrayList', ArrayList_init_$Create$, AbstractMutableList, [Collection, KtList, RandomAccess]);
 initMetadataForClass(HashMap, 'HashMap', HashMap_init_$Create$, AbstractMutableMap, [KtMap]);
 initMetadataForClass(HashMapKeys, 'HashMapKeys', VOID, AbstractMutableSet, [KtSet, Collection]);
 initMetadataForClass(HashMapValues, 'HashMapValues', VOID, AbstractMutableCollection, [Collection]);
@@ -7629,28 +7629,6 @@ function split(_this__u8e3s4, delimiters, ignoreCase, limit) {
   }
   return destination;
 }
-function trimEnd(_this__u8e3s4, chars) {
-  // Inline function 'kotlin.text.trimEnd' call
-  var tmp0 = isCharSequence(_this__u8e3s4) ? _this__u8e3s4 : THROW_CCE();
-  var tmp$ret$1;
-  $l$block: {
-    // Inline function 'kotlin.text.trimEnd' call
-    var inductionVariable = charSequenceLength(tmp0) - 1 | 0;
-    if (0 <= inductionVariable)
-      do {
-        var index = inductionVariable;
-        inductionVariable = inductionVariable + -1 | 0;
-        var it = charSequenceGet(tmp0, index);
-        if (!contains_0(chars, it)) {
-          tmp$ret$1 = charSequenceSubSequence(tmp0, 0, index + 1 | 0);
-          break $l$block;
-        }
-      }
-       while (0 <= inductionVariable);
-    tmp$ret$1 = '';
-  }
-  return toString_1(tmp$ret$1);
-}
 function startsWith_1(_this__u8e3s4, char, ignoreCase) {
   ignoreCase = ignoreCase === VOID ? false : ignoreCase;
   return charSequenceLength(_this__u8e3s4) > 0 && equals_0(charSequenceGet(_this__u8e3s4, 0), char, ignoreCase);
@@ -7697,6 +7675,28 @@ function trimStart(_this__u8e3s4, chars) {
         }
       }
        while (inductionVariable <= last);
+    tmp$ret$1 = '';
+  }
+  return toString_1(tmp$ret$1);
+}
+function trimEnd(_this__u8e3s4, chars) {
+  // Inline function 'kotlin.text.trimEnd' call
+  var tmp0 = isCharSequence(_this__u8e3s4) ? _this__u8e3s4 : THROW_CCE();
+  var tmp$ret$1;
+  $l$block: {
+    // Inline function 'kotlin.text.trimEnd' call
+    var inductionVariable = charSequenceLength(tmp0) - 1 | 0;
+    if (0 <= inductionVariable)
+      do {
+        var index = inductionVariable;
+        inductionVariable = inductionVariable + -1 | 0;
+        var it = charSequenceGet(tmp0, index);
+        if (!contains_0(chars, it)) {
+          tmp$ret$1 = charSequenceSubSequence(tmp0, 0, index + 1 | 0);
+          break $l$block;
+        }
+      }
+       while (0 <= inductionVariable);
     tmp$ret$1 = '';
   }
   return toString_1(tmp$ret$1);

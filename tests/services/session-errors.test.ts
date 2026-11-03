@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   initialSessionErrors,
-  sessionErrorMessage,
+  sessionError,
   sessionErrorReducer,
   type SessionErrorAction,
 } from '../../src/services/session-errors';
@@ -11,7 +11,9 @@ import failures from '../fixtures/contract/presentation/failures.json';
 import { RideFailureError } from '../../src/core/failures';
 
 const coded = (code: string, message: string) => Object.assign(new Error(message), { code });
+const sessionErrorMessage = (...input: Parameters<typeof sessionError>) => sessionError(...input)?.message ?? null;
 const bikeUnavailable = presentationFailure('bikeUnavailable').text;
+const reconnecting = presentationFailure('bikeReconnecting').text;
 
 function replay(...actions: SessionErrorAction[]) {
   return actions.reduce(sessionErrorReducer, initialSessionErrors);
@@ -19,26 +21,26 @@ function replay(...actions: SessionErrorAction[]) {
 
 describe('session error lifecycle', () => {
   it('defers an ongoing reconnect banner only until the held readings expire', () => {
-    const errors = replay({ type: 'native', error: 'Bike disconnected. Reconnecting…' });
+    const errors = replay({ type: 'native', error: reconnecting });
     const renderAt = (now: number) =>
       sessionErrorMessage(errors, {
         deferNative: telemetryDisplay('reconnecting', 10, now) === 'held',
       });
     expect(renderAt(10.3)).toBeNull();
     expect(renderAt(15.999)).toBeNull();
-    expect(renderAt(16)).toBe('Bike disconnected. Reconnecting…');
-    expect(renderAt(25)).toBe('Bike disconnected. Reconnecting…');
+    expect(renderAt(16)).toBe(reconnecting);
+    expect(renderAt(25)).toBe(reconnecting);
   });
 
   it('does not show a delayed banner after recovery or after dismissal', () => {
-    const error = replay({ type: 'native', error: 'Bike disconnected. Reconnecting…' });
+    const error = replay({ type: 'native', error: reconnecting });
     expect(sessionErrorMessage(sessionErrorReducer(error, { type: 'native', error: undefined }))).toBeNull();
     expect(sessionErrorMessage(sessionErrorReducer(error, { type: 'dismiss' }), { deferNative: false })).toBeNull();
   });
 
   it('keeps action failures visible even during a quiet reconnect', () => {
     const errors = replay(
-      { type: 'native', error: 'Bike disconnected. Reconnecting…' },
+      { type: 'native', error: reconnecting },
       { type: 'operation', error: new RideFailureError('bikeUnavailable') },
     );
     expect(sessionErrorMessage(errors, { deferNative: true })).toBe(bikeUnavailable);
@@ -104,6 +106,25 @@ describe('session error lifecycle', () => {
         sessionErrorReducer(state, { type: 'operation', error: new RideFailureError('bikeUnavailable') }),
       ),
     ).toBe(bikeUnavailable);
+  });
+
+  it('keeps the code of the shown failure and names the platform permission', () => {
+    const denied = coded('bluetoothDenied', 'Allow Bluetooth for Power Log in Settings.');
+    expect(sessionError(replay({ type: 'operation', error: denied, platform: 'android' }))).toEqual({
+      message: "Power Log can't use Bluetooth. Allow Nearby devices for Power Log in Settings.",
+      code: 'bluetoothDenied',
+    });
+    expect(sessionError(replay({ type: 'operation', error: denied, platform: 'ios' }))).toEqual({
+      message: presentationFailure('bluetoothDenied').text,
+      code: 'bluetoothDenied',
+    });
+    const native = replay({ type: 'native', error: presentationFailure('bikeNotFound').text, code: 'bikeNotFound' });
+    expect(sessionError(native)?.code).toBe('bikeNotFound');
+    expect(sessionError(sessionErrorReducer(native, { type: 'dismiss' }))).toBeNull();
+    expect(sessionError(sessionErrorReducer(native, { type: 'native', error: 'Link lost' }))).toEqual({
+      message: 'Link lost',
+      code: null,
+    });
   });
 
   it.each([

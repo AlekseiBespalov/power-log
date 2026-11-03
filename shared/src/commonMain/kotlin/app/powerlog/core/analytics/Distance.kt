@@ -85,6 +85,8 @@ private fun controllerContribution(v0: Long, v1: Long, durationUs: Long): Long =
 
 object DistancePolicy {
     const val maximumControllerIntervalUs = 2500000L
+    // A controller link loss shorter than the six-second hold joins the readings on either side.
+    const val maximumControllerEdgeUs = BatteryConsumptionPolicy.maximumCounterEdgeUs
     const val maximumGPSIntervalUs = 10000000L
 
     fun validSelection(selection: String): Boolean = selection in listOf("auto", "gps:watch", "gps:phone", "controller")
@@ -229,7 +231,6 @@ class ControllerDistanceKernel(checkpoint: ControllerDistanceCheckpoint?) {
             old.model == current.model &&
                 old.protocol == current.protocol &&
                 old.deviceIdentity == current.deviceIdentity &&
-                old.continuityIdentity == current.continuityIdentity &&
                 old.activeInterval == current.activeInterval
         val monotonic =
             old.monotonicSeconds == null ||
@@ -237,7 +238,7 @@ class ControllerDistanceKernel(checkpoint: ControllerDistanceCheckpoint?) {
                 current.monotonicSeconds > old.monotonicSeconds
         val counter =
             old.counter == null || current.counter == null || compareScalars(current.counter, old.counter) >= 0
-        if (dt > DistancePolicy.maximumControllerIntervalUs || !same || !monotonic || !counter) {
+        if (dt >= DistancePolicy.maximumControllerEdgeUs || !same || !monotonic || !counter) {
             segment++
             return null
         }

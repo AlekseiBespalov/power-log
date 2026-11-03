@@ -39,9 +39,9 @@ func identified(_ payload: [UInt8]) throws -> ControllerIdentity {
     framed(payload), generation: session.state.generation, request: .identity, sentAt: 0, now: 0.1)
   guard let reply = result.replies.first as? ControllerIdentityReply else {
     if let rejection = result.replies.first as? ControllerRejectedReply {
-      throw ControllerIOError.invalid(ControllerErrorPresentation.message(rejection))
+      throw ControllerIOError.invalid(Failures.shared.controllerRejection(request: rejection.kind).text)
     }
-    throw ControllerIOError.invalid("Unsupported controller. Connect a CYC X6 or X12.")
+    throw ControllerIOError.invalid("No identity reply")
   }
   return reply.identity
 }
@@ -84,7 +84,7 @@ do {
   fatalError("must reject unknown model")
 } catch {
   expect(
-    error.localizedDescription == "Unsupported controller. Connect a CYC X6 or X12.",
+    error.localizedDescription == "This isn't a supported controller. Power Log works with CYC X6 and X12.",
     "a Kotlin rejection reaches Swift as plain copy")
 }
 

@@ -53,6 +53,7 @@ type Events = {
 };
 export declare class PowerLogBridge extends NativeModule<Events> {
   getMonotonicSeconds(): Promise<number>;
+  usesTwentyFourHourClock(): boolean | null;
   shareFile?(uri: string): Promise<void>;
   readMonitorLatest(
     options: NativeMonitorTarget & import('../../src/core/monitor').MonitorLatestRequest,

@@ -331,6 +331,10 @@ class WorkoutPermissionsTest {
                 try {
                     val permissions = requireNotNull(shadowOf(healthActivity.get()).lastRequestedPermission)
                     assertEquals(expected, permissions.requestedPermissions.toSet())
+                    assertFalse(
+                        androidx.health.connect.client.permission.HealthPermission
+                            .PERMISSION_READ_HEALTH_DATA_HISTORY in permissions.requestedPermissions
+                    )
                 } finally {
                     healthActivity.destroy()
                 }

@@ -43,15 +43,10 @@ const span = (
   ...values,
 });
 
-function points(ride: Timeline, intervals: DistanceInterval[]): number[][] {
-  const builder = new DistancePoints(ride);
-  const out = new Float64Array(6);
-  const result: number[][] = [];
-  for (const interval of intervals) {
-    const count = builder.add(interval, out, 0);
-    for (let i = 0; i < count; i++) result.push([out[3 * i]!, out[3 * i + 1]!, out[3 * i + 2]!]);
-  }
-  return result;
+function points(ride: Timeline, intervals: DistanceInterval[], kind: DistanceKind = 'gps'): number[][] {
+  const builder = new DistancePoints(ride, kind);
+  for (const interval of intervals) builder.add(interval);
+  return Array.from({ length: builder.count }, (_, i) => [...builder.values.subarray(4 * i, 4 * i + 4)]);
 }
 
 function ranges(kind: DistanceKind, ride: Timeline, intervals: DistanceInterval[]): DistanceRanges {
@@ -77,40 +72,78 @@ describe('distance points', () => {
         span(6, 7, 1, { segment: 1 }),
       ]),
     ).toEqual([
-      [1, 0, 1],
-      [2, 5, 1],
-      [3, 9, 1],
-      [4, 9, 1],
-      [5, 12, 1],
-      [5, 12, 1],
-      [6, 14, 1],
-      [7, 15, 1],
+      [1, 0, 1, NaN],
+      [2, 5, 1, NaN],
+      [3, 9, 1, NaN],
+      [4, 9, 1, NaN],
+      [5, 12, 1, NaN],
+      [5, 12, 1, NaN],
+      [6, 14, 1, NaN],
+      [7, 15, 1, NaN],
     ]);
   });
 
   it('compares missing segments as equal', () => {
     const builder = new DistancePoints(ride);
-    const out = new Float64Array(6);
-    expect(builder.add(span(1, 2, 1, { segment: NaN }), out, 0)).toBe(2);
-    expect(builder.add(span(2, 3, 1, { segment: NaN }), out, 0)).toBe(1);
+    expect(builder.add(span(1, 2, 1, { segment: NaN }))).toBe(2);
+    expect(builder.add(span(2, 3, 1, { segment: NaN }))).toBe(1);
   });
 
   it('gives an endpoint at a pause or at E to the interval that closes there', () => {
     expect(points(ride, [span(7, 8, 2), span(10, 11, 3), span(19, 20, 1)])).toEqual([
-      [7, 0, 1],
-      [8, 2, 1],
-      [10, 2, 2],
-      [11, 5, 2],
-      [19, 5, 2],
-      [20, 6, 2],
+      [7, 0, 1, NaN],
+      [8, 2, 1, NaN],
+      [10, 2, 2, NaN],
+      [11, 5, 2, NaN],
+      [19, 5, 2, NaN],
+      [20, 6, 2, NaN],
     ]);
   });
 
   it('gives no activity to an interval outside every activity interval', () => {
     expect(points(ride, [span(7.5, 9, 2), span(9, 11, 2)])).toEqual([
-      [7.5, 0, 0],
-      [9, 2, 0],
-      [11, 4, 0],
+      [7.5, 0, 0, NaN],
+      [9, 2, 0, NaN],
+      [11, 4, 0, NaN],
+    ]);
+  });
+
+  it('adds each whole second inside a controller interval with its clipped distance and straight-line speed', () => {
+    expect(
+      points(
+        ride,
+        [
+          span(1, 2, 3, { startSpeed: 2, endSpeed: 4 }),
+          span(2, 6, 24, { startSpeed: 4, endSpeed: 8 }),
+          span(6, 7.5, 12, { startSpeed: 8, endSpeed: 8 }),
+          span(10.5, 11.5, 6, { startSpeed: 6, endSpeed: 6, segment: 1 }),
+        ],
+        'controller',
+      ),
+    ).toEqual([
+      [1, 0, 1, 2],
+      [2, 3, 1, 4],
+      [3, 7.5, 1, 5],
+      [4, 13, 1, 6],
+      [5, 19.5, 1, 7],
+      [6, 27, 1, 8],
+      [7, 35, 1, 8],
+      [7.5, 39, 1, 8],
+      [10.5, 39, 2, 6],
+      [11.5, 45, 2, 6],
+    ]);
+  });
+
+  it('grows its buffer for as many points as a page needs', () => {
+    const intervals = Array.from({ length: 299 }, (_, i) =>
+      span(2 * i, 2 * i + 1.5, 3, { startSpeed: 2, endSpeed: 2 }),
+    );
+    const all = points(timeline(600, []), intervals, 'controller');
+    expect(all).toHaveLength(3 * 299);
+    expect(all.slice(-3)).toEqual([
+      [596, 894, 1, 2],
+      [597, 896, 1, 2],
+      [597.5, 897, 1, 2],
     ]);
   });
 
@@ -164,6 +197,13 @@ describe('distance ranges', () => {
     const sweep = ranges('gps', ride, [span(2, 4, 10, { startSpeed: 4, endSpeed: 8 })]);
     expect(sweep.lap(0).meters).toBe(5);
     expect(sweep.lap(1).meters).toBe(5);
+  });
+
+  it('averages the distance over its covered time even when coverage is partial', () => {
+    const sweep = ranges('controller', ride, [span(2, 4, 12, { startSpeed: 4, endSpeed: 8 })]);
+    expect(sweep.total().partial).toBe(true);
+    expect(sweep.averageSpeed()).toBe(6);
+    expect(ranges('gps', ride, []).averageSpeed()).toBeNaN();
   });
 
   it('keeps an observed zero as covered distance', () => {

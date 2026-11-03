@@ -168,7 +168,7 @@ export class TimelineBuilder {
     readonly end: number,
     options: Partial<TimelineOptions> = {},
   ) {
-    if (!Number.isFinite(end) || end < 0) throw new ExportError('gate', 'The ride has no valid elapsed time.');
+    if (!Number.isFinite(end) || end < 0) throw new ExportError('gate', 'This ride has no recorded time to export.');
     this.fitLimits = options.fitLimits ?? false;
     if (this.fitLimits && end > FIT_MAX_RIDE_SECONDS)
       throw new ExportError(

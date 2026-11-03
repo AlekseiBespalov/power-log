@@ -6,6 +6,7 @@ import {
   FIT_START,
   MemorySink,
   MemorySource,
+  controllerLossRide,
   fitFailure,
   readFit,
   records,
@@ -323,6 +324,7 @@ describe('FIT record witnesses', () => {
     });
     expect(fieldsOf(bytes).map(fields => [fields[253]! - FIT_START, fields[5]])).toEqual([
       [1, 0],
+      [2, 200],
       [3, 400],
       [6, 600],
       [7, 800],
@@ -339,6 +341,59 @@ describe('FIT record witnesses', () => {
       { 253: FIT_START + 1, 7: 101, 4: 81 },
       { 253: FIT_START + 2, 3: 121 },
     ]);
+  });
+});
+
+describe('FIT controller speed', () => {
+  const seconds = (bytes: Uint8Array) =>
+    fieldsOf(bytes).map(fields => [fields[253]! - FIT_START, fields[5], fields[73]]);
+  const before = Array.from({ length: 7 }, (_, t) => [t, 500 * t, 5000]);
+
+  it('gives every second of a joined loss its distance and the speed between the readings either side', async () => {
+    const { bytes } = await runFit(controllerLossRide(5, true));
+    expect(seconds(bytes)).toEqual([
+      ...before,
+      [7, 3520, 5400],
+      [8, 4080, 5800],
+      [9, 4680, 6200],
+      [10, 5320, 6600],
+      ...Array.from({ length: 10 }, (_, i) => [11 + i, 6000 + 700 * i, 7000]),
+    ]);
+  });
+
+  it('leaves a loss of six seconds without distance or speed and resumes from the same distance', async () => {
+    const { bytes } = await runFit(controllerLossRide(6, true));
+    expect(seconds(bytes).slice(0, 13)).toEqual([
+      ...before,
+      ...[7, 8, 9, 10, 11].map(t => [t, undefined, undefined]),
+      [12, 3000, 7000],
+    ]);
+  });
+
+  it.each([
+    [5, 12300, 6150],
+    [6, 8600, 6143],
+  ])(
+    'writes the partly covered average and the highest controller speed after a %d s loss',
+    async (loss, distance, average) => {
+      const session = sessionOf((await runFit(controllerLossRide(loss, true))).bytes).fields;
+      expect([session.get(9), session.get(14), session.get(15)]).toEqual([distance, average, 7000]);
+    },
+  );
+
+  it('writes one record each second through a joined loss without GPS', async () => {
+    const { bytes } = await runFit(controllerLossRide(5, false));
+    expect(seconds(bytes).map(([second]) => second)).toEqual(Array.from({ length: 21 }, (_, t) => t));
+  });
+
+  it('keeps GPS speed and the GPS maximum on a GPS distance ride', async () => {
+    const { bytes } = await runFit(
+      controllerLossRide(5, true, { source: 'gps:phone', kind: 'gps', producer: 'phone' }),
+    );
+    const written = seconds(bytes);
+    expect(written.map(([, , speed]) => speed)).toEqual(Array(21).fill(9000));
+    expect(written.slice(7, 11).map(([, distance]) => distance)).toEqual(Array(4).fill(undefined));
+    expect(sessionOf(bytes).fields.get(15)).toBe(9000);
   });
 });
 

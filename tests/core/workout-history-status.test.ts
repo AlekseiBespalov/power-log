@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { workoutHealthResultPresentation, workoutHistoryStatusPresentation } from '../../src/core/workout-presentation';
 import type { ComponentResult, HealthComponent, OwnerHealth, WorkoutMetadata } from '../../src/core/workouts';
+import healthStates from '../fixtures/contract/presentation/health-states.json';
 
 const ride: WorkoutMetadata = {
   schemaVersion: 1,
@@ -48,6 +49,14 @@ it.each(['appleHealth', 'healthConnect'] as const)('preserves every %s owner out
   }
 });
 
+it('labels every Apple Health outcome with the phrase the Watch shows', () => {
+  for (const [state, label] of Object.entries(healthStates.appleHealth))
+    expect(
+      workoutHealthResultPresentation({ ...ride, healthProvider: 'appleHealth', healthKitState: state as OwnerHealth })
+        .label,
+    ).toBe(label);
+});
+
 it('counts saved and pending components without counting Health-off items', () => {
   const record: WorkoutMetadata = {
     ...ride,
@@ -66,7 +75,7 @@ it('keeps workout saving independent of component saving', () => {
   expect(workoutHistoryStatusPresentation(record)).toBe('Apple Health saved · 0 of 1 saved · 1 item pending');
   expect(workoutHealthResultPresentation(record)).toEqual({
     label: 'Apple Health saved',
-    details: ['Health readback pending'],
+    details: ['Health measurements pending'],
   });
 });
 
@@ -109,10 +118,10 @@ it.each([
     'transientFailure',
     'Apple Health could not confirm this request. Your local ride is available.',
   ],
-  ['unavailable', 'unavailable', 'noCoverage', 'No measurement coverage is available for this component.'],
+  ['unavailable', 'unavailable', 'noCoverage', 'Nothing was measured for this during the ride.'],
   [
     'fenced',
-    'blocked',
+    'stopped',
     'providerDeleted',
     'The workout was deleted from Apple Health. Power Log will not recreate it.',
   ],

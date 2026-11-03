@@ -10,7 +10,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Instant
 import kotlin.reflect.KClass
 
-internal class HealthPage(val records: List<Record>, next: String?, val scopeComplete: Boolean = true) {
+internal class HealthPage(val records: List<Record>, next: String?) {
     val next = next?.takeIf { it.isNotEmpty() }
 }
 
@@ -19,7 +19,7 @@ internal data class HealthReceipt(val providerIds: List<String>)
 internal interface HealthConnectAccess {
     val available: Boolean
     val backgroundReadSupported: Boolean
-    val historyReadSupported: Boolean
+    val readableFrom: Instant?
 
     suspend fun granted(): Set<String>
 
@@ -38,7 +38,7 @@ internal interface HealthConnectAccess {
     suspend fun readById(type: KClass<out Record>, id: String): Record?
 }
 
-internal class AndroidHealthConnectAccess(private val context: Context) : HealthConnectAccess {
+internal open class AndroidHealthConnectAccess(private val context: Context) : HealthConnectAccess {
     override val available
         get() = HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
 
@@ -48,17 +48,21 @@ internal class AndroidHealthConnectAccess(private val context: Context) : Health
                 client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND) ==
                     HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
 
-    override val historyReadSupported
-        get() =
-            available &&
-                client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY) ==
-                    HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+    // Without the history permission, Health Connect reads reach back only to 30 days before the first grant:
+    // https://developer.android.com/health-and-fitness/guides/health-connect/develop/read-data#read-older-data
+    override val readableFrom: Instant?
+        get() {
+            val preferences = context.getSharedPreferences("health-access", Context.MODE_PRIVATE)
+            if (!preferences.contains("observedGrantMillis")) return null
+            return Instant.ofEpochMilli(preferences.getLong("observedGrantMillis", 0)).minusSeconds(30L * 86400)
+        }
 
     private val client
         get() = HealthConnectClient.getOrCreate(context)
 
     override suspend fun granted(): Set<String> {
-        val grants = if (available) client.permissionController.getGrantedPermissions() else emptySet()
+        if (!available) return emptySet()
+        val grants = client.permissionController.getGrantedPermissions()
         val preferences = context.getSharedPreferences("health-access", Context.MODE_PRIVATE)
         if (grants.isEmpty()) preferences.edit().remove("observedGrantMillis").apply()
         else if (!preferences.contains("observedGrantMillis"))
@@ -89,17 +93,7 @@ internal class AndroidHealthConnectAccess(private val context: Context) : Health
                     pageToken = page,
                 )
             )
-        val grants = granted()
-        val observed =
-            context
-                .getSharedPreferences("health-access", Context.MODE_PRIVATE)
-                .getLong("observedGrantMillis", Long.MAX_VALUE)
-        // Without the history permission, reads return only data from 30 days before the first grant:
-        // https://developer.android.com/health-and-fitness/health-connect/read-data
-        val complete =
-            androidx.health.connect.client.permission.HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in grants ||
-                observed != Long.MAX_VALUE && !start.isBefore(Instant.ofEpochMilli(observed).minusSeconds(30L * 86400))
-        return HealthPage(result.records, result.pageToken, complete)
+        return HealthPage(result.records, result.pageToken)
     }
 
     override suspend fun readById(type: KClass<out Record>, id: String): Record? = client.readRecord(type, id).record

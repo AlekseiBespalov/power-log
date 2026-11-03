@@ -7,6 +7,8 @@ interface MonitorPreferencesValue {
   preferences: MonitorPreferences;
   ready: boolean;
   error: string | null;
+  resetOffered: boolean;
+  resetSettings: MonitorPreferencesController['resetSettings'];
   selectView: MonitorPreferencesController['selectView'];
   updateView(id: MonitorViewId, changes: MonitorViewChanges): void;
   resetView(id: MonitorViewId): void;
@@ -32,6 +34,7 @@ export function MonitorPreferencesProvider({ children }: { children: ReactNode }
       selectView: controller.selectView,
       updateView: controller.updateView,
       resetView: controller.resetView,
+      resetSettings: controller.resetSettings,
       setWorkoutOptions: controller.setWorkoutOptions,
       setSpeedUnit: controller.setSpeedUnit,
       setDistanceSource: controller.setDistanceSource,

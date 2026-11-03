@@ -42,14 +42,21 @@ class RecordingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val request = intent?.getStringExtra(FOREGROUND_REQUEST)
         synchronized(this) {
             offer(engine.notificationState)
-            val presentation = latest
-            if (presentation == null || closed) {
-                stopSelf()
+            val shown = latest?.takeIf { !closed }?.let { promote(it, request) } == true
+            if (request != null) {
+                if (!shown)
+                    runCatching {
+                        ServiceCompat.startForeground(this, NOTIFICATION, placeholder(), foregroundType(false))
+                    }
+                engine.serviceStarted(request)
+            }
+            if (!shown || request != null && request != engine.foregroundRequestId) {
+                stopSelf(startId)
                 return START_NOT_STICKY
             }
-            if (!promote(presentation, intent?.getStringExtra(FOREGROUND_REQUEST))) return START_NOT_STICKY
         }
         intent?.let(RideNotificationAdapter::request)?.let { request ->
             engine.handler.post { runCatching { engine.externalAction(request, false) } }
@@ -57,12 +64,20 @@ class RecordingService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun foregroundType(location: Boolean) =
+        if (Build.VERSION.SDK_INT >= 29)
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                if (location) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+        else 0
+
+    private fun placeholder(): Notification =
+        NotificationCompat.Builder(this, CHANNEL)
+            .setSmallIcon(R.drawable.ic_power_log)
+            .setContentTitle("Power Log")
+            .build()
+
     private fun promote(presentation: ActivityPresentation, requestId: String? = null): Boolean {
-        val type =
-            if (Build.VERSION.SDK_INT >= 29)
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-                    if (engine.gpsActive) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
-            else 0
+        val type = foregroundType(engine.gpsActive)
         try {
             if (!foreground || type and foregroundTypes != type) {
                 ServiceCompat.startForeground(this, NOTIFICATION, notification(presentation), type)

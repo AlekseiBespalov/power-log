@@ -102,6 +102,7 @@ export interface HeartRateRows extends StreamRows {
 export interface DistanceRows extends StreamRows {
   readonly stream: typeof DISTANCE;
   readonly distance: Float64Array;
+  readonly speed: Float64Array;
 }
 
 // The loaded rows of one stream; a row whose witness flag is 1 contributes to a record.
@@ -290,8 +291,11 @@ class FieldSums {
       case HEART_RATE:
         this.heartRate = rows.heartRate[i]!;
         break;
-      default:
+      default: {
         this.distance = rows.distance[i]!;
+        const speed = rows.speed[i]!;
+        if (!Number.isNaN(speed)) this.speed = speed;
+      }
     }
   }
 
@@ -809,6 +813,7 @@ export class GpsStream extends PageStream<'gps', GpsRows> {
     private readonly producer: Producer,
     readonly geometry: FitGeometry,
     private readonly statistics: RideStatistics | null,
+    private readonly speeds = true,
   ) {
     super(3, 'gps', pages, clock);
   }
@@ -847,8 +852,8 @@ export class GpsStream extends PageStream<'gps', GpsRows> {
       fix.interruption = interruption[i]!;
       fix.barrier = barriers !== undefined && barriers[i] === 1;
       if (!this.geometry.accept(fix)) continue;
-      const valid = validSpeed(fix.speed, fix.speedAccuracy);
-      this.statistics?.speed(fix.time, valid, fix.interval);
+      const valid = this.speeds ? validSpeed(fix.speed, fix.speedAccuracy) : NaN;
+      if (this.speeds) this.statistics?.speed(fix.time, valid, fix.interval);
       witness[i] = 1;
       altitude[i] = validAltitude(fix.altitude, fix.verticalAccuracy) ? fix.altitude : NaN;
       speed[i] = valid;
@@ -908,7 +913,6 @@ export class DistanceStream implements WitnessStream {
   index = 0;
   rows!: DistanceRows;
   private loaded = 0;
-  private points = new Float64Array(0);
   private readonly builder: DistancePoints;
 
   constructor(
@@ -917,6 +921,7 @@ export class DistanceStream implements WitnessStream {
     timeline: Timeline,
     private readonly ranges: DistanceRanges | null,
     kind: DistanceKind = ranges?.kind ?? 'gps',
+    private readonly statistics: RideStatistics | null = null,
   ) {
     this.builder = new DistancePoints(timeline, kind);
   }
@@ -940,9 +945,9 @@ export class DistanceStream implements WitnessStream {
   }
 
   private receive({ rows, columns }: ProjectionPage<'distance'>): void {
-    if (this.points.length < 6 * rows) this.points = new Float64Array(6 * rows);
     const value = (column: Float64Array | undefined, i: number) => (column ? column[i]! : NaN);
-    let count = 0;
+    const builder = this.builder;
+    builder.clear();
     for (let i = 0; i < rows; i++) {
       const interval: DistanceInterval = {
         startUs: columns.startUs![i]!,
@@ -952,27 +957,40 @@ export class DistanceStream implements WitnessStream {
         startSpeed: value(columns.startSpeed, i),
         endSpeed: value(columns.endSpeed, i),
       };
-      count += this.builder.add(interval, this.points, 3 * count);
+      builder.add(interval);
       this.ranges?.add(interval);
     }
-    this.loaded = count;
+    this.loaded = builder.count;
     this.index = 0;
-    if (count > 0) this.rows = this.prepare(count);
+    if (builder.count > 0) this.rows = this.prepare(builder.count);
   }
 
   private prepare(count: number): DistanceRows {
-    const points = this.points;
+    const points = this.builder.values;
     const elapsed = new Float64Array(count);
     const distance = new Float64Array(count);
     const interval = new Int32Array(count);
+    const speed = new Float64Array(count);
     const witness = new Uint8Array(count);
     for (let k = 0; k < count; k++) {
-      elapsed[k] = points[3 * k]!;
-      distance[k] = points[3 * k + 1]!;
-      interval[k] = points[3 * k + 2]!;
+      elapsed[k] = points[4 * k]!;
+      distance[k] = points[4 * k + 1]!;
+      interval[k] = points[4 * k + 2]!;
+      speed[k] = points[4 * k + 3]!;
       if (interval[k] !== 0 && distanceEncodable(distance[k]!)) witness[k] = 1;
+      if (!Number.isNaN(speed[k]!)) this.statistics?.speed(elapsed[k]!, speed[k]!, interval[k]!);
     }
     const second = this.clock.seconds(elapsed, count);
-    return { stream: DISTANCE, rows: count, elapsed, second, interval, run: new Int32Array(count), witness, distance };
+    return {
+      stream: DISTANCE,
+      rows: count,
+      elapsed,
+      second,
+      interval,
+      run: new Int32Array(count),
+      witness,
+      distance,
+      speed,
+    };
   }
 }

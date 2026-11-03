@@ -61,6 +61,8 @@ function MonitorPanelContent({
     updateView,
     selectView,
     resetView,
+    resetSettings,
+    resetOffered,
     setHistoryRange,
     error: preferencesError,
   } = useMonitorPreferences();
@@ -444,6 +446,19 @@ function MonitorPanelContent({
             >
               {status}
             </Text>
+          )}
+          {resetOffered && (
+            <Pressable
+              accessibilityRole="button"
+              testID="monitor-reset-settings"
+              onPress={() => {
+                resetSettings();
+                setMenuOpen(false);
+              }}
+              style={{ minHeight: 50, paddingHorizontal: 14, justifyContent: 'center' }}
+            >
+              <Text style={{ color: colors.accent }}>Reset settings</Text>
+            </Pressable>
           )}
           {menu === 'view'
             ? viewIds.map(id => (

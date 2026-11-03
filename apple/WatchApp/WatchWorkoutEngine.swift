@@ -109,17 +109,14 @@ final class WatchWorkoutEngine: ObservableObject {
           self.heartAt = observation.timestamp
         }
         do { try self.buffer.append(observation, now: Date()) } catch {
-          self.displayedIssue = error.localizedDescription
+          self.displayedIssue = WatchRideText.readingNotSent
         }
       }
     }
     health.status = { [weak self] rideID, state, id, reason in
       Task { @MainActor in
         guard let self, self.selectedRideID == rideID, !self.discarded else { return }
-        self.savedStatusLabel =
-          state == "saved"
-          ? "Saved to Health"
-          : state == "notRequested" ? "Health saving off" : state == "unknown" ? "Health saving unconfirmed" : state
+        self.savedStatusLabel = WatchRideText.health(state)
         self.pendingHealthAt = Date()
         self.pendingHealth = WorkoutCompanionMessage(
           kind: .health, rideID: rideID, healthState: state, healthID: id, error: reason)
@@ -137,8 +134,7 @@ final class WatchWorkoutEngine: ObservableObject {
         guard let self, let id, self.generation == token else { return }
         self.selectedRideID = id
         self.phase = "interrupted"
-        self.displayedIssue =
-          "The interrupted Health session was ended. Finish or discard the retained ride on your phone."
+        self.displayedIssue = WatchRideText.interrupted
       }
     }
     timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -221,16 +217,19 @@ final class WatchWorkoutEngine: ObservableObject {
   func lap() { command("lap") }
   func finishRide(discard: Bool, confirmedRideID: String?) async {
     guard confirmedRideID == selectedRideID else {
-      displayedIssue = "The selected ride changed."
+      displayedIssue = WatchRideText.rideChanged
       return
     }
     if transport.reachable {
       command(discard ? "discard" : "stop")
     } else {
-      endHealth(discard: discard)
-      displayedIssue = "Phone unreachable. Ending the Watch session locally; finish the phone ride when reconnected."
-      phase = "completed"
+      endLocally(discard: discard, WatchRideText.endedUnreachable)
     }
+  }
+  private func endLocally(discard: Bool, _ issue: String) {
+    endHealth(discard: discard)
+    displayedIssue = issue
+    phase = "completed"
   }
   private func command(_ action: String) {
     guard let id = selectedRideID, pendingCommand == nil else { return }
@@ -250,6 +249,15 @@ final class WatchWorkoutEngine: ObservableObject {
           ? engine.pendingStartRequest == message.commandID
           : engine.generation == token && engine.selectedRideID == message.rideID)
     }
+    let unconfirmed = isStart ? WatchRideText.startUnconfirmed : WatchRideText.phoneUnconfirmed
+    let failed: @MainActor (WatchWorkoutEngine, String) -> Void = { engine, issue in
+      if ["stop", "discard"].contains(message.action) {
+        engine.endLocally(discard: message.action == "discard", WatchRideText.endedUnconfirmed)
+        return
+      }
+      if engine.phase == "preparing" && engine.currentStart == nil { engine.phase = "idle" }
+      engine.displayedIssue = issue
+    }
     transport.send(message) { [weak self] result in
       Task { @MainActor in
         guard let self, isCurrent(self) else { return }
@@ -257,15 +265,8 @@ final class WatchWorkoutEngine: ObservableObject {
         if isStart { self.pendingStartRequest = nil }
         switch result {
         case .success(let reply):
-          if let error = reply.error {
-            self.displayedIssue = error
-            if self.phase == "preparing" && self.currentStart == nil { self.phase = "idle" }
-          } else {
-            self.apply(reply)
-          }
-        case .failure(let error):
-          self.displayedIssue = error.localizedDescription
-          if self.phase == "preparing" && self.currentStart == nil { self.phase = "idle" }
+          if let error = reply.error { failed(self, error) } else { self.apply(reply) }
+        case .failure: failed(self, unconfirmed)
         }
       }
     }
@@ -273,8 +274,7 @@ final class WatchWorkoutEngine: ObservableObject {
       guard let self, isCurrent(self) else { return }
       self.pendingCommand = nil
       if isStart { self.pendingStartRequest = nil }
-      if self.phase == "preparing" && self.currentStart == nil { self.phase = "idle" }
-      self.displayedIssue = "The phone did not confirm the action. Check the phone before retrying."
+      failed(self, unconfirmed)
     }
   }
 
@@ -331,11 +331,11 @@ final class WatchWorkoutEngine: ObservableObject {
         Task { @MainActor in
           guard let self, self.currentStart == message.commandID else { return }
           if case .failure(let error) = result {
-            self.startFailed(message, error: error, reply: reply)
+            self.startFailed(message, issue: WatchRideText.startFailure(error), reply: reply)
             return
           }
           guard message.expiresAt.map({ $0 >= Date() }) == true else {
-            self.startFailed(message, error: WorkoutCompanionError.invalid("Start expired."), reply: reply)
+            self.startFailed(message, issue: WatchRideText.startExpired, reply: reply)
             return
           }
           self.health.start(options) { result in
@@ -343,11 +343,12 @@ final class WatchWorkoutEngine: ObservableObject {
               guard self.currentStart == message.commandID else { return }
               self.currentStart = nil
               switch result {
-              case .failure(let error): self.startFailed(message, error: error, reply: reply)
+              case .failure(let error):
+                self.startFailed(message, issue: WatchRideText.startFailure(error), reply: reply)
               case .success:
                 guard message.expiresAt.map({ $0 >= Date() }) == true else {
                   self.endHealth(discard: true)
-                  self.startFailed(message, error: WorkoutCompanionError.invalid("Start expired."), reply: reply)
+                  self.startFailed(message, issue: WatchRideText.startExpired, reply: reply)
                   return
                 }
                 self.startReply = nil
@@ -386,13 +387,14 @@ final class WatchWorkoutEngine: ObservableObject {
     remember(message.commandID, result: result)
     reply(result)
   }
-  private func startFailed(_ message: WorkoutCompanionMessage, error: Error, reply: (WorkoutCompanionMessage) -> Void) {
+  private func startFailed(
+    _ message: WorkoutCompanionMessage, issue: String, reply: (WorkoutCompanionMessage) -> Void
+  ) {
     currentStart = nil
     startReply = nil
     phase = "idle"
-    displayedIssue = error.localizedDescription
-    reply(
-      WorkoutCompanionMessage(kind: .acknowledgement, commandID: message.commandID, error: error.localizedDescription))
+    displayedIssue = issue
+    reply(WorkoutCompanionMessage(kind: .acknowledgement, commandID: message.commandID, error: issue))
   }
   private func remember(_ id: String?, result: WorkoutCompanionMessage) {
     guard let id else { return }

@@ -82,6 +82,29 @@ class HealthExportTest {
         repeat(12) { exporter.save(id) }
     }
 
+    private fun externalHeartRate() =
+        HeartRateRecord(
+            start,
+            null,
+            start.plusSeconds(2),
+            null,
+            listOf(HeartRateRecord.Sample(start.plusMillis(125), 123)),
+            HealthMetadata.received(
+                "generated-heart",
+                "external-heart",
+                1,
+                null,
+                "app.generated.sensor",
+                start,
+                androidx.health.connect.client.records.metadata.Metadata.RECORDING_METHOD_ACTIVELY_RECORDED,
+            ),
+        )
+
+    private fun readback(store: RideStore, id: String) =
+        (store.metadata(id)["componentResults"] as List<*>)
+            .map { it as Map<*, *> }
+            .single { it["component"] == "readback" }
+
     @Test
     fun completedRidePublishesOnceWithFixedIdsAndKeepsOriginalDetail() = ride { store, id, access, exporter ->
         settle(exporter, id)
@@ -162,24 +185,7 @@ class HealthExportTest {
     fun refreshWithSavingOffImportsMeasurementsWithoutPublicationWork() =
         ride(saveToHealth = false) { store, id, access, exporter ->
             access.grants = HealthReadback.types.map { HealthPermission.getReadPermission(it) }.toSet()
-            access.seed(
-                HeartRateRecord(
-                    start,
-                    null,
-                    start.plusSeconds(2),
-                    null,
-                    listOf(HeartRateRecord.Sample(start.plusMillis(125), 123)),
-                    HealthMetadata.received(
-                        "generated-heart",
-                        "external-heart",
-                        1,
-                        null,
-                        "app.generated.sensor",
-                        start,
-                        androidx.health.connect.client.records.metadata.Metadata.RECORDING_METHOD_ACTIVELY_RECORDED,
-                    ),
-                )
-            )
+            access.seed(externalHeartRate())
             val revision = store.revision(id)
             exporter.refresh(id)
             settle(exporter, id)
@@ -208,6 +214,40 @@ class HealthExportTest {
             val reads = (store.metadata(id)["componentResults"] as List<*>).single() as Map<*, *>
             assertEquals("unavailable", reads["state"])
             assertEquals(if (available) "permission" else "readbackUnavailable", reads["reason"])
+        }
+    }
+
+    @Test
+    fun healthConnectHistoryAccessIsNeitherRequestedNorReported() = ride { _, _, _, exporter ->
+        val history = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
+        for (gps in listOf(false, true)) assertFalse(history in exporter.permissions(gps))
+        val status = exporter.status()
+        assertFalse(history in status["readAuthorization"] as Map<*, *>)
+        assertFalse("historyReadSupported" in status)
+    }
+
+    @Test
+    fun ridesBeforeTheDefaultReadWindowAreNotReadAndShowNoReadbackError() {
+        for (saveToHealth in listOf(false, true)) ride(saveToHealth = saveToHealth) { store, id, access, exporter ->
+            access.seed(externalHeartRate())
+            var reads = 0
+            access.beforeRead = { reads++ }
+            access.readableFrom = start.plusSeconds(1)
+            exporter.refresh(id)
+            settle(exporter, id)
+            assertEquals(0, reads)
+            assertTrue(store.page(id).none { it.kind == "health" })
+            assertEquals("notRequested", readback(store, id)["state"])
+            assertNull(readback(store, id)["reason"])
+            assertEquals(if (saveToHealth) "saved" else "notRequested", store.metadata(id)["healthKitState"])
+            assertFalse(exporter.writesPending(id))
+            assertNull(exporter.nextRefreshUs(id))
+            access.readableFrom = start
+            exporter.refresh(id)
+            settle(exporter, id)
+            assertTrue(reads > 0)
+            assertEquals(123.0, store.page(id).single { it.kind == "health" }.values["heartRateBpm"])
+            assertEquals("saved", readback(store, id)["state"])
         }
     }
 

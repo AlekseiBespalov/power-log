@@ -4,6 +4,7 @@ import app.powerlog.core.RideActions
 import app.powerlog.core.analytics.J
 import app.powerlog.core.protocol.Rejection
 import app.powerlog.core.protocol.StartWindow
+import app.powerlog.core.telemetry.ControllerRequest
 import kotlin.test.*
 
 class FailurePresentationTest {
@@ -25,10 +26,16 @@ class FailurePresentationTest {
             val failure = Failures.present(row["code"].text())
             assertEquals(row["message"].text(), failure.message)
             assertEquals(row["nextStep"].text(), failure.nextStep)
+            assertEquals(row["androidNextStep"].optionalText() ?: failure.nextStep, failure.androidNextStep)
             assertEquals("${failure.message} ${failure.nextStep}".trimEnd(), failure.text)
+            assertEquals("${failure.message} ${failure.androidNextStep}".trimEnd(), failure.androidText)
             assertPlain(failure.text, failure.name)
+            assertPlain(failure.androidText, failure.name)
             assertTrue(failure.message.endsWith("."), failure.name)
-            assertTrue(failure.nextStep.isEmpty() || failure.nextStep.endsWith("."), failure.name)
+            assertTrue(
+                failure.nextStep.isEmpty() || failure.nextStep.endsWith(".") || failure.nextStep.endsWith("…"),
+                failure.name,
+            )
         }
         assertEquals(
             "Power Log couldn't open on your Apple Watch. " +
@@ -36,6 +43,80 @@ class FailurePresentationTest {
             RideFailure.watchLaunchFailed.text,
         )
         assertEquals("Watch data couldn't be synced.", RideFailure.watchDataRejected.message)
+    }
+
+    @Test
+    fun bluetoothPermissionTextNamesEachPlatformsPermission() {
+        assertEquals(
+            "Power Log can't use Bluetooth. Allow Bluetooth for Power Log in Settings.",
+            RideFailure.bluetoothDenied.text,
+        )
+        assertEquals(
+            "Power Log can't use Bluetooth. Allow Nearby devices for Power Log in Settings.",
+            RideFailure.bluetoothDenied.androidText,
+        )
+        assertEquals(RideFailure.bikeNotFound.text, RideFailure.bikeNotFound.androidText)
+    }
+
+    @Test
+    fun connectionFailuresUseRiderWording() {
+        assertEquals(
+            "No CYC X6 or X12 controller found. " +
+                "Turn on your bike's display, keep your phone nearby, then search again.",
+            RideFailure.bikeNotFound.text,
+        )
+        assertEquals("Bluetooth search failed. Try again.", RideFailure.bluetoothSearchFailed.text)
+        assertEquals(
+            "Install it from the Watch app on your iPhone, or turn off Apple Watch in Settings.",
+            RideFailure.watchNotInstalled.nextStep,
+        )
+    }
+
+    @Test
+    fun connectionLossAndBluetoothStatesShowOneTextOnEveryPlatform() {
+        val texts =
+            mapOf(
+                RideFailure.bikeReconnecting to "Connection to your bike was lost. Reconnecting…",
+                RideFailure.bikeUnavailable to
+                    "Power Log couldn't connect to your bike. " +
+                        "Close other apps connected to the bike, turn its display off and on, then connect again.",
+                RideFailure.bluetoothOff to "Bluetooth is off. Turn on Bluetooth, then search again.",
+                RideFailure.bluetoothNotReady to "Bluetooth isn't ready yet. Try again in a moment.",
+                RideFailure.bluetoothUnsupported to "This device doesn't support Bluetooth Low Energy.",
+                RideFailure.bluetoothUnavailable to "Bluetooth isn't available in this build.",
+            )
+        for ((failure, text) in texts) {
+            assertEquals(text, failure.text, failure.name)
+            assertEquals(text, failure.androidText, failure.name)
+            assertPlain(text, failure.name)
+        }
+    }
+
+    @Test
+    fun controllerRejectionsSeparateUnsupportedControllersFromUnsupportedFirmware() {
+        assertEquals(RideFailure.controllerUnsupported, Failures.controllerRejection(ControllerRequest.identity))
+        assertEquals(RideFailure.firmwareUnsupported, Failures.controllerRejection(ControllerRequest.telemetry))
+        assertEquals(
+            "This isn't a supported controller. Power Log works with CYC X6 and X12.",
+            RideFailure.controllerUnsupported.text,
+        )
+        assertEquals(
+            "This controller's firmware isn't supported yet. Share diagnostics from Settings so support can be added.",
+            RideFailure.firmwareUnsupported.text,
+        )
+    }
+
+    @Test
+    fun controllerSpeedNoteAppearsOnlyForIdentitiesWithoutAKnownSpeedUnit() {
+        val note = "Controller speed needs CYC X6 or X12 firmware with protocol 5.3."
+        assertNull(ControllerNotes.speed("X6", "20250604", "5.3"))
+        assertNull(ControllerNotes.speed("X12", "20250604", "5.3"))
+        assertEquals(note, ControllerNotes.speed("X6", "20240101", "5.2"))
+        assertEquals(note, ControllerNotes.speed("X12", "20260101", "6.0"))
+        assertEquals(note, ControllerNotes.speed("X6_suffix", "20250604", "5.3"))
+        assertNull(ControllerNotes.speed(null, null, null))
+        assertNull(ControllerNotes.speed("X6", "20250604", null))
+        assertNull(ControllerNotes.speed("X1", "20250604", "5.3"))
     }
 
     @Test

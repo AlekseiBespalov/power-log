@@ -19,7 +19,10 @@ import { RideActionBar, RideControlsProvider, RideStatus } from '../../src/featu
 import { ConnectionSettings } from '../../src/features/dashboard/connection-settings';
 import { DashboardScreen } from '../../src/features/dashboard/dashboard-screen';
 import { WorkoutActions, type WorkoutActionFlight } from '../../src/services/workout-actions';
+import { formatRideDate } from '../../src/core/formatting';
 vi.mock('../../src/services/device', () => ({ deviceAdapter: {} }));
+const clock = vi.hoisted(() => ({ twentyFourHour: null as boolean | null }));
+vi.mock('../../src/services/clock-preference', () => ({ deviceUsesTwentyFourHourClock: () => clock.twentyFourHour }));
 vi.mock('../../src/services/files', () => ({}));
 vi.mock('../../src/services/diagnostics-export', () => ({}));
 
@@ -68,6 +71,7 @@ let bikeConnected = true;
 let bikeReconnecting = false;
 let bikeHeld = false;
 let bikeBusy = false;
+let bikeFault = 0;
 let permissionStatus: import('../../src/core/workouts').WorkoutPermissionStatus | null = null;
 let permissionsError: string | null = null;
 const refreshPermissions = vi.fn(async () => {});
@@ -82,6 +86,9 @@ const addExampleRides = vi.fn<() => Promise<number>>();
 const getPermissions = vi.fn<() => Promise<import('../../src/core/workouts').WorkoutPermissionStatus>>();
 const start = vi.fn(async (_options: WorkoutOptions) => unavailableWorkoutState);
 const prepareRecording = vi.fn(async () => preferences);
+const resetSettings = vi.fn();
+let settingsError: string | null = null;
+let resetOffered = false;
 const scan = vi.fn(async () => {});
 const refreshHealth = vi.fn(async (_id: string) => {});
 const retryHealthSave = vi.fn(async (_id: string) => {});
@@ -187,7 +194,9 @@ vi.mock('../../src/services/monitor-preferences', () => ({
   useMonitorPreferences: () => ({
     preferences,
     ready: true,
-    error: null,
+    error: settingsError,
+    resetOffered,
+    resetSettings,
     prepareRecording,
     setWorkoutOptions: (update: (previous: WorkoutOptions) => WorkoutOptions) => {
       preferences = { ...preferences, workoutOptions: update(preferences.workoutOptions) };
@@ -215,6 +224,7 @@ vi.mock('../../src/services/session-context', () => ({
     hz: 4,
     adapter: { kind: platformState.os === 'web' ? 'web' : 'native', disconnect },
     display: bikeConnected ? 'live' : bikeHeld ? 'held' : 'unavailable',
+    faultCode: bikeFault,
     state: {
       status: bikeConnected ? 'connected' : bikeReconnecting ? 'reconnecting' : 'idle',
       deviceId: 'synthetic-bike',
@@ -262,11 +272,15 @@ beforeEach(() => {
   bikeReconnecting = false;
   bikeHeld = false;
   bikeBusy = false;
+  bikeFault = 0;
+  clock.twentyFourHour = null;
   permissionStatus = null;
   permissionsError = null;
   preferences = defaultMonitorPreferences();
   preferences.sampleHz = 4;
   prepareRecording.mockImplementation(async () => preferences);
+  settingsError = null;
+  resetOffered = false;
   state = {
     ...unavailableWorkoutState,
     supported: true,
@@ -330,6 +344,7 @@ describe('owner-aware recording controls', () => {
       const markup = renderToStaticMarkup(createElement(DashboardScreen));
       expect(markup).toContain('<section><div><div>No bike connected</div>');
       expect(markup).toContain('Turn on your bike, then find it to see live readings.');
+      expect(markup).toContain('Works with CYC X6 and X12 controllers over Bluetooth.');
       expect(controls.get('Find bike')).toEqual({ secondary: false, disabled: false });
       buttons.get('Find bike')!();
       await vi.waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
@@ -481,7 +496,7 @@ describe('owner-aware recording controls', () => {
     run.mockImplementation(operation => actions.run(operation, async () => {}, 'start'));
     ride();
     buttons.get('setup-start-ride')!();
-    await vi.waitFor(() => expect(actions.snapshot().error).toContain('Could not save monitor settings'));
+    await vi.waitFor(() => expect(actions.snapshot().error).toContain('Your settings weren’t saved'));
     expect(actions.snapshot().error).toContain('out of storage');
     expect(start).not.toHaveBeenCalled();
     expect(committed.sampleHz).toBe(2);
@@ -559,6 +574,38 @@ describe('owner-aware recording controls', () => {
     expect(toggles.has('Save to Apple Health')).toBe(false);
   });
 
+  it('tells the rider what to do about a controller fault', () => {
+    bikeFault = 23;
+    const markup = renderToStaticMarkup(createElement(DashboardScreen));
+    expect(markup).toContain(escaped("Your controller reports fault 23. Check the bike's display."));
+    expect(markup).not.toContain('Controller fault');
+    bikeFault = 0;
+    expect(renderToStaticMarkup(createElement(DashboardScreen))).not.toContain('reports fault');
+  });
+
+  it('explains in About where rides are kept and how far readings can be trusted', () => {
+    const markup = settings();
+    expect(markup).toContain('Rides are stored on this device. Export a ride to keep a copy elsewhere.');
+    expect(markup).toContain(
+      'Readings come from your controller and sensors and can be inaccurate; battery use can read low. Set up before you ride, and don’t use the app while moving.',
+    );
+    expect(markup).toContain('Third-party notices');
+  });
+
+  it('offers Reset settings only for settings that cannot be read', () => {
+    settingsError = "Power Log couldn't read your saved settings. Reset settings to use the defaults.";
+    resetOffered = true;
+    const unreadable = settings();
+    expect(unreadable).toContain('Settings unavailable');
+    expect(unreadable).toContain('Reset settings');
+    buttons.get('Reset settings')!();
+    expect(resetSettings).toHaveBeenCalledTimes(1);
+    settingsError = 'Your settings weren’t saved. Disk full';
+    resetOffered = false;
+    buttons.clear();
+    expect(settings()).not.toContain('Reset settings');
+  });
+
   it('shows GPS settings only when GPS is supported', () => {
     settings();
     expect(toggles.has('Record GPS route')).toBe(true);
@@ -607,6 +654,7 @@ vi.mock('../../src/features/history/history-controller', () => ({
     resource: {},
     record: historyRecord,
     selectedId: historyRecord.id,
+    csv: null,
     action: () => () => {},
   }),
 }));
@@ -644,6 +692,15 @@ function history(id: string, healthRetryAvailable = false) {
   controls.clear();
   return renderToStaticMarkup(createElement(SavedRides, { detail: true }));
 }
+it.each([true, false])('dates a History ride with the device clock when 24-hour time is %s', twentyFourHour => {
+  clock.twentyFourHour = twentyFourHour;
+  const markup = history('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  expect(markup).toContain(formatRideDate(historyRecord.startedAt, { twentyFourHour }));
+});
+it('notes once in the History list that rides stay on this device', () => {
+  const markup = renderToStaticMarkup(createElement(SavedRides, { detail: false }));
+  expect(markup.split('Rides are stored on this device. Export a ride to keep a copy elsewhere.')).toHaveLength(2);
+});
 it.each([false, true])('routes History Health action with retry eligibility %s', async retry => {
   const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   repairingId = null;

@@ -1,10 +1,14 @@
 import {
   BluetoothTrace,
   controllerProtocol,
+  presentationControllerRejection,
+  presentationFailure,
   TelemetryDiscoveryWindow,
   TelemetryTransportSession,
   telemetryRecoveryPlan,
   telemetryReplyAdmissible,
+  telemetryRestartsBackoff,
+  telemetryRetriesIdentity,
   telemetryTimingPolicy,
   telemetryWriteExpired,
 } from '../../shared/js';
@@ -14,8 +18,8 @@ import { sampleRates } from '../core/workouts';
 import type { ConnectionOptions, Device, NativeState, TelemetrySample } from '../core/types';
 import { idleState, type AdapterEvents, type TelemetryAdapter } from './adapter';
 import { UART_NOTIFY, UART_SERVICE, UART_WRITE } from './controller-gatt';
-import { failurePresentation } from '../core/failures';
-import { browserFailure, browserFailureCode } from './browser-failures';
+import { RideFailureError } from '../core/failures';
+import { browserFailure } from './browser-failures';
 
 type RequestRole = 'identity' | 'telemetry';
 type ReceivedResponse = { reply: ControllerResponse; acquiredAt: number; timestamp: string };
@@ -27,7 +31,7 @@ interface PendingResponse {
   writtenAt?: number;
   resolve: (response: ReceivedResponse) => void;
   reject: (error: Error) => void;
-  timeout: ReturnType<typeof setTimeout>;
+  timeout: ReturnType<typeof setTimeout> | undefined;
 }
 interface BikeSession {
   device: BluetoothDevice;
@@ -51,19 +55,22 @@ interface Connection {
   onValue: EventListener;
   onDisconnect: EventListener;
   stableSince?: number;
+  unansweredSince?: number;
 }
 const timing = telemetryTimingPolicy();
 const MAX_NOTIFICATION_BYTES = 65536;
 class ConnectionError extends Error {}
+class ResponseTimeoutError extends ConnectionError {}
+class ResendRequest extends Error {}
 class RejectedReplyError extends Error {}
 const timeoutError = () => new ConnectionError('Controller response timed out');
-const cancellationError = () => new ConnectionError('Bluetooth cancellation timed out. Disconnect and try again.');
-const attemptTimeoutError = () =>
-  new ConnectionError('Bluetooth connection timed out. Disconnect other bike apps and try again.');
-const connectionErrorText = (error: unknown) =>
-  error instanceof ConnectionError || error instanceof RejectedReplyError
+const cancellationError = () => new ConnectionError('Bluetooth cancellation timed out');
+const attemptTimeoutError = () => new ConnectionError('Connection attempt timed out');
+const missingService = (error: unknown) => error instanceof DOMException && error.name === 'NotFoundError';
+const connectionFailureText = (error: unknown) =>
+  error instanceof RejectedReplyError
     ? error.message
-    : failurePresentation(browserFailureCode(error, 'bluetooth')).text;
+    : presentationFailure(missingService(error) ? 'controllerUnsupported' : 'bikeUnavailable').text;
 
 export class BrowserAdapter implements TelemetryAdapter {
   readonly kind = 'web' as const;
@@ -167,8 +174,13 @@ export class BrowserAdapter implements TelemetryAdapter {
       this.session = undefined;
       clearTimeout(this.retryTimer);
       this.retryTimer = undefined;
-      this.update({ status: 'error', recoverableConnectionError: false, error: cancellationError().message });
+      this.stop(cancellationError());
     } else if (this.session && this.transport.reconnectDue !== null) this.waitForRetry(this.session);
+  }
+
+  private stop(error: unknown): void {
+    this.trace('transport_error', String(error));
+    this.update({ status: 'error', recoverableConnectionError: false, error: connectionFailureText(error) });
   }
 
   private cancelGatt(connection: Connection): void {
@@ -205,7 +217,7 @@ export class BrowserAdapter implements TelemetryAdapter {
     this.retryTimer = undefined;
     this.transport.manualDisconnect(connection.operations > 0 || !connection.disconnectCompleted);
     this.cleanup(connection);
-    this.update({ status: 'error', recoverableConnectionError: false, error: connectionErrorText(error) });
+    this.stop(error);
   }
 
   private recover(connection: Connection, error: unknown, peerDisconnected = false): void {
@@ -229,7 +241,12 @@ export class BrowserAdapter implements TelemetryAdapter {
     this.connection = undefined;
     session.attempts += 1;
     this.transport.scheduleRetry(plan, this.now());
-    this.update({ status: 'reconnecting', recoverableConnectionError: true, error: connectionErrorText(error) });
+    this.trace('transport_error', String(error));
+    this.update({
+      status: 'reconnecting',
+      recoverableConnectionError: true,
+      error: presentationFailure('bikeReconnecting').text,
+    });
     this.cleanup(connection);
     this.waitForRetry(session);
   }
@@ -248,7 +265,7 @@ export class BrowserAdapter implements TelemetryAdapter {
         const action = this.transport.check(this.now(), null, null);
         if (action === 'cancellationTimeout') {
           this.session = undefined;
-          this.update({ status: 'error', recoverableConnectionError: false, error: cancellationError().message });
+          this.stop(cancellationError());
         } else if (action === 'beginRetry') void this.open(session, true);
         else this.waitForRetry(session);
       },
@@ -305,7 +322,7 @@ export class BrowserAdapter implements TelemetryAdapter {
     );
     if (!pending) return;
     if (view.byteLength > MAX_NOTIFICATION_BYTES) {
-      this.failed(connection, new ConnectionError('Bike reply exceeds the supported size.'));
+      this.failed(connection, new RejectedReplyError(presentationFailure('controllerUnsupported').text));
       return;
     }
     const acquiredAt = this.now();
@@ -329,22 +346,14 @@ export class BrowserAdapter implements TelemetryAdapter {
       pending.received = true;
       pending.resolve({ reply, acquiredAt, timestamp });
     } else if (decision.action === 'replyRejected') {
-      const reply = decision.replies[0]!;
-      pending.reject(
-        new RejectedReplyError(
-          reply.kind === 'identity'
-            ? 'Unsupported controller. Connect a CYC X6 or X12.'
-            : reply.rejectionReason === 'telemetryMask'
-              ? 'Unexpected telemetry field mask.'
-              : 'Telemetry command or length does not match the verified profile.',
-        ),
-      );
+      pending.reject(new RejectedReplyError(presentationControllerRejection(decision.replies[0]!.kind).text));
     } else if (decision.action !== 'none') pending.reject(timeoutError());
   }
 
   async startScan(): Promise<void> {
     if (this.workoutDeviceId !== null) throw new Error('Finish the ride before choosing another bike.');
-    if (this.session || this.transport.cancellationPending) throw new Error('Disconnect before choosing another bike.');
+    if (this.session) throw new Error('Disconnect before choosing another bike.');
+    if (this.transport.cancellationPending) throw new RideFailureError('bluetoothNotReady');
     if (typeof navigator === 'undefined' || !navigator.bluetooth) {
       this.update({
         status: 'error',
@@ -420,6 +429,28 @@ export class BrowserAdapter implements TelemetryAdapter {
       rejectDeadline = reject;
     });
     const sentAt = this.now();
+    connection.unansweredSince ??= sentAt;
+    const check = (): void => {
+      if (connection.pending !== pending) return;
+      const action = this.transport.check(
+        this.now(),
+        pending.written && !pending.received ? sentAt : null,
+        pending.written ? null : sentAt,
+        false,
+        connection.unansweredSince ?? null,
+      );
+      if (action === 'resendRequest') pending.reject(new ResendRequest());
+      else if (action === 'responseTimeout') pending.reject(new ResponseTimeoutError('Controller response timed out'));
+      else if (action !== 'none') pending.reject(timeoutError());
+      else arm();
+    };
+    const arm = (): void => {
+      clearTimeout(pending.timeout);
+      const due = pending.written
+        ? this.transport.responseDeadline(sentAt, connection.unansweredSince ?? null)!
+        : sentAt + timing.telemetryTimeoutSeconds;
+      pending.timeout = setTimeout(check, Math.max(0, due - this.now()) * 1000);
+    };
     const pending: PendingResponse = {
       kind,
       sentAt,
@@ -433,16 +464,9 @@ export class BrowserAdapter implements TelemetryAdapter {
         rejectResponse(error);
         rejectDeadline(error);
       },
-      timeout: setTimeout(() => {
-        if (connection.pending !== pending) return;
-        const action = this.transport.check(
-          this.now(),
-          pending.received ? null : sentAt,
-          pending.written ? null : sentAt,
-        );
-        if (action !== 'none') pending.reject(timeoutError());
-      }, timing.telemetryTimeoutSeconds * 1000),
+      timeout: undefined,
     };
+    arm();
     connection.pending = pending;
     void response.catch(() => {});
     void deadline.catch(() => {});
@@ -460,11 +484,13 @@ export class BrowserAdapter implements TelemetryAdapter {
       ).then(() => {
         pending.written = true;
         pending.writtenAt = this.now();
+        if (connection.pending === pending) arm();
       });
       const [, result] = await Promise.race([Promise.all([write, response]), deadline]);
       if (!this.current(connection)) throw new ConnectionError('Connection ended');
       if (!telemetryReplyAdmissible(sentAt, this.now()) || telemetryWriteExpired(sentAt, pending.writtenAt!))
         throw timeoutError();
+      connection.unansweredSince = undefined;
       return result;
     } finally {
       if (connection.pending === pending) connection.pending = undefined;
@@ -481,7 +507,7 @@ export class BrowserAdapter implements TelemetryAdapter {
     if (this.connection || this.session || this.transport.cancellationFailed) await this.endConnection();
     else if (this.transport.cancellationPending) await Promise.resolve();
     if (admission !== this.admissionGeneration) return;
-    if (this.transport.cancellationPending) throw new Error('Bluetooth cancellation is still pending');
+    if (this.transport.cancellationPending) throw new RideFailureError('bluetoothNotReady');
     if (this.device !== device || this.scan) throw new Error('Choose the bike first');
     if (this.workoutDeviceId === null) this.hz = hz;
     const session: BikeSession = { device, epoch: this.now(), sequence: 0, attempts: 0 };
@@ -531,6 +557,7 @@ export class BrowserAdapter implements TelemetryAdapter {
         deviceName: device.name,
         controllerModel: undefined,
         firmwareLabel: undefined,
+        controllerProtocol: undefined,
       });
     try {
       const gatt = device.gatt;
@@ -561,7 +588,18 @@ export class BrowserAdapter implements TelemetryAdapter {
       await this.setupStep(connection, () => reader.startNotifications());
       this.trace('subscription', `characteristic=${UART_NOTIFY}; enabled=true`);
       this.advance(connection, 'notifications', 'identity');
-      const { reply } = await this.request(connection, 'identity');
+      const { reply } = await this.request(connection, 'identity').catch((error: unknown) => {
+        if (
+          error instanceof ResponseTimeoutError &&
+          !telemetryRetriesIdentity(
+            session.attempts + 1,
+            this.workoutDeviceId !== null,
+            this.knownControllers.has(device.id),
+          )
+        )
+          throw new RejectedReplyError(presentationFailure('controllerNoReply').text);
+        throw error;
+      });
       this.advance(connection, 'identity', 'ready');
       clearTimeout(connection.attemptTimer);
       const controller = reply.identity!;
@@ -579,6 +617,7 @@ export class BrowserAdapter implements TelemetryAdapter {
         deviceName: device.name ?? 'CYC bike',
         controllerModel: controller.controllerModel,
         firmwareLabel: controller.firmwareLabel,
+        controllerProtocol: controller.controllerProtocol,
       });
       const poll = async (): Promise<void> => {
         if (!this.current(connection)) return;
@@ -587,7 +626,7 @@ export class BrowserAdapter implements TelemetryAdapter {
           await this.request(connection, 'telemetry', response => {
             const now = response.acquiredAt;
             connection.stableSince ??= now;
-            if (now - connection.stableSince >= timing.stableTelemetrySeconds) session.attempts = 0;
+            if (telemetryRestartsBackoff(now - connection.stableSince)) session.attempts = 0;
             if (this.state.status !== 'connected')
               this.update({ status: 'connected', error: undefined, recoverableConnectionError: false });
             this.publish(
@@ -600,7 +639,10 @@ export class BrowserAdapter implements TelemetryAdapter {
             );
           });
         } catch (error) {
-          if (error instanceof RejectedReplyError) this.failed(connection, error);
+          if (error instanceof ResendRequest && this.current(connection)) {
+            this.trace('request_resent', 'request=telemetry');
+            void poll();
+          } else if (error instanceof RejectedReplyError) this.failed(connection, error);
           else this.recover(connection, error);
           return;
         }
@@ -610,8 +652,7 @@ export class BrowserAdapter implements TelemetryAdapter {
       void poll();
     } catch (error) {
       if (this.connection !== connection || connection.cancelling) return;
-      if (error instanceof RejectedReplyError || (error instanceof DOMException && error.name === 'NotFoundError'))
-        this.failed(connection, error);
+      if (error instanceof RejectedReplyError || missingService(error)) this.failed(connection, error);
       else this.recover(connection, error);
     }
   }

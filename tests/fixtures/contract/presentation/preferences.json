@@ -75,7 +75,7 @@
   },
   "loadFailure": {
     "error": "Unreadable settings",
-    "notice": "Changes won't be saved until settings can be read.",
+    "notice": "Reset settings to use the defaults.",
     "edit": {
       "activeView": "battery",
       "historyView": "temperature",

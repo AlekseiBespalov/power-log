@@ -577,6 +577,7 @@ for selection in ["controller", "gps:phone"] {
     try archive.update(id: id, stopElapsedSeconds: 2 + gap)
     try archive.finish(id: id, endedAt: start.addingTimeInterval(2 + gap))
     let profile = try distance.snapshot(id: id, selection: selection)
+    let joined = selection == "controller" && gap < 6
     for buckets in [1, 16] {
       let curve = points(try settledPlot(request(id, from: 0, to: 2 + gap, buckets: buckets, selection: selection)))
       check(
@@ -584,20 +585,21 @@ for selection in ["controller", "gps:phone"] {
         "\(selection) distance display gap \(gap) at \(buckets) buckets")
       if buckets == 16 {
         check(
-          curve[1]["value"] as? Double == curve[2]["value"] as? Double,
-          "\(selection) uncovered distance span is flat")
+          (curve[1]["value"] as? Double == curve[2]["value"] as? Double) != joined,
+          "\(selection) distance across a \(gap) s reconnect rises only when joined")
       }
     }
     let stats = statistics(try monitor.rangeStats(request(id, from: 0, to: 2 + gap, selection: selection)))!
+    let covered = joined ? 2 + gap : 2
     check(
-      profile.coveredSeconds == 2 && profile.info.selected?.partial == true
-        && stats["coveredSeconds"] as? Double == 2 && stats["integral"] == nil,
-      "\(selection) reconnect display continuity adds no coverage or integral")
-    let expected = selection == "controller" ? 20.0 : 2.223902
-    check(profile.totalMeters == expected, "\(selection) reconnect adds no distance")
+      profile.coveredSeconds == covered && profile.info.selected?.partial == !joined
+        && stats["coveredSeconds"] as? Double == covered && stats["integral"] == nil,
+      "\(selection) reconnect display continuity adds coverage only when joined")
+    let expected = selection == "controller" ? (joined ? 40.0 : 20.0) : 2.223902
+    check(profile.totalMeters == expected, "\(selection) reconnect adds distance only when joined")
     check(
-      selected(try monitor.inspectAt(request(id, at: 1 + gap / 2, selection: selection))) == nil,
-      "\(selection) reconnect remains unsupported for inspection")
+      (selected(try monitor.inspectAt(request(id, at: 1 + gap / 2, selection: selection))) == nil) != joined,
+      "\(selection) reconnect is inspectable only when joined")
     let summary = try WorkoutAnalysis.summarize(archive: archive, id: id, distanceSource: selection)
     check(summary.distanceMeters == profile.totalMeters, "\(selection) export summary retains measured distance")
   }

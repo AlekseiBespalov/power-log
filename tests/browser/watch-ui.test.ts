@@ -142,8 +142,8 @@ it('History keeps all nine per-item Health results on the ride page', () =>
         'Cycling cadence',
         'Cycling speed',
         'Cycling distance',
-        'Workout association',
-        'Health readback',
+        'Workout links',
+        'Health measurements',
       ])
         await ui(health.getByText(`${label} pending`, { exact: true })).toBeVisible();
       await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
@@ -215,6 +215,24 @@ it('does not show unrelated ready ride errors in Settings', () =>
     },
     'running',
   ));
+it('keeps Share diagnostics in view and the raw Bluetooth capture under a collapsed Advanced section', () =>
+  run('ios', 'settings', async page => {
+    const panel = page.getByTestId('bluetooth-diagnostics');
+    await ui(panel.getByRole('button', { name: 'Share diagnostics', exact: true })).toBeEnabled();
+    const advanced = panel.getByRole('button', { name: 'Advanced', exact: true });
+    await ui(advanced).toHaveAttribute('aria-expanded', 'false');
+    for (const name of ['Start capture', 'Export log', 'Clear'])
+      await ui(panel.getByRole('button', { name, exact: true })).toHaveCount(0);
+    await ui(panel).not.toContainText('Back to ride');
+    await advanced.click();
+    await ui(advanced).toHaveAttribute('aria-expanded', 'true');
+    await ui(panel.getByText('No capture', { exact: true })).toBeVisible();
+    await ui(panel.getByRole('button', { name: 'Start capture', exact: true })).toBeEnabled();
+    await ui(panel.getByRole('button', { name: 'Export log', exact: true })).toBeDisabled();
+    await ui(panel).toContainText('Back to ride');
+    await advanced.click();
+    await ui(panel.getByRole('button', { name: 'Start capture', exact: true })).toHaveCount(0);
+  }));
 
 const externalFinish = {
   rideId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',

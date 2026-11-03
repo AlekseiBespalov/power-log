@@ -1,5 +1,5 @@
-import { bikeDisplayName } from '../../core/bikes';
-import { Text, View } from 'react-native';
+import { bikeDisplayName, controllerSpeedNote } from '../../core/bikes';
+import { Linking, Text, View } from 'react-native';
 import { Button, colors, Heading, type } from '../../components/ui';
 import { Icon } from '../../components/icon';
 import { bikeConnectionLabel } from '../../core/telemetry-display';
@@ -19,6 +19,8 @@ export function ConnectionSettings() {
   const action = (operation: () => Promise<unknown>) => () => {
     void session.run(operation);
   };
+  const speedNote = connected ? controllerSpeedNote(state) : null;
+  const openSettings = session.errorCode === 'bluetoothDenied' && adapter.kind === 'native';
   return (
     <View style={{ gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -35,6 +37,7 @@ export function ConnectionSettings() {
           >
             {bikeConnectionLabel(state.status, display)}
           </Text>
+          {speedNote && <Text style={{ color: colors.muted, fontSize: type.caption }}>{speedNote}</Text>}
         </View>
         {!connected && !connecting && state.status !== 'scanning' && (
           <Button
@@ -55,6 +58,11 @@ export function ConnectionSettings() {
       {session.error && (
         <View accessibilityRole="alert" style={{ gap: 8 }}>
           <Text style={{ color: colors.red }}>{session.error}</Text>
+          {openSettings && (
+            <Button secondary onPress={action(() => Linking.openSettings())}>
+              Open Settings
+            </Button>
+          )}
           <Button secondary onPress={session.clearError}>
             Dismiss
           </Button>

@@ -258,7 +258,14 @@ export function streams(
   const list: WitnessStream[] = [];
   if (profile)
     list.push(
-      new DistanceStream(readProjection(source, session, 'distance', reads), clock, timeline, ranges, profile.kind),
+      new DistanceStream(
+        readProjection(source, session, 'distance', reads),
+        clock,
+        timeline,
+        ranges,
+        profile.kind,
+        statistics,
+      ),
     );
   list.push(
     new TelemetryStream(
@@ -283,6 +290,7 @@ export function streams(
         gps,
         geometry,
         statistics,
+        profile?.kind !== 'controller',
       ),
     );
   }

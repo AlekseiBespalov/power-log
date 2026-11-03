@@ -47,7 +47,7 @@ function rows({ stream, second, interval, run }: Step): WitnessRows {
     return { ...row, stream, power: NONE, cadence: NONE, assist: NONE, motor: NONE, channels: [] };
   if (stream === GPS) return { ...row, stream, latitude: NONE, longitude: NONE, altitude: NONE, speed: NONE };
   if (stream === HEART_RATE) return { ...row, stream, heartRate: NONE };
-  return { ...row, stream: DISTANCE, distance: NONE };
+  return { ...row, stream: DISTANCE, distance: NONE, speed: NONE };
 }
 
 function witness(step: Step): WitnessRows {

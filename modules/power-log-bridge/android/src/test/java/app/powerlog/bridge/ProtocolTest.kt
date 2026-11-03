@@ -1,5 +1,6 @@
 package app.powerlog.bridge
 
+import app.powerlog.core.presentation.RideFailure
 import app.powerlog.core.telemetry.*
 import app.powerlog.core.telemetry.cyc.*
 import java.io.File
@@ -130,7 +131,8 @@ class ProtocolTest {
                 adapter.notification(controllerFrame(payload))
                 assertTrue(readings.isEmpty())
                 assertEquals("error", adapter.bluetooth.state["status"])
-                assertEquals("Bike returned an invalid controller reply.", adapter.bluetooth.state["error"])
+                assertEquals(RideFailure.firmwareUnsupported.androidText, adapter.bluetooth.state["error"])
+                assertEquals("firmwareUnsupported", adapter.bluetooth.state["errorCode"])
                 assertNull(adapter.bluetooth.deviceId)
                 assertFalse(adapterSession(adapter.bluetooth).state.cancellationPending)
                 assertTrue(

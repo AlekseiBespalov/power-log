@@ -45,9 +45,7 @@ for (const width of [320, 390, 1440]) {
       await expect(heading).toBeVisible();
     }
     await expect(policy).toContainText('heart rate variability');
-    await expect(policy).toContainText(
-      'optional read permissions for supported ride-related physiological measurements',
-    );
+    await expect(policy).toContainText('including records from other apps and devices');
     await expect(policy).toContainText('Imported measurements keep their original times.');
     const contact = policy.getByRole('link', { name: 'GitHub Issues', exact: true });
     await expect(contact).toHaveAttribute('href', destinations[0][1]);

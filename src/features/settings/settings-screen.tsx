@@ -10,7 +10,7 @@ import { ModalDialog } from '../../components/modal-dialog';
 import { StableLabel } from '../../components/stable-label';
 import { Toggle } from '../../components/toggle';
 import { Button, colors, headingLevel, Pressable, type, lineHeight, MIN_TOUCH_TARGET } from '../../components/ui';
-import { APP_VERSION, ISSUES_URL, SOURCE_URL, WEB_NOTICES_URL } from '../../core/app-info';
+import { APP_VERSION, ISSUES_URL, RIDE_STORAGE_NOTE, SOURCE_URL, WEB_NOTICES_URL } from '../../core/app-info';
 import { DISTANCE_SOURCE_LABELS, type DistanceSource } from '../../core/distance';
 import type { BatteryConsumptionSource } from '../../core/consumption';
 import type { SpeedUnit } from '../../core/monitor';
@@ -360,6 +360,13 @@ export function SettingsScreen() {
           </View>
         )}
         <SettingsGroup title="About" caption={`Power Log ${APP_VERSION}`} testID="settings-about">
+          <Text style={{ color: colors.muted, fontSize: type.body, lineHeight: lineHeight.body }}>
+            {RIDE_STORAGE_NOTE}
+          </Text>
+          <Text style={{ color: colors.muted, fontSize: type.body, lineHeight: lineHeight.body }}>
+            Readings come from your controller and sensors and can be inaccurate; battery use can read low. Set up
+            before you ride, and don’t use the app while moving.
+          </Text>
           <Link
             href="/privacy"
             style={{
@@ -474,7 +481,7 @@ export function SettingsScreen() {
         >
           <Text accessibilityRole="header" style={{ fontSize: type.title, fontWeight: '600', color: colors.text }}>
             {settings.error
-              ? settings.error.startsWith('Could not load')
+              ? settings.resetOffered
                 ? 'Settings unavailable'
                 : 'Settings not saved'
               : 'Recording options unavailable'}
@@ -495,6 +502,7 @@ export function SettingsScreen() {
               Retry
             </Button>
           )}
+          {settings.resetOffered && <Button onPress={settings.resetSettings}>Reset settings</Button>}
           <Button secondary onPress={() => setDismissedError(error)}>
             Dismiss
           </Button>

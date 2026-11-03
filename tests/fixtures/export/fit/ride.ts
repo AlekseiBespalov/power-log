@@ -131,6 +131,43 @@ export const START = '2026-01-01T00:00:00.000Z';
 export const FIT_START = Date.parse(START) / 1000 - 631065600;
 export const CONTEXT_TIME = '2026-01-02T03:04:05.000Z';
 
+export function controllerLossRide(
+  loss: number,
+  gps: boolean,
+  profile: ExportDistanceProfile = { source: 'controller', kind: 'controller' },
+): RideSpec {
+  const resumed = 6 + loss;
+  const edge = (start: number, end: number, startSpeed: number, endSpeed: number, segment = 0): DistanceRow => ({
+    start,
+    end,
+    meters: ((startSpeed + endSpeed) / 2) * (end - start),
+    segment,
+    startSpeed,
+    endSpeed,
+  });
+  return {
+    end: 22,
+    profile,
+    telemetry: Array.from({ length: 21 }, (_, t) => t)
+      .filter(t => t <= 6 || t >= resumed)
+      .map(t => ({ t, humanPowerW: 100, cadenceRpm: 80 })),
+    gps: gps
+      ? Array.from({ length: 21 }, (_, t) => ({
+          t,
+          latitude: 45,
+          longitude: 7 + t * 0.0001,
+          horizontalAccuracyM: 5,
+          speedMps: 9,
+        }))
+      : [],
+    distance: [
+      ...Array.from({ length: 6 }, (_, t) => edge(t, t + 1, 5, 5)),
+      ...(loss < 6 ? [edge(6, resumed, 5, 7)] : []),
+      ...Array.from({ length: 20 - resumed }, (_, i) => edge(resumed + i, resumed + i + 1, 7, 7, loss < 6 ? 0 : 1)),
+    ],
+  };
+}
+
 type Row = Readonly<Record<string, unknown>> & { t?: number; start?: number; end?: number };
 
 const IDENTITY = { vendor: 'controller', model: 'X6', firmware: '20250604', protocol: '5.3' } as const;

@@ -10,7 +10,7 @@ internal class RideDistanceInspection(private val store: RideStore) {
         val revision = store.readRevision(id)
         val maximumIntervalUs =
             if (metric == "gpsDistanceMeters") DistancePolicy.maximumGPSIntervalUs
-            else DistancePolicy.maximumControllerIntervalUs
+            else DistancePolicy.maximumControllerEdgeUs
         val upper = if (endUs > Long.MAX_VALUE - maximumIntervalUs) Long.MAX_VALUE else endUs + maximumIntervalUs
         return store.select(
             "SELECT d.*,a.event_id AS start_event,a.timestamp AS start_stamp,a.time AS start_time,b.event_id AS end_event,b.timestamp AS end_stamp,b.time AS end_time FROM distance_intervals d JOIN observations a ON a.id=d.from_id JOIN observations b ON b.id=d.to_id WHERE d.ride=? AND d.source=? AND d.end_us>=? AND d.end_us<=? AND d.start_us<=? AND d.revision<=? ORDER BY d.end_us,d.to_id",

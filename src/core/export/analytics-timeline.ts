@@ -13,7 +13,7 @@ export async function readAnalyticsTimeline(
   reads: ExportReads,
   options: { readonly fitLimits: boolean; readonly file?: string } = { fitLimits: true },
 ): Promise<Timeline> {
-  if (!Number.isFinite(end) || end < 0) throw new ExportError('gate', 'The ride has no valid elapsed time.');
+  if (!Number.isFinite(end) || end < 0) throw new ExportError('gate', 'This ride has no recorded time to export.');
   if (options.fitLimits && end > FIT_MAX_RIDE_SECONDS)
     throw new ExportError(
       'limit',

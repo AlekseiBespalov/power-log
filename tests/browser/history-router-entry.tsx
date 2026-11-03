@@ -40,9 +40,14 @@ function Root() {
     </GestureHandlerRootView>
   );
 }
+let failing = false;
+function FailingSettings() {
+  if (failing) throw new Error('Settings failed to render');
+  return <View testID="settings-placeholder" />;
+}
 const routes: Record<string, unknown> = {
   './_layout.tsx': { default: Root },
-  './settings.tsx': { default: () => <View /> },
+  './settings.tsx': { default: FailingSettings, ErrorBoundary: HistoryRide.ErrorBoundary },
   './index.tsx': { default: () => <View /> },
   './sessions/_layout.tsx': HistoryLayout,
   './sessions/index.tsx': HistoryIndex,
@@ -65,6 +70,9 @@ export function back() {
 export function toList() {
   navigate.dismissTo('/sessions');
 }
+export function failSettings(value: boolean) {
+  failing = value;
+}
 export function persistSeed(count = 2) {
   sessionStorage.setItem('history-router-count', String(count));
 }
@@ -75,4 +83,6 @@ const container = document.createElement('div');
 container.style.cssText = 'height:100vh;display:flex';
 document.body.append(container);
 createRoot(container).render(createElement(ExpoRoot, { context, location: new URL(location.href) }));
-Object.assign(window, { historyRouterTests: { ...archive, push, back, toList, persistSeed, routerReady } });
+Object.assign(window, {
+  historyRouterTests: { ...archive, push, back, toList, persistSeed, routerReady, failSettings },
+});

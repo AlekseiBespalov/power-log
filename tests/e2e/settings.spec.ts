@@ -9,8 +9,10 @@ test('Bluetooth diagnostics require explicit capture and export and can be delet
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/settings');
   const panel = page.getByTestId('bluetooth-diagnostics');
-  await expect(panel.getByText('No capture', { exact: false })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Share diagnostics' })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Start capture', exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Advanced', exact: true }).click();
+  await expect(panel.getByText('No capture', { exact: false })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Export log' })).toBeDisabled();
   await panel.getByRole('button', { name: 'Start capture', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Stop capture' })).toBeEnabled();
@@ -164,7 +166,7 @@ test('Settings hydrate retained choices and expose a failed write without hiding
   const before = await settingsLayout(page);
   await page.getByTestId('settings-speed').click();
   await page.getByRole('radio', { name: 'km/h', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Could not save monitor settings. Something went wrong.');
+  await expect(page.getByRole('alert')).toContainText('Your settings weren’t saved. Something went wrong.');
   await expect(page.getByRole('alert')).not.toContainText('Test settings write failed');
   expect(await settingsLayout(page)).toEqual(before);
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();

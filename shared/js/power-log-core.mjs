@@ -160,7 +160,6 @@ import {
   addAll1k27qatfgp3k5 as addAll,
   listOfNotNull1v4ggfackvuny as listOfNotNull_0,
   isBlank1dvkhjjvox3p0 as isBlank,
-  trimEndvvzjdhan75g as trimEnd,
   get_lastIndex1yw0x4k50k51w as get_lastIndex_0,
   numberToChar93r9buh19yek as numberToChar,
   drop336950s126lmj as drop_0,
@@ -174,6 +173,7 @@ import {
   numberRangeToNumber25vse2rgp6rs8 as numberRangeToNumber,
   ClosedRangehokgr73im9z3 as ClosedRange,
   contains2c50nlxg7en7o as contains_0,
+  trimEndvvzjdhan75g as trimEnd,
   Char__minus_impl_a2frrhw2puetaduxyd as Char__minus_impl_a2frrh,
   Char__compareTo_impl_ypi4mb3bl0kdwnivnp6 as Char__compareTo_impl_ypi4mb,
   IllegalArgumentException_init_$Init$c3q2g5ghz7m0 as IllegalArgumentException_init_$Init$,
@@ -467,6 +467,7 @@ initMetadataForObject(ReadingFreshness, 'ReadingFreshness');
 initMetadataForClass(ControllerPreviewObservation, 'ControllerPreviewObservation');
 initMetadataForClass(ControllerPreviewView, 'ControllerPreviewView');
 initMetadataForClass(ControllerPreview, 'ControllerPreview', ControllerPreview);
+initMetadataForObject(ControllerNotes, 'ControllerNotes');
 initMetadataForClass(RideFailure, 'RideFailure', VOID, Enum);
 initMetadataForObject(Failures, 'Failures');
 initMetadataForClass(SourcePresentation, 'SourcePresentation');
@@ -1581,7 +1582,7 @@ protoOf(CacheIdentity).of_hkh8a1_k$ = function (pin) {
   var tmp_0 = pin.get_semanticMetadataIdentity_h244zo_k$();
   var tmp0_safe_receiver = pin.metadata_1.healthOutcome_1;
   var tmp1_elvis_lhs = tmp0_safe_receiver == null ? null : tmp0_safe_receiver.name_1;
-  return frame(this, listOf([pin.rideId_1, tmp, tmp_0, pin.metadata_1.phase_1, tmp1_elvis_lhs == null ? '' : tmp1_elvis_lhs, pin.metadata_1.healthReadbackPending_1.toString(), pin.distanceSelection_1]));
+  return frame(this, listOf([pin.rideId_1, tmp, tmp_0, pin.metadata_1.phase_1, tmp1_elvis_lhs == null ? '' : tmp1_elvis_lhs, pin.metadata_1.healthReadbackPending_1.toString(), pin.distanceSelection_1, '6000000']));
 };
 protoOf(CacheIdentity).filename_sx5xix_k$ = function (pin) {
   return 'summary-r' + pin.observationRevision_1.toString() + '-d' + replace(pin.distanceSelection_1, _Char___init__impl__6a9atx(58), _Char___init__impl__6a9atx(45)) + '.json';
@@ -2878,6 +2879,7 @@ function controllerContribution(v0, v1, durationUs) {
 function DistancePolicy() {
   DistancePolicy_instance = this;
   this.maximumControllerIntervalUs_1 = new Long(2500000, 0);
+  this.maximumControllerEdgeUs_1 = new Long(6000000, 0);
   this.maximumGPSIntervalUs_1 = new Long(10000000, 0);
 }
 protoOf(DistancePolicy).validSelection_jpjr7u_k$ = function (selection) {
@@ -3224,10 +3226,10 @@ protoOf(ControllerDistanceKernel).append_nsg2n5_k$ = function (current) {
     this.previous_1 = equalsLong(dt, new Long(0, 0)) && (!(old.continuityIdentity_1 == current.continuityIdentity_1) || !(old.activeInterval_1 === current.activeInterval_1)) ? current : null;
     return null;
   }
-  var same = old.model_1 == current.model_1 && old.protocol_1 == current.protocol_1 && old.deviceIdentity_1 == current.deviceIdentity_1 && old.continuityIdentity_1 == current.continuityIdentity_1 && old.activeInterval_1 === current.activeInterval_1;
+  var same = old.model_1 == current.model_1 && old.protocol_1 == current.protocol_1 && old.deviceIdentity_1 == current.deviceIdentity_1 && old.activeInterval_1 === current.activeInterval_1;
   var monotonic = old.monotonicSeconds_1 == null || current.monotonicSeconds_1 == null || current.monotonicSeconds_1 > old.monotonicSeconds_1;
   var counter = old.counter_1 == null || current.counter_1 == null || compareScalars(current.counter_1, old.counter_1) >= 0;
-  if (compare(dt, new Long(2500000, 0)) > 0 || !same || !monotonic || !counter) {
+  if (compare(dt, new Long(6000000, 0)) >= 0 || !same || !monotonic || !counter) {
     this.segment_1 = this.segment_1 + 1 | 0;
     return null;
   }
@@ -18825,13 +18827,38 @@ protoOf(ControllerPreview).view_4te99w_k$ = function (connection, mappedAcquisit
   }
   return new ControllerPreviewView(display, tmp_1, StreamStatus_getInstance().connectionDeadline_t029od_k$(connection, acquired, now));
 };
+function ControllerNotes() {
+  this.speedUnavailable_1 = 'Controller speed needs CYC X6 or X12 firmware with protocol 5.3.';
+}
+protoOf(ControllerNotes).speed_yc7x6a_k$ = function (controllerModel, firmwareLabel, controllerProtocol) {
+  if (controllerModel == null || firmwareLabel == null || controllerProtocol == null)
+    return null;
+  var tmp;
+  try {
+    tmp = TelemetryRestoration_getInstance().restore$default_8xgpy1_k$(controllerModel, firmwareLabel, controllerProtocol, null).identity_1;
+  } catch ($p) {
+    var tmp_0;
+    if ($p instanceof IllegalArgumentException) {
+      var _unused_var__etf5q3 = $p;
+      return null;
+    } else {
+      throw $p;
+    }
+  }
+  var identity = tmp;
+  return identity.get_hasKnownSpeedUnit_w9lwxl_k$() ? null : 'Controller speed needs CYC X6 or X12 firmware with protocol 5.3.';
+};
+var ControllerNotes_instance;
+function ControllerNotes_getInstance() {
+  return ControllerNotes_instance;
+}
 var static_init_called_15;
 function static_init_15() {
   if (static_init_called_15)
     return Unit_instance;
   static_init_called_15 = true;
   RideFailure_watchLaunchFailed_instance = new RideFailure('watchLaunchFailed', 0, "Power Log couldn't open on your Apple Watch.", 'Unlock your Apple Watch and keep it near your iPhone, then start again.');
-  RideFailure_watchNotInstalled_instance = new RideFailure('watchNotInstalled', 1, "Power Log isn't installed on your Apple Watch.", 'Install it from the Watch app on your iPhone, or turn off Use Watch.');
+  RideFailure_watchNotInstalled_instance = new RideFailure('watchNotInstalled', 1, "Power Log isn't installed on your Apple Watch.", 'Install it from the Watch app on your iPhone, or turn off Apple Watch in Settings.');
   RideFailure_watchStartUnconfirmed_instance = new RideFailure('watchStartUnconfirmed', 2, "Your Apple Watch didn't confirm the start.", 'Open Power Log on your Apple Watch, keep it unlocked and nearby, then start again.');
   RideFailure_watchBusy_instance = new RideFailure('watchBusy', 3, 'Your Apple Watch is still busy with another ride.', 'Finish or discard it on your Apple Watch, then start again.');
   RideFailure_startUnconfirmed_instance = new RideFailure('startUnconfirmed', 4, "Power Log couldn't confirm the start.", 'Start again.');
@@ -18857,17 +18884,27 @@ function static_init_15() {
   RideFailure_needsAttention_instance = new RideFailure('needsAttention', 24, 'This ride needs attention.', 'Tap Retry. Your recorded data is kept.');
   RideFailure_healthDenied_instance = new RideFailure('healthDenied', 25, "Power Log can't save to Health.", 'Allow it in the Health app, or turn off Save to Health.');
   RideFailure_healthLocked_instance = new RideFailure('healthLocked', 26, 'Health data is unavailable while this device is locked.', 'Unlock it, then try again.');
-  RideFailure_bluetoothDenied_instance = new RideFailure('bluetoothDenied', 27, "Power Log can't use Bluetooth.", 'Allow Bluetooth for Power Log in Settings.');
+  RideFailure_bluetoothDenied_instance = new RideFailure('bluetoothDenied', 27, "Power Log can't use Bluetooth.", 'Allow Bluetooth for Power Log in Settings.', 'Allow Nearby devices for Power Log in Settings.');
   RideFailure_locationDenied_instance = new RideFailure('locationDenied', 28, "Power Log can't use your location.", 'Allow location in Settings, or turn off GPS for this ride.');
-  RideFailure_bikeUnavailable_instance = new RideFailure('bikeUnavailable', 29, "Your bike isn't connected.", 'Turn on Bluetooth and the bike, keep it nearby, then try again.');
-  RideFailure_storageBusy_instance = new RideFailure('storageBusy', 30, 'Power Log is busy saving your ride.', 'Try again in a moment.');
-  RideFailure_storageFull_instance = new RideFailure('storageFull', 31, 'This device is out of storage.', 'Free up space, then try again.');
-  RideFailure_storageFailed_instance = new RideFailure('storageFailed', 32, "Power Log couldn't save this change.", 'Try again. Your recorded data is kept.');
-  RideFailure_rideDeleted_instance = new RideFailure('rideDeleted', 33, 'This ride was deleted.', 'Choose another ride in History.');
-  RideFailure_ownerEvidenceRejected_instance = new RideFailure('ownerEvidenceRejected', 34, 'Something went wrong.', 'Try again. Your recorded data is kept.');
-  RideFailure_captureRejected_instance = new RideFailure('captureRejected', 35, 'Something went wrong.', 'Try again. Your recorded data is kept.');
-  RideFailure_cutoffBeforeStart_instance = new RideFailure('cutoffBeforeStart', 36, 'Something went wrong.', 'Try again. Your recorded data is kept.');
-  RideFailure_unknown_instance = new RideFailure('unknown', 37, 'Something went wrong.', 'Try again. Your recorded data is kept.');
+  RideFailure_bluetoothOff_instance = new RideFailure('bluetoothOff', 29, 'Bluetooth is off.', 'Turn on Bluetooth, then search again.');
+  RideFailure_bluetoothNotReady_instance = new RideFailure('bluetoothNotReady', 30, "Bluetooth isn't ready yet.", 'Try again in a moment.');
+  RideFailure_bluetoothUnsupported_instance = new RideFailure('bluetoothUnsupported', 31, "This device doesn't support Bluetooth Low Energy.", '');
+  RideFailure_bluetoothUnavailable_instance = new RideFailure('bluetoothUnavailable', 32, "Bluetooth isn't available in this build.", '');
+  RideFailure_bikeReconnecting_instance = new RideFailure('bikeReconnecting', 33, 'Connection to your bike was lost.', 'Reconnecting\u2026');
+  RideFailure_bikeUnavailable_instance = new RideFailure('bikeUnavailable', 34, "Power Log couldn't connect to your bike.", 'Close other apps connected to the bike, turn its display off and on, then connect again.');
+  RideFailure_bikeNotFound_instance = new RideFailure('bikeNotFound', 35, 'No CYC X6 or X12 controller found.', "Turn on your bike's display, keep your phone nearby, then search again.");
+  RideFailure_bluetoothSearchFailed_instance = new RideFailure('bluetoothSearchFailed', 36, 'Bluetooth search failed.', 'Try again.');
+  RideFailure_controllerUnsupported_instance = new RideFailure('controllerUnsupported', 37, "This isn't a supported controller.", 'Power Log works with CYC X6 and X12.');
+  RideFailure_controllerNoReply_instance = new RideFailure('controllerNoReply', 38, "This device didn't reply.", "If it's a CYC X6 or X12 controller, turn on the bike's display and connect again.");
+  RideFailure_firmwareUnsupported_instance = new RideFailure('firmwareUnsupported', 39, "This controller's firmware isn't supported yet.", 'Share diagnostics from Settings so support can be added.');
+  RideFailure_storageBusy_instance = new RideFailure('storageBusy', 40, 'Power Log is busy saving your ride.', 'Try again in a moment.');
+  RideFailure_storageFull_instance = new RideFailure('storageFull', 41, 'This device is out of storage.', 'Free up space, then try again.');
+  RideFailure_storageFailed_instance = new RideFailure('storageFailed', 42, "Power Log couldn't save this change.", 'Try again. Your recorded data is kept.');
+  RideFailure_rideDeleted_instance = new RideFailure('rideDeleted', 43, 'This ride was deleted.', 'Choose another ride in History.');
+  RideFailure_ownerEvidenceRejected_instance = new RideFailure('ownerEvidenceRejected', 44, 'Something went wrong.', 'Try again. Your recorded data is kept.');
+  RideFailure_captureRejected_instance = new RideFailure('captureRejected', 45, 'Something went wrong.', 'Try again. Your recorded data is kept.');
+  RideFailure_cutoffBeforeStart_instance = new RideFailure('cutoffBeforeStart', 46, 'Something went wrong.', 'Try again. Your recorded data is kept.');
+  RideFailure_unknown_instance = new RideFailure('unknown', 47, 'Something went wrong.', 'Try again. Your recorded data is kept.');
 }
 var RideFailure_watchLaunchFailed_instance;
 var RideFailure_watchNotInstalled_instance;
@@ -18898,7 +18935,17 @@ var RideFailure_healthDenied_instance;
 var RideFailure_healthLocked_instance;
 var RideFailure_bluetoothDenied_instance;
 var RideFailure_locationDenied_instance;
+var RideFailure_bluetoothOff_instance;
+var RideFailure_bluetoothNotReady_instance;
+var RideFailure_bluetoothUnsupported_instance;
+var RideFailure_bluetoothUnavailable_instance;
+var RideFailure_bikeReconnecting_instance;
 var RideFailure_bikeUnavailable_instance;
+var RideFailure_bikeNotFound_instance;
+var RideFailure_bluetoothSearchFailed_instance;
+var RideFailure_controllerUnsupported_instance;
+var RideFailure_controllerNoReply_instance;
+var RideFailure_firmwareUnsupported_instance;
 var RideFailure_storageBusy_instance;
 var RideFailure_storageFull_instance;
 var RideFailure_storageFailed_instance;
@@ -18907,25 +18954,9 @@ var RideFailure_ownerEvidenceRejected_instance;
 var RideFailure_captureRejected_instance;
 var RideFailure_cutoffBeforeStart_instance;
 var RideFailure_unknown_instance;
-function values_6() {
-  static_init_15();
-  return [RideFailure_watchLaunchFailed_getInstance(), RideFailure_watchNotInstalled_getInstance(), RideFailure_watchStartUnconfirmed_getInstance(), RideFailure_watchBusy_getInstance(), RideFailure_startUnconfirmed_getInstance(), RideFailure_startCancelled_getInstance(), RideFailure_startExpired_getInstance(), RideFailure_startInterrupted_getInstance(), RideFailure_bikeRequired_getInstance(), RideFailure_ownerUnresolved_getInstance(), RideFailure_rideFinishing_getInstance(), RideFailure_rideActive_getInstance(), RideFailure_actionPending_getInstance(), RideFailure_discardPending_getInstance(), RideFailure_rideChanged_getInstance(), RideFailure_ownerForeign_getInstance(), RideFailure_finishConfirmationRequired_getInstance(), RideFailure_actionUnavailable_getInstance(), RideFailure_finishUnconfirmed_getInstance(), RideFailure_ownerUnconfirmed_getInstance(), RideFailure_recordingInterrupted_getInstance(), RideFailure_sessionUnavailable_getInstance(), RideFailure_syncPending_getInstance(), RideFailure_watchDataRejected_getInstance(), RideFailure_needsAttention_getInstance(), RideFailure_healthDenied_getInstance(), RideFailure_healthLocked_getInstance(), RideFailure_bluetoothDenied_getInstance(), RideFailure_locationDenied_getInstance(), RideFailure_bikeUnavailable_getInstance(), RideFailure_storageBusy_getInstance(), RideFailure_storageFull_getInstance(), RideFailure_storageFailed_getInstance(), RideFailure_rideDeleted_getInstance(), RideFailure_ownerEvidenceRejected_getInstance(), RideFailure_captureRejected_getInstance(), RideFailure_cutoffBeforeStart_getInstance(), RideFailure_unknown_getInstance()];
-}
-function get_entries_6() {
-  static_init_15();
-  if ($ENTRIES_6 == null)
-    $ENTRIES_6 = enumEntries(values_6());
-  return $ENTRIES_6;
-}
-var $ENTRIES_6;
-function RideFailure(name, ordinal, message, nextStep) {
-  Enum.call(this, name, ordinal);
-  this.message_1 = message;
-  this.nextStep_1 = nextStep;
-}
-protoOf(RideFailure).get_text_wouvsm_k$ = function () {
+function text_0($this, step) {
   // Inline function 'kotlin.collections.filter' call
-  var tmp0 = listOf([this.message_1, this.nextStep_1]);
+  var tmp0 = listOf([$this.message_1, step]);
   // Inline function 'kotlin.collections.filterTo' call
   var destination = ArrayList_init_$Create$_0();
   var _iterator__ex2g4s = tmp0.iterator_jk1svi_k$();
@@ -18937,6 +18968,30 @@ protoOf(RideFailure).get_text_wouvsm_k$ = function () {
     }
   }
   return joinToString_0(destination, ' ');
+}
+function values_6() {
+  static_init_15();
+  return [RideFailure_watchLaunchFailed_getInstance(), RideFailure_watchNotInstalled_getInstance(), RideFailure_watchStartUnconfirmed_getInstance(), RideFailure_watchBusy_getInstance(), RideFailure_startUnconfirmed_getInstance(), RideFailure_startCancelled_getInstance(), RideFailure_startExpired_getInstance(), RideFailure_startInterrupted_getInstance(), RideFailure_bikeRequired_getInstance(), RideFailure_ownerUnresolved_getInstance(), RideFailure_rideFinishing_getInstance(), RideFailure_rideActive_getInstance(), RideFailure_actionPending_getInstance(), RideFailure_discardPending_getInstance(), RideFailure_rideChanged_getInstance(), RideFailure_ownerForeign_getInstance(), RideFailure_finishConfirmationRequired_getInstance(), RideFailure_actionUnavailable_getInstance(), RideFailure_finishUnconfirmed_getInstance(), RideFailure_ownerUnconfirmed_getInstance(), RideFailure_recordingInterrupted_getInstance(), RideFailure_sessionUnavailable_getInstance(), RideFailure_syncPending_getInstance(), RideFailure_watchDataRejected_getInstance(), RideFailure_needsAttention_getInstance(), RideFailure_healthDenied_getInstance(), RideFailure_healthLocked_getInstance(), RideFailure_bluetoothDenied_getInstance(), RideFailure_locationDenied_getInstance(), RideFailure_bluetoothOff_getInstance(), RideFailure_bluetoothNotReady_getInstance(), RideFailure_bluetoothUnsupported_getInstance(), RideFailure_bluetoothUnavailable_getInstance(), RideFailure_bikeReconnecting_getInstance(), RideFailure_bikeUnavailable_getInstance(), RideFailure_bikeNotFound_getInstance(), RideFailure_bluetoothSearchFailed_getInstance(), RideFailure_controllerUnsupported_getInstance(), RideFailure_controllerNoReply_getInstance(), RideFailure_firmwareUnsupported_getInstance(), RideFailure_storageBusy_getInstance(), RideFailure_storageFull_getInstance(), RideFailure_storageFailed_getInstance(), RideFailure_rideDeleted_getInstance(), RideFailure_ownerEvidenceRejected_getInstance(), RideFailure_captureRejected_getInstance(), RideFailure_cutoffBeforeStart_getInstance(), RideFailure_unknown_getInstance()];
+}
+function get_entries_6() {
+  static_init_15();
+  if ($ENTRIES_6 == null)
+    $ENTRIES_6 = enumEntries(values_6());
+  return $ENTRIES_6;
+}
+var $ENTRIES_6;
+function RideFailure(name, ordinal, message, nextStep, androidNextStep) {
+  androidNextStep = androidNextStep === VOID ? nextStep : androidNextStep;
+  Enum.call(this, name, ordinal);
+  this.message_1 = message;
+  this.nextStep_1 = nextStep;
+  this.androidNextStep_1 = androidNextStep;
+}
+protoOf(RideFailure).get_text_wouvsm_k$ = function () {
+  return text_0(this, this.nextStep_1);
+};
+protoOf(RideFailure).get_androidText_ted51v_k$ = function () {
+  return text_0(this, this.androidNextStep_1);
 };
 function Failures() {
 }
@@ -18957,6 +19012,9 @@ protoOf(Failures).present_ry3y5w_k$ = function (code) {
   }
   var tmp0_elvis_lhs = tmp$ret$0;
   return tmp0_elvis_lhs == null ? RideFailure_unknown_getInstance() : tmp0_elvis_lhs;
+};
+protoOf(Failures).controllerRejection_et4smr_k$ = function (request) {
+  return request.equals(ControllerRequest_identity_getInstance()) ? RideFailure_controllerUnsupported_getInstance() : RideFailure_firmwareUnsupported_getInstance();
 };
 var Failures_instance;
 function Failures_getInstance() {
@@ -19078,9 +19136,49 @@ function RideFailure_locationDenied_getInstance() {
   static_init_15();
   return RideFailure_locationDenied_instance;
 }
+function RideFailure_bluetoothOff_getInstance() {
+  static_init_15();
+  return RideFailure_bluetoothOff_instance;
+}
+function RideFailure_bluetoothNotReady_getInstance() {
+  static_init_15();
+  return RideFailure_bluetoothNotReady_instance;
+}
+function RideFailure_bluetoothUnsupported_getInstance() {
+  static_init_15();
+  return RideFailure_bluetoothUnsupported_instance;
+}
+function RideFailure_bluetoothUnavailable_getInstance() {
+  static_init_15();
+  return RideFailure_bluetoothUnavailable_instance;
+}
+function RideFailure_bikeReconnecting_getInstance() {
+  static_init_15();
+  return RideFailure_bikeReconnecting_instance;
+}
 function RideFailure_bikeUnavailable_getInstance() {
   static_init_15();
   return RideFailure_bikeUnavailable_instance;
+}
+function RideFailure_bikeNotFound_getInstance() {
+  static_init_15();
+  return RideFailure_bikeNotFound_instance;
+}
+function RideFailure_bluetoothSearchFailed_getInstance() {
+  static_init_15();
+  return RideFailure_bluetoothSearchFailed_instance;
+}
+function RideFailure_controllerUnsupported_getInstance() {
+  static_init_15();
+  return RideFailure_controllerUnsupported_instance;
+}
+function RideFailure_controllerNoReply_getInstance() {
+  static_init_15();
+  return RideFailure_controllerNoReply_instance;
+}
+function RideFailure_firmwareUnsupported_getInstance() {
+  static_init_15();
+  return RideFailure_firmwareUnsupported_instance;
 }
 function RideFailure_storageBusy_getInstance() {
   static_init_15();
@@ -19928,6 +20026,9 @@ function PreferenceLoadDecision(preferences, error, writable, shouldSave) {
   this.writable_1 = writable;
   this.shouldSave_1 = shouldSave;
 }
+protoOf(PreferenceLoadDecision).get_resetOffered_uwcmq3_k$ = function () {
+  return !this.writable_1;
+};
 protoOf(PreferenceLoadDecision).copy_gbrtq9_k$ = function (preferences, error, writable, shouldSave) {
   return new PreferenceLoadDecision(preferences, error, writable, shouldSave);
 };
@@ -19963,8 +20064,8 @@ protoOf(PreferenceLoadDecision).equals = function (other) {
     return false;
   return true;
 };
-function failedLoad($this, previous, error) {
-  return new PreferenceLoadDecision(previous, 'Could not load monitor settings. ' + (error == null ? null : trimEnd(error, charArrayOf([_Char___init__impl__6a9atx(46)]))) + '. ' + "Changes won't be saved until settings can be read.", false);
+function failedLoad($this, previous) {
+  return new PreferenceLoadDecision(previous, "Power Log couldn't read your saved settings. Reset settings to use the defaults.", false);
 }
 function selectable($this, value) {
   // Inline function 'kotlin.collections.map' call
@@ -20239,15 +20340,15 @@ protoOf(Preferences).encode_so8nmh_k$ = function (preferences) {
 };
 protoOf(Preferences).load_sa6qd3_k$ = function (previous, text, loadError) {
   if (!(loadError == null))
-    return failedLoad(this, previous, loadError);
+    return failedLoad(this, previous);
   var tmp;
   try {
     tmp = new PreferenceLoadDecision(text == null ? this.defaults_anl6c2_k$() : this.decode_gmof1w_k$(text), null, true);
   } catch ($p) {
     var tmp_0;
     if ($p instanceof IllegalArgumentException) {
-      var error = $p;
-      tmp_0 = failedLoad(this, previous, error.message);
+      var _unused_var__etf5q3 = $p;
+      tmp_0 = failedLoad(this, previous);
     } else {
       throw $p;
     }
@@ -20257,6 +20358,9 @@ protoOf(Preferences).load_sa6qd3_k$ = function (previous, text, loadError) {
 };
 protoOf(Preferences).change_hhkstr_k$ = function (state, replacement) {
   return state.copy$default_venl8x_k$(replacement, VOID, VOID, state.writable_1);
+};
+protoOf(Preferences).reset_1sjh3j_k$ = function () {
+  return new PreferenceLoadDecision(this.defaults_anl6c2_k$(), null, true, true);
 };
 var Preferences_instance;
 function Preferences_getInstance() {
@@ -20409,15 +20513,15 @@ protoOf(SourcePresentations).project_nvx5z9_k$ = function (phase, indoor, useWat
     switch (heartStatus) {
       case 'denied':
       case 'restricted':
-        heart = new SourcePresentation(heartStatus === 'denied' ? 'Heart-rate access denied' : 'Heart-rate access restricted', 'Health Connect readback', 'warning');
+        heart = new SourcePresentation(heartStatus === 'denied' ? 'Heart-rate access denied' : 'Heart-rate access restricted', 'Allow heart rate for Power Log in Health Connect.', 'warning');
         break;
       case 'receiving':
       case 'backfilled':
-        heart = new SourcePresentation('Backfilled heart rate', 'Health Connect readback', 'neutral');
+        heart = new SourcePresentation('Heart rate from Health Connect', 'Read after the ride', 'neutral');
         break;
       case 'waiting':
       case 'notDetermined':
-        heart = new SourcePresentation('Waiting for backfill', 'Heart rate can appear after Health Connect readback.', 'neutral');
+        heart = new SourcePresentation('Heart rate comes later', 'Power Log reads it from Health Connect after the ride.', 'neutral');
         break;
       default:
         heart = heart;
@@ -24392,14 +24496,15 @@ protoOf(TelemetrySession).advance_9ebukg_k$ = function (generation, expected, ne
   update(this, decision.next_1);
   return decision.action_1;
 };
-protoOf(TelemetrySession).check_a6ognx_k$ = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting) {
-  var decision = TelemetryTransport_instance.check_en4nf2_k$(this.state_1, now, responseSentAt, writeBlockedAt, nativeDisconnecting);
+protoOf(TelemetrySession).check_r9cteq_k$ = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince) {
+  var decision = TelemetryTransport_instance.check_vv4w8n_k$(this.state_1, now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince);
   update(this, decision.next_1);
   return decision.action_1;
 };
-protoOf(TelemetrySession).check$default_gj8gbj_k$ = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting, $super) {
+protoOf(TelemetrySession).check$default_ux6pxt_k$ = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince, $super) {
   nativeDisconnecting = nativeDisconnecting === VOID ? false : nativeDisconnecting;
-  return $super === VOID ? this.check_a6ognx_k$(now, responseSentAt, writeBlockedAt, nativeDisconnecting) : $super.check_a6ognx_k$.call(this, now, responseSentAt, writeBlockedAt, nativeDisconnecting);
+  unansweredSince = unansweredSince === VOID ? null : unansweredSince;
+  return $super === VOID ? this.check_r9cteq_k$(now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince) : $super.check_r9cteq_k$.call(this, now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince);
 };
 protoOf(TelemetrySession).scheduleRetry_syigyl_k$ = function (plan, now) {
   update(this, TelemetryTransport_instance.scheduleRetry_eyz9yi_k$(this.state_1, plan, now));
@@ -24427,7 +24532,7 @@ protoOf(TelemetrySession).notifications_pjny0u_k$ = function (generation, reques
   if (!equalsLong(this.state_1.generation_1, generation) || !this.state_1.stage_1.equals(expected) || this.state_1.get_cancellationPending_t3zr6d_k$() || !(this.state_1.reconnectDue_1 == null))
     return notificationDecision(this, TelemetryTransportAction_none_getInstance());
   if (!(this.state_1.attemptDeadline_1 == null) && now >= ensureNotNull(this.state_1.attemptDeadline_1))
-    return notificationDecision(this, this.check$default_gj8gbj_k$(now, null, null));
+    return notificationDecision(this, this.check$default_ux6pxt_k$(now, null, null));
   var tmp0_safe_receiver = this.lastNotificationAt_1;
   var tmp;
   if (tmp0_safe_receiver == null) {
@@ -24502,6 +24607,9 @@ function StorageColumns_getInstance() {
 }
 function TelemetryTiming() {
   this.telemetryTimeoutSeconds_1 = 2.5;
+  this.replyWindowSeconds_1 = 1.0;
+  this.silenceSeconds_1 = 3.0;
+  this.linkReleaseSeconds_1 = 2.0;
   this.discoverySeconds_1 = 20.0;
   this.attemptSeconds_1 = 20.0;
   this.cancellationGraceSeconds_1 = 5.0;
@@ -24511,6 +24619,23 @@ function TelemetryTiming() {
 }
 protoOf(TelemetryTiming).replyExpired_cmt7hh_k$ = function (sentAt, now) {
   return now - sentAt >= 2.5;
+};
+protoOf(TelemetryTiming).silenceExpired_ty0tmk_k$ = function (unansweredSince, now) {
+  return now - unansweredSince >= 3.0;
+};
+protoOf(TelemetryTiming).responseDeadline_98dgdh_k$ = function (stage, sentAt, unansweredSince) {
+  var tmp;
+  if (sentAt == null) {
+    tmp = null;
+  } else if (stage.equals(TelemetryStage_ready_getInstance())) {
+    var tmp0 = sentAt + 1.0;
+    // Inline function 'kotlin.comparisons.minOf' call
+    var b = (unansweredSince == null ? sentAt : unansweredSince) + 3.0;
+    tmp = Math.min(tmp0, b);
+  } else {
+    tmp = sentAt + 2.5;
+  }
+  return tmp;
 };
 protoOf(TelemetryTiming).replyAdmissible_iqrdvf_k$ = function (sentAt, now) {
   return now >= sentAt && now - sentAt <= 2.5;
@@ -24553,6 +24678,7 @@ protoOf(TelemetryRetryPlan).equals = function (other) {
   return true;
 };
 function TelemetryReconnectPolicy() {
+  this.unverifiedIdentityAttempts_1 = 2;
 }
 protoOf(TelemetryReconnectPolicy).plan_j6emnq_k$ = function (attempt, activeRide, callbackCompleted, peerOrSystem, stableTelemetrySeconds, systemIsReconnecting, systemAttemptPending, peripheralIsDisconnected) {
   // Inline function 'kotlin.require' call
@@ -24564,10 +24690,35 @@ protoOf(TelemetryReconnectPolicy).plan_j6emnq_k$ = function (attempt, activeRide
   if (attempt > 5 && !activeRide)
     return null;
   var immediate = attempt === 1 && callbackCompleted && peerOrSystem && !(stableTelemetrySeconds == null) && isFinite(stableTelemetrySeconds) && stableTelemetrySeconds >= 30.0;
-  var delay = attempt > 5 ? 30.0 : immediate ? 0.0 : 1 << (attempt - 1 | 0);
+  var closesLink = !callbackCompleted && !peripheralIsDisconnected;
+  var tmp;
+  if (attempt > 5) {
+    tmp = 30.0;
+  } else if (immediate) {
+    tmp = 0.0;
+  } else if (closesLink) {
+    // Inline function 'kotlin.comparisons.maxOf' call
+    var a = 1 << (attempt - 1 | 0);
+    tmp = Math.max(a, 2.0);
+  } else {
+    tmp = 1 << (attempt - 1 | 0);
+  }
+  var delay = tmp;
   var adopt = systemIsReconnecting && delay === 0.0;
-  var cancel = !adopt && (systemIsReconnecting || systemAttemptPending || (!callbackCompleted && !peripheralIsDisconnected));
+  var cancel = !adopt && (systemIsReconnecting || systemAttemptPending || closesLink);
   return new TelemetryRetryPlan(delay, adopt, cancel);
+};
+protoOf(TelemetryReconnectPolicy).restartsBackoff_fheji6_k$ = function (telemetrySeconds) {
+  return telemetrySeconds >= 3.0;
+};
+protoOf(TelemetryReconnectPolicy).retriesIdentity_g14yfo_k$ = function (attempt, activeRide, knownController) {
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(attempt >= 1)) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  return activeRide || knownController || attempt < 2;
 };
 var TelemetryReconnectPolicy_instance;
 function TelemetryReconnectPolicy_getInstance() {
@@ -24670,17 +24821,19 @@ function static_init_30() {
   TelemetryTransportAction_none_instance = new TelemetryTransportAction('none', 0);
   TelemetryTransportAction_advanced_instance = new TelemetryTransportAction('advanced', 1);
   TelemetryTransportAction_beginRetry_instance = new TelemetryTransportAction('beginRetry', 2);
-  TelemetryTransportAction_responseTimeout_instance = new TelemetryTransportAction('responseTimeout', 3);
-  TelemetryTransportAction_writeTimeout_instance = new TelemetryTransportAction('writeTimeout', 4);
-  TelemetryTransportAction_attemptTimeout_instance = new TelemetryTransportAction('attemptTimeout', 5);
-  TelemetryTransportAction_cancellationTimeout_instance = new TelemetryTransportAction('cancellationTimeout', 6);
-  TelemetryTransportAction_replyAccepted_instance = new TelemetryTransportAction('replyAccepted', 7);
-  TelemetryTransportAction_replyExpired_instance = new TelemetryTransportAction('replyExpired', 8);
-  TelemetryTransportAction_replyRejected_instance = new TelemetryTransportAction('replyRejected', 9);
+  TelemetryTransportAction_resendRequest_instance = new TelemetryTransportAction('resendRequest', 3);
+  TelemetryTransportAction_responseTimeout_instance = new TelemetryTransportAction('responseTimeout', 4);
+  TelemetryTransportAction_writeTimeout_instance = new TelemetryTransportAction('writeTimeout', 5);
+  TelemetryTransportAction_attemptTimeout_instance = new TelemetryTransportAction('attemptTimeout', 6);
+  TelemetryTransportAction_cancellationTimeout_instance = new TelemetryTransportAction('cancellationTimeout', 7);
+  TelemetryTransportAction_replyAccepted_instance = new TelemetryTransportAction('replyAccepted', 8);
+  TelemetryTransportAction_replyExpired_instance = new TelemetryTransportAction('replyExpired', 9);
+  TelemetryTransportAction_replyRejected_instance = new TelemetryTransportAction('replyRejected', 10);
 }
 var TelemetryTransportAction_none_instance;
 var TelemetryTransportAction_advanced_instance;
 var TelemetryTransportAction_beginRetry_instance;
+var TelemetryTransportAction_resendRequest_instance;
 var TelemetryTransportAction_responseTimeout_instance;
 var TelemetryTransportAction_writeTimeout_instance;
 var TelemetryTransportAction_attemptTimeout_instance;
@@ -24930,7 +25083,7 @@ protoOf(TelemetryTransport).reply_6pz4qv_k$ = function (state, generation, reque
     return failed(this, state, TelemetryTransportAction_replyRejected_getInstance());
   return new TelemetryTransportDecision(state, TelemetryTransportAction_replyAccepted_getInstance());
 };
-protoOf(TelemetryTransport).check_en4nf2_k$ = function (state, now, responseSentAt, writeBlockedAt, nativeDisconnecting) {
+protoOf(TelemetryTransport).check_vv4w8n_k$ = function (state, now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince) {
   // Inline function 'kotlin.require' call
   // Inline function 'kotlin.require' call
   if (!isFinite(now)) {
@@ -24949,8 +25102,21 @@ protoOf(TelemetryTransport).check_en4nf2_k$ = function (state, now, responseSent
   if (!(state.attemptDeadline_1 == null) && now >= state.attemptDeadline_1)
     return failed(this, state, TelemetryTransportAction_attemptTimeout_getInstance());
   if (!state.get_cancellationPending_t3zr6d_k$() && listOf([TelemetryStage_identity_getInstance(), TelemetryStage_ready_getInstance()]).contains_aljjnj_k$(state.stage_1)) {
-    if (!(responseSentAt == null) && TelemetryTiming_instance.replyExpired_cmt7hh_k$(responseSentAt, now))
-      return failed(this, state, TelemetryTransportAction_responseTimeout_getInstance());
+    if (!(responseSentAt == null)) {
+      var ready = state.stage_1.equals(TelemetryStage_ready_getInstance());
+      var tmp;
+      if (ready) {
+        var tmp_0 = TelemetryTiming_instance;
+        tmp = tmp_0.silenceExpired_ty0tmk_k$(unansweredSince == null ? responseSentAt : unansweredSince, now);
+      } else {
+        tmp = TelemetryTiming_instance.replyExpired_cmt7hh_k$(responseSentAt, now);
+      }
+      var silent = tmp;
+      if (silent)
+        return failed(this, state, TelemetryTransportAction_responseTimeout_getInstance());
+      if (ready && now - responseSentAt >= 1.0)
+        return new TelemetryTransportDecision(state, TelemetryTransportAction_resendRequest_getInstance());
+    }
     if (!(writeBlockedAt == null) && TelemetryTiming_instance.writeExpired_ra2wl6_k$(writeBlockedAt, now))
       return failed(this, state, TelemetryTransportAction_writeTimeout_getInstance());
   }
@@ -24999,6 +25165,10 @@ function TelemetryTransportAction_advanced_getInstance() {
 function TelemetryTransportAction_beginRetry_getInstance() {
   static_init_30();
   return TelemetryTransportAction_beginRetry_instance;
+}
+function TelemetryTransportAction_resendRequest_getInstance() {
+  static_init_30();
+  return TelemetryTransportAction_resendRequest_instance;
 }
 function TelemetryTransportAction_responseTimeout_getInstance() {
   static_init_30();
@@ -29306,7 +29476,7 @@ protoOf(PresentationPreset).get_charts_bw3nfi_k$ = function () {
   return copyToArray(this_0);
 };
 protoOf(PresentationPreset).get_range_ixu978_k$ = function () {
-  return text_0(this.core_1.range_1);
+  return text_1(this.core_1.range_1);
 };
 protoOf(PresentationPreset).get_webColumns_a46pgy_k$ = function () {
   return this.core_1.webColumns_1;
@@ -29328,7 +29498,7 @@ protoOf(PresentationPreferences).get_historyView_jptbsg_k$ = function () {
   return tmp0_safe_receiver == null ? null : tmp0_safe_receiver.name_1;
 };
 protoOf(PresentationPreferences).get_historyRange_s43g6m_k$ = function () {
-  return text_0(this.core_1.historyRange_1);
+  return text_1(this.core_1.historyRange_1);
 };
 protoOf(PresentationPreferences).get_speedUnit_ind4ji_k$ = function () {
   return this.core_1.speedUnit_1;
@@ -29407,8 +29577,14 @@ protoOf(PresentationPreferenceLoad).get_writable_8ork2x_k$ = function () {
 protoOf(PresentationPreferenceLoad).get_shouldSave_p014mf_k$ = function () {
   return this.core_1.shouldSave_1;
 };
+protoOf(PresentationPreferenceLoad).get_resetOffered_uwcmq3_k$ = function () {
+  return this.core_1.get_resetOffered_uwcmq3_k$();
+};
 protoOf(PresentationPreferenceLoad).change = function (replacement) {
   return new PresentationPreferenceLoad(Preferences_instance.change_hhkstr_k$(this.core_1, replacement.core_1));
+};
+protoOf(PresentationPreferenceLoad).reset = function () {
+  return new PresentationPreferenceLoad(Preferences_instance.reset_1sjh3j_k$());
 };
 function presentationLoadPreferences(previous, storedJson, loadError) {
   return new PresentationPreferenceLoad(Preferences_instance.load_sa6qd3_k$(previous.core_1, storedJson, loadError));
@@ -29431,8 +29607,20 @@ protoOf(PresentationFailure).get_nextStep_88wb88_k$ = function () {
 protoOf(PresentationFailure).get_text_wouvsm_k$ = function () {
   return this.core_1.get_text_wouvsm_k$();
 };
+protoOf(PresentationFailure).get_androidNextStep_jc9kp1_k$ = function () {
+  return this.core_1.androidNextStep_1;
+};
+protoOf(PresentationFailure).get_androidText_ted51v_k$ = function () {
+  return this.core_1.get_androidText_ted51v_k$();
+};
 function presentationFailure(code) {
   return new PresentationFailure(Failures_instance.present_ry3y5w_k$(code));
+}
+function presentationControllerRejection(request) {
+  return new PresentationFailure(Failures_instance.controllerRejection_et4smr_k$(valueOf_9(request)));
+}
+function presentationControllerSpeedNote(controllerModel, firmwareLabel, controllerProtocol) {
+  return ControllerNotes_instance.speed_yc7x6a_k$(controllerModel, firmwareLabel, controllerProtocol);
 }
 function presentationFailureCodes() {
   // Inline function 'kotlin.collections.map' call
@@ -29479,7 +29667,7 @@ function presentationRange(text) {
   }
   return tmp;
 }
-function text_0(_this__u8e3s4) {
+function text_1(_this__u8e3s4) {
   var tmp;
   switch (_this__u8e3s4.ordinal_1) {
     case 0:
@@ -29510,7 +29698,7 @@ function js_1(_this__u8e3s4) {
   // Inline function 'kotlin.collections.toTypedArray' call
   var this_1 = _this__u8e3s4.get_charts_bw3nfi_k$();
   var tmp$ret$1 = copyToArray(this_1);
-  return new PresentationPreset(tmp, tmp$ret$1, text_0(_this__u8e3s4.range_1), _this__u8e3s4.webColumns_1);
+  return new PresentationPreset(tmp, tmp$ret$1, text_1(_this__u8e3s4.range_1), _this__u8e3s4.webColumns_1);
 }
 function protocolTimestampMicroseconds(timestamp) {
   return Timestamps_getInstance().parse_pc1q8p_k$(timestamp).comparisonUs_1.toString();
@@ -29871,6 +30059,18 @@ function telemetryRecoveryPlan(attempt, activeRide, callbackCompleted, peerOrSys
   }
   return tmp;
 }
+function telemetryRestartsBackoff(telemetrySeconds) {
+  return TelemetryReconnectPolicy_instance.restartsBackoff_fheji6_k$(telemetrySeconds);
+}
+function telemetryRetriesIdentity(attempt, activeRide, knownController) {
+  // Inline function 'kotlin.require' call
+  // Inline function 'kotlin.require' call
+  if (!(isFinite(attempt) && attempt >= 1 && attempt <= 2147483647 && attempt === numberToInt(attempt))) {
+    var message = 'Failed requirement.';
+    throw IllegalArgumentException_init_$Create$(toString_0(message));
+  }
+  return TelemetryReconnectPolicy_instance.retriesIdentity_g14yfo_k$(numberToInt(attempt), activeRide, knownController);
+}
 function TelemetryTransportSession(protocol) {
   this.session_1 = new TelemetrySession(protocol.core_1);
 }
@@ -29924,12 +30124,16 @@ protoOf(TelemetryTransportSession).begin = function (now, systemInitiated) {
 protoOf(TelemetryTransportSession).advance = function (generation, expected, next, now) {
   return this.session_1.advance_9ebukg_k$(telemetryDecimal(generation), valueOf_13(expected), valueOf_13(next), now).name_1;
 };
-protoOf(TelemetryTransportSession).check_a6ognx_k$ = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting) {
-  return this.session_1.check_a6ognx_k$(now, responseSentAt, writeBlockedAt, nativeDisconnecting).name_1;
+protoOf(TelemetryTransportSession).check_r9cteq_k$ = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince) {
+  return this.session_1.check_r9cteq_k$(now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince).name_1;
 };
-protoOf(TelemetryTransportSession).check = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting, $super) {
+protoOf(TelemetryTransportSession).check = function (now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince, $super) {
   nativeDisconnecting = nativeDisconnecting === VOID ? false : nativeDisconnecting;
-  return $super === VOID ? this.check_a6ognx_k$(now, responseSentAt, writeBlockedAt, nativeDisconnecting) : $super.check_a6ognx_k$.call(this, now, responseSentAt, writeBlockedAt, nativeDisconnecting);
+  unansweredSince = unansweredSince === VOID ? null : unansweredSince;
+  return $super === VOID ? this.check_r9cteq_k$(now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince) : $super.check_r9cteq_k$.call(this, now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince);
+};
+protoOf(TelemetryTransportSession).responseDeadline = function (sentAt, unansweredSince) {
+  return TelemetryTiming_instance.responseDeadline_98dgdh_k$(this.session_1.state_1.stage_1, sentAt, unansweredSince);
 };
 protoOf(TelemetryTransportSession).scheduleRetry = function (plan, now) {
   this.session_1.scheduleRetry_syigyl_k$(plan.core_1, now);
@@ -30222,10 +30426,13 @@ defineProp(protoOf(PresentationPreferenceLoad), 'preferences', protoOf(Presentat
 defineProp(protoOf(PresentationPreferenceLoad), 'error', protoOf(PresentationPreferenceLoad).get_error_iqzvfj_k$);
 defineProp(protoOf(PresentationPreferenceLoad), 'writable', protoOf(PresentationPreferenceLoad).get_writable_8ork2x_k$);
 defineProp(protoOf(PresentationPreferenceLoad), 'shouldSave', protoOf(PresentationPreferenceLoad).get_shouldSave_p014mf_k$);
+defineProp(protoOf(PresentationPreferenceLoad), 'resetOffered', protoOf(PresentationPreferenceLoad).get_resetOffered_uwcmq3_k$);
 defineProp(protoOf(PresentationFailure), 'code', protoOf(PresentationFailure).get_code_wok7xy_k$);
 defineProp(protoOf(PresentationFailure), 'message', protoOf(PresentationFailure).get_message_h23axq_k$);
 defineProp(protoOf(PresentationFailure), 'nextStep', protoOf(PresentationFailure).get_nextStep_88wb88_k$);
 defineProp(protoOf(PresentationFailure), 'text', protoOf(PresentationFailure).get_text_wouvsm_k$);
+defineProp(protoOf(PresentationFailure), 'androidNextStep', protoOf(PresentationFailure).get_androidNextStep_jc9kp1_k$);
+defineProp(protoOf(PresentationFailure), 'androidText', protoOf(PresentationFailure).get_androidText_ted51v_k$);
 defineProp(protoOf(ControllerIdentity_0), 'controllerModel', protoOf(ControllerIdentity_0).get_controllerModel_wuhr7o_k$);
 defineProp(protoOf(ControllerIdentity_0), 'firmwareLabel', protoOf(ControllerIdentity_0).get_firmwareLabel_15mswg_k$);
 defineProp(protoOf(ControllerIdentity_0), 'controllerProtocol', protoOf(ControllerIdentity_0).get_controllerProtocol_i3jjrx_k$);
@@ -30271,6 +30478,7 @@ HeldTail_instance = new HeldTail();
 InspectionOrder_instance = new InspectionOrder();
 DistanceInspection_instance = new DistanceInspection();
 ReadingFreshness_instance = new ReadingFreshness();
+ControllerNotes_instance = new ControllerNotes();
 Failures_instance = new Failures();
 PresentationFormatting_instance = new PresentationFormatting();
 ObservationOrder_instance = new ObservationOrder();
@@ -30508,6 +30716,8 @@ export {
   inspectionRenderedOriginal as inspectionRenderedOriginal,
   inspectionRenderedSegment as inspectionRenderedSegment,
   presentationConnectionLabel as presentationConnectionLabel,
+  presentationControllerRejection as presentationControllerRejection,
+  presentationControllerSpeedNote as presentationControllerSpeedNote,
   presentationDefaultPreferences as presentationDefaultPreferences,
   presentationDistanceCaption as presentationDistanceCaption,
   presentationDistanceOptionLabel as presentationDistanceOptionLabel,
@@ -30543,6 +30753,8 @@ export {
   protocolTimestampMicroseconds as protocolTimestampMicroseconds,
   telemetryRecoveryPlan as telemetryRecoveryPlan,
   telemetryReplyAdmissible as telemetryReplyAdmissible,
+  telemetryRestartsBackoff as telemetryRestartsBackoff,
+  telemetryRetriesIdentity as telemetryRetriesIdentity,
   telemetryTimingPolicy as telemetryTimingPolicy,
   telemetryWriteExpired as telemetryWriteExpired,
 };

@@ -312,7 +312,7 @@ export class BrowserExportSource implements ExportSource {
       request.distanceSource != null &&
       !['auto', 'controller', 'gps:phone', 'gps:watch'].includes(request.distanceSource)
     )
-      throw new ExportError('unsupported', 'Unsupported distance source');
+      throw new ExportError('unsupported', "This distance source can't be exported.");
     const selection = record.distanceSource;
     if (!completionOpenExport(JSON.stringify(metadataOf(record)), record.id, record.revision))
       throw new ExportError('gate', 'Save the ride before exporting it.');

@@ -43,7 +43,7 @@ for (const outcome of ['cancel', 'timeout'] as const) {
     else {
       await page.clock.runFor(20001);
       await expect(page.getByTestId('ride-setup-sheet').getByRole('alert')).toContainText(
-        'Bluetooth connection timed out',
+        'Connection to your bike was lost. Reconnecting…',
       );
       await expect(page.getByTestId('ride-setup-sheet').getByTestId('bike-connection-status')).toHaveText(
         'Reconnecting…',

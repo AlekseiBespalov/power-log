@@ -30,10 +30,15 @@ final class Health: WatchWorkoutHealth {
   var started: String?
   var deferAuthorization = false
   var deferStart = false
+  var authorizationFailure: Error?
   var authorizations: [(Result<Void, Error>) -> Void] = []
   var starts: [(Result<Void, Error>) -> Void] = []
   func authorize(writing: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
-    if deferAuthorization { authorizations.append(completion) } else { completion(.success(())) }
+    if deferAuthorization {
+      authorizations.append(completion)
+    } else {
+      completion(authorizationFailure.map { .failure($0) } ?? .success(()))
+    }
   }
   func start(_ options: WorkoutCompanionOptions, completion: @escaping (Result<Void, Error>) -> Void) {
     busy = true
@@ -246,6 +251,69 @@ func exercise() async throws {
     transport.changed?()
     await settle()
     check(heartSends().count == 2, "a delivered heart rate is not sent again without new data")
+  }
+  for reply in ["error", "timeout"] {
+    let transport = Transport()
+    let health = Health()
+    var timeouts: [@MainActor () -> Void] = []
+    let engine = WatchWorkoutEngine(
+      transport: transport, health: health, schedule: { _, task in timeouts.append(task) })
+    let ride = UUID().uuidString
+    await start(transport, id: ride)
+    await engine.finishRide(discard: false, confirmedRideID: ride)
+    let finish = transport.sent.last { $0.message.kind == .command }!
+    if reply == "error" {
+      finish.reply(WorkoutCompanionMessage(kind: .acknowledgement, rideID: ride, error: "The selected ride changed."))
+    } else {
+      for timeout in timeouts { timeout() }
+    }
+    await settle()
+    check(
+      engine.phase == "completed" && !health.busy && health.finishes == [false],
+      "a Finish the phone does not confirm still ends the Watch session")
+  }
+  do {
+    let fixtures = ProcessInfo.processInfo.environment["POWER_LOG_CONTRACT_FIXTURES"] ?? "tests/fixtures/contract"
+    let url = URL(fileURLWithPath: fixtures).appendingPathComponent("presentation/health-states.json")
+    let phrases = try JSONDecoder().decode([String: [String: String]].self, from: Data(contentsOf: url))["appleHealth"]!
+    let transport = Transport()
+    let health = Health()
+    let engine = WatchWorkoutEngine(transport: transport, health: health, schedule: { _, _ in })
+    let ride = UUID().uuidString
+    await start(transport, id: ride)
+    for (state, phrase) in phrases.sorted(by: { $0.key < $1.key }) + [("submitted", phrases["unknown"]!)] {
+      health.status?(ride, state, nil, "provider detail")
+      await settle()
+      check(engine.savedStatusLabel == phrase, "Health state \(state) reads as the iPhone phrase")
+    }
+  }
+  do {
+    let transport = Transport()
+    let health = Health()
+    let engine = WatchWorkoutEngine(transport: transport, health: health, schedule: { _, _ in })
+    func startRequest() -> WorkoutCompanionMessage {
+      WorkoutCompanionMessage(
+        kind: .start, rideID: UUID().uuidString, commandID: UUID().uuidString,
+        expiresAt: Date().addingTimeInterval(15), options: options(UUID().uuidString))
+    }
+    health.authorizationFailure = NSError(domain: "com.apple.healthkit", code: 4)
+    let rejected = await transport.receive(startRequest())
+    let denied = "Power Log can't save to Health. Allow it in the Health app, then start again."
+    check(engine.phase == "idle" && engine.displayedIssue == denied, "denied Health access reads as a next step")
+    check(rejected.error == denied, "the phone receives the same plain text to show back on the Watch")
+    health.authorizationFailure = NSError(domain: NSCocoaErrorDomain, code: 4097)
+    _ = await transport.receive(startRequest())
+    check(engine.displayedIssue == "The ride didn't start. Start again.", "a system start error reads plainly")
+    health.authorizationFailure = nil
+    let ride = UUID().uuidString
+    await start(transport, id: ride)
+    engine.pause()
+    transport.sent.last { $0.message.kind == .command }!.completion?(
+      .failure(NSError(domain: "WCErrorDomain", code: 7007)))
+    await settle()
+    check(
+      engine.displayedIssue == "Your phone didn't confirm. Check Power Log on your phone, then try again.",
+      "a transport error reads as a next step")
   }
   print(
     "Production Watch callbacks: stale replies/ACKs/status, Start correlation, ordering, timeouts and Discard passed")

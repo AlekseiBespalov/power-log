@@ -169,7 +169,10 @@ data class PreferenceLoadDecision(
     val error: String?,
     val writable: Boolean,
     val shouldSave: Boolean = false,
-)
+) {
+    val resetOffered: Boolean
+        get() = !writable
+}
 
 object Preferences {
     fun presetLabel(id: MonitorPresetId): String =
@@ -315,11 +318,11 @@ object Preferences {
         text: String?,
         loadError: String? = null,
     ): PreferenceLoadDecision {
-        if (loadError != null) return failedLoad(previous, loadError)
+        if (loadError != null) return failedLoad(previous)
         return try {
             PreferenceLoadDecision(if (text == null) defaults() else decode(text), null, true)
-        } catch (error: IllegalArgumentException) {
-            failedLoad(previous, error.message)
+        } catch (_: IllegalArgumentException) {
+            failedLoad(previous)
         }
     }
 
@@ -328,11 +331,12 @@ object Preferences {
         replacement: MonitorPreferences,
     ): PreferenceLoadDecision = state.copy(preferences = replacement, shouldSave = state.writable)
 
-    private fun failedLoad(previous: MonitorPreferences, error: String?): PreferenceLoadDecision =
+    fun reset(): PreferenceLoadDecision = PreferenceLoadDecision(defaults(), null, writable = true, shouldSave = true)
+
+    private fun failedLoad(previous: MonitorPreferences): PreferenceLoadDecision =
         PreferenceLoadDecision(
             previous,
-            "Could not load monitor settings. ${error?.trimEnd('.')}. " +
-                "Changes won't be saved until settings can be read.",
+            "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
             false,
         )
 

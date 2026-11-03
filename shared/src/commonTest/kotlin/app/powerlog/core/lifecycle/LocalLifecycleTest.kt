@@ -136,17 +136,22 @@ class LocalLifecycleTest {
                 CaptureMembership(id(2), 1.0, 1),
                 "{}",
             )
-        val fault = CaptureFault(id(3), null, clock(1).timestamp, null, "storageFailed")
-        val batch = LifecycleCapture.admit(CaptureBatch(), original, fault).batch
+        val batch = LifecycleCapture.admit(CaptureBatch(), original).batch
         assertEquals(1, LifecycleCapture.committed(batch, batch.originals, false).batch.originals.size)
         val changed = original.copy(content = "{\"value\":2}")
         assertEquals("staleCommit", LifecycleCapture.committed(batch, listOf(changed), true).outcome)
         assertTrue(LifecycleCapture.committed(batch, listOf(original), true).batch.originals.isEmpty())
-        val full = CaptureBatch((1..64).map { original.copy(observationId = id(it + 100), sequence = it.toLong()) })
-        val overflow = LifecycleCapture.admit(full, original, fault)
+        val full =
+            CaptureBatch(
+                (1..CaptureBatch.queuedFrames).map {
+                    original.copy(observationId = id(it + 1000), sequence = it.toLong())
+                }
+            )
+        val overflow = LifecycleCapture.admit(full, original)
         assertFalse(overflow.admitted)
-        assertEquals(64, overflow.batch.originals.size)
-        assertEquals(fault, overflow.batch.fault)
+        assertEquals(CaptureBatch.queuedFrames, overflow.batch.originals.size)
+        assertNull(overflow.batch.fault)
+        assertEquals(RideFailure.storageBusy.name, overflow.error)
     }
 
     @Test

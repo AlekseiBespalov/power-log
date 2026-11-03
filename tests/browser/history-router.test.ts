@@ -157,6 +157,22 @@ describe('History with the production Expo Router stack', { timeout: 30000 }, ()
       await expectRide(page, 'ride-0');
       await ui(page.getByText('late.csv', { exact: true })).toHaveCount(0);
     }));
+  it('shows a plain screen error with a way back to the other tabs and a working retry', async () =>
+    run('/sessions', async page => {
+      await page.evaluate(() => window.historyRouterTests.failSettings(true));
+      await page.getByRole('link', { name: 'Settings', exact: true }).click();
+      const screen = page.getByTestId('error-screen');
+      await ui(screen.getByText('Something went wrong on this screen.', { exact: true })).toBeVisible();
+      await ui(screen.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
+      await ui(screen.getByText('Settings failed to render', { exact: false })).toHaveCount(0);
+      await page.getByRole('link', { name: 'History', exact: true }).click();
+      await ui(page.getByRole('button', { name: /^Open ride,/ })).toHaveCount(2);
+      await page.getByRole('link', { name: 'Settings', exact: true }).click();
+      await page.evaluate(() => window.historyRouterTests.failSettings(false));
+      await page.getByRole('button', { name: 'Try again', exact: true }).click();
+      await ui(page.getByTestId('settings-placeholder')).toBeAttached();
+      await ui(page.getByTestId('error-screen')).toHaveCount(0);
+    }));
   it('refreshes from the keyboard menu and a touch pull while retaining revision refresh', async () =>
     run('/sessions', async page => {
       await ui(page.getByText('Pull to refresh · 2 rides', { exact: true })).toBeVisible();

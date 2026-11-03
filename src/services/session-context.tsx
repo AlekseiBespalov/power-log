@@ -9,12 +9,13 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
+import { Platform } from 'react-native';
 import type { Device, NativeState } from '../core/types';
 import { presentFailure } from '../core/failures';
 import type { TelemetryDisplay } from '../core/telemetry-display';
 import type { TelemetryAdapter } from './adapter';
 import { deviceAdapter } from './device';
-import { initialSessionErrors, sessionErrorMessage, sessionErrorReducer } from './session-errors';
+import { initialSessionErrors, sessionError, sessionErrorReducer } from './session-errors';
 import { TelemetryMonitor } from '../core/monitor-data';
 import type { MonitorSource } from '../core/monitor';
 import { withEnergyPerDistance } from './energy-per-distance-monitor';
@@ -29,6 +30,7 @@ interface SessionContextValue {
   display: TelemetryDisplay;
   faultCode: number | null;
   error: string | null;
+  errorCode: string | null;
   busy: boolean;
   hz: 2 | 4 | 8;
   monitor: MonitorSource;
@@ -55,9 +57,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const hz = settings.preferences.sampleHz;
   const [busy, setBusy] = useState(false);
   const [errors, dispatchError] = useReducer(sessionErrorReducer, initialSessionErrors);
-  const error = sessionErrorMessage(errors, {
+  const shownError = sessionError(errors, {
     deferNative: state.recoverableConnectionError === true && display === 'held',
   });
+  const error = shownError?.message ?? null;
+  const errorCode = shownError?.code ?? null;
   useEffect(() => {
     let disposed = false;
     let stateEvents = 0;
@@ -68,7 +72,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         monitor.beginSession();
       previousStatus = next.status;
       presentation.receiveState(next);
-      dispatchError({ type: 'native', error: next.error });
+      dispatchError({ type: 'native', error: next.error, code: next.errorCode });
     };
     const unsubscribe = adapter.subscribe({
       state: next => {
@@ -96,8 +100,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             if (!disposed && generation === refreshGeneration && events === stateEvents) receiveState(next);
           })
           .catch(cause => {
-            if (!disposed && generation === refreshGeneration && events === stateEvents)
-              dispatchError({ type: 'native', error: presentFailure(cause).text });
+            if (!disposed && generation === refreshGeneration && events === stateEvents) {
+              const failure = presentFailure(cause, Platform.OS);
+              dispatchError({ type: 'native', error: failure.text, code: failure.code });
+            }
           });
     };
     visibility(appIsForeground());
@@ -115,7 +121,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       await action();
     } catch (cause) {
-      dispatchError({ type: 'operation', error: cause });
+      dispatchError({ type: 'operation', error: cause, platform: Platform.OS });
     } finally {
       setBusy(false);
     }
@@ -128,6 +134,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       display,
       faultCode,
       error,
+      errorCode,
       busy,
       hz,
       monitor: previewMonitor,
@@ -138,7 +145,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await adapter.startScan();
       },
     }),
-    [state, devices, display, faultCode, error, busy, hz, previewMonitor, run],
+    [state, devices, display, faultCode, error, errorCode, busy, hz, previewMonitor, run],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

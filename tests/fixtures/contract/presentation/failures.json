@@ -21,7 +21,7 @@
     {
       "code": "watchNotInstalled",
       "message": "Power Log isn't installed on your Apple Watch.",
-      "nextStep": "Install it from the Watch app on your iPhone, or turn off Use Watch."
+      "nextStep": "Install it from the Watch app on your iPhone, or turn off Apple Watch in Settings."
     },
     {
       "code": "watchStartUnconfirmed",
@@ -151,7 +151,8 @@
     {
       "code": "bluetoothDenied",
       "message": "Power Log can't use Bluetooth.",
-      "nextStep": "Allow Bluetooth for Power Log in Settings."
+      "nextStep": "Allow Bluetooth for Power Log in Settings.",
+      "androidNextStep": "Allow Nearby devices for Power Log in Settings."
     },
     {
       "code": "locationDenied",
@@ -159,9 +160,59 @@
       "nextStep": "Allow location in Settings, or turn off GPS for this ride."
     },
     {
+      "code": "bluetoothOff",
+      "message": "Bluetooth is off.",
+      "nextStep": "Turn on Bluetooth, then search again."
+    },
+    {
+      "code": "bluetoothNotReady",
+      "message": "Bluetooth isn't ready yet.",
+      "nextStep": "Try again in a moment."
+    },
+    {
+      "code": "bluetoothUnsupported",
+      "message": "This device doesn't support Bluetooth Low Energy.",
+      "nextStep": ""
+    },
+    {
+      "code": "bluetoothUnavailable",
+      "message": "Bluetooth isn't available in this build.",
+      "nextStep": ""
+    },
+    {
+      "code": "bikeReconnecting",
+      "message": "Connection to your bike was lost.",
+      "nextStep": "Reconnecting…"
+    },
+    {
       "code": "bikeUnavailable",
-      "message": "Your bike isn't connected.",
-      "nextStep": "Turn on Bluetooth and the bike, keep it nearby, then try again."
+      "message": "Power Log couldn't connect to your bike.",
+      "nextStep": "Close other apps connected to the bike, turn its display off and on, then connect again."
+    },
+    {
+      "code": "bikeNotFound",
+      "message": "No CYC X6 or X12 controller found.",
+      "nextStep": "Turn on your bike's display, keep your phone nearby, then search again."
+    },
+    {
+      "code": "bluetoothSearchFailed",
+      "message": "Bluetooth search failed.",
+      "nextStep": "Try again."
+    },
+    {
+      "code": "controllerUnsupported",
+      "message": "This isn't a supported controller.",
+      "nextStep": "Power Log works with CYC X6 and X12."
+    },
+    {
+      "code": "controllerNoReply",
+      "message": "This device didn't reply.",
+      "nextStep": "If it's a CYC X6 or X12 controller, turn on the bike's display and connect again."
+    },
+    {
+      "code": "firmwareUnsupported",
+      "message": "This controller's firmware isn't supported yet.",
+      "nextStep": "Share diagnostics from Settings so support can be added."
     },
     {
       "code": "storageBusy",

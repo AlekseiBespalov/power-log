@@ -30,10 +30,9 @@
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
-    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
     <application>
         <activity android:name=".HealthPermissionsActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-        <activity android:name=".HealthPrivacyActivity" android:exported="true">
+        <activity android:name=".HealthPrivacyActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter><action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" /></intent-filter>
         </activity>
         <activity-alias android:name="app.powerlog.bridge.HealthPermissionUsage" android:targetActivity=".HealthPrivacyActivity" android:exported="true" android:permission="android.permission.START_VIEW_PERMISSION_USAGE">

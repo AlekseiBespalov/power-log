@@ -26,8 +26,10 @@ function appConfig(buildNumber, version = '2.4.6') {
   }
 }
 
-test('iOS build numbers default to one and accept positive integer environment values', () => {
-  assert.equal(appConfig().ios.buildNumber, '1');
+test('iOS build numbers follow the Android version code formula unless the environment sets one', () => {
+  assert.equal(appConfig(undefined, '2.4.6').ios.buildNumber, '20406');
+  assert.equal(appConfig(undefined, '0.6.1').ios.buildNumber, '601');
+  assert.equal(appConfig(undefined, '1.10.0').ios.buildNumber, '11000');
   assert.equal(appConfig('73').ios.buildNumber, '73');
 });
 
@@ -39,12 +41,12 @@ test('iOS build numbers reject malformed, non-positive and unsafe integers', () 
 
 test('phone, Watch and Live Activity bundle versions follow config on initial and repeated prebuilds', async () => {
   const project = projectFixture(), projectRoot = process.cwd();
-  for (const [version, buildNumber] of [['2.4.6', '73'], ['3.7.9', '108']]) {
+  for (const [version, buildNumber, expected] of [['2.4.6', '73', '73'], ['3.7.9', undefined, '30709']]) {
     const config = withWatch(withActivity(appConfig(buildNumber, version)));
     await config.mods.ios.xcodeproj({ ...config, modResults: project, modRequest: { projectRoot } });
     const phone = IOSConfig.Version.setBuildNumber(config, IOSConfig.Version.setVersion(config, {}));
     assert.equal(phone.CFBundleShortVersionString, version);
-    assert.equal(phone.CFBundleVersion, buildNumber);
+    assert.equal(phone.CFBundleVersion, expected);
     const objects = project.hash.project.objects;
     const targets = Object.values(objects.PBXNativeTarget).filter(target => target.isa === 'PBXNativeTarget');
     assert.equal(targets.length, 3);

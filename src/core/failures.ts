@@ -12,9 +12,15 @@ const bridgeCodes: Readonly<Record<string, string>> = {
   ERR_CHART_CAPACITY: 'chartCapacity',
 };
 
-export function failurePresentation(code: string | null | undefined): FailurePresentation {
+export function failurePresentation(code: string | null | undefined, platform?: string): FailurePresentation {
   const failure = presentationFailure(code ?? null);
-  return { code: failure.code, message: failure.message, nextStep: failure.nextStep, text: failure.text };
+  const android = platform === 'android';
+  return {
+    code: failure.code,
+    message: failure.message,
+    nextStep: android ? failure.androidNextStep : failure.nextStep,
+    text: android ? failure.androidText : failure.text,
+  };
 }
 
 export class RideFailureError extends Error {
@@ -34,7 +40,7 @@ export function failureCode(error: unknown): string {
   return bridgeCodes[code] ?? 'unknown';
 }
 
-export function presentFailure(error: unknown): FailurePresentation {
+export function presentFailure(error: unknown, platform?: string): FailurePresentation {
   if (isChartCapacity(error))
     return {
       code: 'chartCapacity',
@@ -42,7 +48,7 @@ export function presentFailure(error: unknown): FailurePresentation {
       nextStep: '',
       text: 'Choose a smaller range with fewer chart discontinuities.',
     };
-  return failurePresentation(failureCode(error));
+  return failurePresentation(failureCode(error), platform);
 }
 
 export const isChartCapacity = (error: unknown): boolean =>

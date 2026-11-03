@@ -41,6 +41,7 @@ internal enum class TelemetryDiagnosticEvent(val wire: String) {
     bluetoothState("bluetooth_state"),
     telemetrySummary("telemetry_summary"),
     telemetryGap("telemetry_gap"),
+    requestResent("request_resent"),
     backgroundChanged("background_changed"),
     recordingError("recording_error"),
     restored("restored"),

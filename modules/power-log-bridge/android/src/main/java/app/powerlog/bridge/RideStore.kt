@@ -10,6 +10,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabaseLockedException
 import android.database.sqlite.SQLiteException
 import android.database.sqlite.SQLiteOpenHelper
+import android.os.CancellationSignal
+import android.os.OperationCanceledException
 import android.util.Log
 import app.powerlog.core.analytics.ActiveTimeline
 import app.powerlog.core.analytics.AnalysisPin
@@ -121,6 +123,11 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
     val analytics = RideAnalytics(this)
     val energy = RideEnergyPerDistance(this)
     val summaries = RideSummaryCache(name?.let { File("$path.summaries") })
+    private val writers = AtomicInteger()
+    @Volatile private var conversion: CancellationSignal? = null
+    internal var availableBytes: () -> Long = { File(path).parentFile?.usableSpace ?: 0 }
+    internal var reclaimStepObserver: ((StorageReclaimAction) -> Unit)? = null
+    internal var beforeVacuum: ((CancellationSignal) -> Unit)? = null
 
     fun publishSummary(pin: AnalysisPin, summary: Payload) {
         if (Thread.currentThread().isInterrupted) return
@@ -410,6 +417,7 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
                     "Power Log can't open an unversioned ride database. Reinstall the app to start over."
                 }
             }
+        db.execSQL("PRAGMA auto_vacuum=INCREMENTAL")
         db.execSQL(
             "CREATE TABLE analytics(ride TEXT NOT NULL REFERENCES rides(id) ON DELETE CASCADE,metric TEXT NOT NULL,bucket INTEGER NOT NULL,revision INTEGER NOT NULL,first REAL NOT NULL,last REAL NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(ride,metric,bucket,revision)) WITHOUT ROWID"
         )
@@ -556,7 +564,14 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
     private fun <T> writeTransaction(body: () -> T): T {
         val db = writableDatabase
         if (db.inTransaction()) return body()
-        db.beginTransactionNonExclusive()
+        // Paired with convert(): a conversion either sees this writer and does not start, or is cancelled here.
+        writers.incrementAndGet()
+        try {
+            conversion?.cancel()
+            db.beginTransactionNonExclusive()
+        } finally {
+            writers.decrementAndGet()
+        }
         var committed = false
         try {
             val result = body()
@@ -614,6 +629,120 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
             }
         }
     }
+
+    data class Reclaim(
+        val bytesBefore: Long,
+        val bytesAfter: Long,
+        val steps: Int,
+        val converted: Boolean,
+        val deferred: StorageReclaimAction?,
+        val failure: Exception?,
+    )
+
+    val fileBytes: Long
+        get() = File(path).length() + File("$path-wal").length()
+
+    fun reclaimSpace(): Reclaim {
+        val before = fileBytes
+        var steps = 0
+        var converted = false
+        var deferred: StorageReclaimAction? = null
+        var failure: Exception? = null
+        try {
+            while (true) {
+                val action = reclaimStep()
+                reclaimStepObserver?.invoke(action)
+                when (action) {
+                    StorageReclaimAction.reclaim -> steps++
+                    StorageReclaimAction.enableIncremental,
+                    StorageReclaimAction.convert -> converted = true
+                    StorageReclaimAction.done -> break
+                    else -> {
+                        deferred = action
+                        break
+                    }
+                }
+            }
+        } catch (error: Exception) {
+            failure = error
+        }
+        try {
+            writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+        } catch (error: Exception) {
+            failure = failure ?: error
+        }
+        val outcome = Reclaim(before, fileBytes, steps, converted, deferred, failure)
+        val summary =
+            "Storage reclaim: $before to ${outcome.bytesAfter} bytes in $steps steps, converted $converted, " +
+                "deferred ${deferred?.name ?: "no"}"
+        if (failure == null) Log.i("PowerLog", summary) else Log.w("PowerLog", summary, failure)
+        return outcome
+    }
+
+    private fun reclaimStep(): StorageReclaimAction {
+        val action = immediate { db ->
+            val step =
+                StorageReclaim.next(
+                    pragma(db, "auto_vacuum"),
+                    pragma(db, "page_size"),
+                    pragma(db, "page_count"),
+                    pragma(db, "freelist_count"),
+                    db.rawQuery(
+                            "SELECT 1 FROM rides WHERE id NOT LIKE 'live-%' AND phase IN (${StorageReclaim.recordingPhases.joinToString { "'$it'" }}) LIMIT 1",
+                            null,
+                        )
+                        .use { it.moveToFirst() },
+                    availableBytes(),
+                )
+            when (step.action) {
+                // Each freed page yields one result row; the pragma frees pages only while it is stepped.
+                StorageReclaimAction.reclaim ->
+                    check(db.rawQuery("PRAGMA incremental_vacuum(${step.pages})", null).use { it.count } > 0) {
+                        "Incremental vacuum made no progress."
+                    }
+                StorageReclaimAction.enableIncremental -> db.execSQL("PRAGMA auto_vacuum=INCREMENTAL")
+                else -> {}
+            }
+            step.action
+        }
+        if (action == StorageReclaimAction.convert && !convert()) return StorageReclaimAction.waitForIdle
+        if (action == StorageReclaimAction.enableIncremental || action == StorageReclaimAction.convert)
+            check(immediate { pragma(it, "auto_vacuum") } == 2L) { "The store did not switch to incremental vacuum." }
+        return action
+    }
+
+    private fun convert(): Boolean {
+        val signal = CancellationSignal()
+        conversion = signal
+        try {
+            if (writers.get() > 0) return false
+            beforeVacuum?.invoke(signal)
+            // The pragma acts while it is prepared, which Android does on the primary connection that runs VACUUM.
+            writableDatabase.rawQuery("PRAGMA auto_vacuum=INCREMENTAL", null, signal).use { it.count }
+            writableDatabase.rawQuery("VACUUM", null, signal).use { it.count }
+            return true
+        } catch (_: OperationCanceledException) {
+            return false
+        } finally {
+            conversion = null
+        }
+    }
+
+    private fun <T> immediate(body: (SQLiteDatabase) -> T): T {
+        val db = writableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            return body(db).also { db.setTransactionSuccessful() }
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun pragma(db: SQLiteDatabase, name: String): Long =
+        db.rawQuery("PRAGMA $name", null).use {
+            check(it.moveToFirst())
+            it.getLong(0)
+        }
 
     fun create(
         options: RideOptions,
@@ -1595,12 +1724,7 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
                 changed(id)
             }
         }
-        setHealthProgress(
-            id,
-            progress,
-            scopeComplete =
-                healthProgress(id, progress)?.let { requireNotNull(it["scopeComplete"] as? Boolean) } ?: true,
-        )
+        setHealthProgress(id, progress)
         var bits = availabilityBits(available(id).filter { it in telemetryMetrics || it in locationMetrics })
         for (metric in
             metricBits.keys.filter {
@@ -1828,7 +1952,6 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
         attempts: Int = 0,
         error: String? = null,
         nextRefreshUs: Long? = null,
-        scopeComplete: Boolean = true,
     ) = transaction {
         writableDatabase.execSQL(
             "INSERT OR REPLACE INTO health_query_progress VALUES(?,?,?,?,?)",
@@ -1843,7 +1966,6 @@ internal class RideStore(context: Context, name: String? = DATABASE) :
                                 "attempts" to attempts,
                                 "error" to error,
                                 "nextRefreshUs" to nextRefreshUs?.toString(),
-                                "scopeComplete" to scopeComplete,
                             )
                     )
                     .toString(),

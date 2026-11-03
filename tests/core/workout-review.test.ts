@@ -63,12 +63,12 @@ it.each(['appleHealth', 'healthConnect'] as const)('uses shared readable reasons
       healthKitState: 'unavailable',
       healthReason: 'nativeOwnerLost',
     }).details,
-  ).toEqual([`The original ${provider} recording owner is unavailable. Local originals are retained in Power Log.`]);
+  ).toEqual([`The device that was saving this ride to ${provider} is unavailable. Your ride is kept in Power Log.`]);
 });
 
-it('preserves the iPhone terminal clock wording and presents closed states as words', () => {
+it('explains the terminal clock state plainly and presents closed states as words', () => {
   const clock =
-    'Health is unavailable because the retained finish UTC is not after the workout start UTC. Local originals are retained.';
+    'Health can’t save this ride because its finish time isn’t after its start time. Your ride is kept in Power Log.';
   expect(
     workoutHealthResultPresentation({ ...ride, healthKitState: 'unavailable', healthReason: 'clock' }).details,
   ).toEqual([clock]);
@@ -104,6 +104,6 @@ it('describes an unconfirmed Health request without implying automatic replay', 
 it('presents a native metadata payload with the clock reason code', () => {
   const metadata = normalizeWorkoutMetadata({ ...ride, healthKitState: 'unavailable', healthReason: 'clock' });
   expect(workoutHealthResultPresentation(metadata).details).toEqual([
-    'Health is unavailable because the retained finish UTC is not after the workout start UTC. Local originals are retained.',
+    'Health can’t save this ride because its finish time isn’t after its start time. Your ride is kept in Power Log.',
   ]);
 });

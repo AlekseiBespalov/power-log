@@ -51,7 +51,7 @@
       "intervals": 1
     },
     {
-      "name": "gap reanchors",
+      "name": "short gap joins",
       "samples": [
         {
           "time": 0,
@@ -70,9 +70,9 @@
           "speed": 10
         }
       ],
-      "distance": 20,
-      "covered": 2,
-      "intervals": 2
+      "distance": 50,
+      "covered": 5,
+      "intervals": 3
     },
     {
       "name": "pause retains raw and excludes movement",
@@ -106,7 +106,7 @@
       "intervals": 2
     },
     {
-      "name": "short reconnect reanchors",
+      "name": "short reconnect joins",
       "samples": [
         {
           "time": 0,
@@ -125,6 +125,84 @@
           "time": 2.1,
           "speed": 10,
           "connectionEpoch": "connection-2"
+        }
+      ],
+      "distance": 21,
+      "covered": 2.1,
+      "intervals": 3
+    },
+    {
+      "name": "six-second gap reanchors",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10
+        },
+        {
+          "time": 1,
+          "speed": 10
+        },
+        {
+          "time": 7,
+          "speed": 10
+        },
+        {
+          "time": 8,
+          "speed": 10
+        }
+      ],
+      "distance": 20,
+      "covered": 2,
+      "intervals": 2
+    },
+    {
+      "name": "short reconnect to another controller reanchors",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10
+        },
+        {
+          "time": 1,
+          "speed": 10
+        },
+        {
+          "time": 4,
+          "speed": 10,
+          "identity": "other-bike",
+          "connectionEpoch": "connection-2"
+        },
+        {
+          "time": 5,
+          "speed": 10,
+          "identity": "other-bike",
+          "connectionEpoch": "connection-2"
+        }
+      ],
+      "distance": 20,
+      "covered": 2,
+      "intervals": 2
+    },
+    {
+      "name": "short gap into another active interval reanchors",
+      "samples": [
+        {
+          "time": 0,
+          "speed": 10
+        },
+        {
+          "time": 1,
+          "speed": 10
+        },
+        {
+          "time": 4,
+          "speed": 10,
+          "continuity": 1
+        },
+        {
+          "time": 5,
+          "speed": 10,
+          "continuity": 1
         }
       ],
       "distance": 20,

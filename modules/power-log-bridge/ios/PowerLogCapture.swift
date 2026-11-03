@@ -26,7 +26,7 @@ struct PowerLogCaptureDestination: Equatable {
 
 /// A single bounded capture queue. Each admitted frame retains its recording destination.
 final class PowerLogCaptureInbox {
-  static let maximumFrames = 480
+  static let maximumFrames = Int(CaptureBatch.companion.queuedFrames)
   private let lock = NSLock()
   private var frames: [PowerLogCaptureFrame] = []
   private var destination: PowerLogCaptureDestination?

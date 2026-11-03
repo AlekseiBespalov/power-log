@@ -46,7 +46,7 @@ function parseUtc(value: string): ExportStart | null {
 
 export function parseStartedAt(startedAt: string): ExportStart {
   const start = typeof startedAt === 'string' ? parseUtc(startedAt) : null;
-  if (!start) throw new ExportError('gate', 'The ride start time is not a UTC timestamp that can be exported.');
+  if (!start) throw new ExportError('gate', "This ride's start time can't be read, so it can't be exported.");
   return start;
 }
 

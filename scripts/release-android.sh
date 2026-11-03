@@ -23,6 +23,16 @@ for key in POWER_LOG_ANDROID_KEYSTORE POWER_LOG_ANDROID_STORE_PASSWORD POWER_LOG
   [ -n "$value" ] || fail "Set $key for the release signing key."
 done
 [ -f "$POWER_LOG_ANDROID_KEYSTORE" ] || fail "POWER_LOG_ANDROID_KEYSTORE does not name a file."
+upload=0
+for key in POWER_LOG_ANDROID_UPLOAD_KEYSTORE POWER_LOG_ANDROID_UPLOAD_STORE_PASSWORD POWER_LOG_ANDROID_UPLOAD_KEY_ALIAS POWER_LOG_ANDROID_UPLOAD_KEY_PASSWORD; do
+  eval "value=\${$key:-}"
+  [ -z "$value" ] || upload=$((upload + 1))
+done
+case $upload in
+  0) ;;
+  4) [ -f "$POWER_LOG_ANDROID_UPLOAD_KEYSTORE" ] || fail "POWER_LOG_ANDROID_UPLOAD_KEYSTORE does not name a file." ;;
+  *) fail "Set all four POWER_LOG_ANDROID_UPLOAD_* variables for the App Bundle's upload key, or none to skip the bundle." ;;
+esac
 previous=$(gh release view --json tagName --jq .tagName) || fail "Could not read the latest GitHub release."
 [ -n "$previous" ] || fail "Could not read the latest GitHub release."
 
@@ -45,6 +55,15 @@ cd "$work"
 code=$(echo "$version" | awk -F. '{ print $1 * 10000 + $2 * 100 + $3 }')
 POWER_LOG_ANDROID_VERSION_CODE=$code npm run build:android
 apk="$work/artifacts/builds/android/power-log.apk"
+kept="$HOME/.cache/power-log/releases/$version/android"
+rm -rf "$kept"
+mkdir -p "$kept"
+cp android/app/build/generated/sourcemaps/react/release/index.android.bundle.map \
+  android/app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip "$kept/"
+if [ "$upload" -eq 4 ]; then
+  POWER_LOG_ANDROID_VERSION_CODE=$code npm run build:android -- --bundle
+  cp artifacts/builds/android/power-log.aab "$kept/"
+fi
 
 sdk="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 tools=$(ls "$sdk/build-tools" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
@@ -63,3 +82,9 @@ old=$(certificate "$work/previous/power-log.apk")
 git -C "$root" tag -a "$tag" -m "Power Log $version" "$commit"
 git -C "$root" push origin "$tag"
 gh release create "$tag" --verify-tag --generate-notes "$apk" artifacts/builds/android/SHA256SUMS.txt
+echo "The source map and native symbols of $version are kept in $kept."
+if [ "$upload" -eq 0 ]; then
+  echo "App Bundle skipped: set the four POWER_LOG_ANDROID_UPLOAD_* variables to build it for Google Play."
+else
+  echo "App Bundle for Google Play: $kept/power-log.aab"
+fi

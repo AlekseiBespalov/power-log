@@ -1,16 +1,18 @@
 package app.powerlog.core.presentation
 
+import app.powerlog.core.telemetry.ControllerRequest
+
 private const val somethingWentWrong = "Something went wrong."
 private const val tryAgainKept = "Try again. Your recorded data is kept."
 
-enum class RideFailure(val message: String, val nextStep: String) {
+enum class RideFailure(val message: String, val nextStep: String, val androidNextStep: String = nextStep) {
     watchLaunchFailed(
         "Power Log couldn't open on your Apple Watch.",
         "Unlock your Apple Watch and keep it near your iPhone, then start again.",
     ),
     watchNotInstalled(
         "Power Log isn't installed on your Apple Watch.",
-        "Install it from the Watch app on your iPhone, or turn off Use Watch.",
+        "Install it from the Watch app on your iPhone, or turn off Apple Watch in Settings.",
     ),
     watchStartUnconfirmed(
         "Your Apple Watch didn't confirm the start.",
@@ -58,9 +60,35 @@ enum class RideFailure(val message: String, val nextStep: String) {
     needsAttention("This ride needs attention.", "Tap Retry. Your recorded data is kept."),
     healthDenied("Power Log can't save to Health.", "Allow it in the Health app, or turn off Save to Health."),
     healthLocked("Health data is unavailable while this device is locked.", "Unlock it, then try again."),
-    bluetoothDenied("Power Log can't use Bluetooth.", "Allow Bluetooth for Power Log in Settings."),
+    bluetoothDenied(
+        "Power Log can't use Bluetooth.",
+        "Allow Bluetooth for Power Log in Settings.",
+        "Allow Nearby devices for Power Log in Settings.",
+    ),
     locationDenied("Power Log can't use your location.", "Allow location in Settings, or turn off GPS for this ride."),
-    bikeUnavailable("Your bike isn't connected.", "Turn on Bluetooth and the bike, keep it nearby, then try again."),
+    bluetoothOff("Bluetooth is off.", "Turn on Bluetooth, then search again."),
+    bluetoothNotReady("Bluetooth isn't ready yet.", "Try again in a moment."),
+    bluetoothUnsupported("This device doesn't support Bluetooth Low Energy.", ""),
+    bluetoothUnavailable("Bluetooth isn't available in this build.", ""),
+    bikeReconnecting("Connection to your bike was lost.", "Reconnecting…"),
+    bikeUnavailable(
+        "Power Log couldn't connect to your bike.",
+        "Close other apps connected to the bike, turn its display off and on, then connect again.",
+    ),
+    bikeNotFound(
+        "No CYC X6 or X12 controller found.",
+        "Turn on your bike's display, keep your phone nearby, then search again.",
+    ),
+    bluetoothSearchFailed("Bluetooth search failed.", "Try again."),
+    controllerUnsupported("This isn't a supported controller.", "Power Log works with CYC X6 and X12."),
+    controllerNoReply(
+        "This device didn't reply.",
+        "If it's a CYC X6 or X12 controller, turn on the bike's display and connect again.",
+    ),
+    firmwareUnsupported(
+        "This controller's firmware isn't supported yet.",
+        "Share diagnostics from Settings so support can be added.",
+    ),
     storageBusy("Power Log is busy saving your ride.", "Try again in a moment."),
     storageFull("This device is out of storage.", "Free up space, then try again."),
     storageFailed("Power Log couldn't save this change.", tryAgainKept),
@@ -71,9 +99,18 @@ enum class RideFailure(val message: String, val nextStep: String) {
     unknown(somethingWentWrong, tryAgainKept);
 
     val text: String
-        get() = listOf(message, nextStep).filter { it.isNotEmpty() }.joinToString(" ")
+        get() = text(nextStep)
+
+    val androidText: String
+        get() = text(androidNextStep)
+
+    private fun text(step: String): String = listOf(message, step).filter { it.isNotEmpty() }.joinToString(" ")
 }
 
 object Failures {
     fun present(code: String?): RideFailure = RideFailure.entries.firstOrNull { it.name == code } ?: RideFailure.unknown
+
+    fun controllerRejection(request: ControllerRequest): RideFailure =
+        if (request == ControllerRequest.identity) RideFailure.controllerUnsupported
+        else RideFailure.firmwareUnsupported
 }

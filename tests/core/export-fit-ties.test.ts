@@ -165,7 +165,7 @@ function witness(stream: number, second: number, interval: number, run: number, 
       speed: one(value % 2 === 0 ? NaN : value / 10),
     };
   if (stream === HEART_RATE) return { ...row, stream, heartRate: one(60 + (value % 150)) };
-  return { ...row, stream: DISTANCE, distance: one(value) };
+  return { ...row, stream: DISTANCE, distance: one(value), speed: one(value % 3 === 0 ? NaN : value / 10) };
 }
 
 function replay(prefix: WitnessRows[], tied: WitnessRows[], interval: number, asTie: boolean) {

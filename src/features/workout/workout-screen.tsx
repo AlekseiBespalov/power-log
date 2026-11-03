@@ -441,6 +441,7 @@ export function RideEmptyState() {
         No bike connected
       </Text>
       <Body muted>Turn on your bike, then find it to see live readings.</Body>
+      <Body muted>Works with CYC X6 and X12 controllers over Bluetooth.</Body>
       <Button disabled={c.findBikeDisabled} onPress={c.findBike}>
         Find bike
       </Button>

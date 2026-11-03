@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bikeDetails, bikeDisplayName } from '../../src/core/bikes';
+import { bikeDisplayName, controllerSpeedNote } from '../../src/core/bikes';
 
 describe('bike identification', () => {
   it('distinguishes identical advertisements before pairing and keeps the tag after identification', () => {
@@ -10,13 +10,19 @@ describe('bike identification', () => {
     expect(bikeDisplayName({ ...first, controllerModel: 'X12' })).toBe(
       bikeDisplayName(first).replace('CYC bike', 'CYC X12'),
     );
-    expect(bikeDetails(first)).toBe('Model identified on connection · Strong signal');
-    expect(bikeDetails({ ...second, controllerModel: 'X6', firmwareLabel: '20250604', rssi: -77 })).toBe(
-      'Firmware 20250604 · Fair signal',
-    );
   });
-  it('does not invent a model or signal and preserves plain names', () => {
+  it('preserves plain names', () => {
     expect(bikeDisplayName({ name: 'Garage bike' })).toBe('Garage bike');
-    expect(bikeDetails({ id: 'test', name: 'CYCMOTOR', rssi: 0 })).toBe('Model identified on connection');
+  });
+  it('explains missing controller speed only for an identity without a known speed unit', () => {
+    const note = 'Controller speed needs CYC X6 or X12 firmware with protocol 5.3.';
+    expect(
+      controllerSpeedNote({ controllerModel: 'X6', firmwareLabel: '20250604', controllerProtocol: '5.3' }),
+    ).toBeNull();
+    expect(controllerSpeedNote({ controllerModel: 'X12', firmwareLabel: '20240110', controllerProtocol: '5.2' })).toBe(
+      note,
+    );
+    expect(controllerSpeedNote({ controllerModel: 'X6', firmwareLabel: '20250604' })).toBeNull();
+    expect(controllerSpeedNote({})).toBeNull();
   });
 });

@@ -1575,7 +1575,9 @@ export declare class PresentationPreferenceLoad {
     get error(): Nullable<string>;
     get writable(): boolean;
     get shouldSave(): boolean;
+    get resetOffered(): boolean;
     change(replacement: PresentationPreferences): PresentationPreferenceLoad;
+    reset(): PresentationPreferenceLoad;
 }
 export declare namespace PresentationPreferenceLoad {
     /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
@@ -1591,6 +1593,8 @@ export declare class PresentationFailure {
     get message(): string;
     get nextStep(): string;
     get text(): string;
+    get androidNextStep(): string;
+    get androidText(): string;
 }
 export declare namespace PresentationFailure {
     /** @deprecated $metadata$ is used for internal purposes, please don't use it in your code, because it can be removed at any moment */
@@ -1599,6 +1603,8 @@ export declare namespace PresentationFailure {
     }
 }
 export declare function presentationFailure(code: Nullable<string>): PresentationFailure;
+export declare function presentationControllerRejection(request: string): PresentationFailure;
+export declare function presentationControllerSpeedNote(controllerModel: Nullable<string>, firmwareLabel: Nullable<string>, controllerProtocol: Nullable<string>): Nullable<string>;
 export declare function presentationFailureCodes(): Array<string>;
 export declare function protocolTimestampMicroseconds(timestamp: string): string;
 export declare class ControllerIdentity {
@@ -1731,6 +1737,8 @@ export declare namespace TelemetryRecoveryPlan {
     }
 }
 export declare function telemetryRecoveryPlan(attempt: number, activeRide: boolean, callbackCompleted: boolean, peerOrSystem: boolean, stableTelemetrySeconds: Nullable<number>, systemIsReconnecting: boolean, systemAttemptPending: boolean, peripheralIsDisconnected: boolean): Nullable<TelemetryRecoveryPlan>;
+export declare function telemetryRestartsBackoff(telemetrySeconds: number): boolean;
+export declare function telemetryRetriesIdentity(attempt: number, activeRide: boolean, knownController: boolean): boolean;
 export declare class TelemetryTransportSession {
     constructor(protocol: ControllerProtocolApi);
     get discardedBytes(): string;
@@ -1747,7 +1755,8 @@ export declare class TelemetryTransportSession {
     notifications(generation: string, request: string, bytes: Int8Array, sentAt: number, now: number): TelemetryNotifications;
     begin(now: number, systemInitiated: boolean): boolean;
     advance(generation: string, expected: string, next: string, now: number): string;
-    check(now: number, responseSentAt: Nullable<number>, writeBlockedAt: Nullable<number>, nativeDisconnecting?: boolean): string;
+    check(now: number, responseSentAt: Nullable<number>, writeBlockedAt: Nullable<number>, nativeDisconnecting?: boolean, unansweredSince?: Nullable<number>): string;
+    responseDeadline(sentAt: Nullable<number>, unansweredSince: Nullable<number>): Nullable<number>;
     scheduleRetry(plan: TelemetryRecoveryPlan, now: number): void;
     cancelDuringBackoff(): void;
     disconnected(generation: string, now: number): void;

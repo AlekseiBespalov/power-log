@@ -8,7 +8,10 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.SystemClock
+import app.powerlog.core.lifecycle.CaptureBatch
+import app.powerlog.core.lifecycle.CaptureOriginal
 import app.powerlog.core.presentation.*
+import app.powerlog.core.protocol.Timestamps
 import app.powerlog.core.telemetry.*
 import app.powerlog.core.telemetry.cyc.CycProtocol
 import java.io.File
@@ -49,6 +52,67 @@ class RecordingEngineCaptureTest : RecordingEngineTestBase() {
         assertNull(engine.state()["failure"])
         engine.flush()
         assertEquals(8, engine.store.page(id).size)
+    }
+
+    @Test
+    fun aBusyStoreDuringPauseKeepsTheRideRunning() = command {
+        val id = start()
+        engine.store.beforeTransactionEnd = { throw SQLiteDatabaseLockedException("database is locked") }
+        val failure =
+            try {
+                engine.action("pause", id)
+                null
+            } catch (error: Exception) {
+                error
+            } finally {
+                engine.store.beforeTransactionEnd = null
+            }
+        assertEquals(RideFailure.storageBusy, failure?.let { RideFailures.classify(it) })
+        assertEquals("running", engine.state().str("phase"))
+        assertNull(engine.state()["failure"])
+        assertEquals("paused", engine.action("pause", id).str("phase"))
+    }
+
+    @Test
+    fun aFullCaptureQueueDropsSamplesAndShowsTheBusyStoreWithoutInterruptingTheRide() {
+        val id = command {
+            val id = start(sampleHz = 8)
+            val waiting =
+                (1..CaptureBatch.queuedFrames - 8).map {
+                    CaptureOriginal(
+                        UUID.randomUUID().toString(),
+                        "controller",
+                        it.toLong(),
+                        Timestamps.parse(iso()),
+                        UUID.randomUUID().toString(),
+                        0,
+                        null,
+                        null,
+                        null,
+                        "{}",
+                    )
+                }
+            RecordingEngine::class
+                .java
+                .getDeclaredField("captureBatch")
+                .apply { isAccessible = true }
+                .set(engine, CaptureBatch(waiting))
+            engine.store.beforeTransactionEnd = { throw SQLiteDatabaseLockedException("database is locked") }
+            repeat(16) {
+                ShadowSystemClock.advanceBy(Duration.ofMillis(125))
+                telemetry()
+            }
+            id
+        }
+        command {
+            assertEquals("running", engine.state().str("phase"))
+            assertEquals(false, engine.store.metadata(id)["interrupted"])
+            assertEquals(RideFailure.storageBusy.text, engine.bluetooth.state["error"])
+            engine.store.beforeTransactionEnd = null
+            engine.flush()
+            assertEquals(8, engine.store.page(id).size)
+        }
+        command { assertNull(engine.bluetooth.state["error"]) }
     }
 
     @Test
@@ -232,6 +296,48 @@ class RecordingEngineCaptureTest : RecordingEngineTestBase() {
         RideStore.withHealthExecution { assertThrows(IllegalStateException::class.java) { engine.delete(id) } }
         engine.delete(id)
         assertEquals(orphan, engine.state()["id"])
+    }
+
+    @Test
+    fun deletingOrDiscardingARideGivesItsSpaceBack() {
+        val store = engine.store
+        fun fill(id: String) {
+            for (page in 0 until 2048 step 256) store.transaction {
+                for (row in page until page + 256) store.insert(
+                    id,
+                    row / 8.0,
+                    iso(1767225600000 + row * 125L),
+                    "telemetry",
+                    true,
+                    0,
+                    mapOf("humanPowerW" to 100.0 + row % 211, "cadenceRpm" to 80.0),
+                    "X6|test|5.3",
+                    "one",
+                )
+            }
+        }
+        fun settledBytes(): Long {
+            store.writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+            return store.fileBytes
+        }
+        val deleted = command { start() }
+        fill(deleted)
+        command {
+            advanceTo(1)
+            engine.action("stop", deleted)
+        }
+        var before = settledBytes()
+        command { engine.delete(deleted) }
+        engine.storageTasks.submit {}.get(20, TimeUnit.SECONDS)
+        assertFalse(store.exists(deleted))
+        assertTrue("$before to ${store.fileBytes}", store.fileBytes < before - 1_000_000)
+        val discarded = command { start() }
+        fill(discarded)
+        before = settledBytes()
+        command { engine.action("discard", discarded) }
+        engine.storageTasks.submit {}.get(20, TimeUnit.SECONDS)
+        assertFalse(store.exists(discarded))
+        assertTrue("$before to ${store.fileBytes}", store.fileBytes < before - 1_000_000)
     }
 
     @Test

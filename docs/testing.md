@@ -20,6 +20,7 @@ disposable stores and synthetic or sanitized inputs.
 | `bash scripts/test-swift.sh [--only id[,id]]` | Swift host suites, or chosen ones by id from `scripts/swift-suites.mjs` |
 | `npm run test:android [-- --emulator]` | Android JVM suites; with `emulator-5554` also connected suites and crash paths |
 | `npm run prepare:android` | Generate the Android project without building; `build:android` already prepares it |
+| `npm run build:android -- --preview --bundle` | Preview App Bundle with native symbol tables in `artifacts/builds/android/power-log-preview.aab` |
 | `npm run test:crash-paths` | Android interrupted-store checks and browser reload checks |
 | `npm run test:lab-apple` | Apple Lab host checks |
 | `npm run build:ios-simulator` | Linked iPhone simulator Release build with the final-bundle Lab check |

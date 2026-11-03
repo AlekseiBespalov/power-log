@@ -3,6 +3,7 @@
 package app.powerlog.core
 
 import app.powerlog.core.presentation.*
+import app.powerlog.core.telemetry.ControllerRequest
 import app.powerlog.core.telemetry.MetricCatalog
 import kotlin.js.JsExport
 import kotlin.js.jsTypeOf
@@ -724,8 +725,13 @@ class PresentationPreferenceLoad internal constructor(internal val core: Prefere
     val shouldSave: Boolean
         get() = core.shouldSave
 
+    val resetOffered: Boolean
+        get() = core.resetOffered
+
     fun change(replacement: PresentationPreferences): PresentationPreferenceLoad =
         PresentationPreferenceLoad(Preferences.change(core, replacement.core))
+
+    fun reset(): PresentationPreferenceLoad = PresentationPreferenceLoad(Preferences.reset())
 }
 
 @JsExport
@@ -752,8 +758,25 @@ class PresentationFailure internal constructor(private val core: RideFailure) {
 
     val text: String
         get() = core.text
+
+    val androidNextStep: String
+        get() = core.androidNextStep
+
+    val androidText: String
+        get() = core.androidText
 }
 
 @JsExport fun presentationFailure(code: String?): PresentationFailure = PresentationFailure(Failures.present(code))
+
+@JsExport
+fun presentationControllerRejection(request: String): PresentationFailure =
+    PresentationFailure(Failures.controllerRejection(ControllerRequest.valueOf(request)))
+
+@JsExport
+fun presentationControllerSpeedNote(
+    controllerModel: String?,
+    firmwareLabel: String?,
+    controllerProtocol: String?,
+): String? = ControllerNotes.speed(controllerModel, firmwareLabel, controllerProtocol)
 
 @JsExport fun presentationFailureCodes(): Array<String> = RideFailure.entries.map { it.name }.toTypedArray()

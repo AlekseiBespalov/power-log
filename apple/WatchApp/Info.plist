@@ -13,8 +13,7 @@
   <key>WKCompanionAppBundleIdentifier</key><string>$(POWER_LOG_PHONE_BUNDLE_IDENTIFIER)</string>
   <key>WKRunsIndependentlyOfCompanionApp</key><false/>
   <key>WKBackgroundModes</key><array><string>workout-processing</string></array>
-  <key>NSHealthShareUsageDescription</key><string>Power Log reads your workout heart rate, energy, distance and available cycling measurements to record and display your ride.</string>
-  <key>NSHealthUpdateUsageDescription</key><string>Power Log saves your cycling workout, Controller rider power and cadence, and outdoor route to Health.</string>
-  <key>NSLocationWhenInUseUsageDescription</key><string>Power Log records the GPS route, speed and altitude of outdoor rides while a workout is active.</string>
+  <key>NSHealthShareUsageDescription</key><string>Power Log reads the heart rate, heart rate variability, respiratory rate, blood oxygen, active and resting energy, physical effort, workout effort, and cycling distance, speed, power, cadence and functional threshold power recorded during your rides. It sends them to your iPhone, which stores them with the ride.</string>
+  <key>NSHealthUpdateUsageDescription</key><string>Power Log runs a cycling workout on your Apple Watch to measure heart rate and energy during a ride. When Health saving is on, it saves that workout with your GPS route, distance and speed from your iPhone, rider power and cadence from your bike, and the measured heart rate and active and resting energy.</string>
 </dict>
 </plist>

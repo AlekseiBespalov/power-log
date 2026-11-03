@@ -14,6 +14,57 @@
       "expired": true
     }
   ],
+  "telemetryReplies": [
+    {
+      "sentAt": 0,
+      "unansweredSince": null,
+      "now": 0.999999,
+      "deadline": 1,
+      "action": "none"
+    },
+    {
+      "sentAt": 0,
+      "unansweredSince": null,
+      "now": 1,
+      "deadline": 1,
+      "action": "resendRequest"
+    },
+    {
+      "sentAt": 1,
+      "unansweredSince": 0,
+      "now": 1.999999,
+      "deadline": 2,
+      "action": "none"
+    },
+    {
+      "sentAt": 1,
+      "unansweredSince": 0,
+      "now": 2,
+      "deadline": 2,
+      "action": "resendRequest"
+    },
+    {
+      "sentAt": 2,
+      "unansweredSince": 0,
+      "now": 2.999999,
+      "deadline": 3,
+      "action": "none"
+    },
+    {
+      "sentAt": 2,
+      "unansweredSince": 0,
+      "now": 3,
+      "deadline": 3,
+      "action": "responseTimeout"
+    },
+    {
+      "sentAt": 0,
+      "unansweredSince": null,
+      "now": 3,
+      "deadline": 1,
+      "action": "responseTimeout"
+    }
+  ],
   "fragmentCases": [
     {
       "now": 2.5,
@@ -195,6 +246,50 @@
       "stable": 30,
       "systemReconnect": true,
       "delay": 0
+    },
+    {
+      "attempt": 1,
+      "active": false,
+      "completed": false,
+      "peer": false,
+      "stable": null,
+      "systemReconnect": false,
+      "disconnected": false,
+      "delay": 2
+    },
+    {
+      "attempt": 2,
+      "active": true,
+      "completed": false,
+      "peer": false,
+      "stable": null,
+      "systemReconnect": false,
+      "disconnected": false,
+      "delay": 2
+    },
+    {
+      "attempt": 3,
+      "active": true,
+      "completed": false,
+      "peer": false,
+      "stable": null,
+      "systemReconnect": false,
+      "disconnected": false,
+      "delay": 4
+    }
+  ],
+  "backoffRestarts": [
+    {
+      "telemetrySeconds": 0,
+      "restarts": false
+    },
+    {
+      "telemetrySeconds": 2.999999,
+      "restarts": false
+    },
+    {
+      "telemetrySeconds": 3,
+      "restarts": true
     }
   ],
   "displayHoldSeconds": 6,
@@ -232,16 +327,60 @@
       "platformError": false,
       "active": false,
       "known": true,
-      "retry": false
+      "retry": true
     },
     {
       "platformError": false,
       "active": true,
       "known": false,
-      "retry": false
+      "retry": true
     },
     {
       "platformError": false,
+      "active": true,
+      "known": true,
+      "retry": true
+    }
+  ],
+  "identity": [
+    {
+      "attempt": 1,
+      "active": false,
+      "known": false,
+      "retry": true
+    },
+    {
+      "attempt": 2,
+      "active": false,
+      "known": false,
+      "retry": false
+    },
+    {
+      "attempt": 3,
+      "active": false,
+      "known": false,
+      "retry": false
+    },
+    {
+      "attempt": 2,
+      "active": false,
+      "known": true,
+      "retry": true
+    },
+    {
+      "attempt": 6,
+      "active": false,
+      "known": true,
+      "retry": true
+    },
+    {
+      "attempt": 2,
+      "active": true,
+      "known": false,
+      "retry": true
+    },
+    {
+      "attempt": 7,
       "active": true,
       "known": true,
       "retry": true

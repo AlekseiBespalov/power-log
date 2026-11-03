@@ -6,7 +6,13 @@ import { waitForRideAction } from './ride-action-deadline';
 export type WorkoutActionKind = 'start' | 'control';
 export type WorkoutActionFlight = { current: () => boolean; signal: AbortSignal };
 type ActionState = { busy: boolean; recoveryAvailable: boolean; error: string | null };
+const exportReadFailure = {
+  page: "Power Log couldn't read this ride for export. Export it again, and report it if this keeps happening.",
+  cursor: 'The export lost its place in the ride. Export it again.',
+} as const;
 const message = (error: unknown, fallback?: string) => {
+  if (error instanceof ExportError && (error.code === 'page' || error.code === 'cursor'))
+    return exportReadFailure[error.code];
   if (error instanceof ExportError || error instanceof MonitorPreferencesError) return error.message;
   return fallback && failureCode(error) === 'unknown' ? fallback : presentFailure(error).text;
 };

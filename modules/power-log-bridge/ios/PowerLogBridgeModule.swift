@@ -133,6 +133,10 @@ public final class PowerLogBridgeModule: Module {
     Name("PowerLogBridge")
     Events("onDevice", "onState", "onSample", "onWorkoutState")
     AsyncFunction("getMonotonicSeconds") { ProcessInfo.processInfo.systemUptime }
+    Function("usesTwentyFourHourClock") { () -> Bool in
+      // "j" resolves to the hour pattern of the system 12/24-hour setting; "a" is the AM/PM marker.
+      DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current)?.contains("a") == false
+    }
 
     View(MonitorRasterView.self) {
       Events("onRenderStatus")
@@ -143,13 +147,6 @@ public final class PowerLogBridgeModule: Module {
       Prop("selection") { (view: MonitorRasterView, value: String) in view.setSelection(value) }
       Prop("selectionTarget") { (view: MonitorRasterView, value: String) in view.setSelectionTarget(value) }
     }
-    Function("getMonitorRasterDiagnostics") { MonitorRasterWorker.shared.diagnostics() }
-    Function("resetMonitorRasterDiagnostics") { MonitorRasterWorker.shared.diagnostics(reset: true) }
-    AsyncFunction("startMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.start() }.runOnQueue(
-      .main)
-    AsyncFunction("getMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.snapshot() }.runOnQueue(
-      .main)
-    AsyncFunction("stopMonitorRasterFrameDiagnostics") { MonitorRasterFrameDiagnostics.shared.stop() }.runOnQueue(.main)
 
     AsyncFunction("describeMonitorSource") { (options: MonitorReadOptions, promise: Promise) in
       MonitorDataStore.shared.submit(.describe, request: options.request) { result in

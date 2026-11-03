@@ -69,11 +69,12 @@ constructor(originals: List<CaptureOriginal> = emptyList(), val fault: CaptureFa
         get() = owned.toList()
 
     init {
-        require(originals.size <= maximumFrames && originals.map { it.observationId }.distinct().size == originals.size)
+        require(originals.size <= queuedFrames && originals.map { it.observationId }.distinct().size == originals.size)
     }
 
     companion object {
         const val maximumFrames = 64
+        const val queuedFrames = 480
         const val targetFrames = 8
         const val maximumAgeSeconds = 1.0
 
@@ -88,7 +89,7 @@ data class CaptureCommit(val batch: CaptureBatch, val accepted: List<CaptureOrig
 
 object LifecycleCapture {
     @Throws(IllegalArgumentException::class)
-    fun admit(batch: CaptureBatch, original: CaptureOriginal, overflow: CaptureFault): CaptureAdmission {
+    fun admit(batch: CaptureBatch, original: CaptureOriginal): CaptureAdmission {
         val known = batch.originals.firstOrNull { it.observationId == original.observationId }
         val admitted = if (batch.fault == null || known?.ride != null) original else original.copy(ride = null)
         if (known != null)
@@ -98,21 +99,14 @@ object LifecycleCapture {
                 if (known == admitted) "duplicate" else "conflict",
                 if (known == admitted) null else RideFailure.captureRejected.name,
             )
-        if (batch.originals.size == CaptureBatch.maximumFrames) {
-            val fault = batch.fault ?: overflow
-            return CaptureAdmission(
-                CaptureBatch(batch.originals, fault),
-                false,
-                "overflow",
-                Failures.present(fault.error).name,
-            )
-        }
+        if (batch.originals.size == CaptureBatch.queuedFrames)
+            return CaptureAdmission(batch, false, "overflow", RideFailure.storageBusy.name)
         return CaptureAdmission(CaptureBatch(batch.originals + admitted, batch.fault), true, "buffered", null)
     }
 
     @Throws(IllegalArgumentException::class)
     fun committed(batch: CaptureBatch, attempted: List<CaptureOriginal>, succeeded: Boolean): CaptureCommit {
-        require(attempted.size <= CaptureBatch.maximumFrames)
+        require(attempted.size <= CaptureBatch.queuedFrames)
         if (!succeeded) return CaptureCommit(batch, emptyList(), "commitFailed")
         if (attempted.isEmpty()) return CaptureCommit(batch, emptyList(), "checkpointCommitted")
         if (batch.originals.take(attempted.size) != attempted) return CaptureCommit(batch, emptyList(), "staleCommit")

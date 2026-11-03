@@ -17,8 +17,17 @@ android {
                 keyPassword System.getenv('POWER_LOG_ANDROID_KEY_PASSWORD')
             }
         }
+        powerLogUpload {
+            if (System.getenv('POWER_LOG_ANDROID_UPLOAD_KEYSTORE')) {
+                storeFile file(System.getenv('POWER_LOG_ANDROID_UPLOAD_KEYSTORE'))
+                storePassword System.getenv('POWER_LOG_ANDROID_UPLOAD_STORE_PASSWORD')
+                keyAlias System.getenv('POWER_LOG_ANDROID_UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('POWER_LOG_ANDROID_UPLOAD_KEY_PASSWORD')
+            }
+        }
     }
-    buildTypes.release.signingConfig = System.getenv('POWER_LOG_ANDROID_PREVIEW') == '1' ? signingConfigs.debug : signingConfigs.powerLogRelease
+    buildTypes.release.signingConfig = System.getenv('POWER_LOG_ANDROID_PREVIEW') == '1' ? signingConfigs.debug : System.getenv('POWER_LOG_ANDROID_BUNDLE') == '1' ? signingConfigs.powerLogUpload : signingConfigs.powerLogRelease
+    buildTypes.release.ndk.debugSymbolLevel = 'SYMBOL_TABLE'
 }
 `;
 }

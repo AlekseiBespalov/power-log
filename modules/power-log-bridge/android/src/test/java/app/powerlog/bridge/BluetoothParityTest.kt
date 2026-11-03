@@ -5,6 +5,7 @@ import android.bluetooth.*
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import app.powerlog.core.presentation.RideFailure
 import app.powerlog.core.telemetry.*
 import app.powerlog.core.telemetry.cyc.CycProtocol
 import java.io.File
@@ -20,6 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowBluetoothAdapter
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], manifest = Config.NONE)
@@ -79,27 +81,39 @@ class BluetoothParityTest {
         receive(bytes(fixture.getJSONArray("telemetry").getJSONObject(2).getString("frameHex")))
     }
 
-    private fun failConnection(message: String = "Fixture connection lost") {
+    private fun failConnection(peer: Boolean = false) {
         ControllerBluetooth::class
             .java
             .getDeclaredMethod(
                 "failed",
-                String::class.java,
                 TelemetryDiagnosticReason::class.java,
                 Boolean::class.javaPrimitiveType,
                 Boolean::class.javaPrimitiveType,
                 Map::class.java,
+                RideFailure::class.java,
             )
             .apply { isAccessible = true }
             .invoke(
                 bluetooth,
-                message,
                 TelemetryDiagnosticReason.linkDisconnected,
-                false,
+                peer,
                 false,
                 emptyMap<String, Any?>(),
+                RideFailure.bikeUnavailable,
             )
     }
+
+    private fun handshakeToIdentity() {
+        val gatt = field("gatt") as BluetoothGatt
+        val notify = installControllerService(gatt)
+        shadowOf(gatt).notifyConnection(gatt.device.address)
+        advance(0)
+        shadowOf(gatt).gattCallback.onDescriptorWrite(gatt, notify.descriptors.single(), BluetoothGatt.GATT_SUCCESS)
+        advance(0)
+        assertEquals(ControllerRequest.identity, field("pending"))
+    }
+
+    private fun logRows() = bluetooth.diagnosticLog.read().lines().filter { it.isNotBlank() }.map(::JSONObject)
 
     @Test
     fun stopSearchPublishesIdleAndEachSearchHasTwentySeconds() {
@@ -114,7 +128,101 @@ class BluetoothParityTest {
         advance(14999)
         assertEquals("scanning", bluetooth.state["status"])
         advance(1)
-        assertEquals("idle", states.last()["status"])
+        assertEquals("error", states.last()["status"])
+    }
+
+    @Test
+    fun aSearchThatFindsNothingSaysSoAtItsDeadlineButAManualStopDoesNot() {
+        bluetooth.startScan()
+        advance(20000)
+        assertEquals("error", bluetooth.state["status"])
+        assertEquals(RideFailure.bikeNotFound.androidText, bluetooth.state["error"])
+        assertEquals("bikeNotFound", bluetooth.state["errorCode"])
+        bluetooth.startScan()
+        assertNull(bluetooth.state["error"])
+        advance(1000)
+        bluetooth.stopScan()
+        advance(20000)
+        assertEquals("idle", bluetooth.state["status"])
+        assertNull(bluetooth.state["error"])
+        bluetooth.startScan()
+        (field("scanner") as android.bluetooth.le.ScanCallback).onScanResult(
+            0,
+            android.bluetooth.le.ScanResult(adapter.getRemoteDevice(id), null, -50, 0),
+        )
+        advance(20000)
+        assertEquals("idle", bluetooth.state["status"])
+        assertNull(bluetooth.state["error"])
+    }
+
+    @Test
+    fun aFailedSearchShowsPlainTextAndKeepsItsCodeInTheConnectionLog() {
+        bluetooth.startScan()
+        (field("scanner") as android.bluetooth.le.ScanCallback).onScanFailed(2)
+        advance(0)
+        assertEquals("error", bluetooth.state["status"])
+        assertEquals("Bluetooth search failed. Try again.", bluetooth.state["error"])
+        assertEquals("bluetoothSearchFailed", bluetooth.state["errorCode"])
+        val failure = logRows().single { it.getString("event") == "transport_error" }
+        assertEquals("platform_error", failure.getString("reason"))
+        assertEquals(2, failure.getInt("errorCode"))
+        assertEquals("scanning", failure.getString("status"))
+    }
+
+    @Test
+    fun unsupportedIdentityAndTelemetryShowTheSharedTexts() {
+        bluetooth.connect(id, 4) {}
+        stageIdentity(bluetooth)
+        setAdapterRequest(bluetooth, ControllerRequest.identity, SystemClock.elapsedRealtime() / 1000.0)
+        receive(controllerFrame(byteArrayOf(111, 5, 3) + "X1 20260618".toByteArray() + byteArrayOf(0)))
+        assertEquals("error", bluetooth.state["status"])
+        assertEquals(RideFailure.controllerUnsupported.androidText, bluetooth.state["error"])
+        assertEquals("controllerUnsupported", bluetooth.state["errorCode"])
+        bluetooth.disconnect()
+        completeCancellation(bluetooth, handler)
+        bluetooth.connect(id, 4) {}
+        identity()
+        val payload = bytes(fixture.getJSONArray("telemetry").getJSONObject(2).getString("payloadHex"))
+        payload[4] = (payload[4] + 1).toByte()
+        setAdapterRequest(bluetooth, ControllerRequest.telemetry, SystemClock.elapsedRealtime() / 1000.0)
+        receive(controllerFrame(payload))
+        assertEquals("error", bluetooth.state["status"])
+        assertEquals(
+            "This controller's firmware isn't supported yet. Share diagnostics from Settings so support can be added.",
+            bluetooth.state["error"],
+        )
+        assertEquals("firmwareUnsupported", bluetooth.state["errorCode"])
+        val rejections = logRows().filter { it.has("rejection") }.map { it.getString("rejection") }
+        assertEquals(listOf("identity", "telemetryMask"), rejections)
+        val stopped = logRows().filter { it.getString("event") == "session_stopped" }.map { it.getString("reason") }
+        assertEquals(listOf("identity_rejected", "telemetry_rejected"), stopped.filter { it.endsWith("_rejected") })
+    }
+
+    @Test
+    fun aDeviceThatNeverAnswersIdentityIsRejectedOnItsSecondAttemptUnlessItIsAKnownController() {
+        @Suppress("UNCHECKED_CAST") val known = field("knownControllers") as MutableMap<String, ControllerIdentity>
+        for (verified in listOf(false, true)) {
+            known.clear()
+            if (verified) known[id] = CycProtocol.restoreIdentity("X6", "20250725", "5.3")
+            bluetooth.connect(id, 4) {}
+            handshakeToIdentity()
+            advance(3000)
+            assertEquals("reconnecting", bluetooth.state["status"])
+            completeCancellation(bluetooth, handler)
+            advance(2000)
+            handshakeToIdentity()
+            advance(3000)
+            if (verified) {
+                assertEquals("reconnecting", bluetooth.state["status"])
+            } else {
+                assertEquals("error", bluetooth.state["status"])
+                assertEquals(RideFailure.controllerNoReply.androidText, bluetooth.state["error"])
+                assertEquals("controllerNoReply", bluetooth.state["errorCode"])
+                assertEquals(2, bluetooth.diagnostics()["connectionAttempts"])
+            }
+            bluetooth.disconnect()
+            completeCancellation(bluetooth, handler)
+        }
     }
 
     @Test
@@ -181,12 +289,45 @@ class BluetoothParityTest {
     fun bluetoothOffRejectsAdmissionWithoutStartingAnAttempt() {
         shadowOf(adapter).setState(BluetoothAdapter.STATE_OFF)
         val error =
-            assertThrows(IllegalStateException::class.java) {
+            assertThrows(RideFailureException::class.java) {
                 bluetooth.connect(id, 4) { fail("Unexpected admission") }
             }
-        assertEquals("Bluetooth must be powered on; scan first to request permission.", error.message)
+        assertEquals(RideFailure.bluetoothOff, error.failure)
+        assertEquals(RideFailure.bluetoothOff, RideFailures.classify(error, "bike"))
         assertEquals(0, bluetooth.diagnostics()["connectionAttempts"])
         assertEquals("idle", bluetooth.state["status"])
+    }
+
+    @Test
+    fun searchAndConnectNameTheBluetoothStateThatBlocksThem() {
+        shadowOf(adapter).setState(BluetoothAdapter.STATE_OFF)
+        assertEquals(
+            RideFailure.bluetoothOff,
+            assertThrows(RideFailureException::class.java) { bluetooth.startScan() }.failure,
+        )
+        shadowOf(adapter).setState(BluetoothAdapter.STATE_ON)
+        adapterSession(bluetooth).manualDisconnect(true)
+        assertEquals(
+            RideFailure.bluetoothNotReady,
+            assertThrows(RideFailureException::class.java) {
+                    bluetooth.connect(id, 4) { fail("Unexpected admission") }
+                }
+                .failure,
+        )
+        assertEquals(0, bluetooth.diagnostics()["connectionAttempts"])
+    }
+
+    @Test
+    fun aPhoneWithoutBluetoothSaysSo() {
+        ShadowBluetoothAdapter.setIsBluetoothSupported(false)
+        assertEquals(
+            RideFailure.bluetoothUnsupported,
+            assertThrows(RideFailureException::class.java) { bluetooth.startScan() }.failure,
+        )
+        assertEquals(
+            RideFailure.bluetoothUnsupported,
+            assertThrows(RideFailureException::class.java) { bluetooth.validateConnect(id, 4) }.failure,
+        )
     }
 
     @Test
@@ -222,10 +363,10 @@ class BluetoothParityTest {
         advance(1000)
         assertEquals("reconnecting", bluetooth.state["status"])
         assertEquals(model, bluetooth.state["controllerModel"])
-        assertEquals("Fixture connection lost", bluetooth.state["error"])
+        assertEquals(RideFailure.bikeReconnecting.androidText, bluetooth.state["error"])
         assertEquals(true, bluetooth.state["recoverableConnectionError"])
         identity()
-        assertEquals("Fixture connection lost", bluetooth.state["error"])
+        assertEquals(RideFailure.bikeReconnecting.androidText, bluetooth.state["error"])
         telemetry()
         assertEquals("connected", bluetooth.state["status"])
         assertNull(bluetooth.state["error"])
@@ -271,11 +412,11 @@ class BluetoothParityTest {
         assertEquals("connecting", bluetooth.state["status"])
         advance(1)
         assertEquals("reconnecting", bluetooth.state["status"])
-        assertEquals("Controller connection or identity handshake timed out.", bluetooth.state["error"])
+        assertEquals(RideFailure.bikeReconnecting.androidText, bluetooth.state["error"])
         assertFalse(shadowOf(gatt).isClosed)
         completeCancellation(bluetooth, handler)
         assertTrue(shadowOf(gatt).isClosed)
-        advance(999)
+        advance(1999)
         assertEquals(1, bluetooth.diagnostics()["connectionAttempts"])
         advance(1)
         assertEquals(2, bluetooth.diagnostics()["connectionAttempts"])
@@ -333,10 +474,8 @@ class BluetoothParityTest {
                 assertEquals(attempts + 1, bluetooth.diagnostics()["connectionAttempts"])
             } else {
                 assertEquals("error", bluetooth.state["status"])
-                assertEquals(
-                    "Reconnect limit reached. Controller connection or identity handshake timed out.",
-                    bluetooth.state["error"],
-                )
+                assertEquals(RideFailure.bikeUnavailable.androidText, bluetooth.state["error"])
+                assertEquals("bikeUnavailable", bluetooth.state["errorCode"])
             }
             bluetooth.disconnect()
             completeCancellation(bluetooth, handler)
@@ -392,6 +531,7 @@ class BluetoothParityTest {
         advance(0)
         assertTrue(shadowOf(old).isClosed)
         assertEquals(id, bluetooth.deviceId)
+        assertEquals(RideFailure.bluetoothOff.androidText, bluetooth.state["error"])
         shadowOf(adapter).setState(BluetoothAdapter.STATE_ON)
         context.sendBroadcast(
             android.content
@@ -400,6 +540,103 @@ class BluetoothParityTest {
         )
         advance(0)
         assertEquals(2, bluetooth.diagnostics()["connectionAttempts"])
+        assertEquals(RideFailure.bikeReconnecting.androidText, bluetooth.state["error"])
+    }
+
+    @Test
+    fun aLostLinkShowsTheSharedReconnectingText() {
+        bluetooth.connect(id, 4) {}
+        handshakeToIdentity()
+        identity()
+        telemetry()
+        assertEquals("connected", bluetooth.state["status"])
+        val gatt = field("gatt") as BluetoothGatt
+        shadowOf(gatt).gattCallback.onConnectionStateChange(gatt, 8, BluetoothProfile.STATE_DISCONNECTED)
+        advance(0)
+        assertEquals("reconnecting", bluetooth.state["status"])
+        assertEquals("Connection to your bike was lost. Reconnecting…", bluetooth.state["error"])
+        assertNull(bluetooth.state["errorCode"])
+        assertEquals(true, bluetooth.state["recoverableConnectionError"])
+        val lost = logRows().single { it.getString("event") == "transport_error" }
+        assertEquals("link_disconnected", lost.getString("reason"))
+        assertEquals(8, lost.getInt("errorCode"))
+    }
+
+    @Test
+    fun anUnansweredRequestIsSentAgainAndOnlyThreeSilentSecondsCloseTheLink() {
+        recording = true
+        bluetooth.connect(id, 2) {}
+        handshakeToIdentity()
+        identity()
+        val resends = { logRows().count { it.getString("event") == "request_resent" } }
+        advance(990)
+        assertEquals(0, resends())
+        advance(20)
+        assertEquals(1, resends())
+        telemetry()
+        assertEquals("connected", bluetooth.state["status"])
+        assertNull(field("unansweredSince"))
+        advance(field("nextPollAt") as Long - SystemClock.elapsedRealtime())
+        assertNotNull(field("unansweredSince"))
+        advance(2990)
+        assertEquals("connected", bluetooth.state["status"])
+        advance(20)
+        assertEquals("reconnecting", bluetooth.state["status"])
+        assertEquals(3, resends())
+        assertEquals(
+            "response_timeout",
+            logRows().single { it.getString("event") == "transport_error" }.getString("reason"),
+        )
+        assertEquals(
+            2.0,
+            logRows().single { it.getString("event") == "reconnect_scheduled" }.getDouble("retryDelaySeconds"),
+            0.0,
+        )
+    }
+
+    @Test
+    fun onlyThreeSecondsOfTelemetryRestartTheBackoff() {
+        recording = true
+        bluetooth.connect(id, 2) {}
+        identity()
+        telemetry()
+        field("retries", 5)
+        advance(600)
+        telemetry()
+        assertEquals(5, field("retries"))
+        advance(2500)
+        telemetry()
+        assertEquals(0, field("retries"))
+    }
+
+    @Test
+    fun connectionsThatKeepFailingOutsideARideShowTheSharedCouldNotConnectText() {
+        bluetooth.connect(id, 4) {}
+        val failAttempt = {
+            val gatt = field("gatt") as BluetoothGatt
+            shadowOf(gatt).gattCallback.onConnectionStateChange(gatt, 133, BluetoothProfile.STATE_DISCONNECTED)
+            advance(0)
+        }
+        for (delay in listOf(1000L, 2000L, 4000L, 8000L, 16000L)) {
+            failAttempt()
+            assertEquals(RideFailure.bikeReconnecting.androidText, bluetooth.state["error"])
+            advance(delay)
+        }
+        failAttempt()
+        assertEquals("error", bluetooth.state["status"])
+        assertEquals(
+            "Power Log couldn't connect to your bike. " +
+                "Close other apps connected to the bike, turn its display off and on, then connect again.",
+            bluetooth.state["error"],
+        )
+        assertEquals("bikeUnavailable", bluetooth.state["errorCode"])
+        assertEquals(false, bluetooth.state["recoverableConnectionError"])
+        val reasons = logRows().filter { it.getString("event") == "transport_error" }.map { it.getString("reason") }
+        assertEquals(List(6) { "connection_failed" }, reasons)
+        assertEquals(
+            "retry_limit",
+            logRows().single { it.getString("event") == "session_stopped" }.getString("reason"),
+        )
     }
 
     @Test
@@ -416,7 +653,7 @@ class BluetoothParityTest {
         current.onScanResult(0, android.bluetooth.le.ScanResult(adapter.getRemoteDevice(id), null, -50, 0))
         advance(0)
         assertTrue((field("devices") as Map<*, *>).isEmpty())
-        assertEquals("idle", bluetooth.state["status"])
+        assertEquals("bikeNotFound", bluetooth.state["errorCode"])
     }
 
     @Test
@@ -426,30 +663,13 @@ class BluetoothParityTest {
             val row = rows.getJSONObject(index)
             recording = row.getBoolean("active")
             bluetooth.connect(id, 4) {}
+            field("established", !row.optBoolean("disconnected", true))
             field("retries", row.getInt("attempt") - 1)
             field(
                 "stableSince",
                 if (row.isNull("stable")) null else SystemClock.elapsedRealtime() / 1000.0 - row.getDouble("stable"),
             )
-            ControllerBluetooth::class
-                .java
-                .getDeclaredMethod(
-                    "failed",
-                    String::class.java,
-                    TelemetryDiagnosticReason::class.java,
-                    Boolean::class.javaPrimitiveType,
-                    Boolean::class.javaPrimitiveType,
-                    Map::class.java,
-                )
-                .apply { isAccessible = true }
-                .invoke(
-                    bluetooth,
-                    "fixture",
-                    TelemetryDiagnosticReason.linkDisconnected,
-                    row.getBoolean("peer") && row.getBoolean("completed"),
-                    false,
-                    emptyMap<String, Any?>(),
-                )
+            failConnection(peer = row.getBoolean("peer") && row.getBoolean("completed"))
             val transport = adapterSession(bluetooth).state
             if (row.isNull("delay")) assertEquals("error", bluetooth.state["status"])
             else {

@@ -739,13 +739,38 @@ class TelemetryContractTest {
         assertTrue(TelemetryTiming.replyAdmissible(0.0, 2.5))
         assertFalse(TelemetryTiming.replyAdmissible(0.0, 2.500001))
         assertFalse(TelemetryTiming.replyAdmissible(1.0, 0.0))
+        val identity = TelemetryTransportState(1, TelemetryStage.identity)
+        assertEquals(TelemetryTransportAction.responseTimeout, TelemetryTransport.check(identity, 2.5, 0.0).action)
+        assertEquals(TelemetryTransportAction.none, TelemetryTransport.check(identity, 2.499999, 0.0, 0.0).action)
+        assertEquals(2.5, TelemetryTiming.responseDeadline(TelemetryStage.identity, 0.0, null))
         val ready = TelemetryTransportState(1, TelemetryStage.ready)
-        assertEquals(TelemetryTransportAction.responseTimeout, TelemetryTransport.check(ready, 2.5, 0.0).action)
         assertEquals(
             TelemetryTransportAction.writeTimeout,
             TelemetryTransport.check(ready, 2.5, writeBlockedAt = 0.0).action,
         )
-        assertEquals(TelemetryTransportAction.none, TelemetryTransport.check(ready, 2.499999, 0.0, 0.0).action)
+        assertNull(TelemetryTiming.responseDeadline(TelemetryStage.ready, null, 0.0))
+    }
+
+    @Test
+    fun unansweredTelemetryIsSentAgainUntilTheLinkStaysSilent() {
+        val ready = TelemetryTransportState(1, TelemetryStage.ready)
+        for (case in telemetryFixture("transport")["telemetryReplies"].list()) {
+            val sentAt = case["sentAt"].double()
+            val since = case["unansweredSince"].optionalDouble()
+            val decision = TelemetryTransport.check(ready, case["now"].double(), sentAt, null, false, since)
+            assertEquals(TelemetryTransportAction.valueOf(case["action"].text()), decision.action, case.toString())
+            assertEquals(
+                if (decision.action == TelemetryTransportAction.responseTimeout) TelemetryStage.idle
+                else TelemetryStage.ready,
+                decision.next.stage,
+            )
+            assertEquals(
+                case["deadline"].double(),
+                TelemetryTiming.responseDeadline(TelemetryStage.ready, sentAt, since),
+            )
+        }
+        val cancelling = ready.copy(cancellationGeneration = 1)
+        assertEquals(TelemetryTransportAction.none, TelemetryTransport.check(cancelling, 3.0, 0.0).action)
     }
 
     @Test
@@ -760,9 +785,9 @@ class TelemetryContractTest {
                     case["stable"].optionalDouble(),
                     case["systemReconnect"].bool(),
                     false,
-                    true,
+                    case["disconnected"] != J.Bool(false),
                 )
-            assertEquals(case["delay"].optionalDouble(), plan?.delaySeconds)
+            assertEquals(case["delay"].optionalDouble(), plan?.delaySeconds, case.toString())
             if (plan != null)
                 assertEquals(case["systemReconnect"].bool() && plan.delaySeconds == 0.0, plan.adoptSystemReconnect)
         }
@@ -771,6 +796,10 @@ class TelemetryContractTest {
             val plan = TelemetryReconnectPolicy.plan(1, false, complete, false, null, system, pending, disconnected)!!
             assertEquals(system || pending || (!complete && !disconnected), plan.cancelBeforeRetry)
         }
+        for (case in telemetryFixture("transport")["backoffRestarts"].list()) assertEquals(
+            case["restarts"].bool(),
+            TelemetryReconnectPolicy.restartsBackoff(case["telemetrySeconds"].double()),
+        )
         for (stable in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) assertEquals(
             1.0,
             TelemetryReconnectPolicy.plan(1, false, true, true, stable, false, false, true)!!.delaySeconds,
@@ -1008,7 +1037,10 @@ class TelemetryContractTest {
         assertNull(
             TelemetryTransport.disconnected(failed.next, begun.generation, f["lateCallbackAt"].double()).reconnectDue
         )
-        assertTrue(TelemetryTransport.disconnected(retry, begun.generation, 26.0).cancellationFailed)
+        assertTrue(
+            TelemetryTransport.disconnected(retry, begun.generation, f["cancellationDeadline"].double())
+                .cancellationFailed
+        )
         val manual = TelemetryTransport.manualDisconnect(retry, true)
         assertNull(manual.reconnectDue)
         assertNull(TelemetryTransport.begin(manual, f["lateCallbackAt"].double()))
@@ -1171,6 +1203,16 @@ class TelemetryContractTest {
                 case["known"].bool(),
             ),
         )
+        for (case in transport["identity"].list()) assertEquals(
+            case["retry"].bool(),
+            TelemetryReconnectPolicy.retriesIdentity(
+                case["attempt"].long().toInt(),
+                case["active"].bool(),
+                case["known"].bool(),
+            ),
+            case.toString(),
+        )
+        assertFailsWith<IllegalArgumentException> { TelemetryReconnectPolicy.retriesIdentity(0, false, false) }
         for (case in transport["pollIntervals"].list()) assertEquals(
             case["seconds"].double(),
             TelemetryTiming.pollIntervalSeconds(

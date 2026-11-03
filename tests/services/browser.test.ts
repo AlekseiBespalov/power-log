@@ -24,6 +24,8 @@ import {
   FakeDevice,
 } from '../support/browser-telemetry';
 
+const notReady = { code: 'bluetoothNotReady', message: presentationFailure('bluetoothNotReady').text };
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
@@ -165,13 +167,13 @@ describe('foreground browser BLE lifecycle', () => {
     h.clock.seconds = deadlines.attemptDeadline;
     await vi.advanceTimersByTimeAsync(deadlines.attemptDeadline * 1000);
     h.clock.seconds = deadlines.reconnectDue;
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync((deadlines.reconnectDue - deadlines.attemptDeadline) * 1000);
     expect(h.device.gatt.connect).toHaveBeenCalledOnce();
     h.clock.seconds = deadlines.cancellationDeadline;
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync((deadlines.cancellationDeadline - deadlines.reconnectDue) * 1000);
     expect(await h.adapter.getState()).toMatchObject({
       status: 'error',
-      error: expect.stringContaining('cancellation'),
+      error: presentationFailure('bikeUnavailable').text,
     });
     h.clock.seconds = deadlines.lateCompletions[1]!;
     h.device.gatt.connected = true;
@@ -215,10 +217,10 @@ describe('foreground browser BLE lifecycle', () => {
     h.service.writer.onWrite = () => {};
     const retry = deferred<FakeGatt>();
     h.device.gatt.connect.mockReturnValueOnce(retry.promise);
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(4000);
     expect((await h.adapter.getState()).status).toBe('reconnecting');
     expect(h.device.gatt.connected).toBe(false);
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(2000);
     const connectsBeforeCompletion = h.device.gatt.connect.mock.calls.length;
     h.device.gatt.deliverDisconnect();
     await vi.advanceTimersByTimeAsync(0);
@@ -362,7 +364,7 @@ describe('foreground browser BLE lifecycle', () => {
     await flush();
     expect(await h.adapter.getState()).toMatchObject({
       status: 'error',
-      error: presentationFailure('bikeUnavailable').text,
+      error: presentationFailure('controllerUnsupported').text,
     });
     expect(vi.getTimerCount()).toBe(0);
     expect(h.events.sample).not.toHaveBeenCalled();
@@ -398,6 +400,38 @@ describe('foreground browser BLE lifecycle', () => {
     expect(h.requestDevice).toHaveBeenCalledOnce();
     expect(h.events.sample).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('shows the shared reconnecting text while a lost link recovers', async () => {
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    h.device.gatt.disconnect();
+    await flush();
+    expect(await h.adapter.getState()).toMatchObject({
+      status: 'reconnecting',
+      recoverableConnectionError: true,
+      error: 'Connection to your bike was lost. Reconnecting…',
+    });
+  });
+
+  it("shows the shared couldn't-connect text with its next step when reconnects run out outside a ride", async () => {
+    const h = harness();
+    h.device.gatt.connect.mockRejectedValue(new Error('Radio unavailable'));
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    expect((await h.adapter.getState()).error).toBe(presentationFailure('bikeReconnecting').text);
+    await vi.advanceTimersByTimeAsync(31000);
+    expect(await h.adapter.getState()).toMatchObject({
+      status: 'error',
+      recoverableConnectionError: false,
+      error:
+        "Power Log couldn't connect to your bike. " +
+        'Close other apps connected to the bike, turn its display off and on, then connect again.',
+    });
   });
 
   it('admits a notification before Pause while its write completion is still pending', async () => {
@@ -565,7 +599,7 @@ describe('foreground browser BLE lifecycle', () => {
     h.service.writer.onWrite = () => h.service.reader.identity(111, 'X120');
     await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
     await flush();
-    expect((await h.adapter.getState()).error).toContain('Unsupported controller');
+    expect((await h.adapter.getState()).error).toBe(presentationFailure('controllerUnsupported').text);
     expect((await h.adapter.getState()).status).toBe('error');
     expect(h.events.sample).toHaveBeenCalledTimes(1);
   });
@@ -765,15 +799,13 @@ describe('foreground browser BLE lifecycle', () => {
       await flush();
       expect(await h.adapter.getState()).toMatchObject({
         status: 'reconnecting',
-        error: expect.stringContaining('timed out'),
+        error: presentationFailure('bikeReconnecting').text,
       });
       expect(h.device.gatt.connected).toBe(false);
       expect(h.service.writer.writeValueWithoutResponse).not.toHaveBeenCalled();
       expect(vi.getTimerCount()).toBe(1);
 
-      await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toThrow(
-        'cancellation is still pending',
-      );
+      await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toMatchObject(notReady);
       expect(h.device.gatt.connect).toHaveBeenCalledOnce();
       await h.adapter.disconnect();
       gate.resolve();
@@ -829,7 +861,7 @@ describe('foreground browser BLE lifecycle', () => {
     await h.adapter.startScan();
     const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
     await flush();
-    await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toThrow('cancellation is still pending');
+    await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toMatchObject(notReady);
     expect(h.device.gatt.connect).toHaveBeenCalledOnce();
     oldService.reject(new Error('Stale service discovery failed'));
     await oldConnect;
@@ -851,7 +883,7 @@ describe('foreground browser BLE lifecycle', () => {
     await h.adapter.startScan();
     const oldConnect = h.adapter.connect({ deviceId: h.device.id, hz: 2 });
     await flush();
-    await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toThrow('cancellation is still pending');
+    await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toMatchObject(notReady);
     expect(h.device.gatt.connect).toHaveBeenCalledOnce();
     h.device.gatt.connected = true;
     oldServer.resolve(h.device.gatt);
@@ -874,7 +906,8 @@ describe('foreground browser BLE lifecycle', () => {
     await flush();
     await h.adapter.disconnect();
     await oldConnect;
-    await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toThrow('cancellation is still pending');
+    await expect(h.adapter.connect({ deviceId: h.device.id, hz: 2 })).rejects.toMatchObject(notReady);
+    await expect(h.adapter.startScan()).rejects.toMatchObject(notReady);
     expect(h.device.gatt.connect).toHaveBeenCalledOnce();
     oldWrite.reject(new Error('Old write rejected'));
     await flush();
@@ -1075,7 +1108,7 @@ describe('automatic browser BLE recovery', () => {
     for (const seconds of [1, 2, 4, 8, 16]) {
       await vi.advanceTimersByTimeAsync(seconds * 1000);
       expect((await h.adapter.getState()).status).toBe('reconnecting');
-      await vi.advanceTimersByTimeAsync(2500);
+      await vi.advanceTimersByTimeAsync(3000);
     }
     expect((await h.adapter.getState()).status).toBe('error');
     expect(h.events.sample).toHaveBeenCalledTimes(1);
@@ -1091,13 +1124,78 @@ describe('automatic browser BLE recovery', () => {
     await flush();
     if (failure === 'timeout') h.service.writer.onWrite = () => {};
     else h.service.writer.writeValueWithoutResponse.mockRejectedValueOnce(new Error('GATT write failed'));
-    await vi.advanceTimersByTimeAsync(failure === 'timeout' ? 3000 : 500);
+    await vi.advanceTimersByTimeAsync(failure === 'timeout' ? 3600 : 500);
     expect((await h.adapter.getState()).status).toBe('reconnecting');
     replyAutomatically(h.service);
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect((await h.adapter.getState()).status).toBe('connected');
     expect(h.events.sample).toHaveBeenCalledTimes(2);
     expect(h.requestDevice).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends an unanswered telemetry request again without leaving the link', async () => {
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    let telemetryWrites = 0;
+    h.service.writer.onWrite = bytes => {
+      if (bytes[2] === 50 && ++telemetryWrites > 1) h.service.reader.telemetry();
+    };
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(telemetryWrites).toBe(1);
+    await vi.advanceTimersByTimeAsync(101);
+    expect(telemetryWrites).toBe(2);
+    expect(await h.adapter.getState()).toMatchObject({ status: 'connected' });
+    expect(h.events.sample).toHaveBeenCalledTimes(2);
+    expect(h.device.gatt.connect).toHaveBeenCalledOnce();
+    expect(h.device.gatt.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('records one reading when a late reply and the reply to its re-sent request both arrive', async () => {
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    let telemetryWrites = 0;
+    h.service.writer.onWrite = bytes => {
+      if (bytes[2] !== 50 || ++telemetryWrites === 1) return;
+      h.service.reader.telemetry();
+      h.service.reader.telemetry();
+    };
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(telemetryWrites).toBe(2);
+    expect(h.events.sample).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps backing off when each reconnect sends one reading and then goes silent', async () => {
+    const h = harness();
+    replyAutomatically(h.service);
+    await h.adapter.startScan();
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    let answered = false;
+    h.service.writer.onWrite = bytes => {
+      if (bytes[2] === 111) {
+        answered = false;
+        h.service.reader.identity();
+      } else if (bytes[2] === 50 && !answered) {
+        answered = true;
+        h.service.reader.telemetry();
+      }
+    };
+    h.device.gatt.disconnect();
+    for (const seconds of [1, 2, 4, 8, 16]) {
+      await vi.advanceTimersByTimeAsync(seconds * 1000);
+      expect((await h.adapter.getState()).status).toBe('connected');
+      await vi.advanceTimersByTimeAsync(3500);
+    }
+    expect((await h.adapter.getState()).status).toBe('error');
+    expect(h.events.sample).toHaveBeenCalledTimes(6);
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(6);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it.each(['backoff', 'setup'])('cancels recovery during %s and ignores late completion', async stage => {
@@ -1135,7 +1233,7 @@ describe('automatic browser BLE recovery', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(await h.adapter.getState()).toMatchObject({
       status: 'error',
-      error: expect.stringContaining('Unsupported controller'),
+      error: presentationFailure('controllerUnsupported').text,
     });
     expect(h.events.sample).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
@@ -1152,8 +1250,35 @@ describe('automatic browser BLE recovery', () => {
       h.service.reader.notify(framePayload(payload));
     };
     await vi.advanceTimersByTimeAsync(500);
-    expect((await h.adapter.getState()).status).toBe('error');
+    expect(await h.adapter.getState()).toMatchObject({
+      status: 'error',
+      error: presentationFailure('firmwareUnsupported').text,
+    });
     expect(h.events.sample).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('rejects a device that never answers identity on its second attempt unless it was verified before', async () => {
+    const h = harness();
+    await h.adapter.startScan();
+    h.service.writer.onWrite = () => {};
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await vi.advanceTimersByTimeAsync(2600);
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(await h.adapter.getState()).toMatchObject({
+      status: 'error',
+      error: presentationFailure('controllerNoReply').text,
+    });
+    expect(h.device.gatt.connect).toHaveBeenCalledTimes(2);
+    replyAutomatically(h.service);
+    await h.adapter.connect({ deviceId: h.device.id, hz: 2 });
+    await flush();
+    expect((await h.adapter.getState()).status).toBe('connected');
+    h.service.writer.onWrite = () => {};
+    h.device.gatt.disconnect();
+    await vi.advanceTimersByTimeAsync(12000);
+    expect((await h.adapter.getState()).status).toBe('reconnecting');
+    expect(h.device.gatt.connect.mock.calls.length).toBeGreaterThan(4);
   });
 });

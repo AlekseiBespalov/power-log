@@ -71,7 +71,7 @@ class Bytes {
 
 export function zipTime(exportedAt: string): ZipTime {
   const match = typeof exportedAt === 'string' ? UTC_TIME.exec(exportedAt) : null;
-  const notUtc = () => new ExportError('unsupported', 'The export time is not a UTC timestamp.');
+  const notUtc = () => new ExportError('unsupported', "Power Log couldn't create this export. Export it again.");
   if (!match) throw notUtc();
   const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
     number,

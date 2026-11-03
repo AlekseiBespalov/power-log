@@ -1,5 +1,6 @@
 package app.powerlog.bridge
 
+import android.content.Context
 import androidx.health.connect.client.records.*
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
@@ -85,6 +86,22 @@ class HealthReadbackTest {
                 it.getInt(0)
             },
         )
+    }
+
+    @Test
+    fun readWindowStartsThirtyDaysBeforeTheFirstObservedGrantEvenWhileHealthConnectIsUnavailable() {
+        val context = RuntimeEnvironment.getApplication()
+        val preferences = context.getSharedPreferences("health-access", Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val access =
+            object : AndroidHealthConnectAccess(context) {
+                override val available = false
+            }
+        assertNull(access.readableFrom)
+        preferences.edit().putLong("observedGrantMillis", start.toEpochMilli()).commit()
+        assertEquals(start.minusSeconds(30L * 86400), access.readableFrom)
+        assertTrue(runBlocking { access.granted() }.isEmpty())
+        assertEquals(start.minusSeconds(30L * 86400), access.readableFrom)
     }
 
     @Test

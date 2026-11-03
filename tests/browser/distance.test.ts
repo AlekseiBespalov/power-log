@@ -769,26 +769,75 @@ describe('controller distance with real IndexedDB', () => {
           },
           { gap, interrupted },
         );
+        const joined = gap < 6;
+        const distance = joined ? 20 + 10 * gap : 20;
+        const covered = joined ? 2 + gap : 2;
         for (const [index, points] of result.plots.entries()) {
-          if (index === 1 && gap === 2 && !interrupted) {
+          if (index === 1 && joined) {
             expect(points.map(p => [p.elapsedSeconds, p.value, p.startsSegment])).toEqual([
               [0, 0, true],
-              [4, 20, false],
+              [2 + gap, distance, false],
             ]);
             continue;
           }
           expect(points.map(p => [p.elapsedSeconds, p.value, p.startsSegment])).toEqual([
             [0, 0, true],
             [1, 10, false],
-            [1 + gap, 10, interrupted || gap >= 6],
-            [2 + gap, 20, false],
+            [1 + gap, distance - 10, !joined],
+            [2 + gap, distance, false],
           ]);
         }
-        expect(result.info).toMatchObject({ distanceMeters: 20, coveredSeconds: 2, partial: true });
-        expect(result.stats).toEqual({ distance: 20, coveredSeconds: 2, partial: true, unresolvedBoundary: false });
-        expect(result.inspected).toBeNull();
+        expect(result.info).toMatchObject({ distanceMeters: distance, coveredSeconds: covered, partial: !joined });
+        expect(result.stats).toEqual({
+          distance,
+          coveredSeconds: covered,
+          partial: !joined,
+          unresolvedBoundary: false,
+        });
+        if (joined) expect(result.inspected).toMatchObject({ elapsedSeconds: 1, value: 10 });
+        else expect(result.inspected).toBeNull();
         expect(result.telemetryCount).toBe(4);
       }));
+  it('joins a controller loss shorter than six seconds across connection epochs within one activity interval', async () =>
+    run(async page => {
+      const result = await page.evaluate(async () => {
+        const api = window.distanceTests;
+        const at = (time: number) => new Date(Date.parse('2026-01-01T00:00:00.000Z') + time * 1000).toISOString();
+        const distance = async (resumed: number, paused: boolean) => {
+          const ride = await api.store.begin(
+            'owner',
+            { indoor: true, recordGPS: false, sampleHz: 2 },
+            '2026-01-01T00:00:00.000Z',
+          );
+          const rows = [0, 1, resumed, resumed + 1].map((time, sequence) => ({
+            ...api.browserRow(time, sequence),
+            recordingId: ride.id,
+            controllerSpeedMps: 10,
+            speedRaw: 36,
+            controllerModel: 'X6',
+            controllerProtocol: '5.3',
+            firmwareLabel: '20260101',
+            connectionEpoch: sequence < 2 ? 'first' : 'second',
+            active: true,
+            interval: paused && sequence >= 2 ? 1 : 0,
+          }));
+          await api.store.append(ride.id, 'owner', rows.slice(0, 2), 1, 1, at(1));
+          if (paused) {
+            await api.store.transition(ride.id, 'owner', 'pause', 2, 2, at(2));
+            await api.store.transition(ride.id, 'owner', 'resume', 3, 2, at(3));
+          }
+          const timer = resumed + (paused ? 0 : 1);
+          await api.store.append(ride.id, 'owner', rows.slice(2), resumed + 1, timer, at(resumed + 1));
+          const { selected } = (await api.ensureBrowserDistance(ride.id)).info;
+          await api.store.transition(ride.id, 'owner', 'stop', resumed + 2, timer + 1, at(resumed + 2));
+          return selected;
+        };
+        return { joined: await distance(6, false), long: await distance(7, false), paused: await distance(6, true) };
+      });
+      expect(result.joined).toMatchObject({ distanceMeters: 70, coveredSeconds: 7 });
+      expect(result.long).toMatchObject({ distanceMeters: 20, coveredSeconds: 2 });
+      expect(result.paused).toMatchObject({ distanceMeters: 20, coveredSeconds: 2 });
+    }));
   it('keeps the Start-time distance despite later settings and reuses profile and raw caches', async () =>
     run(async page => {
       const result = await page.evaluate(async () => {
@@ -1092,7 +1141,7 @@ describe('controller distance with real IndexedDB', () => {
           monitor = api.monitor(ride.id),
           description = await monitor.describeSource({ generation: 1 });
         const request = { generation: 1, expectedRevision: description.revision, metrics: ['distanceMeters'] };
-        const [plot, stats, latest, gap, summary] = await Promise.all([
+        const [plot, stats, latest, joined, summary] = await Promise.all([
           monitor.readPlot({ ...request, startSeconds: 0, endSeconds: 3, pixelWidth: 240 }),
           monitor.rangeStats({ ...request, startSeconds: 0.5, endSeconds: 1.6 }),
           monitor.readLatest(request),
@@ -1113,7 +1162,7 @@ describe('controller distance with real IndexedDB', () => {
           inside,
           stats,
           latest,
-          gap,
+          joined,
           summary,
           anchored,
           unchanged: before === JSON.stringify(await api.store.page(ride.id, 0, 10)),
@@ -1121,9 +1170,9 @@ describe('controller distance with real IndexedDB', () => {
       });
       expect(result.info.selected).toMatchObject({
         source: 'controller',
-        distanceMeters: 20,
-        coveredSeconds: 2,
-        uncoveredSeconds: 1,
+        distanceMeters: 21,
+        coveredSeconds: 2.1,
+        uncoveredSeconds: 0.9,
         estimated: true,
         partial: true,
       });
@@ -1134,27 +1183,28 @@ describe('controller distance with real IndexedDB', () => {
         expect(result.plot.series.distanceMeters!.map(p => [p.value, p.startsSegment])).toEqual([
           [0, true],
           [10, false],
-          [10, false],
-          [20, false],
+          [11, false],
+          [21, false],
         ]);
       expect(result.stats.status).toBe('ok');
       if (result.stats.status === 'ok')
         expect(result.stats.statistics.distanceMeters).toEqual({
-          distance: 10,
-          coveredSeconds: 1,
+          distance: 11,
+          coveredSeconds: 1.1,
           unresolvedBoundary: false,
-          partial: true,
+          partial: false,
         });
       expect(result.inside.status).toBe('ok');
       if (result.inside.status === 'ok')
         expect(result.inside.series.distanceMeters!.map(p => p.elapsedSeconds)).toEqual([0, 1]);
-      if (result.gap.status === 'ok') expect(result.gap.points.distanceMeters).toBeNull();
+      if (result.joined.status === 'ok')
+        expect(result.joined.points.distanceMeters).toMatchObject({ value: 10, elapsedSeconds: 1, derived: true });
       if (result.anchored.status === 'ok')
-        expect(result.anchored.points.distanceMeters).toMatchObject({ value: 10, elapsedSeconds: 1.1, derived: true });
-      expect(result.summary.summary).toMatchObject({ distanceMeters: 20, averageSpeedMps: 10 });
+        expect(result.anchored.points.distanceMeters).toMatchObject({ value: 11, elapsedSeconds: 1.1, derived: true });
+      expect(result.summary.summary).toMatchObject({ distanceMeters: 21, averageSpeedMps: 10 });
     }));
 
-  it('keeps observed zero eligible and rejects unknown-unit, paused and reconnect edges', async () =>
+  it('keeps observed zero eligible, rejects unknown-unit and paused edges and joins a short reconnect', async () =>
     run(async page => {
       const result = await page.evaluate(async () => {
         const api = window.distanceTests,
@@ -1185,7 +1235,7 @@ describe('controller distance with real IndexedDB', () => {
       });
       expect(result.info).toMatchObject({
         selection: 'controller',
-        selected: { distanceMeters: 0, coveredSeconds: 2 },
+        selected: { distanceMeters: 0, coveredSeconds: 3 },
       });
       expect(result.before).toBe(result.after);
     }));

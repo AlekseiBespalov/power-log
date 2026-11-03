@@ -43,15 +43,21 @@ export function PrivacyPolicy() {
           serial. Enabled GPS and available Health measurements become part of the local ride.
         </Body>
         <Body>
-          iPhone and Android keep recorded rides in local databases and pre-Start previews in bounded memory, settings
-          in app files, and temporary imports and exports in app storage. An exported file stays there for at least 24
-          hours so the app you share it with can read it; Power Log deletes it the next time it starts or exports after
-          that. iPhone also remembers the selected Bluetooth device and the identifiers, model and firmware of
-          controllers it has recognized (disconnecting does not clear that list). iPhone and Android keep a bounded
-          connection log of connection events, timings and error codes, without device names, identifiers, locations or
-          ride measurements. Apple Watch keeps recording settings and a bounded in-memory buffer of observations for its
-          paired iPhone. The phone keeps the ride archive; interrupted rides retain only committed data. Native apps
-          also write operational errors to system logs.
+          iPhone and Android keep recorded rides in a database on the device, readings shown before Start only in
+          memory, settings in app files, and temporary imports and exports in app storage. An exported file stays there
+          for at least 24 hours so the app you share it with can read it; Power Log deletes it the next time it starts
+          or exports after that. iPhone also remembers the selected Bluetooth device and the identifiers, model and
+          firmware of controllers it has recognized (disconnecting does not clear that list). iPhone and Android keep a
+          bounded connection log of connection events, timings and error codes, without device names, identifiers,
+          locations or ride measurements. Apple Watch keeps its recording settings and holds recent readings in memory
+          only until your iPhone receives them. The phone keeps the rides; an interrupted ride keeps what was saved
+          before the interruption. The iPhone, Apple Watch and Android apps also write error messages to the device’s
+          system log.
+        </Body>
+        <Body>
+          On iPhone, Apple Watch and Android, Power Log keeps its rides, settings and logs in private app storage that
+          other apps cannot read, protected by the device’s own encryption. Power Log has no server and transmits none
+          of this data except as described under What leaves the app.
         </Body>
         <Body>
           Depending on your Apple backup settings, iPhone app data, including rides with their Health readings and
@@ -108,21 +114,23 @@ export function PrivacyPolicy() {
       <Card>
         <Heading level={2}>Apple Health</Heading>
         <Body>
-          When Apple Health is used, Power Log requests read access to workouts, routes, heart rate, active and resting
-          energy, cycling distance, power, cadence and speed, breathing rate, blood oxygen, heart rate variability,
-          physical effort and cycling functional threshold power. Supported systems also provide workout effort and
-          estimated effort scores. Readings depend on your permissions and what the device provides.
+          When Apple Health is used, Power Log requests read access to heart rate, heart rate variability, respiratory
+          rate, blood oxygen, active and resting energy, physical effort, cycling distance, power, cadence and speed,
+          and cycling functional threshold power. Supported systems also provide workout effort and estimated effort
+          scores. iPhone also reads workouts to confirm that the Watch saved a Watch-assisted ride. Readings depend on
+          your permissions and what the device provides.
         </Body>
         <Body>
           The device running the native workout also requests write access to workouts, routes, heart rate, active and
-          resting energy, cycling distance, power, cadence and speed, breathing rate, blood oxygen and heart rate
-          variability. The Watch writes Watch-assisted workouts; iPhone writes other Apple Health workouts. Route
-          permission can be requested even when GPS is off; route points are saved only when GPS recording is enabled.
+          resting energy, and cycling distance, power, cadence and speed. Power Log writes nothing else to Apple Health.
+          The Watch writes Watch-assisted workouts; iPhone writes other Apple Health workouts. Route permission can be
+          requested even when GPS is off; route points are saved only when GPS recording is enabled.
         </Body>
         <Body>
           Watch measurements are transferred to iPhone with their original times. Ride-related Health measurements can
           also be read after Finish or an explicit refresh, retaining their sample identities, times and source details
-          locally. Power Log writes controller rider power and cadence to the workout; motor electrical power is not
+          locally. The workout session records heart rate and active and resting energy. Power Log adds rider power and
+          cadence from the controller and distance, speed and route from phone GPS; motor electrical power is not
           written as rider power.
         </Body>
         <Body>
@@ -135,11 +143,23 @@ export function PrivacyPolicy() {
       <Card>
         <Heading level={2}>Health Connect on Android</Heading>
         <Body>
-          When Health Connect saving is enabled, Power Log requests permission to write completed cycling sessions,
-          rider power, cadence and distance. With GPS enabled it also requests speed and exercise route write access. It
-          also requests optional read permissions for supported ride-related physiological measurements. New records are
-          collected at Finish, 15 minutes and 60 minutes later, or when you select Refresh Health data. Imported
-          measurements keep their original times. Your saved Health copy is separate from the local ride.
+          When you turn on Health Connect saving, Power Log asks for permission to write exercise sessions, power, speed
+          and distance, and exercise routes when GPS recording is on. It saves each completed ride once as a cycling
+          session with its laps, pauses and route, with rider power and cadence from the controller and speed and
+          distance from phone GPS. Power Log writes nothing else to Health Connect.
+        </Body>
+        <Body>
+          It also asks to read exercise sessions, heart rate, active calories burned, respiratory rate, oxygen
+          saturation, heart rate variability, power, cadence, speed and distance, including records from other apps and
+          devices, and to read them in the background. Power Log reads only records from the time of a ride. With Health
+          Connect saving on, it reads them at Finish and again 15 and 60 minutes later, in the background; Refresh
+          Health data reads them again for any finished ride. Without background access, these reads wait until you open
+          Power Log. It skips the records it saved itself. Imported measurements keep their original times. They are
+          stored with the ride on your phone, like the rest of its data.
+        </Body>
+        <Body>
+          Power Log does not ask for older Health Connect history, so it does not read rides that started more than 30
+          days before you first allowed Health Connect access. Your saved Health copy is separate from the local ride.
         </Body>
       </Card>
       <Card>

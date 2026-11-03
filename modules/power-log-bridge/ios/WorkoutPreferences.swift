@@ -9,7 +9,7 @@ struct WorkoutCapturePreferences: Equatable {
 
 enum WorkoutPreferences {
   private static let unreadable = WorkoutDataError.invalid(
-    "Saved monitor settings could not be read. Open Settings on the phone before starting a ride.")
+    "Power Log couldn't read your saved settings. Open Settings on your iPhone and reset them, then start again.")
 
   static func read(directory: URL? = nil) throws -> WorkoutCapturePreferences {
     let root =

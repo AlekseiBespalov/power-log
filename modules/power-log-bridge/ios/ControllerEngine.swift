@@ -8,6 +8,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   private static let uart = CBUUID(string: "6e400001-b5a3-f393-e0a9-e50e24dcca9e")
   private static let writeUUID = CBUUID(string: "6e400002-b5a3-f393-e0a9-e50e24dcca9e")
   private static let notifyUUID = CBUUID(string: "6e400003-b5a3-f393-e0a9-e50e24dcca9e")
+  private static let reconnecting = WorkoutRideFailure("bikeReconnecting").message
   private var central: CBCentralManager?
   private var selected: CBPeripheral?
   private var devices: [UUID: CBPeripheral] = [:]
@@ -17,6 +18,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   private var replyPoll: DispatchWorkItem?
   private let session: TelemetrySession
   private var pending: (request: ControllerRequest, sent: Double)?
+  private var unansweredSince: Double?
   private var waitingToSend: ControllerRequest?
   private var sendBlockedAt: Double?
   private var lastSample: Double?
@@ -46,7 +48,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   private var connectionEpoch = UUID().uuidString.lowercased()
   private var sessionSamples = 0
   private var status = "idle"
-  private var errorMessage: String?
+  private var connectionError: (message: String, code: String?)?
   private var recoveryErrorMessage: String?
   private var storeError: String?
   private var diagnosticLog: TelemetryDiagnosticLog?
@@ -114,12 +116,14 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       if let identity = knownControllers[selected.identifier.uuidString] {
         value["controllerModel"] = identity.controllerModel
         value["firmwareLabel"] = identity.firmwareLabel
+        value["controllerProtocol"] = identity.controllerProtocol
       }
     }
     let displayError = ControllerErrorPresentation.displayError(
-      storage: storeError, other: errorMessage,
+      storage: storeError, other: connectionError?.message,
       recovery: recoveryErrorMessage, reconnecting: status == "reconnecting")
     if let error = displayError.message { value["error"] = error }
+    if storeError == nil, let code = connectionError?.code { value["errorCode"] = code }
     value["recoverableConnectionError"] = displayError.recoverable
     return value
   }
@@ -269,7 +273,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     discoveryGeneration += 1
     discovery = try TelemetryDiscovery.companion.begin(generation: discoveryGeneration, now: now)
     status = "scanning"
-    errorMessage = nil
+    connectionError = nil
     recoveryErrorMessage = nil
     devices.removeAll()
     ensureTimer()
@@ -277,11 +281,19 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     emitState()
   }
 
-  func stopScan() {
+  func stopScan() { endScan(expired: false) }
+
+  private func endScan(expired: Bool) {
     scanRequested = false
     discovery = nil
     central?.stopScan()
-    if status == "scanning" { status = "idle" }
+    if status == "scanning", expired, devices.isEmpty {
+      status = "error"
+      let failure = WorkoutRideFailure("bikeNotFound")
+      connectionError = (failure.message, failure.code)
+    } else if status == "scanning" {
+      status = "idle"
+    }
     stopTimerIfIdle()
     emitState()
   }
@@ -303,9 +315,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     guard !shouldConnect else {
       throw ControllerIOError.invalid("Disconnect the current controller before connecting again.")
     }
-    guard !connectionAttempt.cancellationPending else {
-      throw ControllerIOError.invalid("Bluetooth is still finishing the previous disconnection. Try again shortly.")
-    }
+    guard !connectionAttempt.cancellationPending else { throw WorkoutRideFailure("bluetoothNotReady") }
     ensureCentral()
     guard let central, central.state == .poweredOn else {
       throw bluetoothFailure(central?.state ?? .unknown)
@@ -331,7 +341,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     note(.connectRequested)
     defaults.set(id.uuidString, forKey: "PowerLog.selectedPeripheral")
     defaults.set(hz, forKey: "PowerLog.pollHz")
-    errorMessage = nil
+    connectionError = nil
     recoveryErrorMessage = nil
     ensureTimer()
     beginConnection()
@@ -379,7 +389,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     defaults.removeObject(forKey: "PowerLog.selectedPeripheral")
     clearTransport()
     status = "idle"
-    errorMessage = nil
+    connectionError = nil
     recoveryErrorMessage = nil
     note(.sessionStopped, reason: .manualDisconnect)
     stopTimerIfIdle()
@@ -509,6 +519,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     writer = nil
     notifier = nil
     pending = nil
+    unansweredSince = nil
     waitingToSend = nil
     sendBlockedAt = nil
     lastSample = nil
@@ -516,7 +527,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   }
 
   private func retry(
-    _ message: String, reason: TelemetryDiagnosticReason, error: Error? = nil,
+    reason: TelemetryDiagnosticReason, error: Error? = nil,
     systemIsReconnecting: Bool = false, disconnectCallbackCompleted: Bool = false
   ) {
     guard shouldConnect, reconnectDue == nil else { return }
@@ -533,14 +544,14 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     note(.transportError, reason: reason, error: error)
     guard let plan else {
       fail(
-        "Reconnect limit reached. \(message)", reason: .retryLimit,
+        WorkoutRideFailure("bikeUnavailable"), reason: .retryLimit,
         cancelConnection: !disconnectCallbackCompleted || systemIsReconnecting)
       return
     }
     try! session.scheduleRetry(plan: plan, now: now)
     if plan.cancelBeforeRetry, let selected { cancel(selected, reason: reason) }
     clearTransport()
-    recoveryErrorMessage = message
+    recoveryErrorMessage = Self.reconnecting
     reconnectAttempts = min(nextAttempt, 6)
     status = "reconnecting"
     diagnosticMetrics.scheduledReconnect()
@@ -560,7 +571,8 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   }
 
   private func fail(
-    _ message: String, reason: TelemetryDiagnosticReason, error: Error? = nil, cancelConnection: Bool = true
+    _ failure: WorkoutRideFailure, reason: TelemetryDiagnosticReason, error: Error? = nil,
+    cancelConnection: Bool = true
   ) {
     defer { updateBackgroundHold() }
     note(.transportError, reason: reason, error: error)
@@ -569,8 +581,8 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     }
     if workoutSampling.id != nil, [.bluetoothUnavailable, .cancellationDeadline, .retryLimit].contains(reason) {
       clearTransport()
-      recoveryErrorMessage = message
-      errorMessage = nil
+      recoveryErrorMessage = reason == .bluetoothUnavailable ? failure.message : Self.reconnecting
+      connectionError = nil
       status = "reconnecting"
       if central?.state == .poweredOn {
         let plan = try! TelemetryReconnectPolicy.shared.plan(
@@ -589,7 +601,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     defaults.removeObject(forKey: "PowerLog.selectedPeripheral")
     clearTransport()
     status = "error"
-    errorMessage = message
+    connectionError = (failure.message, failure.code)
     recoveryErrorMessage = nil
     note(.sessionStopped, reason: reason)
     stopTimerIfIdle()
@@ -601,13 +613,14 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     let current = now
     if let scheduledTick { maxQueueDelaySeconds = max(maxQueueDelaySeconds, max(0, current - scheduledTick)) }
     summarizeIfDue()
-    if let scanDeadline, current >= scanDeadline { stopScan() }
+    if let scanDeadline, current >= scanDeadline { endScan(expired: true) }
     guard shouldConnect else { return }
     guard central?.state == .poweredOn else { return }
     let action = try! session.check(
       now: current, responseSentAt: pending.map { KotlinDouble(value: $0.sent) },
       writeBlockedAt: sendBlockedAt.map { KotlinDouble(value: $0) },
-      nativeDisconnecting: selected?.state == .disconnecting)
+      nativeDisconnecting: selected?.state == .disconnecting,
+      unansweredSince: unansweredSince.map { KotlinDouble(value: $0) })
     if handle(action) { return }
     if reconnectDue != nil || connectionAttempt.cancellationFailed { return }
     if let request = waitingToSend {
@@ -616,7 +629,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     }
     guard verified, pending == nil, current >= nextPoll else { return }
     if selected?.state == .disconnected {
-      retry("Bike disconnected. Reconnecting…", reason: .linkDisconnected)
+      retry(reason: .linkDisconnected)
     } else {
       send(.telemetry)
     }
@@ -634,7 +647,9 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       reconnectDue: reconnectDue.map { KotlinDouble(value: $0) },
       attemptDeadline: transportDeadline.map { KotlinDouble(value: $0) },
       cancellationPending: connectionAttempt.cancellationPending || selected?.state == .disconnecting,
-      responseDeadline: pending.map { KotlinDouble(value: $0.sent + TelemetryTiming.shared.telemetryTimeoutSeconds) },
+      responseDeadline: TelemetryTiming.shared.responseDeadline(
+        stage: connectionAttempt.stage, sentAt: pending.map { KotlinDouble(value: $0.sent) },
+        unansweredSince: unansweredSince.map { KotlinDouble(value: $0) }),
       writeDeadline: sendBlockedAt.map { KotlinDouble(value: $0 + TelemetryTiming.shared.telemetryTimeoutSeconds) },
       nextPoll: verified && pending == nil && waitingToSend == nil && reconnectDue == nil
         ? KotlinDouble(value: nextPoll) : nil,
@@ -684,7 +699,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     }
     let frame = session.frame(request)
     guard frame.count <= selected.maximumWriteValueLength(for: .withoutResponse) else {
-      fail("UART write capacity is smaller than an allowlisted request.", reason: .writeCapacity)
+      fail(WorkoutRideFailure("controllerUnsupported"), reason: .writeCapacity)
       return
     }
     waitingToSend = nil
@@ -693,6 +708,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     replyPoll = nil
     let sent = now
     pending = (request, sent)
+    if unansweredSince == nil { unansweredSince = sent }
     nextPoll = sent + pollInterval
     trace("write", "request=\(request.name); characteristic=\(writer.uuid.uuidString); withoutResponse", bytes: frame)
     selected.writeValue(frame, for: writer, type: .withoutResponse)
@@ -703,30 +719,28 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     if central.state == .poweredOn {
       scanIfReady()
       resumeIfPossible()
+      if shouldConnect, recoveryErrorMessage != nil { recoveryErrorMessage = Self.reconnecting }
       if shouldConnect, reconnectDue == nil, connectionAttempt.stage == .idle { beginConnection() }
     } else if central.state != .unknown && central.state != .resetting {
       if scanRequested { stopScan() }
       try! session.radioUnavailable()
+      let failure = bluetoothFailure(central.state)
       if shouldConnect {
-        fail(bluetoothError(central.state), reason: .bluetoothUnavailable, cancelConnection: false)
+        fail(failure, reason: .bluetoothUnavailable, cancelConnection: false)
       } else {
         status = "error"
-        errorMessage = bluetoothError(central.state)
+        connectionError = (failure.message, failure.code)
         emitState()
       }
     }
   }
 
   private func bluetoothFailure(_ state: CBManagerState) -> WorkoutRideFailure {
-    WorkoutRideFailure(state == .unauthorized ? "bluetoothDenied" : "bikeUnavailable")
-  }
-
-  private func bluetoothError(_ state: CBManagerState) -> String {
     switch state {
-    case .unauthorized: return "Bluetooth permission is denied. Enable it in iOS Settings."
-    case .unsupported: return "Bluetooth Low Energy is unsupported on this device."
-    case .poweredOff: return "Bluetooth is switched off."
-    default: return "Bluetooth is not ready."
+    case .unauthorized: return WorkoutRideFailure("bluetoothDenied")
+    case .unsupported: return WorkoutRideFailure("bluetoothUnsupported")
+    case .poweredOff: return WorkoutRideFailure("bluetoothOff")
+    default: return WorkoutRideFailure("bluetoothNotReady")
     }
   }
 
@@ -804,7 +818,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     let fields = diagnosticMetrics.disconnected(at: now, error: error, defaultReason: .connectionFailed)
     note(.connectionFailed, fields: fields)
     if shouldConnect, connectionAttempt.cancellationFailed, handle(.cancellationtimeout) { return }
-    retry(WorkoutRideFailure("bikeUnavailable").message, reason: .connectionFailed, error: error)
+    retry(reason: .connectionFailed, error: error)
   }
 
   func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
@@ -837,8 +851,8 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
         cancel(peripheral, reason: .pendingReconnect)
       } else {
         retry(
-          "Bike disconnected. Reconnecting…", reason: .linkDisconnected, error: error,
-          systemIsReconnecting: systemIsReconnecting, disconnectCallbackCompleted: true)
+          reason: .linkDisconnected, error: error, systemIsReconnecting: systemIsReconnecting,
+          disconnectCallbackCompleted: true)
       }
     } else if systemIsReconnecting {
       cancel(peripheral, reason: .manualDisconnect)
@@ -877,9 +891,9 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       platformError: error != nil, activeRide: workoutSampling.id != nil,
       knownController: knownControllers[peripheral.identifier.uuidString] != nil)
     {
-      retry("Could not read the bike's services. Reconnecting…", reason: reason, error: error)
+      retry(reason: reason, error: error)
     } else {
-      fail("This bike does not provide the controller telemetry service.", reason: reason)
+      fail(WorkoutRideFailure("controllerUnsupported"), reason: reason)
     }
   }
 
@@ -908,7 +922,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       invalidatedServices.contains(where: { $0.uuid == Self.uart })
     else { return }
 
-    retry("CYC UART services were invalidated by Bluetooth.", reason: .servicesInvalidated)
+    retry(reason: .servicesInvalidated)
   }
 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -947,7 +961,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       connectionAttempt.stage == .notifications, shouldConnect, reconnectDue == nil
     else { return }
     guard error == nil, characteristic.isNotifying else {
-      retry("Could not subscribe to Controller telemetry.", reason: .notificationSetup, error: error)
+      retry(reason: .notificationSetup, error: error)
       return
     }
     guard advance(from: .notifications, to: .identity) else { return }
@@ -993,7 +1007,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     if decision.action == .replyrejected, let rejection = decision.replies.first as? ControllerRejectedReply {
       note(.transportError, fields: ["rejection": rejection.reason])
       fail(
-        ControllerErrorPresentation.message(rejection),
+        WorkoutRideFailure(Failures.shared.controllerRejection(request: rejection.kind).name),
         reason: rejection.kind == .identity ? .identityRejected : .telemetryRejected)
       return
     }
@@ -1007,14 +1021,29 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       }
       emitDevice(peripheral)
       pending = nil
+      unansweredSince = nil
       nextPoll = current
       note(.identityVerified)
       emitState()
     } else if let readingReply = reply as? ControllerReadingReply {
       pending = nil
+      unansweredSince = nil
       receive(readingReply.reading, at: current, responseSeconds: current - outstanding.sent)
     }
     paceNextPoll()
+  }
+
+  private func resend() {
+    guard let request = pending?.request else { return }
+    note(.requestResent)
+    pending = nil
+    send(request)
+  }
+
+  private func retriesIdentity() -> Bool {
+    try! TelemetryReconnectPolicy.shared.retriesIdentity(
+      attempt: Int32(reconnectAttempts + 1), activeRide: workoutSampling.id != nil,
+      knownController: selected.map { knownControllers[$0.identifier.uuidString] != nil } ?? false)
   }
 
   private func advance(from expected: TelemetryStage, to next: TelemetryStage) -> Bool {
@@ -1034,16 +1063,23 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     switch action {
     case .beginretry:
       beginConnection(forceConnect: true)
+    case .resendrequest:
+      resend()
     case .attempttimeout:
-      retry("Controller connection or identity handshake timed out.", reason: .connectionDeadline)
+      retry(reason: .connectionDeadline)
     case .responsetimeout:
-      retry("Controller response timed out; a telemetry gap was recorded.", reason: .responseTimeout)
+      if pending?.request == .identity, !retriesIdentity() {
+        diagnosticMetrics.timedOut()
+        fail(WorkoutRideFailure("controllerNoReply"), reason: .responseTimeout)
+      } else {
+        retry(reason: .responseTimeout)
+      }
     case .writetimeout:
-      retry("The bike did not accept a request. Reconnecting…", reason: .writeReadyTimeout)
+      retry(reason: .writeReadyTimeout)
     case .replyexpired:
-      retry("The bike response arrived too late. Reconnecting…", reason: .expiredReply)
+      retry(reason: .expiredReply)
     case .cancellationtimeout:
-      fail("Bluetooth cancellation did not finish before reconnect deadline.", reason: .cancellationDeadline)
+      fail(WorkoutRideFailure("bikeUnavailable"), reason: .cancellationDeadline)
     default:
       return false
     }
@@ -1066,13 +1102,15 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     do {
       sample = try captureClock.observation(reading, connectionEpoch: connectionEpoch, monotonic: current)
     } catch {
-      fail(WorkoutRideFailure("captureRejected").message, reason: .telemetryRejected, error: error)
+      fail(WorkoutRideFailure("captureRejected"), reason: .telemetryRejected, error: error)
       return
     }
     sample["elapsedSeconds"] = current - sessionStarted
     sample["sequence"] = sessionSamples
     if stableSince == nil { stableSince = current }
-    if let stableSince, current - stableSince >= TelemetryTiming.shared.stableTelemetrySeconds { reconnectAttempts = 0 }
+    if let stableSince, TelemetryReconnectPolicy.shared.restartsBackoff(telemetrySeconds: current - stableSince) {
+      reconnectAttempts = 0
+    }
     lastSample = current
     let storageStarted = now
     do {

@@ -1,6 +1,7 @@
 package app.powerlog.core.presentation
 
 import app.powerlog.core.StreamStatus
+import app.powerlog.core.telemetry.TelemetryRestoration
 
 object ReadingFreshness {
     fun available(acquiredAt: Double?, now: Double?, cutoff: Double): Boolean =
@@ -77,5 +78,20 @@ class ControllerPreview {
             if (display == "unavailable") null else observation?.faultCode,
             StreamStatus.connectionDeadline(connection, acquired, now),
         )
+    }
+}
+
+object ControllerNotes {
+    const val speedUnavailable = "Controller speed needs CYC X6 or X12 firmware with protocol 5.3."
+
+    fun speed(controllerModel: String?, firmwareLabel: String?, controllerProtocol: String?): String? {
+        if (controllerModel == null || firmwareLabel == null || controllerProtocol == null) return null
+        val identity =
+            try {
+                TelemetryRestoration.restore(controllerModel, firmwareLabel, controllerProtocol, null).identity
+            } catch (_: IllegalArgumentException) {
+                return null
+            }
+        return if (identity.hasKnownSpeedUnit) null else speedUnavailable
     }
 }

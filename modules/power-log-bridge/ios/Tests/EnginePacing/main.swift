@@ -255,13 +255,46 @@ try missing.engine.queue.sync {
   try missing.connect()
   missing.respond = false
   missing.replies = []
-  missing.advance(to: missing.now + TelemetryTiming.shared.telemetryTimeoutSeconds + 0.7)
-  check(missing.sent.count == 1, "a missing reply never overlaps selective requests")
+  let first = missing.sent[0]
+  missing.advance(to: first + TelemetryTiming.shared.silenceSeconds - 0.001)
+  check(missing.sent.count == 3, "an unanswered request is sent again on the same link")
+  check(
+    zip(missing.sent, missing.sent.dropFirst()).allSatisfy { $1 - $0 >= TelemetryTiming.shared.replyWindowSeconds },
+    "a request is sent again only after its reply window, never overlapping")
+  check(missing.engine.state()["status"] as? String != "reconnecting", "unanswered requests keep the link")
+  missing.advance(to: first + TelemetryTiming.shared.silenceSeconds + 0.7)
+  check(missing.sent.count == 3, "silence ends the re-sending")
   check(
     missing.engine.state()["status"] as? String == "reconnecting",
-    "the delayed timer remains a response-timeout backstop")
-  check(CBCentralManager.latest.cancellations == 1, "response timeout cancels the ambiguous old connection")
+    "the delayed timer closes a link that stays silent")
+  check(CBCentralManager.latest.cancellations == 1, "silence cancels the ambiguous old connection")
   try missing.finish()
+}
+
+let resent = EngineHarness(timerDelay: 0)
+try resent.engine.queue.sync {
+  try resent.connect()
+  resent.replies = []
+  resent.advance(to: resent.sent[0] + TelemetryTiming.shared.replyWindowSeconds + 0.1)
+  check(resent.sent.count == 2, "the reply window sends the request again")
+  check(MonitorDataStore.shared.samples.count == 1, "the reply to a re-sent request is captured")
+  check(resent.engine.state()["status"] as? String == "connected", "a re-sent request keeps the link connected")
+  check(CBCentralManager.latest.cancellations == 0, "a re-sent request never cancels the connection")
+  try resent.finish()
+}
+
+let late = EngineHarness(timerDelay: 0)
+try late.engine.queue.sync {
+  try late.connect()
+  late.respond = false
+  late.replies = []
+  late.advance(to: late.sent[0] + TelemetryTiming.shared.replyWindowSeconds + 0.01)
+  check(late.sent.count == 2, "the reply window sends the late request again")
+  late.notify(telemetry)
+  late.notify(telemetry)
+  check(
+    MonitorDataStore.shared.samples.count == 1, "a late reply and the reply to its re-sent request record one reading")
+  try late.finish()
 }
 
 let expired = EngineHarness()
@@ -400,14 +433,14 @@ try cancelledBackoff.engine.queue.sync {
   cancelledBackoff.notify(telemetry)
   let failedAt = cancelledBackoff.now
   let oldConnections = CBCentralManager.latest.connections
-  cancelledBackoff.advance(to: failedAt + 1.5)
+  cancelledBackoff.advance(to: failedAt + TelemetryTiming.shared.linkReleaseSeconds + 0.5)
   check(CBCentralManager.latest.connections == oldConnections, "retry waits for native cancellation completion")
   cancelledBackoff.peripheral.state = .disconnected
   cancelledBackoff.engine.centralManager(
     CBCentralManager.latest,
     didDisconnectPeripheral: cancelledBackoff.peripheral, error: nil)
   cancelledBackoff.engine.setBackground(false)
-  cancelledBackoff.advance(to: failedAt + 1.8)
+  cancelledBackoff.advance(to: failedAt + TelemetryTiming.shared.linkReleaseSeconds + 0.8)
   check(
     CBCentralManager.latest.connections == oldConnections + 1,
     "completed cancellation permits exactly one bounded retry")
@@ -426,7 +459,8 @@ try cancellationBudget.engine.queue.sync {
   cancellationBudget.now = failedAt + 0.5
   cancellationBudget.peripheral.state = .connected
   cancellationBudget.engine.centralManager(CBCentralManager.latest, didConnect: cancellationBudget.peripheral)
-  cancellationBudget.advance(to: failedAt + 6)
+  cancellationBudget.advance(
+    to: failedAt + TelemetryTiming.shared.linkReleaseSeconds + TelemetryTiming.shared.cancellationGraceSeconds)
   check(
     cancellationBudget.engine.state()["status"] as? String == "error",
     "unexpected connection during backoff cannot extend the original cancellation deadline")
@@ -442,22 +476,23 @@ try activeCancellation.engine.queue.sync {
   activeCancellation.replies = []
   activeCancellation.now += 2.500001
   activeCancellation.notify(telemetry)
-  let failedAt = activeCancellation.now
+  let expiry =
+    activeCancellation.now + TelemetryTiming.shared.linkReleaseSeconds + TelemetryTiming.shared.cancellationGraceSeconds
   let oldConnections = CBCentralManager.latest.connections
-  activeCancellation.advance(to: failedAt + 6)
+  activeCancellation.advance(to: expiry)
   check(
     activeCancellation.engine.state()["status"] as? String == "reconnecting",
     "an active ride retains intent after cancellation expiry")
-  activeCancellation.now = failedAt + 7
+  activeCancellation.now = expiry + 1
   activeCancellation.peripheral.state = .disconnected
   activeCancellation.engine.centralManager(
     CBCentralManager.latest,
     didDisconnectPeripheral: activeCancellation.peripheral, error: nil)
-  activeCancellation.advance(to: failedAt + 35)
+  activeCancellation.advance(to: expiry + 29)
   check(
     CBCentralManager.latest.connections == oldConnections,
     "late cancellation completion cannot bypass the active ride's thirty-second backoff")
-  activeCancellation.advance(to: failedAt + 36)
+  activeCancellation.advance(to: expiry + 30)
   check(
     CBCentralManager.latest.connections == oldConnections + 1,
     "an active ride resumes bounded recovery after late native completion")
@@ -473,11 +508,17 @@ try restoredRadio.engine.queue.sync {
   CBCentralManager.latest.state = .poweredOff
   restoredRadio.engine.centralManagerDidUpdateState(CBCentralManager.latest)
   check(restoredRadio.engine.state()["status"] as? String == "reconnecting", "Bluetooth-off retains active ride intent")
+  check(
+    restoredRadio.engine.state()["error"] as? String == WorkoutRideFailure("bluetoothOff").message,
+    "Bluetooth-off during a ride names its cause")
   CBCentralManager.latest.state = .poweredOn
   restoredRadio.engine.centralManagerDidUpdateState(CBCentralManager.latest)
   check(
     CBCentralManager.latest.connections == oldConnections + 1,
     "radio restoration starts recovery without inventing a thirty-second delay")
+  check(
+    restoredRadio.engine.state()["error"] as? String == WorkoutRideFailure("bikeReconnecting").message,
+    "radio restoration replaces the Bluetooth-off text with the reconnecting text")
   try restoredRadio.finish()
 }
 
@@ -567,8 +608,9 @@ for activeRide in [false, true] {
         owner.engine.state()["status"] as? String == (activeRide ? "reconnecting" : "error"),
         "late cancellation keeps the \(activeRide ? "ride" : "preview") failure path, \(order)")
       check(
-        (owner.engine.state()["error"] as? String)?.contains("cancellation") == true,
-        "late cancellation keeps its visible failure, \(order)")
+        owner.engine.state()["error"] as? String
+          == WorkoutRideFailure(activeRide ? "bikeReconnecting" : "bikeUnavailable").message,
+        "late cancellation shows the shared \(activeRide ? "reconnecting" : "couldn't-connect") text, \(order)")
       owner.now = 29
       owner.timer?.fire()
       check(
@@ -622,8 +664,9 @@ for activeRide in [false, true] {
         owner.engine.state()["status"] as? String == (activeRide ? "reconnecting" : "error"),
         "late modern cancellation keeps the failure path, \(order)")
       check(
-        (owner.engine.state()["error"] as? String)?.contains("cancellation") == true,
-        "late modern cancellation keeps its visible failure, \(order)")
+        owner.engine.state()["error"] as? String
+          == WorkoutRideFailure(activeRide ? "bikeReconnecting" : "bikeUnavailable").message,
+        "late modern cancellation shows the shared \(activeRide ? "reconnecting" : "couldn't-connect") text, \(order)")
       check(
         CBCentralManager.latest.cancellations > oldCancellations,
         "late modern callback cancels the flagged system attempt, \(order)")
@@ -638,7 +681,9 @@ for activeRide in [false, true] {
           try owner.engine.connect(deviceID: owner.peripheral.identifier.uuidString, rate: 8)
           check(false, "preview awaits flagged system cancellation before a new connection, \(order)")
         } catch {
-          check(true, "preview awaits flagged system cancellation before a new connection, \(order)")
+          check(
+            WorkoutRideFailure.classify(error, stage: "bike").code == "bluetoothNotReady",
+            "preview awaits flagged system cancellation before a new connection, \(order)")
         }
       }
       owner.engine.centralManager(
@@ -681,8 +726,9 @@ for completes in [false, true] {
         nativeFence.engine.state()["status"] as? String == "error",
         "native disconnecting obeys cancellation deadline 26")
       check(
-        (nativeFence.engine.state()["error"] as? String)?.contains("cancellation") == true,
-        "native disconnecting expiry exposes cancellation failure")
+        nativeFence.engine.state()["error"] as? String == WorkoutRideFailure("bikeUnavailable").message
+          && nativeFence.engine.state()["errorCode"] as? String == "bikeUnavailable",
+        "native disconnecting expiry shows the shared couldn't-connect text")
     }
     try nativeFence.finish()
   }
@@ -718,7 +764,8 @@ try refused.engine.queue.sync {
     error: NSError(domain: "CBErrorDomain", code: 14, userInfo: [NSLocalizedDescriptionKey: "Peer removed pairing"]))
   let shown = refused.engine.state()["error"] as? String
   check(
-    shown == WorkoutRideFailure("bikeUnavailable").message, "a failed connection shows plain text: \(shown ?? "none")")
+    shown == WorkoutRideFailure("bikeReconnecting").message,
+    "a failed connection attempt shows the shared reconnecting text: \(shown ?? "none")")
   try refused.finish()
 }
 

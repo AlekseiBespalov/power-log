@@ -28,14 +28,14 @@ import { exportRecording, exportRide } from '../../services/ride-export';
 import { CsvRideDetails } from './csv-ride-details';
 import { MonitorPanel } from '../monitor/monitor-panel';
 import { metricById, formatMetric } from '../../core/monitor';
+import { formatRideDate } from '../../core/formatting';
+import { RIDE_STORAGE_NOTE } from '../../core/app-info';
+import { deviceUsesTwentyFourHourClock } from '../../services/clock-preference';
 
 import { recordKey, useHistory } from './history-controller';
 const number = (value: number | null | undefined, decimals = 0) =>
   value == null || !Number.isFinite(value) ? '—' : value.toFixed(decimals);
-const dateLabel = (date: string) => {
-  const value = new Date(date);
-  return `${value.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${value.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}`;
-};
+const dateLabel = (date: string) => formatRideDate(date, { twentyFourHour: deviceUsesTwentyFourHourClock() });
 function recordingDevice(record: WorkoutMetadata) {
   if (record.storage === 'browser') return 'Browser';
   if (record.watchEnabled) return 'Watch + iPhone';
@@ -173,23 +173,26 @@ export function SavedRides({ detail }: { detail: boolean }) {
         </View>
       )}
       {!detail && selection === null && (
-        <Body muted>
-          {pending('catalog') ? 'Refreshing…' : 'Pull to refresh'} · {records.length}{' '}
-          {records.length === 1 ? 'ride' : 'rides'}
-        </Body>
+        <View style={{ gap: 4 }}>
+          <Body muted>
+            {pending('catalog') ? 'Refreshing…' : 'Pull to refresh'} · {records.length}{' '}
+            {records.length === 1 ? 'ride' : 'rides'}
+          </Body>
+          <Text style={{ color: colors.muted, fontSize: type.caption }}>{RIDE_STORAGE_NOTE}</Text>
+        </View>
       )}
       {(workout.catalogUnreadableCount > 0 || workout.catalogUnindexedCount > 0) && (
         <Card style={{ padding: 14, gap: 6 }}>
           {workout.catalogUnreadableCount > 0 && (
             <Text accessibilityRole="alert" style={{ color: colors.muted }}>
-              {workout.catalogUnreadableCount} unreadable{' '}
-              {workout.catalogUnreadableCount === 1 ? 'ride was' : 'rides were'} skipped while loading this page.
+              {workout.catalogUnreadableCount} {workout.catalogUnreadableCount === 1 ? 'ride' : 'rides'} couldn’t be
+              read, so {workout.catalogUnreadableCount === 1 ? 'it isn’t' : 'they aren’t'} shown.
             </Text>
           )}
           {workout.catalogUnindexedCount > 0 && (
             <Text accessibilityRole="alert" style={{ color: colors.muted }}>
-              {workout.catalogUnindexedCount} {workout.catalogUnindexedCount === 1 ? 'ride is' : 'rides are'} missing
-              from the History index.
+              {workout.catalogUnindexedCount} saved {workout.catalogUnindexedCount === 1 ? 'ride' : 'rides'} couldn’t be
+              listed.
             </Text>
           )}
         </Card>
@@ -540,7 +543,7 @@ export function SavedRides({ detail }: { detail: boolean }) {
             {workout.catalogLoading
               ? 'Loading saved rides…'
               : workout.catalogError
-                ? 'Saved ride catalog unavailable.'
+                ? 'Saved rides couldn’t be loaded.'
                 : 'No saved rides yet.'}
           </Body>
         </Card>

@@ -43,7 +43,7 @@ export function DashboardScreen() {
         />
         {available && session.faultCode !== null && session.faultCode !== 0 && (
           <Text accessibilityRole="alert" style={{ color: colors.red }}>
-            Controller fault: {session.faultCode}
+            {`Your controller reports fault ${session.faultCode}. Check the bike's display.`}
           </Text>
         )}
       </AppShell>

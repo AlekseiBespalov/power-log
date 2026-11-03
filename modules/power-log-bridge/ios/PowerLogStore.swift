@@ -2,6 +2,7 @@ import Foundation
 import PowerLogCore
 import SQLite3
 import CryptoKit
+import os
 
 enum PowerLogStorageLimits {
   static let pageRows = 512
@@ -635,6 +636,10 @@ final class PowerLogStore: @unchecked Sendable {
   private var walFrames: Int32 = 0
   private var checkpointScheduled = false
   static let checkpointFrames: Int32 = 1000
+  static let walLimitBytes = 8 * 1024 * 1024
+  var availableBytesForTesting: (() -> Int64)?
+  var reclaimStepObserverForTesting: ((StorageReclaimAction) -> Void)?
+  var beforeVacuumForTesting: (() -> Void)?
   static let interactiveQueue = DispatchSpecificKey<Bool>()
   var beforeCommitForTesting: (() throws -> Void)?
   var jobObserverForTesting: ((_ priority: PowerLogJobPriority, _ steps: Int, _ reprepares: Int) -> Void)?
@@ -712,11 +717,14 @@ final class PowerLogStore: @unchecked Sendable {
         throw PowerLogStorageError.invalid(
           "Power Log can't open an unversioned ride store. Reinstall the app to start over.")
       }
+      // Switching to WAL writes the first page, after which auto_vacuum can only change through VACUUM.
+      if version == 0 { try db.execute("PRAGMA auto_vacuum=INCREMENTAL") }
       _ = try db.rows("PRAGMA journal_mode=WAL", limit: 1)
       try db.execute("PRAGMA synchronous=FULL")
       try db.execute("PRAGMA foreign_keys=ON")
       // SQLite's automatic checkpoint runs within the commit that crosses its threshold; a background job does it here.
       _ = try db.rows("PRAGMA wal_autocheckpoint=0", limit: 1)
+      _ = try db.rows("PRAGMA journal_size_limit=\(Self.walLimitBytes)", limit: 1)
       sqlite3_wal_hook(
         handle,
         { context, _, _, frames in
@@ -867,7 +875,7 @@ final class PowerLogStore: @unchecked Sendable {
   func checkpoint() throws {
     try read(priority: .background) { db in
       guard transactionDepth == 0 else { throw PowerLogStorageError.invalid("Checkpoint inside a transaction") }
-      try passiveCheckpoint()
+      try walCheckpoint()
     }
   }
   /// Queues a background checkpoint without waiting for the executor.
@@ -883,7 +891,7 @@ final class PowerLogStore: @unchecked Sendable {
           admission.lock()
           checkpointScheduled = false
           admission.unlock()
-          if transactionDepth == 0 { try? passiveCheckpoint() }
+          if transactionDepth == 0 { try? walCheckpoint() }
         }, DispatchSemaphore(value: 0)
       ))
     if !draining {
@@ -891,9 +899,9 @@ final class PowerLogStore: @unchecked Sendable {
       queue.async { [self] in drain() }
     }
   }
-  private func passiveCheckpoint() throws {
+  private func walCheckpoint(_ mode: Int32 = SQLITE_CHECKPOINT_PASSIVE) throws {
     let started = ProcessInfo.processInfo.systemUptime
-    let rc = sqlite3_wal_checkpoint_v2(db.handle, nil, SQLITE_CHECKPOINT_PASSIVE, nil, nil)
+    let rc = sqlite3_wal_checkpoint_v2(db.handle, nil, mode, nil, nil)
     guard rc == SQLITE_OK else { throw db.error() }
     metrics["checkpoints", default: 0] += 1
     metrics["checkpointMilliseconds", default: 0] += (ProcessInfo.processInfo.systemUptime - started) * 1000
@@ -902,6 +910,110 @@ final class PowerLogStore: @unchecked Sendable {
     metrics["walFrames", default: 0] += Double(frames >= walFrames ? frames - walFrames : frames)
     walFrames = frames
     if frames >= Self.checkpointFrames { scheduleCheckpoint() }
+  }
+
+  struct ReclaimOutcome {
+    var bytesBefore: Int64
+    var bytesAfter: Int64 = 0
+    var steps = 0
+    var converted = false
+    var deferred: StorageReclaimAction?
+    var failure: Int32?
+  }
+  var fileBytes: Int64 {
+    ["", "-wal"].reduce(0) { total, suffix in
+      total
+        + ((try? FileManager.default.attributesOfItem(atPath: databaseURL.path + suffix)[.size] as? NSNumber)?
+          .int64Value ?? 0)
+    }
+  }
+  @discardableResult
+  func reclaimSpace() -> ReclaimOutcome {
+    var outcome = ReclaimOutcome(bytesBefore: fileBytes)
+    do {
+      reclaiming: while true {
+        let action = try read(priority: .background) { db in try reclaimStep(db) }
+        reclaimStepObserverForTesting?(action)
+        switch action {
+        case .reclaim: outcome.steps += 1
+        case .enableincremental, .convert: outcome.converted = true
+        case .done: break reclaiming
+        default:
+          outcome.deferred = action
+          break reclaiming
+        }
+      }
+    } catch PowerLogStorageError.sqlite(let code, _) {
+      outcome.failure = code
+    } catch {
+      outcome.failure = SQLITE_ERROR
+    }
+    do {
+      try read(priority: .background) { _ in try walCheckpoint(SQLITE_CHECKPOINT_TRUNCATE) }
+    } catch PowerLogStorageError.sqlite(let code, _) {
+      outcome.failure = outcome.failure ?? code
+    } catch {
+      outcome.failure = outcome.failure ?? SQLITE_ERROR
+    }
+    outcome.bytesAfter = fileBytes
+    try? read(priority: .background) { _ in
+      metrics["reclaimedBytes", default: 0] += Double(max(0, outcome.bytesBefore - outcome.bytesAfter))
+      metrics["reclaimSteps", default: 0] += Double(outcome.steps)
+      if outcome.converted { metrics["reclaimConversions", default: 0] += 1 }
+      if outcome.deferred != nil { metrics["reclaimDeferrals", default: 0] += 1 }
+      if outcome.failure != nil { metrics["reclaimFailures", default: 0] += 1 }
+    }
+    Logger(subsystem: "app.powerlog", category: "Storage").notice(
+      "Reclaim: \(outcome.bytesBefore) to \(outcome.bytesAfter) bytes in \(outcome.steps) steps, converted \(outcome.converted), deferred \(outcome.deferred?.name ?? "no", privacy: .public), failure \(outcome.failure ?? SQLITE_OK)"
+    )
+    return outcome
+  }
+  var foregroundWorkWaiting: Bool {
+    admission.lock()
+    defer { admission.unlock() }
+    return jobs.contains { $0.priority != .background }
+  }
+  private func reclaimStep(_ db: PowerLogDatabase) throws -> StorageReclaimAction {
+    guard transactionDepth == 0 else { throw PowerLogStorageError.invalid("Reclaim inside a transaction") }
+    let pageCount = try db.scalarInt("PRAGMA page_count") ?? 0
+    let recording =
+      try db.scalarInt(
+        "SELECT 1 FROM collections WHERE kind='workout' AND phase IN (\(StorageReclaim.shared.recordingPhases.map { "'\($0)'" }.joined(separator: ","))) AND NOT EXISTS(SELECT 1 FROM durable_records d WHERE d.namespace='deleted-workouts' AND d.key=collections.id) LIMIT 1"
+      ) != nil
+    let available =
+      availableBytesForTesting?()
+      ?? (try? databaseURL.deletingLastPathComponent().resourceValues(forKeys: [.volumeAvailableCapacityKey]))
+      .flatMap(\.volumeAvailableCapacity).map(Int64.init) ?? 0
+    let step = try StorageReclaim.shared.next(
+      autoVacuum: db.scalarInt("PRAGMA auto_vacuum") ?? 0, pageSize: db.scalarInt("PRAGMA page_size") ?? 0,
+      pageCount: pageCount, freePages: db.scalarInt("PRAGMA freelist_count") ?? 0, recording: recording,
+      availableBytes: available)
+    switch step.action {
+    case .reclaim:
+      // Each freed page yields one result row; the pragma frees pages only while it is stepped.
+      let freed = try db.scan("PRAGMA incremental_vacuum(\(step.pages))", limit: Int(step.pages)) { _ in true }
+      guard freed > 0 else { throw PowerLogStorageError.invalid("Incremental vacuum made no progress") }
+    case .enableincremental, .convert:
+      // Aborts VACUUM, which rolls back, as soon as any job other than background work waits for the connection.
+      sqlite3_progress_handler(
+        db.handle, 1000,
+        { Unmanaged<PowerLogStore>.fromOpaque($0!).takeUnretainedValue().foregroundWorkWaiting ? 1 : 0 },
+        Unmanaged.passUnretained(self).toOpaque())
+      defer { sqlite3_progress_handler(db.handle, 0, nil, nil) }
+      if step.action == .convert { beforeVacuumForTesting?() }
+      // The pragma acts while it is parsed, which a cached prepared statement would skip; exec parses it every time.
+      let rc = sqlite3_exec(
+        db.handle,
+        step.action == .convert ? "PRAGMA auto_vacuum=INCREMENTAL; VACUUM" : "PRAGMA auto_vacuum=INCREMENTAL",
+        nil, nil, nil)
+      if rc == SQLITE_INTERRUPT { return .waitforidle }
+      guard rc == SQLITE_OK else { throw db.error() }
+      guard try db.scalarInt("PRAGMA auto_vacuum") == 2 else {
+        throw PowerLogStorageError.invalid("The store did not switch to incremental vacuum")
+      }
+    default: break
+    }
+    return step.action
   }
   func diagnostics() throws -> [String: Any] {
     try read { _ in

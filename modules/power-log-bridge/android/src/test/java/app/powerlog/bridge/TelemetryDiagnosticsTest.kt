@@ -229,7 +229,7 @@ class TelemetryDiagnosticsTest {
 
     @Test
     fun aMissingTelemetryServiceStopsTheSessionWithItsReason() {
-        val bluetooth = ControllerBluetooth(context, handler, { _, _ -> }, { _, _, _ -> }, { true })
+        val bluetooth = ControllerBluetooth(context, handler, { _, _ -> }, { _, _, _ -> }, { false })
         bluetooth.connect("02:00:00:00:00:01", 4) {}
         val gatt =
             ControllerBluetooth::class.java.getDeclaredField("gatt").apply { isAccessible = true }.get(bluetooth)

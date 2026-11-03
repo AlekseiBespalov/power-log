@@ -479,6 +479,7 @@ struct WorkoutDistanceSnapshot: Codable {
   var activeIntervals: [[Double]]
   var battery: [String: WorkoutBatteryProfile] = [:]
   var counterEdgeUs = BatteryConsumptionPolicy.shared.maximumCounterEdgeUs
+  var controllerEdgeUs = DistancePolicy.shared.maximumControllerEdgeUs
   var info: WorkoutDistanceInfo {
     WorkoutDistanceInfo(selection: selection, selected: sources.first { $0.source == source }, available: sources)
   }

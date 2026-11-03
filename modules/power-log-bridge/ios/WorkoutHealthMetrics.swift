@@ -52,13 +52,17 @@ enum WorkoutAppleHealthMetrics {
 
   static var quantityTypes: Set<HKQuantityType> { Set(supported.compactMap(\.type)) }
   static var readTypes: Set<HKObjectType> {
-    Set(quantityTypes.map { $0 as HKObjectType }).union([HKObjectType.workoutType(), HKSeriesType.workoutRoute()])
+    let quantities = Set(quantityTypes.map { $0 as HKObjectType })
+    #if os(watchOS)
+      return quantities
+    #else
+      return quantities.union([HKObjectType.workoutType()])
+    #endif
   }
   static var shareTypes: Set<HKSampleType> {
     let identifiers: [HKQuantityTypeIdentifier] = [
       .heartRate, .activeEnergyBurned, .basalEnergyBurned,
-      .distanceCycling, .cyclingPower, .cyclingCadence, .cyclingSpeed, .respiratoryRate,
-      .oxygenSaturation, .heartRateVariabilitySDNN,
+      .distanceCycling, .cyclingPower, .cyclingCadence, .cyclingSpeed,
     ]
     return Set(identifiers.compactMap { HKQuantityType.quantityType(forIdentifier: $0) as HKSampleType? })
       .union([HKObjectType.workoutType(), HKSeriesType.workoutRoute()])

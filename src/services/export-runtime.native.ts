@@ -52,13 +52,12 @@ async function call<T>(site: CallSite, operation: (native: PowerLogBridge) => Pr
 }
 
 function opened(result: ExportOpenResult): ExportOpenResult {
-  if (typeof result?.session !== 'string')
-    throw new ExportError('page', `${FAILURES.page} The export session is missing.`);
+  if (typeof result?.session !== 'string') throw new ExportError('page', FAILURES.page);
   return result;
 }
 
 function committed(result: ExportCommitResult): ExportCommitResult {
-  if (typeof result?.uri !== 'string') throw new ExportError('sink', `${FAILURES.sink} The saved file is missing.`);
+  if (typeof result?.uri !== 'string') throw new ExportError('sink', FAILURES.sink);
   return result;
 }
 

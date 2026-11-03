@@ -5,23 +5,22 @@ const plist = require('@expo/plist').default;
 const withWatch = require('../../plugins/with-power-log-watch');
 const { projectFixture } = require('./project-fixture.cjs');
 
+const watchSources = fs
+  .readdirSync('apple/WatchApp')
+  .filter(file => file.endsWith('.swift'))
+  .map(file => `apple/WatchApp/${file}`)
+  .concat(
+    ['WorkoutCompanion', 'WorkoutCompanionTransport', 'WorkoutNativeHealth', 'WorkoutHealthMetrics'].map(
+      name => `modules/power-log-bridge/ios/${name}.swift`,
+    ),
+  )
+  .sort();
+
 test('prebuild embeds the Watch privacy manifest once alongside assets and preserves the compiled source set', async () => {
   const project = projectFixture(),
     projectRoot = process.cwd();
   const config = withWatch({ version: '2.4.6', ios: { bundleIdentifier: 'app.powerlog.test', buildNumber: '73' } });
-  const expectedSources = fs
-    .readdirSync('apple/WatchApp')
-    .filter(file => file.endsWith('.swift'))
-    .map(file => `../apple/WatchApp/${file}`)
-    .concat(
-      [
-        'WorkoutCompanion',
-        'WorkoutCompanionTransport',
-        'WorkoutNativeHealth',
-        'WorkoutHealthMetrics',
-      ].map(name => `../modules/power-log-bridge/ios/${name}.swift`),
-    )
-    .sort();
+  const expectedSources = watchSources.map(file => `../${file}`);
   for (let repetition = 0; repetition < 3; repetition++) {
     await config.mods.ios.xcodeproj({ ...config, modResults: project, modRequest: { projectRoot } });
     const objects = project.hash.project.objects;
@@ -79,4 +78,16 @@ test('Watch and PowerLogBridge privacy manifests declare only app-local defaults
       ],
     );
   }
+});
+
+test('the Watch states its Health use and asks for no location because it never runs Core Location', () => {
+  const info = plist.parse(fs.readFileSync('apple/WatchApp/Info.plist', 'utf8'));
+  assert.match(info.NSHealthShareUsageDescription, /\S/);
+  assert.match(info.NSHealthUpdateUsageDescription, /\S/);
+  assert.deepEqual(
+    Object.keys(info).filter(key => key.startsWith('NSLocation')),
+    [],
+  );
+  for (const file of watchSources)
+    assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /CLLocationManager|requestWhenInUseAuthorization/, file);
 });

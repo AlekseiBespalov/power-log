@@ -230,7 +230,8 @@
     }
 
     private func enqueue(_ operation: @escaping (@escaping (Bool, Error?) -> Void) -> Void) {
-      guard writes.count < 32, !uncertain else {
+      if uncertain { return }
+      guard writes.count < 32 else {
         markUncertain("Health write backlog exceeded its bound.")
         return
       }
@@ -419,6 +420,19 @@
           completion(id)
         }
       }
+    }
+
+    func savedWorkout(rideID: String, completion: @escaping (Result<String?, Error>) -> Void) {
+      let query = HKSampleQuery(
+        sampleType: .workoutType(),
+        predicate: HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeyExternalUUID, allowedValues: [rideID]),
+        limit: 1, sortDescriptors: nil
+      ) { _, samples, error in
+        self.queue.async {
+          if let error { completion(.failure(error)) } else { completion(.success(samples?.first?.uuid.uuidString)) }
+        }
+      }
+      store.execute(query)
     }
 
     /// A bounded, explicit read of the ride window. No provider-history synchronization is retained.

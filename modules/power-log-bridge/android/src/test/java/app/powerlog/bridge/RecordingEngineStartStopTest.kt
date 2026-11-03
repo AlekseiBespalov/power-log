@@ -30,7 +30,6 @@ class RecordingEngineStartStopTest : RecordingEngineTestBase() {
                 val failure = assertThrows(IllegalStateException::class.java) { start(gps = gps) }
                 assertEquals("$status GPS=$gps", RideFailure.bikeRequired.text, failure.message)
                 assertNoFailedStart()
-                assertFalse(engine.awaitingForeground)
             }
         }
         setBikeStatus("connected")

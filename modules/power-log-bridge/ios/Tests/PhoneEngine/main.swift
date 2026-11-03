@@ -438,6 +438,53 @@ do {
     "Pause sends the eligible Health seconds before the paused state discards their window")
   _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
 }
+do {
+  let directory = root.appendingPathComponent(UUID().uuidString)
+  let before = WorkoutEngine(archive: try WorkoutArchive(rootURL: directory))
+  let id = try start(before, watch: true)
+  let first = WorkoutCompanionTransport.latest!
+  let last = try before.queue.sync {
+    _ = try before.pause(expectedID: id)
+    _ = try before.resume(expectedID: id)
+    return first.sent.compactMap(\.stateRevision).max() ?? 0
+  }
+  PowerLogStore.evictSharedForTesting(databaseURL: PowerLogStore.databaseURL(forRoot: directory))
+  let after = WorkoutEngine(archive: try WorkoutArchive(rootURL: directory))
+  let second = WorkoutCompanionTransport.latest!
+  let ended = try after.queue.sync {
+    _ = try after.stop(expectedID: id)
+    return second.sent.last { $0.phase == "completed" }?.stateRevision ?? 0
+  }
+  check(ended > last, "the Watch accepts the end of a ride after the phone app restarts")
+}
+do {
+  let archive = try WorkoutArchive(rootURL: root.appendingPathComponent(UUID().uuidString))
+  func finished(minutesAgo: Double) throws -> String {
+    let ended = Date().addingTimeInterval(-minutesAgo * 60)
+    let ride = try archive.create(
+      startedAt: ended.addingTimeInterval(-600), indoor: true, watchEnabled: true, saveToHealth: true,
+      recordGPS: false, sampleHz: 8)
+    _ = try archive.update(id: ride.id, healthKitState: "pending")
+    _ = try archive.finish(id: ride.id, endedAt: ended)
+    return ride.id
+  }
+  let saved = try finished(minutesAgo: 120)
+  let missing = try finished(minutesAgo: 120)
+  let recent = try finished(minutesAgo: 5)
+  WorkoutNativeHealth.savedWorkouts = [saved: UUID().uuidString]
+  defer { WorkoutNativeHealth.savedWorkouts = [:] }
+  let engine = WorkoutEngine(archive: archive)
+  engine.queue.sync {}
+  func health(_ id: String) throws -> String { try archive.metadata(id: id).healthKitState }
+  try check(
+    health(saved) == "saved" && health(missing) == "unknown" && health(recent) == "pending",
+    "a ride left at Health save pending settles from Apple Health at launch")
+  WorkoutNativeHealth.savedWorkouts[recent] = UUID().uuidString
+  let refreshed = DispatchSemaphore(value: 0)
+  engine.queue.async { engine.refreshHealth(recent) { _ in refreshed.signal() } }
+  check(refreshed.wait(timeout: .now() + 5) == .success, "Health refresh completed")
+  try check(health(recent) == "saved", "a Health refresh confirms a workout that arrives after the ride")
+}
 // Cancellation may overtake Start in transit, or arrive while the native Start reply is outstanding.
 do {
   let (engine, _) = try make()
@@ -566,6 +613,59 @@ do {
   _ = try engine.queue.sync { try engine.resume(expectedID: id) }
   check(WorkoutLocation.latest.paused == false, "Resume restores GPS accuracy")
   _ = try engine.queue.sync { try engine.stop(expectedID: id, discard: true) }
+}
+do {
+  let (engine, archive) = try make()
+  let store = archive.store
+  func fill(_ id: String, seconds: Int) throws {
+    let at = try WorkoutCoding.date(archive.metadata(id: id).startedAt)
+    for page in stride(from: 0, to: seconds * 8, by: 512) {
+      _ = try archive.appendBatch(
+        (page..<min(page + 512, seconds * 8)).map { sample in
+          try WorkoutEvent(
+            workoutId: id, kind: "telemetry", source: "controller",
+            timestamp: at.addingTimeInterval(Double(sample) / 8),
+            elapsedSeconds: Double(sample) / 8,
+            payload: ["humanPowerW": .number(Double(100 + sample % 211)), "cadenceRpm": .number(80)])
+        })
+    }
+  }
+  func saved(seconds: Int) throws -> String {
+    let ride = try archive.create(
+      startedAt: Date(), indoor: true, watchEnabled: false, saveToHealth: false, recordGPS: false, sampleHz: 8)
+    try fill(ride.id, seconds: seconds)
+    _ = try archive.update(id: ride.id, phase: "completed")
+    return ride.id
+  }
+  func settledBytes() throws -> Int64 {
+    _ = try store.read { try $0.rows("PRAGMA wal_checkpoint(TRUNCATE)", limit: 1) }
+    return store.fileBytes
+  }
+  func gone(_ id: String) throws -> Bool {
+    try store.read { try $0.scalarInt("SELECT count(*) FROM collections WHERE id=?", [.text(id)]) } == 0
+  }
+  let kept = try saved(seconds: 60)
+  let deleted = try saved(seconds: 600)
+  var before = try settledBytes()
+  _ = try engine.queue.sync { try engine.deleteWorkout(deleted) }
+  engine.fileQueue.sync {}
+  check(try gone(deleted) && store.fileBytes < before - 2_000_000, "History deletion gives the ride's space back")
+  let discarded = try start(engine)
+  try fill(discarded, seconds: 600)
+  before = try settledBytes()
+  _ = try engine.queue.sync { try engine.stop(expectedID: discarded, discard: true) }
+  engine.fileQueue.sync {}
+  check(try gone(discarded) && store.fileBytes < before - 2_000_000, "Discard gives the ride's space back")
+  let unfinished = try saved(seconds: 600)
+  _ = try store.markWorkoutDeleted(id: unfinished)
+  before = try settledBytes()
+  let relaunched = WorkoutEngine(archive: archive)
+  relaunched.fileQueue.sync {}
+  relaunched.fileQueue.sync {}
+  check(
+    try gone(unfinished) && store.fileBytes < before - 2_000_000,
+    "a deletion the app did not finish completes and gives its space back at the next launch")
+  check(try archive.metadata(id: kept).eventCount == 480, "deletions keep the other rides")
 }
 print(
   "Production phone engine: bike admission, Watch handshake, Stop cutoff, failed Finish, and paused convergence passed")

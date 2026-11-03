@@ -57,7 +57,8 @@ do {
   fatalError("unreadable committed settings must block Start")
 } catch {
   check(
-    error.localizedDescription.contains("Open Settings on the phone"), "an unreadable store gives an actionable error")
+    error.localizedDescription.contains("Open Settings on your iPhone"),
+    "an unreadable store gives an actionable error")
 }
 check(try FileManager.default.contentsOfDirectory(atPath: directory.path).count == 6, "reading never rewrites settings")
 try FileManager.default.removeItem(at: directory)

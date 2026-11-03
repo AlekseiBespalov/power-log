@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.*
+import app.powerlog.core.presentation.Failures
+import app.powerlog.core.presentation.RideFailure
 import app.powerlog.core.telemetry.*
 import app.powerlog.core.telemetry.cyc.CycControllerDecoder
 import java.util.UUID
@@ -41,6 +43,9 @@ internal class ControllerBluetooth(
     private var selected: BluetoothDevice? = null
     private val knownControllers = mutableMapOf<String, ControllerIdentity>()
     private var recoveryError: String? = null
+    private var connectionError: String? = null
+    private var connectionErrorCode: String? = null
+    private var storageError: String? = null
     val deviceId: String?
         get() = desired
 
@@ -50,6 +55,7 @@ internal class ControllerBluetooth(
     private var stableSince: Double? = null
     private var pending: ControllerRequest? = null
     private var pendingSince: Double? = null
+    private var unansweredSince: Double? = null
     private var writeBlockedAt: Double? = null
     private var nativeWritePending = false
     @Volatile private var requestOwnership: ControllerRequestOwnership? = null
@@ -91,12 +97,16 @@ internal class ControllerBluetooth(
                                 gatt?.let(::release)
                                 clearRequests()
                                 if (desired != null) {
-                                    recoveryError = "Bluetooth is off."
+                                    recoveryError = RideFailure.bluetoothOff.androidText
                                     publish("reconnecting", recoveryError)
                                 }
                                 schedule()
                             }
-                            BluetoothAdapter.STATE_ON -> if (desired != null && gatt == null) begin()
+                            BluetoothAdapter.STATE_ON ->
+                                if (desired != null && gatt == null) {
+                                    if (recoveryError != null) recoveryError = RideFailure.bikeReconnecting.androidText
+                                    begin()
+                                }
                         }
                     }
                 }
@@ -198,12 +208,15 @@ internal class ControllerBluetooth(
         repace()
     }
 
-    fun recordingResult(failed: Boolean) =
+    fun recordingResult(failure: String?) {
         note(
             TelemetryDiagnosticEvent.recordingError,
             TelemetryDiagnosticReason.storageFailure,
-            mapOf("recordingFailed" to failed),
+            mapOf("recordingFailed" to (failure != null)),
         )
+        storageError = failure?.let { Failures.present(it).androidText }
+        publish(state.str("status"), connectionError, connectionErrorCode)
+    }
 
     private fun requestDisconnect(reason: TelemetryDiagnosticReason) {
         metrics.requestedCancellation(reason, now())
@@ -233,8 +246,13 @@ internal class ControllerBluetooth(
         schedule()
     }
 
+    private fun bluetoothFailure(): RideFailure? {
+        val adapter = manager?.adapter ?: return RideFailure.bluetoothUnsupported
+        return RideFailure.bluetoothOff.takeUnless { adapter.isEnabled }
+    }
+
     fun startScan() {
-        check(manager?.adapter?.isEnabled == true) { "Turn on Bluetooth to find your bike." }
+        bluetoothFailure()?.let { throw RideFailureException(it) }
         stopScan(publishIdle = false)
         devices.clear()
         val window = TelemetryDiscovery.begin(++scanGeneration, now())
@@ -272,7 +290,12 @@ internal class ControllerBluetooth(
                     handler.post {
                         if (!window.accepts(discovery?.generation ?: return@post, now())) return@post
                         stopScan(publishIdle = false)
-                        publish("error", "Bluetooth scan failed ($code). Try again.")
+                        note(
+                            TelemetryDiagnosticEvent.transportError,
+                            TelemetryDiagnosticReason.platformError,
+                            mapOf("errorCode" to code),
+                        )
+                        publish("error", RideFailure.bluetoothSearchFailed)
                     }
                 }
             }
@@ -294,12 +317,18 @@ internal class ControllerBluetooth(
         schedule()
     }
 
+    private fun expireScan() {
+        val found = devices.isNotEmpty()
+        stopScan(publishIdle = found)
+        if (!found && state["status"] == "scanning") publish("error", RideFailure.bikeNotFound)
+    }
+
     fun validateConnect(id: String, frequency: Int) {
         BridgeInputs.sampleHz(frequency)
         require(BluetoothAdapter.checkBluetoothAddress(id)) { "Invalid local Bluetooth device identifier." }
         check(desired == null) { "Disconnect the current controller before connecting again." }
-        check(!session.state.cancellationPending) { "Wait for Bluetooth cancellation to complete." }
-        check(manager?.adapter?.isEnabled == true) { "Bluetooth must be powered on; scan first to request permission." }
+        if (session.state.cancellationPending) throw RideFailureException(RideFailure.bluetoothNotReady)
+        bluetoothFailure()?.let { throw RideFailureException(it) }
     }
 
     fun connect(id: String, frequency: Int, completion: (Throwable?) -> Unit) {
@@ -317,7 +346,11 @@ internal class ControllerBluetooth(
         completion(null)
     }
 
-    private fun publish(status: String, error: String? = null) {
+    private fun publish(status: String, failure: RideFailure) = publish(status, failure.androidText, failure.name)
+
+    private fun publish(status: String, error: String? = null, errorCode: String? = null) {
+        connectionError = error
+        connectionErrorCode = errorCode
         val identity = selected?.address?.let { knownControllers[it] }
         state =
             mapOf(
@@ -326,8 +359,10 @@ internal class ControllerBluetooth(
                 "deviceName" to selected?.let { runCatching { it.name }.getOrNull() ?: "Bike" },
                 "controllerModel" to identity?.controllerModel,
                 "firmwareLabel" to identity?.firmwareLabel,
-                "error" to error,
-                "recoverableConnectionError" to (status == "reconnecting" && error != null),
+                "controllerProtocol" to identity?.controllerProtocol,
+                "error" to (storageError ?: error),
+                "errorCode" to errorCode?.takeIf { storageError == null && error != null },
+                "recoverableConnectionError" to (status == "reconnecting" && storageError == null && error != null),
             )
         emit("onState", state)
     }
@@ -343,7 +378,7 @@ internal class ControllerBluetooth(
         try {
             val adapter = manager?.adapter
             if (adapter?.isEnabled != true) {
-                failed("Bluetooth is off.", TelemetryDiagnosticReason.bluetoothUnavailable)
+                failed(TelemetryDiagnosticReason.bluetoothUnavailable, failure = RideFailure.bluetoothOff)
                 return
             }
             val device = devices[desired] ?: adapter.getRemoteDevice(desired)
@@ -365,16 +400,9 @@ internal class ControllerBluetooth(
                                 try {
                                     body()
                                 } catch (_: SecurityException) {
-                                    failed(
-                                        "Allow Nearby devices to reconnect your bike.",
-                                        TelemetryDiagnosticReason.bluetoothUnavailable,
-                                        terminal = true,
-                                    )
+                                    failed(RideFailure.bluetoothDenied, TelemetryDiagnosticReason.bluetoothUnavailable)
                                 } catch (_: Exception) {
-                                    failed(
-                                        "Bluetooth could not read the bike. Reconnecting…",
-                                        TelemetryDiagnosticReason.platformError,
-                                    )
+                                    failed(TelemetryDiagnosticReason.platformError)
                                 }
                                 schedule()
                             }
@@ -401,12 +429,7 @@ internal class ControllerBluetooth(
                                             else schedule()
                                         }
                                     } else if (attempt == session.state.generation) {
-                                        failed(
-                                            "Bike disconnected ($status).",
-                                            lost,
-                                            peer = true,
-                                            error = gattError(status),
-                                        )
+                                        failed(lost, peer = true, error = gattError(status))
                                     }
                                 }
                             } else {
@@ -424,11 +447,7 @@ internal class ControllerBluetooth(
                                 }
                                 event(connection) {
                                     if (status != BluetoothGatt.GATT_SUCCESS)
-                                        failed(
-                                            "Bike connection failed ($status).",
-                                            TelemetryDiagnosticReason.connectionFailed,
-                                            error = gattError(status),
-                                        )
+                                        failed(TelemetryDiagnosticReason.connectionFailed, error = gattError(status))
                                     else if (
                                         newState == BluetoothProfile.STATE_CONNECTED &&
                                             advance(attempt, TelemetryStage.connecting, TelemetryStage.services)
@@ -437,10 +456,7 @@ internal class ControllerBluetooth(
                                         metrics.connected(now())
                                         note(TelemetryDiagnosticEvent.linkConnected)
                                         if (!connection.discoverServices())
-                                            failed(
-                                                "Could not discover bike services.",
-                                                TelemetryDiagnosticReason.serviceDiscovery,
-                                            )
+                                            failed(TelemetryDiagnosticReason.serviceDiscovery)
                                     }
                                 }
                             }
@@ -458,11 +474,7 @@ internal class ControllerBluetooth(
                                 }
                                 if (session.state.stage != TelemetryStage.services) return@event
                                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                                    failed(
-                                        "Bike service discovery failed ($status).",
-                                        TelemetryDiagnosticReason.serviceDiscovery,
-                                        error = gattError(status),
-                                    )
+                                    failed(TelemetryDiagnosticReason.serviceDiscovery, error = gattError(status))
                                     return@event
                                 }
                                 if (!advance(attempt, TelemetryStage.services, TelemetryStage.characteristics))
@@ -474,29 +486,21 @@ internal class ControllerBluetooth(
                                 val descriptor =
                                     notify?.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
                                 if (writer == null || notify == null || descriptor == null) {
-                                    val retry =
-                                        TelemetryReconnectPolicy.retriesDiscovery(
-                                            false,
-                                            recording(),
-                                            selected?.address?.let { it in knownControllers } == true,
-                                        )
-                                    failed(
-                                        if (retry) "Could not read the bike's services. Reconnecting…"
-                                        else "This bike does not provide the controller telemetry service.",
+                                    val reason =
                                         if (service == null) TelemetryDiagnosticReason.serviceDiscovery
-                                        else TelemetryDiagnosticReason.characteristicDiscovery,
-                                        terminal = !retry,
+                                        else TelemetryDiagnosticReason.characteristicDiscovery
+                                    if (
+                                        TelemetryReconnectPolicy.retriesDiscovery(false, recording(), knownController())
                                     )
+                                        failed(reason)
+                                    else failed(RideFailure.controllerUnsupported, reason)
                                     return@event
                                 }
                                 if (!advance(attempt, TelemetryStage.characteristics, TelemetryStage.notifications))
                                     return@event
                                 note(TelemetryDiagnosticEvent.transportStage)
                                 if (!connection.setCharacteristicNotification(notify, true)) {
-                                    failed(
-                                        "Could not enable bike notifications.",
-                                        TelemetryDiagnosticReason.notificationSetup,
-                                    )
+                                    failed(TelemetryDiagnosticReason.notificationSetup)
                                     return@event
                                 }
                                 val value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
@@ -510,7 +514,6 @@ internal class ControllerBluetooth(
                                 nativeWritePending = result == BluetoothStatusCodes.SUCCESS
                                 if (!nativeWritePending)
                                     failed(
-                                        "Could not subscribe to bike notifications.",
                                         TelemetryDiagnosticReason.notificationSetup,
                                         error = bluetoothStatusError(result),
                                     )
@@ -525,11 +528,7 @@ internal class ControllerBluetooth(
                                 if (session.state.stage != TelemetryStage.notifications) return@event
                                 nativeWritePending = false
                                 if (status != BluetoothGatt.GATT_SUCCESS)
-                                    failed(
-                                        "Bike notifications failed ($status).",
-                                        TelemetryDiagnosticReason.notificationSetup,
-                                        error = gattError(status),
-                                    )
+                                    failed(TelemetryDiagnosticReason.notificationSetup, error = gattError(status))
                                 else if (advance(attempt, TelemetryStage.notifications, TelemetryStage.identity)) {
                                     note(TelemetryDiagnosticEvent.transportStage)
                                     send(ControllerRequest.identity)
@@ -545,11 +544,7 @@ internal class ControllerBluetooth(
                                 if (characteristic.uuid.toString() != ControllerGatt.WRITE) return@event
                                 nativeWritePending = false
                                 if (status != BluetoothGatt.GATT_SUCCESS)
-                                    failed(
-                                        "Bike request failed ($status).",
-                                        TelemetryDiagnosticReason.writeFailed,
-                                        error = gattError(status),
-                                    )
+                                    failed(TelemetryDiagnosticReason.writeFailed, error = gattError(status))
                                 else if (writeBlockedAt != null) pending?.let(::send)
                             }
 
@@ -578,13 +573,9 @@ internal class ControllerBluetooth(
                     BluetoothDevice.TRANSPORT_LE,
                 )
         } catch (_: SecurityException) {
-            failed(
-                "Allow Nearby devices to reconnect your bike.",
-                TelemetryDiagnosticReason.bluetoothUnavailable,
-                terminal = true,
-            )
+            failed(RideFailure.bluetoothDenied, TelemetryDiagnosticReason.bluetoothUnavailable)
         } catch (_: Exception) {
-            failed("Bluetooth could not connect. Try again.", TelemetryDiagnosticReason.platformError)
+            failed(TelemetryDiagnosticReason.platformError)
         }
         schedule()
     }
@@ -595,27 +586,26 @@ internal class ControllerBluetooth(
         return action == TelemetryTransportAction.advanced
     }
 
+    private fun knownController() = selected?.address?.let { it in knownControllers } == true
+
     private fun handle(action: TelemetryTransportAction): Boolean {
         if (action != TelemetryTransportAction.none)
             trace("transport") { "action=${action.name}; stage=${session.state.stage.name}" }
-        val (message, reason) =
+        if (
+            action == TelemetryTransportAction.responseTimeout &&
+                pending == ControllerRequest.identity &&
+                !TelemetryReconnectPolicy.retriesIdentity(retries + 1, recording(), knownController())
+        ) {
+            failed(RideFailure.controllerNoReply, TelemetryDiagnosticReason.responseTimeout)
+            return true
+        }
+        val reason =
             when (action) {
-                TelemetryTransportAction.attemptTimeout ->
-                    "Controller connection or identity handshake timed out." to
-                        TelemetryDiagnosticReason.connectionDeadline
-                TelemetryTransportAction.responseTimeout ->
-                    "Bike response timed out." to TelemetryDiagnosticReason.responseTimeout
-                TelemetryTransportAction.replyExpired ->
-                    "Bike response arrived after its freshness deadline." to TelemetryDiagnosticReason.expiredReply
-                TelemetryTransportAction.writeTimeout ->
-                    "Bike write timed out." to TelemetryDiagnosticReason.writeReadyTimeout
-                TelemetryTransportAction.replyRejected ->
-                    "Bike returned an invalid controller reply." to
-                        if (pending == ControllerRequest.identity) TelemetryDiagnosticReason.identityRejected
-                        else TelemetryDiagnosticReason.telemetryRejected
-                TelemetryTransportAction.cancellationTimeout ->
-                    "Bluetooth cancellation timed out. Disconnect and try again." to
-                        TelemetryDiagnosticReason.cancellationDeadline
+                TelemetryTransportAction.attemptTimeout -> TelemetryDiagnosticReason.connectionDeadline
+                TelemetryTransportAction.responseTimeout -> TelemetryDiagnosticReason.responseTimeout
+                TelemetryTransportAction.replyExpired -> TelemetryDiagnosticReason.expiredReply
+                TelemetryTransportAction.writeTimeout -> TelemetryDiagnosticReason.writeReadyTimeout
+                TelemetryTransportAction.cancellationTimeout -> TelemetryDiagnosticReason.cancellationDeadline
                 else -> return false
             }
         if (action == TelemetryTransportAction.cancellationTimeout) {
@@ -625,7 +615,7 @@ internal class ControllerBluetooth(
             session.manualDisconnect(false)
             clearRequests()
             if (desired != null) begin() else publish("idle")
-        } else failed(message, reason, terminal = action == TelemetryTransportAction.replyRejected)
+        } else failed(reason)
         return true
     }
 
@@ -662,26 +652,27 @@ internal class ControllerBluetooth(
             if (result == BluetoothStatusCodes.SUCCESS) {
                 nativeWritePending = true
                 pendingSince = sentAt
+                if (unansweredSince == null) unansweredSince = sentAt
                 writeBlockedAt = null
                 if (read == ControllerRequest.telemetry) nextPollAt = sentAtMillis + pollIntervalMillis()
             } else if (result == BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY) {
                 if (writeBlockedAt == null) writeBlockedAt = sentAt
-            } else
-                failed(
-                    "Could not read bike telemetry.",
-                    TelemetryDiagnosticReason.writeFailed,
-                    error = bluetoothStatusError(result),
-                )
+            } else failed(TelemetryDiagnosticReason.writeFailed, error = bluetoothStatusError(result))
         } catch (_: SecurityException) {
-            failed(
-                "Allow Nearby devices to reconnect your bike.",
-                TelemetryDiagnosticReason.bluetoothUnavailable,
-                terminal = true,
-            )
+            failed(RideFailure.bluetoothDenied, TelemetryDiagnosticReason.bluetoothUnavailable)
         } catch (_: Exception) {
-            failed("Bluetooth could not read the bike. Reconnecting…", TelemetryDiagnosticReason.platformError)
+            failed(TelemetryDiagnosticReason.platformError)
         }
         schedule()
+    }
+
+    private fun resend() {
+        val request = pending ?: return
+        note(TelemetryDiagnosticEvent.requestResent)
+        requestOwnership = null
+        pending = null
+        pendingSince = null
+        send(request)
     }
 
     private fun receive(bytes: ByteArray, receipt: RecordingClockReading, owner: ControllerRequestOwnership?) {
@@ -697,14 +688,22 @@ internal class ControllerBluetooth(
         for (reply in decision.replies.filterIsInstance<ControllerRejectedReply>()) trace("rejected") {
             "request=${reply.kind.name}; reason=${reply.reason}"
         }
-        decision.replies.filterIsInstance<ControllerRejectedReply>().firstOrNull()?.let {
-            note(TelemetryDiagnosticEvent.transportError, fields = mapOf("rejection" to it.reason))
+        val rejection = decision.replies.filterIsInstance<ControllerRejectedReply>().firstOrNull()
+        rejection?.let { note(TelemetryDiagnosticEvent.transportError, fields = mapOf("rejection" to it.reason)) }
+        if (decision.action == TelemetryTransportAction.replyRejected && rejection != null) {
+            failed(
+                Failures.controllerRejection(rejection.kind),
+                if (rejection.kind == ControllerRequest.identity) TelemetryDiagnosticReason.identityRejected
+                else TelemetryDiagnosticReason.telemetryRejected,
+            )
+            return
         }
         if (handle(decision.action)) return
         if (decision.action != TelemetryTransportAction.replyAccepted) return
         requestOwnership = null
         pending = null
         pendingSince = null
+        unansweredSince = null
         when (val reply = decision.replies.single()) {
             is ControllerIdentityReply -> {
                 selected?.address?.let { knownControllers[it] = reply.identity }
@@ -717,7 +716,7 @@ internal class ControllerBluetooth(
             is ControllerReadingReply -> {
                 val at = receivedAt / 1000.0
                 if (stableSince == null) stableSince = at
-                if (at - checkNotNull(stableSince) >= TelemetryTiming.stableTelemetrySeconds) retries = 0
+                if (TelemetryReconnectPolicy.restartsBackoff(at - checkNotNull(stableSince))) retries = 0
                 lastSample = receivedAt
                 if (state["status"] != "connected") {
                     recoveryError = null
@@ -743,6 +742,7 @@ internal class ControllerBluetooth(
         nativeWritePending = false
         pending = null
         pendingSince = null
+        unansweredSince = null
         writeBlockedAt = null
         writer = null
         nextPollAt = 0L
@@ -757,14 +757,16 @@ internal class ControllerBluetooth(
         runCatching { connection.close() }
     }
 
+    private fun failed(failure: RideFailure, reason: TelemetryDiagnosticReason) =
+        failed(reason, terminal = true, failure = failure)
+
     private fun failed(
-        message: String,
         reason: TelemetryDiagnosticReason,
         peer: Boolean = false,
         terminal: Boolean = false,
         error: Payload = emptyMap(),
+        failure: RideFailure = RideFailure.bikeUnavailable,
     ) {
-        trace("error") { message }
         val at = now()
         if (reason == TelemetryDiagnosticReason.responseTimeout || reason == TelemetryDiagnosticReason.expiredReply)
             metrics.timedOut()
@@ -793,7 +795,7 @@ internal class ControllerBluetooth(
             session.manualDisconnect(connection != null && !peer)
             desired = null
             recoveryError = null
-            publish("error", if (terminal) message else "Reconnect limit reached. $message")
+            publish("error", failure)
             note(
                 TelemetryDiagnosticEvent.sessionStopped,
                 if (plan == null && !terminal) TelemetryDiagnosticReason.retryLimit else reason,
@@ -801,9 +803,12 @@ internal class ControllerBluetooth(
         } else {
             session.scheduleRetry(plan, at)
             retries = (retries + 1).coerceAtMost(6)
-            recoveryError = message
+            recoveryError =
+                (if (reason == TelemetryDiagnosticReason.bluetoothUnavailable) failure
+                    else RideFailure.bikeReconnecting)
+                    .androidText
             metrics.scheduledReconnect()
-            publish("reconnecting", message)
+            publish("reconnecting", recoveryError)
             note(
                 TelemetryDiagnosticEvent.reconnectScheduled,
                 reason,
@@ -840,7 +845,7 @@ internal class ControllerBluetooth(
                 transport.reconnectDue,
                 transport.attemptDeadline,
                 transport.cancellationPending,
-                pendingSince?.plus(TelemetryTiming.telemetryTimeoutSeconds),
+                TelemetryTiming.responseDeadline(transport.stage, pendingSince, unansweredSince),
                 writeBlockedAt?.plus(TelemetryTiming.telemetryTimeoutSeconds),
                 nextPollAt
                     .takeIf {
@@ -856,9 +861,10 @@ internal class ControllerBluetooth(
             Runnable {
                 maxQueueDelaySeconds = maxOf(maxQueueDelaySeconds, now() - due)
                 summarizeIfDue()
-                if (discovery?.expired(now()) == true) stopScan()
-                when (val action = session.check(now(), pendingSince, writeBlockedAt)) {
+                if (discovery?.expired(now()) == true) expireScan()
+                when (val action = session.check(now(), pendingSince, writeBlockedAt, false, unansweredSince)) {
                     TelemetryTransportAction.beginRetry -> begin()
+                    TelemetryTransportAction.resendRequest -> resend()
                     TelemetryTransportAction.none -> {
                         if (writeBlockedAt != null) pending?.let(::send)
                         else if (

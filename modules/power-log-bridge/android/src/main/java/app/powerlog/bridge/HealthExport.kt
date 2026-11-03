@@ -108,7 +108,6 @@ internal class HealthExport(
         for (type in HealthReadback.types) add(HealthPermission.getReadPermission(type))
         if (gps) add(HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE)
         if (access.backgroundReadSupported) add(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
-        if (access.historyReadSupported) add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
     }
 
     fun granted(): Set<String> = runBlocking { access.granted() }
@@ -122,7 +121,6 @@ internal class HealthExport(
             "available" to available,
             "provider" to "healthConnect",
             "backgroundReadSupported" to access.backgroundReadSupported,
-            "historyReadSupported" to access.historyReadSupported,
             "requiredWrites" to essentialPermissions().toList(),
             "unsupportedReadTypes" to
                 listOf(
@@ -144,7 +142,6 @@ internal class HealthExport(
                         for (type in writeTypes + HealthReadback.types) add(HealthPermission.getReadPermission(type))
                         if (access.backgroundReadSupported)
                             add(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
-                        if (access.historyReadSupported) add(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY)
                     }
                 ),
         )

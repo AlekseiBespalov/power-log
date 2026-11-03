@@ -628,6 +628,17 @@ class RecordingEngineNotificationTest : RecordingEngineTestBase() {
     }
 
     @Test
+    fun aRideEndedBeforeItsServiceStartsLeavesTheStopToTheService() {
+        command { engine.action("discard", start()) }
+        assertNull(shadowOf(RuntimeEnvironment.getApplication()).nextStoppedService)
+        openNotificationService(startCommand = false)
+        val started = service!!.get()
+        started.onStartCommand(Intent().putExtra(RecordingService.FOREGROUND_REQUEST, "ended"), 0, 1)
+        assertNotNull(shadowOf(started).lastForegroundNotification)
+        assertTrue(shadowOf(started).isStoppedBySelf)
+    }
+
+    @Test
     fun selectedControllerDoesNotRequestRideStreamWithoutRide() = command {
         ControllerBluetooth::class
             .java

@@ -31,10 +31,10 @@
     }
   ],
   "retryErrorAt": 20,
-  "reconnectDue": 21,
-  "cancellationDeadline": 26,
-  "cancellationCompletedAt": 22,
-  "missingCancellationAt": 26,
+  "reconnectDue": 22,
+  "cancellationDeadline": 27,
+  "cancellationCompletedAt": 23,
+  "missingCancellationAt": 27,
   "lateCallbackAt": 25,
   "unexpectedReconnectAt": 20.5
 }

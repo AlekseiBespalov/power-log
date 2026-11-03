@@ -214,7 +214,7 @@ it.each(['ios', 'android'] as const)(
       const rows = page.getByTestId('workout-health-sync');
       await ui(rows).toContainText(os === 'ios' ? 'Apple Health saved' : 'Health Connect saved');
       await ui(rows).toContainText(
-        `Health readback pending: ${os === 'ios' ? 'Apple Health' : 'Health Connect'} is locked. Unlock the device to allow Health access.`,
+        `Health measurements pending: ${os === 'ios' ? 'Apple Health' : 'Health Connect'} is locked. Unlock the device to allow Health access.`,
       );
       await ui(rows).not.toContainText('syncing');
     }),

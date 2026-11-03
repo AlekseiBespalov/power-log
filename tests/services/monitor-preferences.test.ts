@@ -72,7 +72,6 @@ describe('persistent monitor preferences', () => {
     controller.resetView('ride');
     expect(controller.snapshot().preferences.views.ride).toEqual(defaultMonitorPreferences().views.ride);
     expect(controller.snapshot().error).toBe(error);
-    expect(error).toContain(fixture.error);
     expect(error).toContain(fixture.notice);
     expect(storage.save).not.toHaveBeenCalled();
   });
@@ -97,7 +96,9 @@ describe('persistent monitor preferences', () => {
   it('refuses recording after an unreadable load but accepts a recovered committed revision', async () => {
     const storage = store();
     storage.load.mockRejectedValueOnce(new Error('Read denied'));
-    await expect(new MonitorPreferencesController(storage).prepareRecording()).rejects.toThrow('Read denied');
+    await expect(new MonitorPreferencesController(storage).prepareRecording()).rejects.toThrow(
+      "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
+    );
     storage.load.mockResolvedValue({
       preferences: defaultMonitorPreferences(),
       warning: 'Recovered previous settings.',
@@ -111,7 +112,7 @@ describe('persistent monitor preferences', () => {
     await controller.hydrate();
     storage.save.mockRejectedValueOnce(new Error('Disk full'));
     controller.setSampleHz(8);
-    await expect(controller.prepareRecording()).rejects.toThrow('Could not save monitor settings. Disk full');
+    await expect(controller.prepareRecording()).rejects.toThrow('Your settings weren’t saved. Disk full');
     expect(controller.snapshot().preferences.sampleHz).toBe(8);
     controller.setDistanceSource('controller');
     await expect(controller.prepareRecording()).resolves.toMatchObject({ sampleHz: 8, distanceSource: 'controller' });
@@ -303,7 +304,7 @@ describe('persistent monitor preferences', () => {
       if (failure) first.resolve();
       else first.reject(new Error('Older save failed'));
       await firstFlush;
-      expect(controller.snapshot().error).toBe(failure ? 'Could not save monitor settings. Latest save failed' : null);
+      expect(controller.snapshot().error).toBe(failure ? 'Your settings weren’t saved. Latest save failed' : null);
     },
   );
 
@@ -332,7 +333,9 @@ describe('persistent monitor preferences', () => {
     storage.load.mockResolvedValue({ preferences: saved });
     const controller = new MonitorPreferencesController(storage);
     await controller.hydrate();
-    expect(controller.snapshot().error).toContain('Invalid saved monitor settings');
+    expect(controller.snapshot().error).toBe(
+      "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
+    );
     controller.updateView('temperature', { numbers: ['batteryCurrentA'] });
     expect(storage.save).not.toHaveBeenCalled();
     const clean = new MonitorPreferencesController(store());
@@ -366,7 +369,10 @@ describe('persistent monitor preferences', () => {
     controller.updateView('ride', { charts: ['motorCurrentA'] });
     await controller.hydrate();
     await controller.flush();
-    expect(controller.snapshot()).toMatchObject({ ready: true, error: expect.stringContaining('Read denied') });
+    expect(controller.snapshot()).toMatchObject({
+      ready: true,
+      error: "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
+    });
     expect(controller.snapshot().preferences.views.ride.charts).toEqual(['motorCurrentA']);
     expect(storage.save).not.toHaveBeenCalled();
   });

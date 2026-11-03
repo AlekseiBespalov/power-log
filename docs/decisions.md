@@ -40,6 +40,17 @@ decision record; N labels are the analytics rules that tests cite.
   full-values or keepalive command, and no general Bluetooth write API.
 - **A backgrounded app without a recording ride polls at 1 Hz.** The link stays up for a Watch Start; a preparing,
   running or paused ride keeps its frozen rate in the background, and the foreground uses the selected rate.
+- **A missed reply is asked for again, not treated as a lost link.** The controller leaves some requests unanswered,
+  most often while the motor draws current. A telemetry request without a reply after 1 s is sent again on the same
+  connection; only 3 s of unanswered requests or a system disconnect closes the link. Replies carry no request
+  number, so a reply completes the request outstanding when it arrives and keeps its arrival time; a late reply and
+  the reply to its re-sent request record one reading. A reconnect after the app closes a live link waits at least
+  2 s, because Android ends the released link a second later. A reconnect that keeps delivering telemetry for 3 s
+  restarts the backoff; a bike that is off, or drops again sooner, keeps backing off. A failed service lookup
+  retries for a known controller or during a ride.
+- **Unknown devices get two identity attempts.** Discovery lists any Nordic UART device. Outside a ride, a device
+  without a remembered verified identity that leaves the identity request unanswered on two connection attempts is
+  reported as not replying, with the hint to turn on the bike's display, instead of being retried.
 - **Raw Bluetooth diagnostics require an explicit capture.** Retain rejected packets before decoding in bounded,
   temporary memory, separately from rides and routine connection logs. Export is a rider action with notice that raw
   bytes can include serials. Diagnostic capture never bypasses ride admission or adds controller commands.
@@ -53,8 +64,10 @@ decision record; N labels are the analytics rules that tests cite.
   `TelemetryRestoration`; telemetry keeps requiring rider power and cadence until a controller lacks them.
 - **Meanings.** Recorded rider power is never motor or battery power; `motorInputPowerW` is battery voltage × current, shown as
   battery input power. CYC cadence is controller-smoothed. Controller and motor temperatures are never ambient.
-- **Controller speed** is `speedRaw / 3.6` only for exact X6/X12 identities with protocol 5.3. It never replaces GPS
-  speed, and its distance is a **Controller estimate**: Power Log does not calibrate wheels.
+- **Controller speed** is `speedRaw / 3.6` only for exact X6/X12 identities with protocol 5.3. When the ride distance
+  source is the controller, controller speed is the FIT and ride CSV record speed and the FIT maximum; GPS-distance rides
+  keep GPS speed, and Health never receives controller speed. Its distance is a **Controller estimate**: Power Log does
+  not calibrate wheels.
 
 ## Live display and charts
 
@@ -63,11 +76,11 @@ decision record; N labels are the analytics rules that tests cite.
   current-value tiles become unavailable and the reconnect error shows. Chart headers keep
   the last recorded value; original sample times appear during inspection. Holds and chart continuity are
   rendering only, never samples, Health data or exports; longer gaps stay visible. Energy, charge and Wh/km lines
-  join across the same short controller gaps, although totals and averages still exclude the gap. A metric with no
-  samples is unavailable, never zero.
+  join across the same short controller gaps; totals and averages exclude the gap, except the controller energy and
+  charge counters and controller distance, which span it. A metric with no samples is unavailable, never zero.
 - **Separate timing policies.** GPS age admission (15 s), GPS freshness (10 s), heart-rate display (15 s), plot
-  continuity (30 s) and integration (10 s), controller integration (2.5 s) and controller display and plot continuity
-  (6 s) stay independent.
+  continuity (30 s) and integration (10 s), controller integration (2.5 s), controller distance join (6 s) and
+  controller display and plot continuity (6 s) stay independent.
 - **Live freshness uses monotonic acquisition time;** replays, retries and backfill never renew it, and backfill keeps
   its original time.
 - **O6: the Live Activity evaluates no policy.** It and the Android ride notification take new readings at most every
@@ -101,7 +114,8 @@ decision record; N labels are the analytics rules that tests cite.
 - **Choices freeze at Start.** GPS, Health, indoor, the 2, 4 or 8 Hz capture rate, the concrete distance producer, battery-consumption method and
   Health writer stay fixed for the ride. The phone owns the capture-rate, distance and battery-consumption preferences; Watch Start
   uses those saved phone settings, with no separate Watch rate preference (C22). Phone Start requires its settings
-  save to succeed. The Watch retains its indoor/GPS/Health controls.
+  save to succeed; settings that cannot be read block Start until **Reset settings** saves the defaults as a new
+  revision. The Watch retains its indoor/GPS/Health controls.
 - **Local completion is independent.** Finish commits the local ride and enables History/export without waiting for
   Health or a Watch reply. Health has its own outcome. A pending old Watch save does not block a new phone-only ride;
   starting another Watch session first requires its previous native session to end.
@@ -112,6 +126,11 @@ decision record; N labels are the analytics rules that tests cite.
   observations is acceptable; corrupted committed data, fabricated zeros and silent erasure are not. Queue limits
   are not a guarantee of a one-second crash-loss bound. Only storage failures interrupt a ride; a busy store retries,
   and any other recording error is shown without interrupting the ride.
+- **Deleting a ride gives its space back.** Phone stores use incremental auto-vacuum. After History deletion or
+  Discard commits, freed pages return to the file system in bounded background steps that capture, Start and reads
+  run between, and the WAL is truncated. An interrupted iPhone deletion resumes at the next launch. A store created
+  without auto-vacuum converts once with VACUUM, only while no ride records and with free space for VACUUM's copies;
+  storage work that would wait for it cancels the conversion until the next deletion.
 - **Preview is temporary.** Before Start, live data stays in bounded memory. Once recording, dashboards and History
   query the same ride archive. Previous recorded rides remain in History.
 
@@ -138,6 +157,8 @@ decision record; N labels are the analytics rules that tests cite.
 - **O7: published meanings.** Save a workout/session with laps, pauses and route, rider power, cadence, GPS speed and
   GPS distance. Never publish motor electrical input, controller speed/distance or derived work as human output.
   Disable automatic cycling power/cadence/speed/distance collection where the native writer supplies those quantities.
+  Apple write access covers exactly these plus the heart rate and active and resting energy that HealthKit's live
+  workout data source collects for cycling on iPhone and Watch.
 - **Provider rules remain.** Permissions, units, range checks, route limits and provider call budgets are real adapter
   constraints. Health admission uses 0–5,000 W and 0–300 rpm; analytical summaries retain their own range policies.
 - **One writer and small outcomes.** Keep deterministic provider identities where supported, fixed versions and
@@ -155,6 +176,8 @@ decision record; N labels are the analytics rules that tests cite.
   invalidate views; it does not revise already published Health data. There is no exhaustive provider deletion/history
   synchronization. Android reads at Finish, +15 minutes and +60 minutes; explicit refresh remains available.
   Refresh can read permitted measurements with saving off; it does not enable publication or require write permission.
+  Android requests no Health Connect history access: a ride that starts more than 30 days before the first observed
+  grant is not read and shows no readback error.
 - **O5: one Health source per metric.** Health Connect selects the origin with greatest clipped coverage, ties by
   package name, and never sums competing origins. Android does not read total calories or derive resting energy;
   Apple-provided resting energy remains available.
@@ -181,6 +204,8 @@ decision record; N labels are the analytics rules that tests cite.
 - **Distance freezes at Start.** Auto selects phone GPS for outdoor GPS recording and the controller otherwise.
   Explicit source choice never falls back. **Ride distance** uses that source for summaries and FIT; independently
   selectable **Distance (GPS)** and **Distance (controller)** charts retain both calculations. Health always uses GPS.
+  Controller distance joins readings less than 6 s apart from the same controller and active interval, across
+  reconnects, using the speeds on either side. FIT average speed is ride distance over covered time.
 - **Battery consumption is ride-relative.** **Energy used (controller)** and **Charge used (controller)** accumulate
   positive counter deltas; **Energy used (calc)** and **Charge used (calc)** independently integrate positive V × A
   and current. Each starts at the first valid reading, retaining supported totals across resets, pauses, reconnects
@@ -218,7 +243,7 @@ decision record; N labels are the analytics rules that tests cite.
   battery totals, GPS, Health and events CSV, each source at its own rate. The ride CSV is one table for overlay and
   spreadsheet tools: FIT's per-second records, never widened for long rides, with every value as a named column and
   the ride totals of the frozen consumption source. Values without a reading in that second stay empty; nothing is
-  interpolated.
+  interpolated, except that seconds inside a joined controller loss carry the joined distance and speed.
   Unsupported derived analysis never blocks raw ZIP export; its metadata records why the derived table is unavailable. FIT has a record
   per second, or the smallest wider interval within Garmin Connect's point limit, and writes battery power as
   `motor_power`. The export-time **FIT power source** setting defaults to Rider power; Battery input power

@@ -114,6 +114,7 @@ export const swiftUnits = [
     },
   ),
   suite('preferences', entry('Preferences'), bridgeFiles(['WorkoutPreferences'])),
+  suite('health-metrics', entry('HealthMetrics'), bridgeFiles(['WorkoutHealthMetrics'])),
   suite('interrupted-finish', entry('InterruptedFinish'), bridgeFiles(['ExportSource'])),
   suite('storage', entry('Storage')),
   suite('capture', entry('Capture')),

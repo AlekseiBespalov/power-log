@@ -63,13 +63,12 @@ class RecordingNotificationManager : ShadowNotificationManager() {
 class RecordingContextImpl : ShadowContextImpl() {
     companion object {
         var beforeForegroundStart: (() -> Unit)? = null
-        var afterForegroundStart: ((Intent) -> Unit)? = null
     }
 
     @Implementation
     override fun startForegroundService(intent: Intent): ComponentName? {
         beforeForegroundStart?.invoke()
-        return super.startForegroundService(intent).also { afterForegroundStart?.invoke(intent) }
+        return super.startForegroundService(intent)
     }
 }
 
@@ -105,10 +104,7 @@ abstract class RecordingEngineTestBase {
             }
         }
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
-        while (!result.isDone && System.nanoTime() < deadline) {
-            if (engine.awaitingForeground) idleNotifications()
-            Thread.sleep(1)
-        }
+        while (!result.isDone && System.nanoTime() < deadline) Thread.sleep(1)
         return result.get(1, TimeUnit.SECONDS)
     }
 
@@ -122,13 +118,6 @@ abstract class RecordingEngineTestBase {
     @Before
     fun setup() {
         RecordingContextImpl.beforeForegroundStart = null
-        RecordingContextImpl.afterForegroundStart = { intent ->
-            if (engine.awaitingForeground)
-                android.os.Handler(Looper.getMainLooper()).post {
-                    if (service == null) openNotificationService(startCommand = false)
-                    service!!.get().onStartCommand(intent, 0, 1)
-                }
-        }
         setFixtureUtc()
         ShadowPausedSystemClock::class
             .java
@@ -178,6 +167,8 @@ abstract class RecordingEngineTestBase {
         }
         engine.healthTasks.shutdownNow()
         engine.healthTasks.awaitTermination(20, TimeUnit.SECONDS)
+        engine.storageTasks.shutdown()
+        engine.storageTasks.awaitTermination(20, TimeUnit.SECONDS)
         engine.reads.shutdownNow()
         engine.store.close()
         (field("previewStore") as RideStore).close()
@@ -187,7 +178,6 @@ abstract class RecordingEngineTestBase {
     @After
     fun close() {
         RecordingContextImpl.beforeForegroundStart = null
-        RecordingContextImpl.afterForegroundStart = null
         service?.destroy()
         service = null
         scheduledHealth = { _, _ -> }

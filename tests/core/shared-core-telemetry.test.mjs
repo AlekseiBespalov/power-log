@@ -167,12 +167,25 @@ test('Telemetry generated transport bindings retain one setup budget and cancell
   const recovery = core.telemetryRecoveryPlan(1, false, false, false, null, false, false, false);
   assert.equal(recovery.cancelBeforeRetry, true);
   session.scheduleRetry(recovery, 20);
-  assert.equal(session.reconnectDue, 21);
-  assert.equal(session.cancellationDeadline, 26);
+  assert.equal(session.reconnectDue, 22);
+  assert.equal(session.cancellationDeadline, 27);
   assert.equal(session.begin(21, false), false);
   session.disconnected(generation, 22);
   assert.equal(session.begin(22, false), true);
   assert.equal(session.advance(generation, 'connecting', 'services', 30), 'none');
+  const ready = new core.TelemetryTransportSession(core.controllerProtocol());
+  ready.begin(0, false);
+  for (const [expected, next] of [
+    ['connecting', 'services'],
+    ['services', 'characteristics'],
+    ['characteristics', 'notifications'],
+    ['notifications', 'identity'],
+    ['identity', 'ready'],
+  ])
+    assert.equal(ready.advance(ready.generation, expected, next, 0), 'advanced');
+  assert.equal(ready.responseDeadline(1, 0), 2);
+  assert.equal(ready.check(2, 1, null, false, 0), 'resendRequest');
+  assert.equal(ready.check(3, 2, null, false, 0), 'responseTimeout');
   const window = new core.TelemetryDiscoveryWindow('9007199254740993', 0);
   assert.equal(window.accepts('9007199254740993', 19.999999), true);
   assert.equal(window.accepts('9007199254740993', 20), false);

@@ -58,9 +58,10 @@ public final class CBPeripheral {
   public var state: CBPeripheralState = .disconnected
   public var services: [CBService]?
   public var canSendWriteWithoutResponse = true
+  public var maximumWriteLength = 64
   public var onWrite: ((Data) -> Void)?
   public init() {}
-  public func maximumWriteValueLength(for type: CBCharacteristicWriteType) -> Int { 64 }
+  public func maximumWriteValueLength(for type: CBCharacteristicWriteType) -> Int { maximumWriteLength }
   public func writeValue(_ data: Data, for characteristic: CBCharacteristic, type: CBCharacteristicWriteType) {
     onWrite?(data)
   }

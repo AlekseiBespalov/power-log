@@ -22,7 +22,7 @@ import type { WorkoutOptions } from '../core/workouts';
 import type { DistanceSource } from '../core/distance';
 
 export type MonitorViewChanges = Partial<Pick<MonitorView, 'numbers' | 'charts' | 'range' | 'webColumns'>>;
-type Snapshot = { preferences: MonitorPreferences; ready: boolean; error: string | null };
+type Snapshot = { preferences: MonitorPreferences; ready: boolean; error: string | null; resetOffered: boolean };
 type Change = (preferences: PresentationPreferences) => PresentationPreferences;
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -33,6 +33,7 @@ export class MonitorPreferencesController {
     preferences: monitorPreferencesFromCore(this.load.preferences, true),
     ready: false,
     error: null,
+    resetOffered: false,
   };
   private listeners = new Set<() => void>();
   private hydration: Promise<void> | null = null;
@@ -62,13 +63,18 @@ export class MonitorPreferencesController {
         this.load = this.load.change(loaded);
         for (const change of changes) this.load = this.load.change(change(this.load.preferences));
         const preferences = monitorPreferencesFromCore(this.load.preferences, true);
-        this.publish({ preferences, ready: true, error: result.warning ?? null });
+        this.publish({ preferences, ready: true, error: result.warning ?? null, resetOffered: this.load.resetOffered });
         if (changes.length) this.persist(preferences);
       })
       .catch(error => {
         this.beforeLoad = [];
         this.load = presentationLoadPreferences(this.load.preferences, null, message(error));
-        this.publish({ ...this.state, ready: true, error: this.load.error ?? null });
+        this.publish({
+          ...this.state,
+          ready: true,
+          error: this.load.error ?? null,
+          resetOffered: this.load.resetOffered,
+        });
       }));
 
   private persist(preferences: MonitorPreferences) {
@@ -81,7 +87,7 @@ export class MonitorPreferencesController {
       },
       error => {
         if (this.pendingSave === pending) {
-          this.saveError = `Could not save monitor settings. ${message(error)}`;
+          this.saveError = `Your settings weren’t saved. ${message(error)}`;
           this.publish({ ...this.state, error: this.saveError });
         }
       },
@@ -92,7 +98,10 @@ export class MonitorPreferencesController {
   flush = () => this.pendingSave;
   prepareRecording = async (): Promise<MonitorPreferences> => {
     await this.hydrate();
-    if (!this.load.writable) throw new MonitorPreferencesError(this.load.error ?? 'Monitor settings are unreadable.');
+    if (!this.load.writable)
+      throw new MonitorPreferencesError(
+        this.load.error ?? "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
+      );
     let pending: Promise<void>;
     do {
       pending = this.pendingSave;
@@ -159,4 +168,10 @@ export class MonitorPreferencesController {
     });
   };
   resetView = (id: MonitorViewId) => this.change(previous => previous.withPreset(id, this.defaults.view(id)));
+  resetSettings = () => {
+    this.load = this.load.reset();
+    const preferences = monitorPreferencesFromCore(this.load.preferences, true);
+    this.publish({ preferences, ready: true, error: null, resetOffered: this.load.resetOffered });
+    this.persist(preferences);
+  };
 }

@@ -334,8 +334,8 @@ describe('production History and resource lifecycle in React', () => {
         h.mount();
       });
       await ui(rows(page)).toHaveCount(1);
-      await ui(page.getByRole('alert').filter({ hasText: '3 unreadable rides' })).toBeVisible();
-      await ui(page.getByRole('alert').filter({ hasText: '2 rides are missing' })).toBeVisible();
+      await ui(page.getByRole('alert').filter({ hasText: '3 rides couldn’t be read' })).toBeVisible();
+      await ui(page.getByRole('alert').filter({ hasText: '2 saved rides couldn’t be listed' })).toBeVisible();
       await page.evaluate(async () => {
         window.historyTests.setCatalogWarnings(0, 0);
         await window.historyTests.refreshCatalog();

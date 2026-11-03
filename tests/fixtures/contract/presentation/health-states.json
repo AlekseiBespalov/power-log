@@ -1,0 +1,12 @@
+{
+  "appleHealth": {
+    "pending": "Apple Health save pending",
+    "saved": "Apple Health saved",
+    "failed": "Apple Health not saved",
+    "notSaved": "Apple Health not saved",
+    "unavailable": "Apple Health unavailable",
+    "unknown": "Apple Health save unconfirmed",
+    "discarded": "Apple Health discarded",
+    "notRequested": "Saved only in Power Log"
+  }
+}

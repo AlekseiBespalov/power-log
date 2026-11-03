@@ -2,7 +2,8 @@ import type { ExpoConfig } from 'expo/config';
 import { version } from './package.json';
 
 const lab = process.env.POWER_LOG_LAB === '1';
-const iosBuildNumber = process.env.POWER_LOG_IOS_BUILD_NUMBER ?? '1';
+const [major, minor, patch] = version.split('.').map(Number) as [number, number, number];
+const iosBuildNumber = process.env.POWER_LOG_IOS_BUILD_NUMBER ?? String(major * 10000 + minor * 100 + patch);
 if (!/^[1-9]\d*$/.test(iosBuildNumber) || !Number.isSafeInteger(Number(iosBuildNumber)))
   throw new Error('Invalid iOS build number');
 const androidVersionCode = Number(process.env.POWER_LOG_ANDROID_VERSION_CODE ?? 1);
@@ -41,7 +42,7 @@ const config: ExpoConfig = {
     buildNumber: iosBuildNumber,
     bundleIdentifier: lab ? 'app.powerlog.lab' : (process.env.POWER_LOG_BUNDLE_ID ?? 'app.powerlog.mobile'),
     appleTeamId: process.env.POWER_LOG_APPLE_TEAM_ID,
-    supportsTablet: true,
+    supportsTablet: false,
     entitlements: { 'com.apple.developer.healthkit': true },
     privacyManifests: { NSPrivacyTracking: false, NSPrivacyAccessedAPITypes: [] },
     infoPlist: {
@@ -61,11 +62,12 @@ const config: ExpoConfig = {
             },
           }
         : {}),
-      NSBluetoothAlwaysUsageDescription: 'Power Log reads your CYC bike telemetry.',
+      NSBluetoothAlwaysUsageDescription:
+        'Power Log connects to the CYC controller on your bike over Bluetooth to show and record your rides.',
       NSHealthShareUsageDescription:
-        'Power Log reads your workout heart rate, energy and cycling measurements to show and save your ride.',
+        'Power Log reads the heart rate, heart rate variability, respiratory rate, blood oxygen, active and resting energy, physical effort, workout effort, and cycling distance, speed, power, cadence and functional threshold power recorded during your rides. It stores them with each ride for its charts, summary and exports. It also reads workouts to confirm that your Apple Watch saved a ride.',
       NSHealthUpdateUsageDescription:
-        'Power Log saves your cycling workouts, rider power, cadence and outdoor routes to Apple Health.',
+        'When Health saving is on, Power Log saves each ride as a cycling workout. The workout includes your GPS route, distance and speed, rider power and cadence from your bike, and the heart rate and active and resting energy measured during it.',
       NSLocationWhenInUseUsageDescription:
         'Power Log records your outdoor ride route, distance, speed and elevation while a workout is active.',
       UIBackgroundModes: ['bluetooth-central', 'location'],
@@ -75,7 +77,7 @@ const config: ExpoConfig = {
   web: { bundler: 'metro', output: 'static', name: 'Power Log', shortName: 'Power Log' },
   plugins: [
     'expo-router',
-    'expo-dev-client',
+    './plugins/with-power-log-dev-client',
     'expo-document-picker',
     ...(lab ? ['./plugins/with-power-log-lab'] : []),
     // Precompiled Expo modules require React.framework; building them from source keeps the app launchable

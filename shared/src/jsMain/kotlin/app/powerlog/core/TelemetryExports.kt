@@ -169,6 +169,16 @@ fun telemetryRecoveryPlan(
 }
 
 @JsExport
+fun telemetryRestartsBackoff(telemetrySeconds: Double): Boolean =
+    TelemetryReconnectPolicy.restartsBackoff(telemetrySeconds)
+
+@JsExport
+fun telemetryRetriesIdentity(attempt: Double, activeRide: Boolean, knownController: Boolean): Boolean {
+    require(attempt.isFinite() && attempt >= 1 && attempt <= Int.MAX_VALUE && attempt == attempt.toInt().toDouble())
+    return TelemetryReconnectPolicy.retriesIdentity(attempt.toInt(), activeRide, knownController)
+}
+
+@JsExport
 class TelemetryTransportSession(protocol: ControllerProtocolApi) {
     private val session = TelemetrySession(protocol.core)
     val discardedBytes: String
@@ -226,7 +236,11 @@ class TelemetryTransportSession(protocol: ControllerProtocolApi) {
         responseSentAt: Double?,
         writeBlockedAt: Double?,
         nativeDisconnecting: Boolean = false,
-    ): String = session.check(now, responseSentAt, writeBlockedAt, nativeDisconnecting).name
+        unansweredSince: Double? = null,
+    ): String = session.check(now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince).name
+
+    fun responseDeadline(sentAt: Double?, unansweredSince: Double?): Double? =
+        TelemetryTiming.responseDeadline(session.state.stage, sentAt, unansweredSince)
 
     fun scheduleRetry(plan: TelemetryRecoveryPlan, now: Double) {
         session.scheduleRetry(plan.core, now)

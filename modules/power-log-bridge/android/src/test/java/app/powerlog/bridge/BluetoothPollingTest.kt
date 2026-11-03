@@ -4,6 +4,7 @@ import android.bluetooth.*
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import app.powerlog.core.presentation.RideFailure
 import app.powerlog.core.telemetry.*
 import app.powerlog.core.telemetry.cyc.CycProtocol
 import java.io.File
@@ -30,6 +31,9 @@ class BluetoothPollingTest {
     private fun field(bluetooth: ControllerBluetooth, name: String, value: Any?) {
         ControllerBluetooth::class.java.getDeclaredField(name).apply { isAccessible = true }.set(bluetooth, value)
     }
+
+    private fun field(bluetooth: ControllerBluetooth, name: String): Any? =
+        ControllerBluetooth::class.java.getDeclaredField(name).apply { isAccessible = true }.get(bluetooth)
 
     private fun receive(bluetooth: ControllerBluetooth, frame: ByteArray) = receiveAdapter(bluetooth, frame)
 
@@ -168,8 +172,7 @@ class BluetoothPollingTest {
             receive(bluetooth, frame)
             assertEquals(if (age == 2500L) 1 else 0, samples)
             assertEquals(if (age == 2500L) "connected" else "reconnecting", bluetooth.state["status"])
-            if (age > 2500L)
-                assertEquals("Bike response arrived after its freshness deadline.", bluetooth.state["error"])
+            if (age > 2500L) assertEquals(RideFailure.bikeReconnecting.androidText, bluetooth.state["error"])
             bluetooth.disconnect()
             handler.removeCallbacksAndMessages(null)
         }
@@ -315,31 +318,74 @@ class BluetoothPollingTest {
     }
 
     @Test
-    fun responseAndWriteTimeoutFixturesRunThroughTheAdapterTimer() {
+    fun writeTimeoutFixturesRunThroughTheAdapterTimer() {
         val handler = Handler(Looper.getMainLooper())
         val rows = telemetryFixture("transport").getJSONArray("timeouts")
-        for (blockedWrite in listOf(false, true)) for (index in 0 until rows.length()) {
+        for (index in 0 until rows.length()) {
             val row = rows.getJSONObject(index)
             ControllerAdapterFixture(handler).use { adapter ->
                 adapter.identity()
                 val at = SystemClock.elapsedRealtime() / 1000.0
-                if (blockedWrite) {
-                    field(adapter.bluetooth, "pendingSince", null)
-                    field(adapter.bluetooth, "writeBlockedAt", at - row.getDouble("now"))
-                } else field(adapter.bluetooth, "pendingSince", at - row.getDouble("now"))
-                val timer =
-                    ControllerBluetooth::class
-                        .java
-                        .getDeclaredField("timer")
-                        .apply { isAccessible = true }
-                        .get(adapter.bluetooth) as Runnable
-                timer.run()
+                field(adapter.bluetooth, "pendingSince", null)
+                field(adapter.bluetooth, "writeBlockedAt", at - row.getDouble("now"))
+                (field(adapter.bluetooth, "timer") as Runnable).run()
                 assertEquals(row.getBoolean("expired"), adapter.bluetooth.state["status"] == "reconnecting")
                 if (row.getBoolean("expired"))
+                    assertEquals(RideFailure.bikeReconnecting.androidText, adapter.bluetooth.state["error"])
+            }
+        }
+    }
+
+    @Test
+    fun aLateReplyAndTheReplyToItsResentRequestRecordOneReading() {
+        val handler = Handler(Looper.getMainLooper())
+        val readings = mutableListOf<TelemetryReading>()
+        ControllerAdapterFixture(handler, readings::add).use { adapter ->
+            adapter.identity()
+            shadowOf(handler.looper).idleFor(Duration.ofMillis(1010))
+            val frame = bytes(fixture.getJSONArray("telemetry").getJSONObject(2).getString("frameHex"))
+            adapter.queueNotification(frame)
+            adapter.queueNotification(frame)
+            shadowOf(handler.looper).idle()
+            assertEquals(1, readings.size)
+            assertEquals("connected", adapter.bluetooth.state["status"])
+        }
+    }
+
+    @Test
+    fun unansweredTelemetryFixturesRunThroughTheAdapterTimer() {
+        val handler = Handler(Looper.getMainLooper())
+        val rows = telemetryFixture("transport").getJSONArray("telemetryReplies")
+        for (index in 0 until rows.length()) {
+            val row = rows.getJSONObject(index)
+            ControllerAdapterFixture(handler).use { adapter ->
+                shadowOf(handler.looper).idleFor(Duration.ofMillis(1000 - SystemClock.elapsedRealtime() % 1000))
+                adapter.identity()
+                val at = SystemClock.elapsedRealtime() / 1000.0
+                val origin = at - row.getDouble("now")
+                val sentAt = origin + row.getDouble("sentAt")
+                val since = origin + row.optDouble("unansweredSince", row.getDouble("sentAt"))
+                field(adapter.bluetooth, "pendingSince", sentAt)
+                field(adapter.bluetooth, "unansweredSince", since)
+                val resends = {
+                    adapter.bluetooth.diagnosticLog.read().lines().count { it.contains("\"event\":\"request_resent\"") }
+                }
+                val before = resends()
+                (field(adapter.bluetooth, "timer") as Runnable).run()
+                val action = row.getString("action")
+                assertEquals(
+                    row.toString(),
+                    action == "responseTimeout",
+                    adapter.bluetooth.state["status"] == "reconnecting",
+                )
+                if (action != "responseTimeout") {
                     assertEquals(
-                        if (blockedWrite) "Bike write timed out." else "Bike response timed out.",
-                        adapter.bluetooth.state["error"],
+                        if (action == "resendRequest") at else sentAt,
+                        field(adapter.bluetooth, "pendingSince"),
                     )
+                    assertEquals(since, field(adapter.bluetooth, "unansweredSince"))
+                }
+                assertEquals(if (action == "resendRequest") before + 1 else before, resends())
             }
         }
     }
@@ -385,7 +431,7 @@ class BluetoothPollingTest {
                     assertEquals("connecting", adapter.bluetooth.state["status"])
                     shadowOf(handler.looper).idleFor(Duration.ofMillis(1))
                     assertEquals("reconnecting", adapter.bluetooth.state["status"])
-                    assertEquals("Bike write timed out.", adapter.bluetooth.state["error"])
+                    assertEquals(RideFailure.bikeReconnecting.androidText, adapter.bluetooth.state["error"])
                     assertEquals(1, io.acceptedWrites.size)
                     assertTrue(io.disconnectRequested)
                 }
@@ -424,7 +470,7 @@ class BluetoothPollingTest {
                     assertEquals(1, readings.size)
                 } else {
                     assertEquals("reconnecting", adapter.bluetooth.state["status"])
-                    assertEquals("Bike write timed out.", adapter.bluetooth.state["error"])
+                    assertEquals(RideFailure.bikeReconnecting.androidText, adapter.bluetooth.state["error"])
                     assertTrue(readings.isEmpty())
                     assertEquals(1, io.acceptedWrites.size)
                     assertTrue(io.disconnectRequested)

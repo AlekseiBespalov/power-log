@@ -679,3 +679,8 @@ try archive.update(id: atomicRide.id, healthKitState: "pending")
 check(
   try archive.metadata(id: atomicRide.id).healthKitState == "saved",
   "A delayed pending Health message cannot replace a saved result")
+for (name, value) in try reclaimTests(root: root).sorted(by: { $0.key < $1.key }) {
+  print(
+    "Reclaim \(name): deleted ride \(value.rideBytes) bytes; database and WAL \(value.before) to \(value.after) bytes; \(value.steps) steps in \(Int(value.milliseconds)) ms"
+  )
+}

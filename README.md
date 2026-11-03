@@ -39,13 +39,18 @@ Install JDK 17 and the Android SDK with platform tools; set `JAVA_HOME` and `AND
 
 - `npm run build:android -- --preview` builds a release-mode, offline Preview APK as the separate
   `app.powerlog.mobile.preview` app in `artifacts/builds/android/power-log-preview.apk`, signed with the public
-  development key; `--arch=arm64-v8a` limits it to one architecture. Never use that key for a public release.
+  development key; `--arch=arm64-v8a` limits it to one architecture, and `--bundle` builds an App Bundle
+  (`power-log-preview.aab`) with native symbol tables instead. Never use that key for a public release.
 - `npm run test:android` runs the JVM and Robolectric suites; with `emulator-5554` running, `-- --emulator` adds the
   connected suites. `GRADLE_OPTS=-Dorg.gradle.daemon=false` leaves no Gradle daemon behind.
 - `npm run release:android -- <version>` builds, signs and publishes a GitHub release from the maintainer's Mac. It
   reads the signing key from `POWER_LOG_ANDROID_KEYSTORE`, `POWER_LOG_ANDROID_STORE_PASSWORD`,
   `POWER_LOG_ANDROID_KEY_ALIAS` and `POWER_LOG_ANDROID_KEY_PASSWORD`. Keep that key and a backup outside the
-  repository: every update must be signed with it.
+  repository: every update must be signed with it. With the Google Play upload key in
+  `POWER_LOG_ANDROID_UPLOAD_KEYSTORE`, `POWER_LOG_ANDROID_UPLOAD_STORE_PASSWORD`, `POWER_LOG_ANDROID_UPLOAD_KEY_ALIAS`
+  and `POWER_LOG_ANDROID_UPLOAD_KEY_PASSWORD` it also builds the App Bundle for manual upload, and skips it otherwise;
+  only the APK is published. The bundle, JS source map and native symbols stay in
+  `~/.cache/power-log/releases/<version>/android/`.
 
 ## Verify
 

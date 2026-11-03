@@ -211,6 +211,24 @@ describe('native monitor preference commits', () => {
     fs.files.set(file(1), '{corrupt');
     await expect(storage.load()).rejects.toThrow('could not be read');
   });
+  it('resets unreadable settings to saved defaults so a ride can start', async () => {
+    const storage = await native();
+    await storage.save({ ...defaultMonitorPreferences(), sampleHz: 8 });
+    fs.files.set(file(1), '{corrupt');
+    const controller = new MonitorPreferencesController(storage);
+    await controller.hydrate();
+    expect(controller.snapshot()).toMatchObject({ ready: true, resetOffered: true });
+    await expect(controller.prepareRecording()).rejects.toThrow(
+      "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
+    );
+    controller.resetSettings();
+    expect(controller.snapshot()).toMatchObject({ error: null, resetOffered: false });
+    await expect(controller.prepareRecording()).resolves.toEqual(defaultMonitorPreferences());
+    expect(JSON.parse(fs.files.get(file(2))!)).toEqual(defaults);
+    controller.setSpeedUnit('mph');
+    await controller.flush();
+    expect((await (await native()).load()).preferences).toEqual({ ...defaultMonitorPreferences(), speedUnit: 'mph' });
+  });
   it('loads a revision holding removed Health choices without them and keeps saving', async () => {
     const storage = await native();
     await storage.save(defaultMonitorPreferences());
@@ -299,7 +317,7 @@ describe('native monitor preference commits', () => {
     fs.failMove = true;
     controller.setSampleHz(8);
     await controller.flush();
-    expect(controller.snapshot().error).toBe("Could not save monitor settings. Power Log couldn't save this change.");
+    expect(controller.snapshot().error).toBe("Your settings weren’t saved. Power Log couldn't save this change.");
     expect((await storage.load()).preferences).toMatchObject({ speedUnit: 'mph', sampleHz: 2 });
     fs.failMove = false;
     controller.selectView('battery');
@@ -315,7 +333,7 @@ describe('native monitor preference commits', () => {
     const unreadable = new MonitorPreferencesController(storage);
     await unreadable.hydrate();
     expect(unreadable.snapshot().error).toBe(
-      "Could not load monitor settings. Saved monitor settings could not be read. Changes won't be saved until settings can be read.",
+      "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
     );
     fs.failList = false;
     const controller = new MonitorPreferencesController(storage);
@@ -323,7 +341,7 @@ describe('native monitor preference commits', () => {
     fs.failWrite = true;
     controller.setSpeedUnit('mph');
     await controller.flush();
-    expect(controller.snapshot().error).toBe("Could not save monitor settings. Power Log couldn't save this change.");
+    expect(controller.snapshot().error).toBe("Your settings weren’t saved. Power Log couldn't save this change.");
     for (const error of [unreadable.snapshot().error, controller.snapshot().error])
       expect(error).not.toMatch(/ExpoModulesCore|Caused by|function has failed/);
   });
@@ -349,7 +367,7 @@ describe('browser monitor preferences', () => {
       await controller.flush();
       expect(controller.snapshot().preferences).toMatchObject({ activeView: 'battery', speedUnit: 'mph' });
       expect(controller.snapshot().error).toBe(error);
-      expect(error).toContain("Changes won't be saved until settings can be read.");
+      expect(error).toContain('Reset settings to use the defaults.');
       expect(setItem).not.toHaveBeenCalled();
       getItem.mockImplementation(() => monitorPreferencesJson(defaultMonitorPreferences()));
       const reloaded = new MonitorPreferencesController(storage);
@@ -395,7 +413,9 @@ describe('browser monitor preferences', () => {
     values.set(key, original);
     const controller = new MonitorPreferencesController(storage);
     await controller.hydrate();
-    expect(controller.snapshot().error).toContain('Invalid saved monitor settings');
+    expect(controller.snapshot().error).toBe(
+      "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
+    );
     controller.setSampleHz(8);
     await controller.flush();
     expect(values.get(key)).toBe(original);
@@ -448,7 +468,7 @@ describe('browser monitor preferences', () => {
       await controller.flush();
       expect(controller.snapshot()).toMatchObject({
         ready: true,
-        error: expect.stringContaining('Invalid saved monitor settings'),
+        error: "Power Log couldn't read your saved settings. Reset settings to use the defaults.",
       });
       expect(controller.snapshot().preferences.speedUnit).toBe('mph');
       expect(setItem).not.toHaveBeenCalled();

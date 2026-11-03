@@ -4,6 +4,12 @@ import app.powerlog.core.StreamStatus
 
 object TelemetryTiming {
     const val telemetryTimeoutSeconds = 2.5
+    const val replyWindowSeconds = 1.0
+    const val silenceSeconds = 3.0
+    // Android ends a link one second after its last app releases it (GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP in
+    // https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/system/stack/include/gatt_api.h);
+    // a connection made sooner joins that link and fails with status 22.
+    const val linkReleaseSeconds = 2.0
     const val discoverySeconds = 20.0
     const val attemptSeconds = 20.0
     const val cancellationGraceSeconds = 5.0
@@ -15,6 +21,16 @@ object TelemetryTiming {
         1 / if (background && !recording) minOf(hz, backgroundPreviewHz) else hz
 
     fun replyExpired(sentAt: Double, now: Double): Boolean = now - sentAt >= telemetryTimeoutSeconds
+
+    fun silenceExpired(unansweredSince: Double, now: Double): Boolean = now - unansweredSince >= silenceSeconds
+
+    fun responseDeadline(stage: TelemetryStage, sentAt: Double?, unansweredSince: Double?): Double? =
+        when {
+            sentAt == null -> null
+            stage == TelemetryStage.ready ->
+                minOf(sentAt + replyWindowSeconds, (unansweredSince ?: sentAt) + silenceSeconds)
+            else -> sentAt + telemetryTimeoutSeconds
+        }
 
     fun replyAdmissible(sentAt: Double, now: Double): Boolean = now >= sentAt && now - sentAt <= telemetryTimeoutSeconds
 
@@ -82,16 +98,31 @@ object TelemetryReconnectPolicy {
                 stableTelemetrySeconds != null &&
                 stableTelemetrySeconds.isFinite() &&
                 stableTelemetrySeconds >= TelemetryTiming.stableTelemetrySeconds
-        val delay = if (attempt > 5) 30.0 else if (immediate) 0.0 else (1 shl (attempt - 1)).toDouble()
+        val closesLink = !callbackCompleted && !peripheralIsDisconnected
+        val delay =
+            when {
+                attempt > 5 -> 30.0
+                immediate -> 0.0
+                closesLink -> maxOf((1 shl (attempt - 1)).toDouble(), TelemetryTiming.linkReleaseSeconds)
+                else -> (1 shl (attempt - 1)).toDouble()
+            }
         val adopt = systemIsReconnecting && delay == 0.0
-        val cancel =
-            !adopt &&
-                (systemIsReconnecting || systemAttemptPending || (!callbackCompleted && !peripheralIsDisconnected))
+        val cancel = !adopt && (systemIsReconnecting || systemAttemptPending || closesLink)
         return TelemetryRetryPlan(delay, adopt, cancel)
     }
 
+    fun restartsBackoff(telemetrySeconds: Double): Boolean = telemetrySeconds >= TelemetryTiming.silenceSeconds
+
     fun retriesDiscovery(platformError: Boolean, activeRide: Boolean, knownController: Boolean): Boolean =
-        platformError || activeRide && knownController
+        platformError || activeRide || knownController
+
+    const val unverifiedIdentityAttempts = 2
+
+    @Throws(IllegalArgumentException::class)
+    fun retriesIdentity(attempt: Int, activeRide: Boolean, knownController: Boolean): Boolean {
+        require(attempt >= 1)
+        return activeRide || knownController || attempt < unverifiedIdentityAttempts
+    }
 }
 
 data class TelemetryDiscovery(val generation: Long, val deadline: Double) {
@@ -122,6 +153,7 @@ enum class TelemetryTransportAction {
     none,
     advanced,
     beginRetry,
+    resendRequest,
     responseTimeout,
     writeTimeout,
     attemptTimeout,
@@ -292,6 +324,7 @@ object TelemetryTransport {
         responseSentAt: Double? = null,
         writeBlockedAt: Double? = null,
         nativeDisconnecting: Boolean = false,
+        unansweredSince: Double? = null,
     ): TelemetryTransportDecision {
         require(now.isFinite())
         if (state.cancellationFailed) return TelemetryTransportDecision(state, TelemetryTransportAction.none)
@@ -312,8 +345,15 @@ object TelemetryTransport {
         if (state.attemptDeadline != null && now >= state.attemptDeadline)
             return failed(state, TelemetryTransportAction.attemptTimeout)
         if (!state.cancellationPending && state.stage in listOf(TelemetryStage.identity, TelemetryStage.ready)) {
-            if (responseSentAt != null && TelemetryTiming.replyExpired(responseSentAt, now))
-                return failed(state, TelemetryTransportAction.responseTimeout)
+            if (responseSentAt != null) {
+                val ready = state.stage == TelemetryStage.ready
+                val silent =
+                    if (ready) TelemetryTiming.silenceExpired(unansweredSince ?: responseSentAt, now)
+                    else TelemetryTiming.replyExpired(responseSentAt, now)
+                if (silent) return failed(state, TelemetryTransportAction.responseTimeout)
+                if (ready && now - responseSentAt >= TelemetryTiming.replyWindowSeconds)
+                    return TelemetryTransportDecision(state, TelemetryTransportAction.resendRequest)
+            }
             if (writeBlockedAt != null && TelemetryTiming.writeExpired(writeBlockedAt, now))
                 return failed(state, TelemetryTransportAction.writeTimeout)
         }

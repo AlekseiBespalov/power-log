@@ -442,7 +442,7 @@ class RidePlotReadsTest {
                     if (checkRevision) assertTrue("Revision read once per cached node: $revisions", revisions <= 8)
                     assertTrue(
                         "Full-domain boundary read: $windows",
-                        windows.all { it.second - it.first <= 16000000 + DistancePolicy.maximumControllerIntervalUs },
+                        windows.all { it.second - it.first <= 16000000 + DistancePolicy.maximumControllerEdgeUs },
                     )
                     assertTrue("Repeated interval reads: ${windows.size}", windows.size <= 3)
                 }

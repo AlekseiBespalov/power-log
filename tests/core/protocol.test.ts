@@ -6,7 +6,7 @@ import wireMetrics from '../fixtures/contract/telemetry/cyc/wire-metrics.json';
 import { adapters, flush, harness } from '../support/browser-telemetry';
 import { framePayload } from '../support/controller-frames';
 import { hex, toHex } from './helpers';
-import { controllerCrc } from '../../shared/js';
+import { controllerCrc, presentationFailure } from '../../shared/js';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(async () => {
@@ -162,7 +162,7 @@ describe('controller contract fixtures through the production web adapter', () =
     expect(oversized.events.sample).not.toHaveBeenCalled();
     expect(await oversized.adapter.getState()).toMatchObject({
       status: 'error',
-      error: expect.stringContaining('size'),
+      error: presentationFailure('controllerUnsupported').text,
     });
   });
 

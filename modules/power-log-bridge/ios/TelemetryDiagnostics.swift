@@ -3,12 +3,6 @@ import Foundation
 import PowerLogCore
 
 enum ControllerErrorPresentation {
-  static func message(_ rejection: ControllerRejectedReply) -> String {
-    if rejection.kind == .identity { return "Unsupported controller. Connect a CYC X6 or X12." }
-    if rejection.reason == "telemetryMask" { return "Unexpected telemetry field mask." }
-    return "Telemetry command or length does not match the verified profile."
-  }
-
   static func displayError(storage: String?, other: String?, recovery: String?, reconnecting: Bool) -> (
     message: String?, recoverable: Bool
   ) {
@@ -34,6 +28,7 @@ enum TelemetryDiagnosticEvent: String, CaseIterable {
   case bluetoothState = "bluetooth_state"
   case telemetrySummary = "telemetry_summary"
   case telemetryGap = "telemetry_gap"
+  case requestResent = "request_resent"
   case backgroundChanged = "background_changed"
   case recordingError = "recording_error"
   case restored

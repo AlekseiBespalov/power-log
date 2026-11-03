@@ -41,7 +41,7 @@ function configureActivityProject(project, config) {
       SDKROOT: 'iphoneos',
       SUPPORTED_PLATFORMS: '"iphoneos iphonesimulator"',
       IPHONEOS_DEPLOYMENT_TARGET: '26.0',
-      TARGETED_DEVICE_FAMILY: '"1,2"',
+      TARGETED_DEVICE_FAMILY: '1',
       APPLICATION_EXTENSION_API_ONLY: 'YES',
       SWIFT_VERSION: '5.0',
       SWIFT_STRICT_CONCURRENCY: 'targeted',

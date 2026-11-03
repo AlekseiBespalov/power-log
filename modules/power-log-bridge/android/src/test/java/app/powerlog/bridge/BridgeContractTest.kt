@@ -230,6 +230,10 @@ class BridgeContractTest {
         for (entry in vocabulary) {
             val failure = RideFailure.valueOf(entry["code"] as String)
             assertEquals("${entry["message"]} ${entry["nextStep"]}".trimEnd(), failure.text)
+            assertEquals(
+                "${entry["message"]} ${entry["androidNextStep"] ?: entry["nextStep"]}".trimEnd(),
+                failure.androidText,
+            )
             assertEquals(failure.text, RideFailureException(failure).message)
             assertSame(failure, RideFailureException(failure.name).failure)
             assertPlain(failure.name, failure.text)

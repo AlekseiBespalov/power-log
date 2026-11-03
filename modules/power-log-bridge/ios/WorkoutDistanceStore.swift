@@ -213,6 +213,8 @@ final class WorkoutDistanceStore {
   private static let currentSnapshot =
     "json_type(CAST(value AS TEXT),'$.battery') IS 'object' AND json_extract(CAST(value AS TEXT),'$.counterEdgeUs')="
     + String(BatteryConsumptionPolicy.shared.maximumCounterEdgeUs)
+    + " AND json_extract(CAST(value AS TEXT),'$.controllerEdgeUs')="
+    + String(DistancePolicy.shared.maximumControllerEdgeUs)
   func cachedSnapshot(id: String, revision: Int64, selection: String = "auto") throws -> WorkoutDistanceSnapshot? {
     try validate(selection)
     let value = try read { db -> Data? in
@@ -799,6 +801,7 @@ final class WorkoutDistanceStore {
     ]
     var fixed = Dictionary(uniqueKeysWithValues: keys.compactMap { key in metadata[key].map { (key, $0) } })
     fixed["counterEdgeUs"] = BatteryConsumptionPolicy.shared.maximumCounterEdgeUs
+    fixed["controllerEdgeUs"] = DistancePolicy.shared.maximumControllerEdgeUs
     let fingerprint = String(
       data: try JSONSerialization.data(withJSONObject: fixed, options: [.sortedKeys]), encoding: .utf8)!
     return Context(

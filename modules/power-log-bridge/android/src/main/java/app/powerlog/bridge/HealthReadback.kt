@@ -28,6 +28,9 @@ internal class HealthReadback(
         mode != app.powerlog.core.health.ExecutionMode.background ||
             access.backgroundReadSupported && HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND in grants
 
+    private fun beforeReadWindow(id: String) =
+        access.readableFrom?.let { HealthRecords.instant(timeUs(store.metadata(id).str("startedAt"))) < it } == true
+
     fun readDenied(
         id: String,
         type: kotlin.reflect.KClass<out Record>,
@@ -60,13 +63,14 @@ internal class HealthReadback(
             return
         }
         store.deferHealthReads(id, false)
+        if (beforeReadWindow(id)) return
         for (type in types) {
             if (!store.exists(id)) return
             val metric = metric(type)
             val progress = HealthQueryProgress("healthConnect", metric, scope(id), null)
             var previous = store.healthProgress(id, progress)
             if (
-                previous?.get("cursor") in listOf("denied", "scopeIncomplete") ||
+                previous?.get("cursor") == "denied" ||
                     (previous?.get("attempts") as? Number)?.toInt()?.let { it >= 10 } == true
             )
                 continue
@@ -86,7 +90,6 @@ internal class HealthReadback(
                 store.setHealthProgress(id, progress)
                 previous = null
             }
-            var complete = previous?.let { requireNotNull(it["scopeComplete"] as? Boolean) } ?: true
             try {
                 val token = (previous?.get("cursor") as? String)?.takeUnless { it == "denied" }
                 val page =
@@ -101,25 +104,20 @@ internal class HealthReadback(
                     )
                 if (!store.exists(id)) return
                 require(page.records.size <= 128)
-                complete = complete && page.scopeComplete
-                if (!complete) store.setHealthProgress(id, progress.copy(cursor = token), scopeComplete = false)
-                run {
-                    for (record in page.records) {
-                        import(id, record, token)
-                    }
-                    store.clearHealthQuota(id, "readback:$metric")
-                    store.setHealthProgress(
-                        id,
-                        progress.copy(cursor = page.next ?: if (complete) "complete" else "scopeIncomplete"),
-                        nextRefreshUs =
-                            if (page.next == null)
-                                listOf(900_000_000L, 3_600_000_000L)
-                                    .map { timeUs(m.str("endedAt")) + it }
-                                    .firstOrNull { it > now() }
-                            else null,
-                        scopeComplete = complete,
-                    )
+                for (record in page.records) {
+                    import(id, record, token)
                 }
+                store.clearHealthQuota(id, "readback:$metric")
+                store.setHealthProgress(
+                    id,
+                    progress.copy(cursor = page.next ?: "complete"),
+                    nextRefreshUs =
+                        if (page.next == null)
+                            listOf(900_000_000L, 3_600_000_000L)
+                                .map { timeUs(m.str("endedAt")) + it }
+                                .firstOrNull { it > now() }
+                        else null,
+                )
             } catch (error: SecurityException) {
                 if (!store.exists(id)) return
                 store.setHealthProgress(id, progress.copy(cursor = "denied"))
@@ -132,7 +130,6 @@ internal class HealthReadback(
                         progress.copy(cursor = previous?.get("cursor") as? String),
                         attempts,
                         error.message,
-                        scopeComplete = complete,
                     )
                     store.healthQuotaWait(id, "readback:$metric", now())
                 } else {
@@ -142,7 +139,6 @@ internal class HealthReadback(
                         progress.copy(cursor = previous?.get("cursor") as? String),
                         attempts + 1,
                         error.message,
-                        scopeComplete = complete,
                     )
                     val retry = app.powerlog.core.health.HealthBudget.retry(attempts + 1, false, null, now())
                     val budget = store.healthBudget(app.powerlog.core.health.CallBucket.read, now())
@@ -167,6 +163,8 @@ internal class HealthReadback(
                 null,
                 emptyList(),
             )
+        if (beforeReadWindow(id))
+            return ComponentResult(Component.readback, revision, false, ComponentState.notRequested, null, emptyList())
         val cursors = types.map {
             store.healthProgress(
                 id,
@@ -175,14 +173,11 @@ internal class HealthReadback(
         }
         val pending = cursors.any {
             it == null ||
-                it["cursor"] !in listOf("complete", "denied", "scopeIncomplete") &&
+                it["cursor"] !in listOf("complete", "denied") &&
                     (it["attempts"] as? Number)?.toInt()?.let { n -> n >= 10 } != true
         }
         val denied = cursors.any { it?.get("cursor") == "denied" }
-        val failure = cursors.any {
-            it?.get("cursor") == "scopeIncomplete" ||
-                (it?.get("attempts") as? Number)?.toInt()?.let { n -> n >= 10 } == true
-        }
+        val failure = cursors.any { (it?.get("attempts") as? Number)?.toInt()?.let { n -> n >= 10 } == true }
         return ComponentResult(
             Component.readback,
             revision,
@@ -287,12 +282,14 @@ internal class HealthReadback(
     }
 
     fun nextRefreshUs(id: String): Long? =
-        store.select(
-            "SELECT min(CAST(json_extract(payload,'$.nextRefreshUs') AS INTEGER)) FROM health_query_progress WHERE ride=? AND measure!='publicationParent' AND json_extract(payload,'$.cursor')='complete'",
-            arrayOf(id),
-        ) {
-            if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null
-        }
+        if (beforeReadWindow(id)) null
+        else
+            store.select(
+                "SELECT min(CAST(json_extract(payload,'$.nextRefreshUs') AS INTEGER)) FROM health_query_progress WHERE ride=? AND measure!='publicationParent' AND json_extract(payload,'$.cursor')='complete'",
+                arrayOf(id),
+            ) {
+                if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null
+            }
 
     companion object {
         val types =

@@ -55,10 +55,29 @@ export function checkSources() {
     assert.doesNotMatch(readFileSync(file, 'utf8'), forbidden, 'The bridge must not expose Lab entry points');
 }
 
+export function checkInfoPlist(info) {
+  assert.deepEqual(
+    [
+      ...['NSLocalNetworkUsageDescription', 'NSBonjourServices'].filter(key => key in info),
+      ...(info.NSAppTransportSecurity?.NSAllowsLocalNetworking ? ['NSAllowsLocalNetworking'] : []),
+      ...(info.CFBundleURLTypes ?? [])
+        .flatMap(type => type.CFBundleURLSchemes ?? [])
+        .filter(scheme => scheme.startsWith('exp+')),
+    ],
+    [],
+    'Store builds declare no local network access and no development client URL scheme',
+  );
+}
+
 export function checkBundle(bundle) {
   assert.ok(bundle?.endsWith('.app'), 'The final .app bundle is required');
   const root = realpathSync(resolve(bundle));
   assert.ok(statSync(root).isDirectory(), 'The final .app bundle must be a directory');
+  checkInfoPlist(
+    JSON.parse(
+      execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', join(root, 'Info.plist')], { encoding: 'utf8' }),
+    ),
+  );
   const executable = execFileSync(
     '/usr/bin/plutil',
     ['-extract', 'CFBundleExecutable', 'raw', '-o', '-', join(root, 'Info.plist')],
@@ -97,5 +116,7 @@ if (process.argv[1]?.endsWith('check-apple-release-surface.mjs')) {
   assert.equal(process.argv.length, 3, 'Supply the final .app bundle');
   checkSources();
   const binaries = checkBundle(process.argv[2]);
-  console.log(`Apple release surface: ${binaries.length} Mach-O executables contain no Lab hooks or entry points`);
+  console.log(
+    `Apple release surface: ${binaries.length} Mach-O executables contain no Lab hooks or entry points, and Info.plist has no development client entries`,
+  );
 }

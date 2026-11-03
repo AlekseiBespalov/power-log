@@ -63,7 +63,7 @@ struct MonitorRasterLaunchProfile {
     var result = frames
     result["profileVersion"] = 1
     result["requestedMilliseconds"] = 30_000
-    // 1 = duration reached, 2 = foreground lost, 3 = explicit sampler stop/restart.
+    // 1 = duration reached, 2 = foreground lost.
     result["stopReason"] = Double(stopReason)
     for (name, count) in raster { result["raster_\(name)"] = Double(count) }
     return result
@@ -81,14 +81,12 @@ struct MonitorRasterLaunchProfile {
 
   final class MonitorRasterFrameDiagnostics: NSObject {
     static let shared = MonitorRasterFrameDiagnostics()
+    private static let durationSeconds = 30.0
     private var link: CADisplayLink?
     private var beganAt = 0.0
-    private var durationLimit = 60.0
     private var counters = MonitorRasterFrameCounters()
     private var launchProfile = MonitorRasterLaunchProfile(
       enabled: ProcessInfo.processInfo.arguments.contains(MonitorRasterLaunchProfile.argument))
-    private var profiling = false
-    private var profileWriteStatus = 0.0
     private var inactiveObserver: NSObjectProtocol?
     private let outputQueue = DispatchQueue(label: "powerlog.monitor.profile-output", qos: .utility)
 
@@ -106,87 +104,47 @@ struct MonitorRasterLaunchProfile {
       FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
     }
 
-    func start() -> [String: Double] {
-      begin(duration: 60, profile: false)
-      return snapshot()
-    }
-
     func observePresentation(hasAcceptedBitmap: Bool, hasCursor: Bool) {
       precondition(Thread.isMainThread)
       guard launchProfile.shouldStart(hasAcceptedBitmap: hasAcceptedBitmap, hasCursor: hasCursor) else { return }
       _ = MonitorRasterWorker.shared.diagnostics(reset: true)
-      begin(duration: 30, profile: true)
-    }
-
-    private func begin(duration: Double, profile: Bool) {
-      precondition(Thread.isMainThread)
-      if link != nil { _ = finish(reason: 3) }
-      durationLimit = duration
-      profiling = profile
       counters = MonitorRasterFrameCounters()
+      counters.presentationUpdates = 1
       beganAt = CACurrentMediaTime()
-      if profile { counters.presentationUpdates = 1 }
       let next = CADisplayLink(target: self, selector: #selector(tick(_:)))
       next.add(to: .main, forMode: .common)
       link = next
       inactiveObserver = NotificationCenter.default.addObserver(
         forName: UIApplication.willResignActiveNotification,
         object: nil, queue: .main
-      ) { [weak self] _ in _ = self?.finish(reason: 2) }
+      ) { [weak self] _ in self?.finish(reason: 2) }
     }
 
-    func stop() -> [String: Double] { finish(reason: 3) }
-    func snapshot() -> [String: Double] {
-      var result = counters.snapshot(active: link != nil)
-      result["launchProfileEnabled"] = launchProfile.enabled ? 1 : 0
-      result["launchProfileStarted"] = launchProfile.started ? 1 : 0
-      // 0 = no write, 1 = queued, 2 = written, -1 = failed. These are counters, never user data.
-      result["profileWriteStatus"] = profileWriteStatus
-      return result
-    }
     func presentationChanged() { if link != nil { counters.presentationUpdates += 1 } }
 
-    private func finish(reason: Int) -> [String: Double] {
+    private func finish(reason: Int) {
       precondition(Thread.isMainThread)
-      link?.invalidate()
-      link = nil
+      guard let link else { return }
+      link.invalidate()
+      self.link = nil
       if let inactiveObserver {
         NotificationCenter.default.removeObserver(inactiveObserver)
         self.inactiveObserver = nil
       }
-      if profiling {
-        profiling = false
-        let report = MonitorRasterLaunchProfile.report(
-          frames: counters.snapshot(active: false),
-          raster: MonitorRasterWorker.shared.diagnostics(), stopReason: reason)
-        saveProfile(report)
-      }
-      return snapshot()
-    }
-
-    private func saveProfile(_ report: [String: Double]) {
-      guard let directory = Self.outputDirectory else {
-        profileWriteStatus = -1
-        return
-      }
-      profileWriteStatus = 1
-      outputQueue.async {
-        let status: Double
-        do {
-          try MonitorRasterLaunchProfile.write(report, to: directory)
-          status = 2
-        } catch { status = -1 }
-        DispatchQueue.main.async { self.profileWriteStatus = status }
-      }
+      let report = MonitorRasterLaunchProfile.report(
+        frames: counters.snapshot(active: false),
+        raster: MonitorRasterWorker.shared.diagnostics(), stopReason: reason)
+      guard let directory = Self.outputDirectory else { return }
+      outputQueue.async { try? MonitorRasterLaunchProfile.write(report, to: directory) }
     }
 
     @objc private func tick(_ link: CADisplayLink) {
       guard UIApplication.shared.applicationState == .active else {
-        _ = finish(reason: 2)
+        finish(reason: 2)
         return
       }
-      guard CACurrentMediaTime() - beganAt < durationLimit else {
-        _ = finish(reason: 1)
+      guard CACurrentMediaTime() - beganAt < Self.durationSeconds else {
+        finish(reason: 1)
         return
       }
       counters.record(timestamp: link.timestamp)

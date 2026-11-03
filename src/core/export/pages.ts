@@ -302,7 +302,7 @@ export async function* readProjection<P extends ProjectionName>(
 ): AsyncGenerator<ProjectionPage<P>, void, undefined> {
   const { platform, kind, slicer, signal } = reads.options;
   if (!(PROJECTIONS[projection].kinds as readonly ExportKind[]).includes(kind))
-    throw new ExportError('unsupported', `A ${kind} export does not read ${projection} pages.`);
+    throw new ExportError('unsupported', "Power Log couldn't create this export. Export it again.");
   const expected = projectionColumns(projection, platform, kind);
   let after: ExportCursor | null = null;
   let rows = 0;

@@ -56,8 +56,10 @@ class TelemetrySession(private val protocol: ControllerProtocol) {
         responseSentAt: Double?,
         writeBlockedAt: Double?,
         nativeDisconnecting: Boolean = false,
+        unansweredSince: Double? = null,
     ): TelemetryTransportAction {
-        val decision = TelemetryTransport.check(state, now, responseSentAt, writeBlockedAt, nativeDisconnecting)
+        val decision =
+            TelemetryTransport.check(state, now, responseSentAt, writeBlockedAt, nativeDisconnecting, unansweredSince)
         update(decision.next)
         return decision.action
     }

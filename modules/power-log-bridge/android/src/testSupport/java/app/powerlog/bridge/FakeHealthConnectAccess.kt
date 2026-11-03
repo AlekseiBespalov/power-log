@@ -8,7 +8,7 @@ import kotlin.reflect.KClass
 internal class FakeHealthConnectAccess(private val deduplicateSampleTimes: Boolean = true) : HealthConnectAccess {
     override var available = true
     override var backgroundReadSupported = true
-    override var historyReadSupported = true
+    override var readableFrom: java.time.Instant? = java.time.Instant.EPOCH
     var grants =
         setOf(
             HealthPermission.getWritePermission(ExerciseSessionRecord::class),
@@ -18,7 +18,6 @@ internal class FakeHealthConnectAccess(private val deduplicateSampleTimes: Boole
             HealthPermission.getWritePermission(SpeedRecord::class),
             HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE,
             HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND,
-            HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY,
         )
 
     init {
@@ -90,7 +89,6 @@ internal class FakeHealthConnectAccess(private val deduplicateSampleTimes: Boole
         write(records)
     }
 
-    var scopeComplete = true
     var beforeRead: () -> Unit = {}
 
     override suspend fun read(
@@ -124,7 +122,6 @@ internal class FakeHealthConnectAccess(private val deduplicateSampleTimes: Boole
         return HealthPage(
             candidates.drop(offset).take(128),
             if (offset + 128 < candidates.size) (offset + 128).toString() else null,
-            scopeComplete,
         )
     }
 

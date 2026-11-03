@@ -1,4 +1,5 @@
-import type { Device } from './types';
+import { presentationControllerSpeedNote } from '../../shared/js';
+import type { NativeState } from './types';
 
 /** Local peripheral IDs distinguish identical advertisements; the tag stays stable across scans. */
 export function bikeDisplayName(device: { id?: string; name?: string; controllerModel?: string }): string {
@@ -14,11 +15,14 @@ export function bikeDisplayName(device: { id?: string; name?: string; controller
   return `${name} · ${tag}`;
 }
 
-export function bikeDetails(device: Device): string {
-  const parts = [
-    device.controllerModel ? `Firmware ${device.firmwareLabel ?? 'unknown'}` : 'Model identified on connection',
-  ];
-  if (device.rssi < 0 && device.rssi >= -126)
-    parts.push(`${device.rssi >= -65 ? 'Strong' : device.rssi >= -80 ? 'Fair' : 'Weak'} signal`);
-  return parts.join(' · ');
+export function controllerSpeedNote(
+  identity: Pick<NativeState, 'controllerModel' | 'firmwareLabel' | 'controllerProtocol'>,
+): string | null {
+  return (
+    presentationControllerSpeedNote(
+      identity.controllerModel ?? null,
+      identity.firmwareLabel ?? null,
+      identity.controllerProtocol ?? null,
+    ) ?? null
+  );
 }

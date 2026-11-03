@@ -81,6 +81,10 @@ final class WorkoutNativeHealth {
     start: Date, end: Date, receive: ([WorkoutCompanionObservation]) throws -> Void,
     completion: (Result<Void, Error>) -> Void
   ) { completion(.success(())) }
+  static var savedWorkouts: [String: String] = [:]
+  func savedWorkout(rideID: String, completion: (Result<String?, Error>) -> Void) {
+    completion(.success(Self.savedWorkouts[rideID]))
+  }
 }
 final class WorkoutLocation {
   static var latest: WorkoutLocation!
