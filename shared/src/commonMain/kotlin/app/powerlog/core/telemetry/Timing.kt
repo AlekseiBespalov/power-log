@@ -125,6 +125,34 @@ object TelemetryReconnectPolicy {
     }
 }
 
+class TelemetryLinkLimit {
+    private val ages = ArrayDeque<Double>()
+    private var abandoned = false
+
+    val reconnectAtSeconds: Double?
+        get() {
+            if (abandoned || ages.size < drops) return null
+            val shortest = ages.min()
+            if (shortest < TelemetryTiming.stableTelemetrySeconds || ages.max() - shortest > spreadSeconds) return null
+            return shortest - marginSeconds
+        }
+
+    @Throws(IllegalArgumentException::class)
+    fun peerEnded(linkSeconds: Double) {
+        require(linkSeconds.isFinite() && linkSeconds >= 0)
+        // The bike ended a link before its planned reconnect, so reconnecting doesn't renew its limit.
+        if (reconnectAtSeconds?.let { linkSeconds < it } == true) abandoned = true
+        ages.addLast(linkSeconds)
+        if (ages.size > drops) ages.removeFirst()
+    }
+
+    companion object {
+        const val drops = 3
+        const val spreadSeconds = 1.0
+        const val marginSeconds = 2.0
+    }
+}
+
 data class TelemetryDiscovery(val generation: Long, val deadline: Double) {
     fun accepts(generation: Long, now: Double): Boolean = this.generation == generation && now < deadline
 

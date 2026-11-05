@@ -48,6 +48,14 @@ decision record; N labels are the analytics rules that tests cite.
   2 s, because Android ends the released link a second later. A reconnect that keeps delivering telemetry for 3 s
   restarts the backoff; a bike that is off, or drops again sooner, keeps backing off. A failed service lookup
   retries for a known controller or during a ride.
+- **On iPhone, a ride reconnects just before the bike's own link limit.** The X6 asks for a connection interval under
+  15 ms, which iOS never grants, and 30 s after its third request it ends the link, at 95 s (HCI 0x3B); three in four
+  iPhone reconnects after such a drop then wait 4.4 s instead of 0.5 s. Once the bike has ended three links of at
+  least 30 s at ages within 1 s of each other, a ride closes the link at its first reading once it is within 2 s of
+  the shortest of those ages, and reconnects as soon as iOS reports the disconnect, without Android's link-release
+  wait; the bike starts its count again on the new link. A link the bike ends before its planned reconnect turns
+  planning off until the next connection. Previews, background links without a ride, Android and web keep the bike's
+  own drops.
 - **Unknown devices get two identity attempts.** Discovery lists any Nordic UART device. Outside a ride, a device
   without a remembered verified identity that leaves the identity request unanswered on two connection attempts is
   reported as not replying, with the hint to turn on the bike's display, instead of being retried.

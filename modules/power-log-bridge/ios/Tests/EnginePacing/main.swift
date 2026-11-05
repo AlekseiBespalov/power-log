@@ -815,5 +815,88 @@ try silentLoss.engine.queue.sync {
   try silentLoss.finish()
 }
 
+extension EngineHarness {
+  func relink() {
+    peripheral.state = .connected
+    engine.centralManager(CBCentralManager.latest, didConnect: peripheral)
+    let service = CBService(
+      uuid: CBUUID(string: "6e400001-b5a3-f393-e0a9-e50e24dcca9e"), characteristics: [writer, notifier])
+    peripheral.services = [service]
+    engine.peripheral(peripheral, didDiscoverServices: nil)
+    engine.peripheral(peripheral, didDiscoverCharacteristicsFor: service, error: nil)
+    engine.peripheral(peripheral, didUpdateNotificationStateFor: notifier, error: nil)
+  }
+
+  func bikeEndsLink(after seconds: Double) {
+    advance(to: now + seconds)
+    replies = []
+    peripheral.state = .disconnected
+    engine.centralManager(
+      CBCentralManager.latest, didDisconnectPeripheral: peripheral, error: NSError(domain: "CBErrorDomain", code: 0))
+  }
+
+  func learnLinkLimit() {
+    for _ in 0..<3 {
+      bikeEndsLink(after: 95)
+      relink()
+    }
+  }
+}
+
+let planned = EngineHarness(timerDelay: 0)
+try planned.engine.queue.sync {
+  try planned.connect()
+  planned.engine.setWorkoutSamplingOwner("synthetic-ride", rate: 8)
+  let connections = CBCentralManager.latest.connections
+  planned.learnLinkLimit()
+  check(CBCentralManager.latest.connections == connections + 3, "a stable link the bike ends reconnects at once")
+  let linked = planned.now
+  planned.advance(to: linked + 92.9)
+  check(CBCentralManager.latest.cancellations == 0, "a ride keeps its link until two seconds before the learned limit")
+  planned.advance(to: linked + 93.2)
+  check(CBCentralManager.latest.cancellations == 1, "a ride closes its link after the first reading past that age")
+  let sent = planned.sent.count
+  let replaced = CBCentralManager.latest.connections
+  planned.advance(to: planned.now + 0.5)
+  check(planned.sent.count == sent, "no request goes out on the link being closed")
+  check(CBCentralManager.latest.connections == replaced, "the planned reconnect waits for the disconnect callback")
+  planned.peripheral.state = .disconnected
+  planned.engine.centralManager(CBCentralManager.latest, didDisconnectPeripheral: planned.peripheral, error: nil)
+  planned.advance(to: planned.now + 0.01)
+  check(
+    CBCentralManager.latest.connections == replaced + 1,
+    "the planned reconnect starts when the closed link reports its disconnect, without the link-release wait")
+  check(
+    planned.engine.state()["status"] as? String == "reconnecting", "a planned reconnect keeps the ride's link status")
+  planned.relink()
+  planned.advance(to: planned.now + 1)
+  check(planned.engine.state()["status"] as? String == "connected", "the new link delivers readings")
+  try planned.finish()
+}
+
+let previewLimit = EngineHarness(timerDelay: 0)
+try previewLimit.engine.queue.sync {
+  try previewLimit.connect()
+  previewLimit.learnLinkLimit()
+  previewLimit.advance(to: previewLimit.now + 94.5)
+  check(CBCentralManager.latest.cancellations == 0, "a preview leaves the link to the bike")
+  try previewLimit.finish()
+}
+
+let earlyDrop = EngineHarness(timerDelay: 0)
+try earlyDrop.engine.queue.sync {
+  try earlyDrop.connect()
+  earlyDrop.engine.setWorkoutSamplingOwner("synthetic-ride", rate: 8)
+  earlyDrop.learnLinkLimit()
+  earlyDrop.bikeEndsLink(after: 2)
+  earlyDrop.advance(to: earlyDrop.now + 2.1)
+  earlyDrop.relink()
+  earlyDrop.advance(to: earlyDrop.now + 94.5)
+  check(
+    CBCentralManager.latest.cancellations == 0,
+    "a link the bike ends before its planned reconnect stops planned reconnects for the session")
+  try earlyDrop.finish()
+}
+
 print("Engine pacing: \(checks - failures) passed, \(failures) failed")
 if failures > 0 { exit(1) }

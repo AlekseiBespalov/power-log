@@ -61,6 +61,7 @@ enum TelemetryDiagnosticReason: String, CaseIterable {
   case restorationCleanup = "restoration_cleanup"
   case storageFailure = "storage_failure"
   case appTerminating = "app_terminating"
+  case plannedReconnect = "planned_reconnect"
 }
 
 struct ControllerDisconnectDiagnostic {

@@ -37,6 +37,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
   private var connectionDeadline: Double? { session.state.attemptDeadline?.doubleValue }
   private var reconnectDue: Double? { session.state.reconnectDue?.doubleValue }
   private var reconnectAttempts = 0
+  private var linkLimit = TelemetryLinkLimit()
   private var connectionAttempt: TelemetryTransportState { session.state }
   private var stableSince: Double?
   private var hz: Double = 2
@@ -336,6 +337,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       startedAt: WorkoutCoding.timestamp(captureClock.wallOrigin), monotonic: sessionStarted, id: captureClock.sessionID
     )
     diagnosticMetrics.beginSession(at: now)
+    linkLimit = TelemetryLinkLimit()
 
     notificationErrors = 0
     note(.connectRequested)
@@ -548,11 +550,26 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
         cancelConnection: !disconnectCallbackCompleted || systemIsReconnecting)
       return
     }
+    reconnect(plan, reason: reason, attempt: nextAttempt)
+  }
+
+  private func reconnectBeforeLimit() -> Bool {
+    guard shouldConnect, verified, reconnectDue == nil, workoutSampling.id != nil,
+      let limit = linkLimit.reconnectAtSeconds?.doubleValue,
+      let age = diagnosticMetrics.connectionSeconds(at: now), age >= limit
+    else { return false }
+    reconnect(
+      TelemetryRetryPlan(delaySeconds: 0, adoptSystemReconnect: false, cancelBeforeRetry: true),
+      reason: .plannedReconnect, attempt: reconnectAttempts + 1)
+    return true
+  }
+
+  private func reconnect(_ plan: TelemetryRetryPlan, reason: TelemetryDiagnosticReason, attempt: Int) {
     try! session.scheduleRetry(plan: plan, now: now)
     if plan.cancelBeforeRetry, let selected { cancel(selected, reason: reason) }
     clearTransport()
     recoveryErrorMessage = Self.reconnecting
-    reconnectAttempts = min(nextAttempt, 6)
+    reconnectAttempts = min(attempt, 6)
     status = "reconnecting"
     diagnosticMetrics.scheduledReconnect()
     note(
@@ -840,6 +857,12 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
     completedDisconnection()
     let fields = diagnosticMetrics.disconnected(at: now, error: error)
     note(.disconnected, fields: fields.merging(["systemReconnect": systemIsReconnecting]) { _, value in value })
+    if diagnosticMetrics.lastDisconnect?.initiator == "peer_or_system", diagnosticMetrics.linkSamples > 0,
+      let seconds = diagnosticMetrics.lastDisconnect?.connectionSeconds
+    {
+      try! linkLimit.peerEnded(linkSeconds: seconds)
+    }
+    defer { scheduleNextTick() }
     if shouldConnect, connectionAttempt.cancellationFailed {
       if systemIsReconnecting { cancel(peripheral, reason: .pendingReconnect) }
       if handle(.cancellationtimeout) { return }
@@ -1029,6 +1052,7 @@ final class ControllerEngine: NSObject, CBCentralManagerDelegate, CBPeripheralDe
       pending = nil
       unansweredSince = nil
       receive(readingReply.reading, at: current, responseSeconds: current - outstanding.sent)
+      if reconnectBeforeLimit() { return }
     }
     paceNextPoll()
   }

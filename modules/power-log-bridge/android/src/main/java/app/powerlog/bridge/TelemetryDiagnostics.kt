@@ -74,6 +74,7 @@ internal enum class TelemetryDiagnosticReason(val wire: String) {
     restorationCleanup("restoration_cleanup"),
     storageFailure("storage_failure"),
     appTerminating("app_terminating"),
+    plannedReconnect("planned_reconnect"),
 }
 
 internal fun gattError(status: Int): Payload = mapOf("errorDomain" to "AndroidGattStatus", "errorCode" to status)
