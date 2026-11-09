@@ -1,1 +1,1 @@
-shared/js/*.mjs linguist-generated=true -diff
+shared/generated/js/*/*.mjs linguist-generated=true -diff

@@ -15,8 +15,10 @@ Power Log cannot change drive settings or firmware.
 ## Build and run
 
 Use Node 24 (`export PATH=/opt/homebrew/opt/node@24/bin:$PATH`) and run `npm ci`. `npm run doctor:local` reports the
-Node, Xcode, simulator and CocoaPods tools it finds. Maintained native sources live in `modules/` and `apple/`; Expo
-prebuild regenerates `ios/` and `android/`.
+Node, Xcode, simulator and CocoaPods tools it finds. The screens live in `src/`, the Expo module and the platform
+adapters in `modules/power-log/`, the Watch app and the Live Activity in `targets/`, and the shared Kotlin, which holds
+the rules, use cases and storage, in `shared/`: one Gradle build of five modules, whose JavaScript builds are checked in
+under `shared/generated/`. Expo prebuild regenerates `ios/` and `android/`.
 
 ### Web
 
@@ -37,12 +39,12 @@ simulator. Riding with a bike needs a physical iPhone with Developer Mode.
 
 Install JDK 17 and the Android SDK with platform tools; set `JAVA_HOME` and `ANDROID_HOME` if they are not detected.
 
-- `npm run build:android -- --preview` builds a release-mode, offline Preview APK as the separate
-  `app.powerlog.mobile.preview` app in `artifacts/builds/android/power-log-preview.apk`, signed with the public
-  development key; `--arch=arm64-v8a` limits it to one architecture, and `--bundle` builds an App Bundle
-  (`power-log-preview.aab`) with native symbol tables instead. Never use that key for a public release.
-- `npm run test:android` runs the JVM and Robolectric suites; with `emulator-5554` running, `-- --emulator` adds the
-  connected suites. `GRADLE_OPTS=-Dorg.gradle.daemon=false` leaves no Gradle daemon behind.
+- `npm run build:android` builds a release APK in `artifacts/builds/android/power-log.apk`, signed with the release
+  key from the `POWER_LOG_ANDROID_*` variables below, so it installs over the existing app and keeps its rides;
+  `--arch=arm64-v8a` limits it to one architecture, and `--bundle` builds an App Bundle with native symbol tables
+  instead. `npm run android` builds and runs a development build, signed with the debug key, on an emulator.
+- `npm run test:android` runs the JVM and Robolectric suites. `GRADLE_OPTS=-Dorg.gradle.daemon=false` leaves no Gradle
+  daemon behind.
 - `npm run release:android -- <version>` builds, signs and publishes a GitHub release from the maintainer's Mac. It
   reads the signing key from `POWER_LOG_ANDROID_KEYSTORE`, `POWER_LOG_ANDROID_STORE_PASSWORD`,
   `POWER_LOG_ANDROID_KEY_ALIAS` and `POWER_LOG_ANDROID_KEY_PASSWORD`. Keep that key and a backup outside the
@@ -55,16 +57,18 @@ Install JDK 17 and the Android SDK with platform tools; set `JAVA_HOME` and `AND
 ## Verify
 
 `sh scripts/verify.sh .` is the everyday check of the working directory; `npm run verify` runs the release tier on a
-clean copy of `HEAD`. The testing guide covers [qualification evidence](docs/testing.md#qualification-evidence), the
-[Apple Health Lab](docs/testing.md#apple-health-lab) and the [device checklist](docs/testing.md#phase-6-checklist).
+clean copy of `HEAD`. The testing guide covers the [tiers](docs/testing.md#tiers), the
+[goldens](docs/testing.md#goldens), [qualification evidence](docs/testing.md#qualification-evidence) and the
+[device checks](docs/testing.md#device-checks).
 
 ## Use and share
 
 Settings holds recording defaults: Watch companion, phone GPS, Health saving, distance source and the 2, 4 or 8 Hz
-rate. These freeze at Start. Watch Start waits up to 15 seconds; if unavailable, cancel or start without the Watch.
-After an interruption, finish the saved portion or discard it. Local Finish and exports do not wait for Health. History shows each ride's status, summary, charts and exports, and
-**Open CSV** reads a ride-data ZIP's `telemetry.csv`. To share on Strava, export the ride's FIT, save it, choose
-**Open Strava upload** and select the file on [Strava's website](https://www.strava.com/upload/select).
+rate. These freeze at Start. Settings also chooses Metric or Imperial units and °C or °F. Watch Start waits up to 15
+seconds; if it fails, turn off Apple Watch in Settings and start again. After an interruption, finish the saved portion
+or discard it. Local Finish and exports do not wait for Health. History shows each ride's status, summary, charts and
+exports, and **Open CSV** reads a ride-data ZIP's `telemetry.csv`. To share on Strava, export the ride's FIT, save it,
+choose **Open Strava upload** and select the file on [Strava's website](https://www.strava.com/upload/select).
 
 The [privacy policy](https://AlekseiBespalov.github.io/power-log/privacy) and third-party notices are in Settings →
 About and on the website. [Example screenshots](artifacts/app-store/README.md) use fictional rides.
@@ -72,9 +76,9 @@ About and on the website. [Example screenshots](artifacts/app-store/README.md) u
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): how to change, check and format the code.
-- [Architecture](docs/architecture.md): the runtime structure and the code map.
+- [Architecture](docs/architecture.md): the layers, slices, modules, storage and bridge.
 - [Decisions](docs/decisions.md): the product and design choices.
-- [Testing](docs/testing.md#qualification-evidence): checks, evidence levels and device procedures.
+- [Testing](docs/testing.md): checks, goldens, evidence levels and device procedures.
 
 [Apache-2.0](LICENSE). Free and unsupported, provided as is. No warranty, support or future updates are promised,
 subject to applicable law. Measurements may be inaccurate or incomplete; do not rely on the app for safety-critical

@@ -1,22 +1,40 @@
 import { expect, test, type Page } from '@playwright/test';
-import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { syntheticBike } from '../fixtures/browser-bike';
 
-async function stored(
-  page: Page,
-): Promise<{ phase?: string; telemetryCount: number; timerSeconds?: number; id: string; distanceSource?: string }[]> {
+type StoredRide = { id: string; phase: string; telemetryCount: number; timerSeconds: number; distanceSource: string };
+
+async function stored(page: Page): Promise<StoredRide[]> {
   return page.evaluate(async () => {
+    const name = (await indexedDB.databases())
+      .map(database => database.name)
+      .find(database => database?.startsWith('power-log-archive-'));
+    if (!name) return [];
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const r = indexedDB.open('power-log');
-      r.onsuccess = () => resolve(r.result);
-      r.onerror = () => reject(r.error);
+      const request = indexedDB.open(name);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
     });
     try {
-      return await new Promise((resolve, reject) => {
-        const r = db.transaction('recordings').objectStore('recordings').getAll();
-        r.onsuccess = () => resolve(r.result);
-        r.onerror = () => reject(r.error);
-      });
+      const transaction = db.transaction(['ride', 'facts']);
+      const read = <T>(store: string) =>
+        new Promise<T[]>((resolve, reject) => {
+          const request = transaction.objectStore(store).getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      const [rides, facts] = await Promise.all([
+        read<{ uuid: string; phase: string; cpTimerUs: number; distanceSource: string }>('ride'),
+        read<{ ride: string; kind: string; rows: number }>('facts'),
+      ]);
+      return rides.map(ride => ({
+        id: ride.uuid,
+        phase: ride.phase,
+        timerSeconds: ride.cpTimerUs / 1e6,
+        distanceSource: ride.distanceSource,
+        telemetryCount: facts
+          .filter(batch => batch.ride === ride.uuid && batch.kind === 'telemetry')
+          .reduce((count, batch) => count + batch.rows, 0),
+      }));
     } finally {
       db.close();
     }
@@ -26,13 +44,14 @@ for (const width of [390, 1440])
   test(`one browser ride flow saves, pauses and discards at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
     await syntheticBike(page);
-    const preferences = defaultMonitorPreferences();
-    preferences.workoutOptions.recordGPS = false;
-    await page.addInitScript(
-      preferences => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences)),
-      JSON.parse(monitorPreferencesJson(preferences)),
-    );
-    await page.goto('/');
+    await page.goto('/settings');
+    const gps = page.getByRole('switch', { name: 'Record GPS route', exact: true });
+    await gps.click();
+    await expect(gps).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('button', { name: /^Units, / }).click();
+    await page.getByTestId('settings-options').getByRole('radio', { name: 'Metric', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Units, Metric', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Ride', exact: true }).click();
     await page.getByTestId('ride-setup').click();
     await expect(page.getByRole('switch', { name: 'Save to Apple Health' })).toHaveCount(0);
     await expect(page.getByRole('switch', { name: 'Use Apple Watch' })).toHaveCount(0);
@@ -67,10 +86,11 @@ for (const width of [390, 1440])
     ).toBeVisible();
     await expect.poll(async () => (await stored(page))[0]?.phase).toBe('paused');
     const paused = (await stored(page))[0]!;
-    await expect
-      .poll(async () => (await stored(page))[0]?.telemetryCount ?? 0)
-      .toBeGreaterThan(paused.telemetryCount + 1);
-    expect((await stored(page))[0]?.timerSeconds).toBe(paused.timerSeconds);
+    await page.waitForTimeout(1500);
+    expect((await stored(page))[0], 'readings while paused are dropped').toMatchObject({
+      telemetryCount: paused.telemetryCount,
+      timerSeconds: paused.timerSeconds,
+    });
     await page
       .getByTestId('ride-controls')
       .filter({ visible: true })
@@ -165,7 +185,7 @@ for (const width of [390, 1440])
     await page.getByTestId('finish-ride-sheet').getByRole('button', { name: 'Discard ride', exact: true }).click();
     await page.getByTestId('finish-ride-sheet').getByRole('button', { name: 'Discard for good', exact: true }).click();
     await expect(page.getByTestId('start-ride').filter({ visible: true })).toBeVisible();
-    expect((await stored(page)).map(ride => ride.id)).toEqual([savedID]);
+    await expect.poll(async () => (await stored(page)).map(ride => ride.id)).toEqual([savedID]);
     await page.getByRole('link', { name: 'History', exact: true }).click();
     await expect(page).toHaveURL(new URL(`/sessions/ride?id=${savedID}`, page.url()).href);
     await page.getByRole('button', { name: '‹ History', exact: true }).click();

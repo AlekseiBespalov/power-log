@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { AppShell } from '../../components/app-shell';
 import { ExternalLink } from '../../components/external-link';
 import { Body, Card, Heading, colors, type, lineHeight, MIN_TOUCH_TARGET } from '../../components/ui';
-import { APP_VERSION, ISSUES_URL } from '../../core/app-info';
+import { APP_VERSION, ISSUES_URL } from '../../components/app-info';
 
 export function PrivacyScreen() {
   return (

@@ -14,17 +14,22 @@ test('Android keeps included build histories independent and core artifacts outs
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, content);
   };
+  const modules = ['domain', 'application', 'data', 'kit', 'runtime'];
   for (const file of [
     'settings.gradle.kts',
-    'build.gradle.kts',
     'gradle.properties',
     'gradlew',
+    'gradle/libs.versions.toml',
     'gradle/wrapper/gradle-wrapper.jar',
     'gradle/wrapper/gradle-wrapper.properties',
+    'build-logic/settings.gradle.kts',
+    'build-logic/build.gradle.kts',
+    'build-logic/src/main/kotlin/powerlog.kmp.gradle.kts',
+    ...modules.map(module => `${module}/build.gradle.kts`),
   ])
     write(`shared/${file}`, fs.readFileSync(`shared/${file}`));
   fs.chmodSync(path.join(root, 'shared/gradlew'), 0o755);
-  write('shared/src/commonMain/kotlin/Core.kt', 'class Core\n');
+  write('shared/domain/src/commonMain/kotlin/Core.kt', 'public class Core\n');
   for (const name of ['First', 'Second']) {
     write(`${name}/settings.gradle`, `rootProject.name = '${name}'\n`);
     write(
@@ -56,16 +61,18 @@ public class ${name} implements org.gradle.api.Plugin<org.gradle.api.Project> {
   write(
     'android/build.gradle',
     `plugins { id 'java'; id 'fixture.First'; id 'fixture.Second' }
-repositories { mavenCentral() }
-dependencies { implementation 'app.powerlog:power-log-core:0.3.0' }
+repositories { google(); mavenCentral() }
+dependencies { implementation 'app.powerlog:runtime:1.0.0' }
 def coreFiles = configurations.runtimeClasspath
 tasks.register('checkCoreArtifact') {
     inputs.files(coreFiles)
     doLast {
-        def core = coreFiles.files.find { it.name.startsWith('power-log-core-jvm-') }
-        assert core != null : 'Missing substituted core artifact'
-        assert core.canonicalFile.parentFile == file('build/power-log-core/libs').canonicalFile : core
-        println 'Resolved Android core: ' + core
+        for (name in ['runtime', 'application', 'kit', 'domain']) {
+            def core = coreFiles.files.find { it.name.startsWith(name + '-jvm-') }
+            assert core != null : 'Missing substituted ' + name + ' artifact'
+            assert core.canonicalFile.parentFile == file('build/power-log-shared/' + name + '/libs').canonicalFile : core
+            println 'Resolved Android core: ' + core
+        }
     }
 }
 `,
@@ -79,7 +86,11 @@ tasks.register('checkCoreArtifact') {
     const result = spawnSync(path.join(root, 'shared/gradlew'), ['-p', path.join(root, project), ...tasks, ...args], {
       encoding: 'utf8',
       timeout: 180000,
-      env: { ...process.env, GRADLE_OPTS: `${process.env.GRADLE_OPTS ?? ''} -Dorg.gradle.daemon=false` },
+      env: {
+        ...process.env,
+        ANDROID_HOME: process.env.ANDROID_HOME ?? path.join(os.homedir(), 'Library/Android/sdk'),
+        GRADLE_OPTS: `${process.env.GRADLE_OPTS ?? ''} -Dorg.gradle.daemon=false`,
+      },
     });
     assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
     return result.stdout;
@@ -92,12 +103,12 @@ tasks.register('checkCoreArtifact') {
     assert.ok(fs.existsSync(path.join(root, `${name}/.gradle`)));
     assert.ok(fs.existsSync(path.join(root, `${name}/build/classes/java/main/fixture/${name}.class`)));
   }
-  for (const directory of ['shared/build', 'shared/.kotlin'])
+  for (const directory of ['shared/build', 'shared/.kotlin', ...modules.map(module => `shared/${module}/build`)])
     assert.equal(fs.existsSync(path.join(root, directory)), false, directory);
   assert.ok(fs.existsSync(path.join(root, 'shared/.gradle')));
   assert.ok(fs.existsSync(path.join(root, 'android/.gradle')));
-  assert.ok(fs.existsSync(path.join(root, 'android/build/power-log-core/libs/power-log-core-jvm-0.3.0.jar')));
-  run('shared', ['jvmJar']);
-  assert.ok(fs.existsSync(path.join(root, 'shared/build/libs/power-log-core-jvm-0.3.0.jar')));
+  assert.ok(fs.existsSync(path.join(root, 'android/build/power-log-shared/domain/libs/domain-jvm-1.0.0.jar')));
+  run('shared', [':domain:jvmJar']);
+  assert.ok(fs.existsSync(path.join(root, 'shared/domain/build/libs/domain-jvm-1.0.0.jar')));
   assert.ok(fs.existsSync(path.join(root, 'shared/.gradle')));
 });

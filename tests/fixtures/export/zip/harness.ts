@@ -3,32 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib';
-import { projectionColumns } from '../../../../src/core/export/pages';
-import type {
-  ExportCommitResult,
-  ExportConnection,
-  ExportContext,
-  ExportDeflateResult,
-  ExportOpenRequest,
-  ExportOpenResult,
-  ExportPage,
-  ExportPageRequest,
-  ExportSink,
-  ExportSource,
-  ProjectionName,
-} from '../../../../src/core/export/types';
-
-export type Cell = number | string | null;
-export type Row = Readonly<Record<string, Cell>>;
-export type Identity = Omit<ExportConnection, 'token'>;
-
-export interface CanonicalRide {
-  readonly rideId: string;
-  readonly context: ExportContext;
-  readonly open: Omit<ExportOpenResult, 'session'>;
-  readonly identities?: Readonly<Record<string, Identity>>;
-  readonly rows: Partial<Record<ProjectionName, readonly Row[]>>;
-}
+import type { DeflateResult, ExportSink, SharedFile } from '../../../../modules/power-log/src/exports/types';
 
 export const FIXTURES = 'tests/fixtures/export/zip';
 export const ENTRY_NAMES = [
@@ -41,104 +16,6 @@ export const ENTRY_NAMES = [
 ] as const;
 
 const settle = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-
-export function canonicalPage<P extends ProjectionName>(
-  ride: CanonicalRide,
-  projection: P,
-  start: number,
-  size: number,
-  seen?: Set<string>,
-): ExportPage<P> {
-  const all = ride.rows[projection] ?? [];
-  const rows = all.slice(start, start + size);
-  const columns: Record<string, Float64Array | (string | null)[]> = {};
-  const expected = projectionColumns(projection, ride.context.platform, 'zip');
-  for (const row of rows)
-    for (const name of Object.keys(row))
-      if (!expected.some(column => column.name === name))
-        throw new Error(`Fixture ${projection} row names ${name}, which ${ride.context.platform} does not deliver`);
-  if (rows.length > 0)
-    for (const column of expected) {
-      if (column.type === 'number')
-        columns[column.name] = Float64Array.from(rows, (row, index) => {
-          const value =
-            column.name === 'producerSequence' && !Object.hasOwn(row, column.name)
-              ? start + index + 1
-              : (row[column.name] ?? null);
-          if (typeof value === 'string') throw new Error(`Fixture ${projection}.${column.name} must be numeric`);
-          return value === null ? NaN : value;
-        });
-      else
-        columns[column.name] = rows.map(row => {
-          const value = row[column.name] ?? null;
-          if (typeof value === 'number') throw new Error(`Fixture ${projection}.${column.name} must be text`);
-          return value;
-        });
-    }
-  const connections: ExportConnection[] = [];
-  if (projection === 'telemetry' && seen)
-    for (const row of rows) {
-      const token = row.connection;
-      if (typeof token !== 'string' || seen.has(token)) continue;
-      seen.add(token);
-      const identity = ride.identities?.[token];
-      if (!identity) throw new Error(`Fixture connection ${token} has no identity`);
-      connections.push({ token, ...identity });
-    }
-  const end = start + rows.length;
-  return {
-    rows: rows.length,
-    last: rows.length ? [end] : null,
-    done: end >= all.length,
-    ...(projection === 'telemetry' ? { connections } : {}),
-    columns,
-  } as ExportPage<P>;
-}
-
-export interface SourceHooks {
-  beforePage?(request: ExportPageRequest, count: number): void | Promise<void>;
-}
-
-export class MemorySource implements ExportSource {
-  readonly requests: ExportPageRequest[] = [];
-  readonly opened: ExportOpenRequest[] = [];
-  readonly closed: string[] = [];
-  maxInFlight = 0;
-  private inFlight = 0;
-  private readonly seen = new Map<ProjectionName, Set<string>>();
-
-  constructor(
-    readonly ride: CanonicalRide,
-    readonly pageSize = 4096,
-    private readonly hooks: SourceHooks = {},
-  ) {}
-
-  async open(request: ExportOpenRequest): Promise<ExportOpenResult> {
-    this.opened.push(request);
-    await settle();
-    return { session: 'canonical-session', ...this.ride.open };
-  }
-
-  async page<P extends ProjectionName>(request: ExportPageRequest<P>): Promise<ExportPage<P>> {
-    this.requests.push(request);
-    this.inFlight++;
-    this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
-    try {
-      await settle();
-      await this.hooks.beforePage?.(request, this.requests.length);
-      if (request.session !== 'canonical-session') throw new Error('Unknown session');
-      if (request.after === null) this.seen.set(request.projection, new Set());
-      const start = request.after === null ? 0 : request.after[0]!;
-      return canonicalPage(this.ride, request.projection, start, this.pageSize, this.seen.get(request.projection));
-    } finally {
-      this.inFlight--;
-    }
-  }
-
-  async close(session: string): Promise<void> {
-    this.closed.push(session);
-  }
-}
 
 export interface SinkHooks {
   beforeWrite?(index: number): void | Promise<void>;
@@ -196,7 +73,7 @@ export class MemorySink implements ExportSink {
     });
   }
 
-  endDeflate(): Promise<ExportDeflateResult> {
+  endDeflate(): Promise<DeflateResult> {
     return this.run('endDeflate', async () => {
       const stage = this.stage;
       if (!stage) throw new Error('No deflate stage is open');
@@ -208,12 +85,12 @@ export class MemorySink implements ExportSink {
     });
   }
 
-  commit(name: string): Promise<ExportCommitResult> {
+  commit(name: string): Promise<SharedFile> {
     return this.run('commit', async () => {
       if (this.stage) throw new Error('Commit inside a deflate stage');
       await this.hooks.commit?.(name);
       this.committed = name;
-      return { uri: `memory://${name}` };
+      return { uri: `memory://${name}`, name, mimeType: 'application/octet-stream', sizeBytes: this.length };
     });
   }
 
@@ -312,29 +189,11 @@ export function readZip(file: Uint8Array): ZipEntry[] {
 
 export const entryText = (entry: ZipEntry) => new TextDecoder('utf-8', { fatal: true }).decode(entry.data);
 
-const DESCRIPTOR_VALUES = ['name', 'id', 'created', 'powerLog:ride', 'powerLog:sources', 'powerLog:batteryConsumption'];
-
 function descriptor(family: string): string {
   const full = readFileSync(join(FIXTURES, 'gps-iphone', 'datapackage.json'), 'utf8');
   if (family === 'gps-iphone') return full;
   const values = JSON.parse(readFileSync(join(FIXTURES, family, 'datapackage-values.json'), 'utf8'));
   return JSON.stringify({ ...JSON.parse(full), ...values }, null, 2) + '\n';
-}
-
-export function writeDescriptors(captures: Map<string, string>) {
-  const full = captures.get('gps-iphone')!;
-  const reference = JSON.parse(full) as Record<string, unknown>;
-  const values = new Map<string, string>();
-  for (const [family, text] of captures) {
-    if (family === 'gps-iphone') continue;
-    const capture = JSON.parse(text) as Record<string, unknown>;
-    const varying = Object.fromEntries(DESCRIPTOR_VALUES.map(key => [key, capture[key]]));
-    if (JSON.stringify({ ...reference, ...varying }, null, 2) + '\n' !== text)
-      throw new Error(`The ${family} descriptor has additional differences; retain them explicitly before updating`);
-    values.set(family, JSON.stringify(varying, null, 2) + '\n');
-  }
-  writeFileSync(join(FIXTURES, 'gps-iphone', 'datapackage.json'), full);
-  for (const [family, text] of values) writeFileSync(join(FIXTURES, family, 'datapackage-values.json'), text);
 }
 
 export function expectedEntries(family: string): Record<(typeof ENTRY_NAMES)[number], string> {
@@ -372,7 +231,7 @@ export function verifyWithPython(file: Uint8Array): { entries: VerifiedEntry[]; 
   try {
     const path = join(directory, 'export.zip');
     writeFileSync(path, file);
-    const output = execFileSync('python3', ['tests/export/verify_zip.py', path], {
+    const output = execFileSync('python3', ['tests/support/verify_zip.py', path], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });

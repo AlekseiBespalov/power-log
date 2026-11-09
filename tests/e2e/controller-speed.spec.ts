@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { seedSettings } from '../helpers/settings-store';
 
 async function openSpeedExample(page: Page, known: boolean) {
   await page.goto('/sessions');
@@ -24,6 +25,7 @@ async function openSpeedExample(page: Page, known: boolean) {
 for (const width of [390, 1440])
   test(`controller speed units and legacy fallback at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
+    await seedSettings(page, { app: { units: 'metric' } });
     await openSpeedExample(page, true);
     await page.getByTestId('monitor-edit').click();
     await expect(page.getByRole('checkbox', { name: 'Controller speed', exact: true })).toBeChecked();
@@ -37,8 +39,8 @@ for (const width of [390, 1440])
       .getByTestId('tab-transition-1')
       .evaluate(node => node.setAttribute('data-retained-speed-history', 'true'));
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
-    await page.getByTestId('settings-speed').click();
-    await page.getByRole('radio', { name: 'mph', exact: true }).click();
+    await page.getByRole('button', { name: /^Units, / }).click();
+    await page.getByTestId('settings-options').getByRole('radio', { name: 'Imperial', exact: true }).click();
     await page.getByRole('link', { name: 'History', exact: true }).click();
     const retainedHistory = page.locator('[data-retained-speed-history="true"]');
     await expect(retainedHistory).toBeVisible();

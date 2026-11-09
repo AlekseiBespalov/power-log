@@ -88,6 +88,7 @@ final class CaptureTests: XCTestCase {
       let zoom = system.buttons["Zoom-button"]
       if zoom.exists { zoom.tap() }
     }
+    XCTAssertTrue(app.otherElements["tab-sessions"].waitForExistence(timeout: 120))
     app.otherElements["tab-sessions"].tap()
     let rides = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Open ride,"))
     XCTAssertTrue(rides.firstMatch.waitForExistence(timeout: 20))

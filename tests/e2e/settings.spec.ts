@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { defaultMonitorPreferences, monitorPreferencesJson, type MonitorPreferences } from '../../src/core/monitor';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 import { syntheticBike } from '../fixtures/browser-bike';
 import { readFile } from 'node:fs/promises';
+import { seedSettings, storedSettings } from '../helpers/settings-store';
 
 test('Bluetooth diagnostics require explicit capture and export and can be deleted', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
@@ -33,7 +33,7 @@ test('Bluetooth diagnostics require explicit capture and export and can be delet
 async function settingsLayout(page: Page) {
   return page.evaluate(() => {
     const boxes: Record<string, { x: number; y: number; width: number; height: number }> = {};
-    for (const id of ['app-header', 'settings-display', 'settings-recording', 'settings-speed', 'settings-distance']) {
+    for (const id of ['app-header', 'settings-display', 'settings-recording', 'settings-units', 'settings-distance']) {
       const { x, y, width, height } = document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
       boxes[id] = { x, y, width, height };
     }
@@ -108,26 +108,24 @@ test('Settings choices persist and keyboard dismissal returns focus without remo
   await expect(page.getByTestId('ride-setup')).toBeVisible();
   await page.getByTestId('tab-transition-0').evaluate(node => node.setAttribute('data-settings-retained-ride', 'true'));
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  const speed = page.getByTestId('settings-speed');
-  await expect(speed).toBeVisible();
-  await speed.focus();
+  const units = page.getByTestId('settings-units');
+  await expect(units).toBeVisible();
+  await units.focus();
   await page.keyboard.press('Enter');
-  await page.getByRole('radio', { name: 'km/h', exact: true }).focus();
+  await page.getByRole('radio', { name: 'Metric', exact: true }).focus();
   await page.keyboard.press('End');
-  await expect(page.getByRole('radio', { name: 'm/s', exact: true })).toBeFocused();
+  await expect(page.getByRole('radio', { name: 'Imperial', exact: true })).toBeFocused();
   await page.keyboard.press('Space');
   await expect(page.getByTestId('settings-options')).toBeHidden();
-  await expect(speed).toBeFocused();
-  await expect(speed).toHaveAccessibleName('Speed units, m/s');
+  await expect(units).toBeFocused();
+  await expect(units).toHaveAccessibleName('Units, Imperial');
   await page.getByTestId('settings-fitPower').click();
   await page.getByRole('radio', { name: 'Battery input power', exact: true }).click();
   await page.getByTestId('settings-environment').click();
   await page.getByRole('radio', { name: 'Indoor', exact: true }).click();
   await page.getByTestId('settings-sampleHz').click();
   await page.getByRole('radio', { name: '8 Hz', exact: true }).click();
-  await expect
-    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('power-log.monitor-preferences.v1')!).sampleHz))
-    .toBe(8);
+  await expect(page.getByTestId('settings-sampleHz')).toHaveAccessibleName('Bike sample rate, 8 Hz');
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await expect(page.getByTestId('tab-transition-1').filter({ visible: true })).toHaveCount(1);
   await page.getByRole('link', { name: 'Ride', exact: true }).click();
@@ -135,46 +133,36 @@ test('Settings choices persist and keyboard dismissal returns focus without remo
   await expect(page.locator('[data-settings-retained-ride="true"]')).toHaveAttribute('data-testid', 'tab-transition-0');
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.reload();
-  await expect(page.getByTestId('settings-speed')).toHaveAccessibleName('Speed units, m/s');
+  await expect(page.getByTestId('settings-units')).toHaveAccessibleName('Units, Imperial');
   await expect(page.getByTestId('settings-fitPower')).toHaveAccessibleName('FIT power source, Battery input power');
   await expect(page.getByTestId('settings-environment')).toHaveAccessibleName('Ride type, Indoor');
   await expect(page.getByTestId('settings-sampleHz')).toHaveAccessibleName('Bike sample rate, 8 Hz');
 });
 
 test('Settings hydrate retained choices and expose a failed write without hiding controls', async ({ page }) => {
-  const preferences: MonitorPreferences = {
-    ...defaultMonitorPreferences(),
-    speedUnit: 'mph',
-    distanceSource: 'gps:watch',
-    sampleHz: 4,
-  };
-  await page.addInitScript(
-    preferences => {
-      localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences));
-      const set = Storage.prototype.setItem;
-      Storage.prototype.setItem = function (key, value) {
-        if (key === 'power-log.monitor-preferences.v1') throw new Error('Test settings write failed');
-        set.call(this, key, value);
-      };
-    },
-    JSON.parse(monitorPreferencesJson(preferences)),
-  );
+  await seedSettings(page, { app: { units: 'imperial' }, ride: { distance: 'controller', sampleRate: '4' } }, '/');
+  await page.addInitScript(() => {
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, key) {
+      if (this.name === 'appState' && (value as { settings?: string }).settings?.includes('"metric"'))
+        throw new DOMException('Test settings write failed', 'UnknownError');
+      return put.call(this, value, key);
+    };
+  });
   await page.goto('/settings');
-  await expect(page.getByTestId('settings-speed')).toHaveAccessibleName('Speed units, mph');
-  await expect(page.getByTestId('settings-distance')).toHaveAccessibleName('Distance source, GPS · Watch');
+  await expect(page.getByTestId('settings-units')).toHaveAccessibleName('Units, Imperial');
+  await expect(page.getByTestId('settings-distance')).toHaveAccessibleName('Distance source, Controller estimate');
   await expect(page.getByTestId('settings-sampleHz')).toHaveAccessibleName('Bike sample rate, 4 Hz');
   const before = await settingsLayout(page);
-  await page.getByTestId('settings-speed').click();
-  await page.getByRole('radio', { name: 'km/h', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Your settings weren’t saved. Something went wrong.');
+  await page.getByTestId('settings-units').click();
+  await page.getByRole('radio', { name: 'Metric', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Your settings weren’t saved.');
   await expect(page.getByRole('alert')).not.toContainText('Test settings write failed');
   expect(await settingsLayout(page)).toEqual(before);
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   await expect(page.getByTestId('settings-error')).toBeHidden();
   await expect(page.getByTestId('settings-distance')).toBeEnabled();
-  expect(
-    await page.evaluate(() => JSON.parse(localStorage.getItem('power-log.monitor-preferences.v1')!).speedUnit),
-  ).toBe('mph');
+  expect(JSON.parse((await storedSettings(page))!).app.units).toBe('imperial');
 });
 
 test('History keeps the same open CSV after Settings, Ride and repeated settled returns', async ({ page }) => {
@@ -196,10 +184,11 @@ test('History keeps the same open CSV after Settings, Ride and repeated settled 
   await expect(history.getByTestId('monitor-chart-power')).toBeVisible();
   await history.evaluate(node => node.setAttribute('data-settings-retained-history', 'true'));
   const retained = page.locator('[data-settings-retained-history="true"]');
-  for (const unit of ['mph', 'm/s']) {
+  for (const units of ['Metric', 'Imperial']) {
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
-    await page.getByTestId('settings-speed').click();
-    await page.getByRole('radio', { name: unit, exact: true }).click();
+    await page.getByTestId('settings-units').click();
+    await page.getByRole('radio', { name: units, exact: true }).click();
+    await expect(page.getByTestId('settings-units')).toHaveAccessibleName(`Units, ${units}`);
     await page.getByRole('link', { name: 'History', exact: true }).click();
     await expect(retained).toBeVisible();
     await expect

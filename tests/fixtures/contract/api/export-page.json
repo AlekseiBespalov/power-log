@@ -1,0 +1,8 @@
+[
+  {
+    "envelope": "{\"ok\":true,\"value\":{\"rows\":3,\"next\":[3.0],\"done\":true,\"connections\":[{\"token\":\"1\",\"vendor\":\"controller\",\"model\":\"X6\",\"firmware\":null,\"protocol\":\"5.3\"}],\"columns\":{\"timestamp\":[\"2026-01-01T00:00:00.000Z\",null,\"2026-01-01T00:00:02.000Z\"]}},\"now\":1793520000123456}",
+    "numbers": {
+      "humanPowerW": "AAAAAAAA+D8AAAAAAAD4fwAAAAAAAAhA"
+    }
+  }
+]

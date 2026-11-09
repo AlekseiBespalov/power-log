@@ -1,9 +1,20 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, writeFileSync, symlinkSync, readFileSync, rmSync } from 'node:fs';
+import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-export async function startHistoryRouterServer(port: number): Promise<() => void> {
+async function freePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise(resolve => probe.close(resolve));
+  return port;
+}
+
+export async function startHistoryRouterServer(): Promise<{ origin: string; stop: () => void }> {
+  const port = await freePort();
+  const origin = `http://127.0.0.1:${port}`;
   const project = mkdtempSync(path.join(tmpdir(), 'power-log-history-router-'));
   const workspace = process.cwd();
   symlinkSync(path.join(workspace, 'node_modules'), path.join(project, 'node_modules'));
@@ -26,21 +37,10 @@ export async function startHistoryRouterServer(port: number): Promise<() => void
     path.join(project, 'entry.js'),
     `import ${JSON.stringify(path.join(workspace, 'tests/browser/history-router-entry.tsx'))};`,
   );
-  const backend = path.join(workspace, 'tests/fixtures/history-deletion-backend.ts');
   const platform = path.join(workspace, 'tests/fixtures/history-deletion-platform.tsx');
-  const aliases: Record<string, string> = {};
-  for (const name of ['src/services/workouts', 'src/services/ride-export'])
-    aliases[path.join(workspace, name)] = backend;
-  for (const name of [
-    'src/services/session-context',
-    'src/services/device',
-    'src/services/monitor-preferences',
-    'src/services/workout-monitor-source',
-    'src/services/files',
-    'src/components/route-preview',
-    'src/features/monitor/monitor-panel',
-  ])
-    aliases[path.join(workspace, name)] = platform;
+  const aliases: Record<string, string> = {
+    [path.join(workspace, 'src/components/route-preview')]: platform,
+  };
   writeFileSync(
     path.join(project, 'metro.config.js'),
     `const { getDefaultConfig } = require('expo/metro-config');
@@ -78,10 +78,10 @@ module.exports = config;`,
   try {
     const deadline = Date.now() + 110000;
     while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(output);
+      if (child.exitCode !== null || output.includes('Skipping dev server')) throw new Error(output);
       try {
-        const response = await fetch(`http://127.0.0.1:${port}/entry.bundle?platform=web&dev=false&minify=false`);
-        if (response.ok) return stop;
+        const response = await fetch(`${origin}/entry.bundle?platform=web&dev=false&minify=false`);
+        if (response.ok) return { origin, stop };
         const error = await response.text();
         if (error) throw new Error(error);
       } catch (error) {

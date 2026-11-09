@@ -1,0 +1,4 @@
+timestamp,elapsedSeconds,lap,latitude,longitude,altitudeMeters,speedMps,distanceMeters,heartRateBpm,humanPowerW,cadenceRpm,motorInputPowerW,assistLevel,batteryVoltageV,batteryCurrentA,motorCurrentA,motorRpm,motorTempC,controllerTempC,pedalTorqueNm,controllerEnergyWh,controllerChargeAh
+2026-09-09T00:00:01Z,1,1,,,,,,100,,,,,,,,,,,,,
+2026-09-09T00:00:03Z,3,1,,,,,,120,,,,,,,,,,,,,
+2026-09-09T00:00:05Z,5,1,,,,,,140,,,,,,,,,,,,,

@@ -1,7 +1,16 @@
 import { expect, test, type Locator } from '@playwright/test';
-import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { seedSettings } from '../helpers/settings-store';
+
+function withoutControllerSpeed(csv: string) {
+  const rows = csv
+    .trimEnd()
+    .split('\n')
+    .map(line => line.split(','));
+  const column = rows[0]!.indexOf('controllerSpeedMps');
+  return rows.map(row => row.filter((_, index) => index !== column).join(',')).join('\n') + '\n';
+}
 
 async function expectCentered(chart: Locator) {
   await expect(chart.getByText('No samples', { exact: true })).toBeVisible();
@@ -36,21 +45,18 @@ async function expectCentered(chart: Locator) {
 test('empty label stays at the plot center through resize, text enlargement and fullscreen', async ({
   page,
 }, testInfo) => {
-  const preferences = defaultMonitorPreferences();
-  preferences.views.ride.numbers = [];
-  preferences.views.ride.charts = ['speedMps', 'controllerSpeedMps', 'motorInputPowerW'];
-  await page.addInitScript(
-    value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-    JSON.parse(monitorPreferencesJson(preferences)),
-  );
-  await page.goto('/sessions');
+  await seedSettings(page, {
+    app: { views: { ride: { numbers: [], charts: ['speedMps', 'controllerSpeedMps', 'motorInputPowerW'] } } },
+  });
   const chooser = page.waitForEvent('filechooser');
   if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
     await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
-  const csv = exportCsv(
-    [0, 22].map((seconds, index) =>
-      syntheticSample(seconds, index, new Date(Date.UTC(2026, 8, 12) + seconds * 1000).toISOString()),
+  const csv = withoutControllerSpeed(
+    exportCsv(
+      [0, 22].map((seconds, index) =>
+        syntheticSample(seconds, index, new Date(Date.UTC(2026, 8, 12) + seconds * 1000).toISOString()),
+      ),
     ),
   );
   await (
@@ -118,7 +124,10 @@ test('empty label stays at the plot center through resize, text enlargement and 
     await page.setViewportSize({ width: width!, height: height! });
     await expectCentered(fullscreen);
   }
-  await fullscreen.screenshot({ path: testInfo.outputPath('empty-chart-fullscreen.png') });
+  await expect(async () => {
+    await expectCentered(fullscreen);
+    await fullscreen.screenshot({ path: testInfo.outputPath('empty-chart-fullscreen.png'), timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   await page.getByTestId('monitor-close').click();
   for (const hasSpeed of [true, false]) {
     const file = page.waitForEvent('filechooser');
@@ -137,7 +146,7 @@ test('empty label stays at the plot center through resize, text enlargement and 
     ).setFiles({
       name: `Synthetic speed ${hasSpeed}.csv`,
       mimeType: 'text/csv',
-      buffer: Buffer.from(exportCsv(samples)),
+      buffer: Buffer.from(hasSpeed ? exportCsv(samples) : withoutControllerSpeed(exportCsv(samples))),
     });
     if (hasSpeed) {
       await expect(chart.getByText('No samples', { exact: true })).toHaveCount(0);

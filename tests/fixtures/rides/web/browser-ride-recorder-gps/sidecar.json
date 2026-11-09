@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "platform": "web",
+  "rideId": "027fb9e6-20cf-4279-bc04-101a1dc49fd7",
+  "distanceSource": "gps:phone",
+  "connections": [
+    {
+      "connection": 1,
+      "decoder": "cyc"
+    }
+  ],
+  "gpsBarriers": [
+    {
+      "elapsedUs": 25000000,
+      "seq": 21
+    }
+  ],
+  "healthRepresentations": []
+}

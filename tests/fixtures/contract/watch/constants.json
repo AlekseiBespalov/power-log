@@ -1,0 +1,18 @@
+{
+  "watchProtocol": {
+    "version": 1,
+    "maxMessageBytes": 60000,
+    "maxQuantities": 32,
+    "maxRoutePoints": 32,
+    "maxLaps": 256,
+    "maxHealthSamples": 64,
+    "rideIntervalUs": 2000000,
+    "routineMinIntervalUs": 1000000,
+    "commandExpiryUs": 5000000,
+    "resendUs": 1000000,
+    "replayUs": 60000000
+  },
+  "startWindowUs": 15000000,
+  "heartRateDisplayHoldUs": 15000000,
+  "ownSyncIdPrefix": "powerlog:"
+}

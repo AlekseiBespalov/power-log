@@ -1,21 +1,28 @@
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
+        google()
         gradlePluginPortal()
         mavenCentral()
     }
 }
 
 dependencyResolutionManagement {
-    repositories { mavenCentral() }
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
 
-rootProject.name = "power-log-core"
+rootProject.name = "power-log-shared"
+
+include(":domain", ":application", ":data", ":kit", ":runtime")
 
 if (gradle.parent != null) {
-    val androidCore = settingsDir.resolve("../android/build/power-log-core").canonicalFile
+    val androidShared = settingsDir.resolve("../android/build/power-log-shared").canonicalFile
     gradle.beforeProject {
-        layout.buildDirectory.set(androidCore)
-        extensions.extraProperties["kotlin.project.persistent.dir"] = androidCore.resolve(".kotlin").path
+        layout.buildDirectory.set(androidShared.resolve(name))
+        extensions.extraProperties["kotlin.project.persistent.dir"] = androidShared.resolve(".kotlin").path
         extensions.extraProperties["kotlin.project.persistent.dir.gradle.disableWrite"] = "true"
     }
 }

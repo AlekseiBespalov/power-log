@@ -46,21 +46,22 @@ test('records GPS, finishes the saved portion after reload and exports it', asyn
   await expect(page.getByTestId('ride-state-badge')).toHaveText('Running');
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          new Promise<number>((resolve, reject) => {
-            const open = indexedDB.open('power-log', 9);
-            open.onerror = () => reject(open.error);
-            open.onsuccess = () => {
-              const db = open.result;
-              const read = db.transaction('ride-locations').objectStore('ride-locations').count();
-              read.onsuccess = () => {
-                db.close();
-                resolve(read.result);
-              };
-            };
-          }),
-      ),
+      page.evaluate(async () => {
+        const name = (await indexedDB.databases())
+          .map(database => database.name)
+          .find(name => name?.startsWith('power-log-archive-'))!;
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          const open = indexedDB.open(name);
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => resolve(open.result);
+        });
+        const facts = await new Promise<{ kind: string; rows: number }[]>(resolve => {
+          const read = db.transaction('facts').objectStore('facts').getAll();
+          read.onsuccess = () => resolve(read.result as { kind: string; rows: number }[]);
+        });
+        db.close();
+        return facts.filter(batch => batch.kind === 'location').reduce((total, batch) => total + batch.rows, 0);
+      }),
     )
     .toBeGreaterThan(2);
   await page.reload();

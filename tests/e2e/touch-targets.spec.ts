@@ -22,7 +22,7 @@ for (const width of [320, 390, 1440])
     await editor.getByRole('button', { name: 'Done', exact: true }).click();
     await page.goto('/settings');
     await expectTouchTargets(page.locator('body'));
-    await page.getByTestId('settings-speed').click();
+    await page.getByTestId('settings-units').click();
     const dialog = page.getByTestId('settings-options');
     await expect(dialog).toBeVisible();
     await expectTouchTargets(dialog);

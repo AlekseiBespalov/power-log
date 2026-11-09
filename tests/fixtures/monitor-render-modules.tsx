@@ -50,3 +50,5 @@ export function requireNativeViewManager() {
     return <View ref={ref as Ref<View>} style={style} />;
   });
 }
+
+export const requireOptionalNativeModule = () => null;

@@ -71,5 +71,8 @@ export function unorderedInterfaces(source) {
   let text = source;
   for (const replacement of replacements.sort((a, b) => b.start - a.start))
     text = text.slice(0, replacement.start) + replacement.text + text.slice(replacement.end);
-  return text;
+  // A rebuild may also reorder the import lines and change the compiler's mangled member suffixes.
+  const lines = text.replace(/_[0-9a-z]{6}_k\$/g, '_k$').split('\n');
+  const imports = lines.filter(line => line.startsWith('import ')).sort();
+  return lines.map(line => (line.startsWith('import ') ? imports.shift() : line)).join('\n');
 }

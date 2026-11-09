@@ -9,8 +9,7 @@
       ]
     },
     "types": [
-      "react",
-      "web-bluetooth"
+      "react"
     ],
     "noUnusedLocals": true,
     "noUnusedParameters": true

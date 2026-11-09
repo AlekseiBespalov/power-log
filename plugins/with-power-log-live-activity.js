@@ -2,11 +2,11 @@ const { withInfoPlist, withXcodeProject } = require('@expo/config-plugins');
 
 const targetName = 'PowerLogActivity';
 const unquote = value => String(value ?? '').replace(/^"|"$/g, '');
-const intentPath = '../apple/LiveActivity/PowerLogRideIntent.swift';
+const intentPath = '../targets/live-activity/PowerLogRideIntent.swift';
 const sources = [
-  '../modules/power-log-bridge/ios/PowerLogRideAttributes.swift',
+  '../modules/power-log/ios/ridecard/PowerLogRideAttributes.swift',
   intentPath,
-  '../apple/LiveActivity/PowerLogRideWidget.swift',
+  '../targets/live-activity/PowerLogRideWidget.swift',
 ];
 
 function configureActivityProject(project, config) {
@@ -35,7 +35,7 @@ function configureActivityProject(project, config) {
     Object.assign(configuration.buildSettings, {
       PRODUCT_BUNDLE_IDENTIFIER: `"${bundleIdentifier}.activity"`,
       POWER_LOG_URL_SCHEME: `"${config.scheme}"`,
-      INFOPLIST_FILE: '"../apple/LiveActivity/Info.plist"',
+      INFOPLIST_FILE: '"../targets/live-activity/Info.plist"',
       CODE_SIGN_STYLE: 'Automatic',
       GENERATE_INFOPLIST_FILE: 'NO',
       SDKROOT: 'iphoneos',

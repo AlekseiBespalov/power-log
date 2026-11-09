@@ -1,0 +1,182 @@
+{
+  "schema": 1,
+  "root": "~/.cache/power-log/goldens",
+  "files": {
+    "rides/android/real-ride/ride.csv": {
+      "bytes": 26834,
+      "sha256": "1fb7d48999245480b6e9e2337c88f3ae30acd9f0890c3a4166463e56a0723d91"
+    },
+    "rides/android/real-ride/ride.fit": {
+      "bytes": 18242,
+      "sha256": "96528744dd679977f23a5b2c7580fd9211e1f82cbf22c5f8637a95e7720317c0"
+    },
+    "rides/android/real-ride/ride.zip": {
+      "bytes": 59899,
+      "sha256": "afeafb049eca79e33ac91ca1ab5828a26b75efa0a54629585fc1674dc95d1cce"
+    },
+    "rides/android/real-ride/sidecar.json": {
+      "bytes": 262,
+      "sha256": "d1e2ec79ef5876e47e1361aec4cf0f772a9ced7355fce2c3822bfdc72c9b4d16"
+    },
+    "rides/ios/long-ride/ride.csv": {
+      "bytes": 1750227,
+      "sha256": "2833f0f461da148db9c759975f76fbb62b0e062cd2f99c62b609ecafd6f83403"
+    },
+    "rides/ios/long-ride/ride.fit": {
+      "bytes": 674577,
+      "sha256": "1b4c79c3ce6e780bf85aa29139be08497e20facdd134c6460c660458b138c44e"
+    },
+    "rides/ios/long-ride/ride.zip": {
+      "bytes": 4607290,
+      "sha256": "52214230361243b9a4cb83064945797210dab923a8bda7d140d890be7712cace"
+    },
+    "rides/ios/long-ride/sidecar.json": {
+      "bytes": 2062973,
+      "sha256": "96b8691b956eee75507bec5a20e1e662ad0a78749a6cf5363aeee28902281679"
+    },
+    "rides/ios/real-ride/ride.csv": {
+      "bytes": 125185,
+      "sha256": "2f640041848eb004d9c95938f84db7670d6d9cf7b05ffb9720ac6cfee8a63cf6"
+    },
+    "rides/ios/real-ride/ride.fit": {
+      "bytes": 75730,
+      "sha256": "a63dc1ec979426905413ee542e13f47283695909a762e26027633d6e30343910"
+    },
+    "rides/ios/real-ride/ride.zip": {
+      "bytes": 410762,
+      "sha256": "b83dd3fd5ac4c7e03a9bdabebee6b62086b792f620fad90a20eae7d21c7fd11d"
+    },
+    "rides/ios/real-ride/sidecar.json": {
+      "bytes": 79538,
+      "sha256": "4ac52033fa2fecbf53369da80f9b8857d033d84410d115f2623b00fe2c04286b"
+    },
+    "encoder-cases/export-fit-planning/72-hour-rides-plans-an-uninterrupted-ride-to-3-second-record-206ddab3/case.json": {
+      "bytes": 807520,
+      "sha256": "2b14626970892e24c74500c4959504681d775a0467a7f59030d6d6fcdf41e2a8"
+    },
+    "encoder-cases/export-fit-planning/72-hour-rides-plans-an-uninterrupted-ride-to-3-second-record-206ddab3/pages/open.json": {
+      "bytes": 531,
+      "sha256": "a562cd470635a196f601abae55eddfceebdc6b8ee6e2f5ce8f38193498b749ed"
+    },
+    "encoder-cases/export-fit-planning/72-hour-rides-plans-an-uninterrupted-ride-to-3-second-record-206ddab3/pages/seconds.json": {
+      "bytes": 11204833,
+      "sha256": "2dc66c5d1e401527fcd9dc4e41d0fcd666a976f5f4bc766cd34f32744c5cfa43"
+    },
+    "encoder-cases/export-fit-planning/72-hour-rides-plans-an-uninterrupted-ride-to-3-second-record-206ddab3/pages/summary.json": {
+      "bytes": 672,
+      "sha256": "17851cc42fdf4800cb917dbac74b44c36a0b3b26dbe8e87f3ea64c4e0c16b622"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-83fa2238/case.json": {
+      "bytes": 934495,
+      "sha256": "e9ffa8bdbb98b7df8062139ecd73f6db0be73a8a081138c669955109ebf91d50"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-83fa2238/pages/open.json": {
+      "bytes": 531,
+      "sha256": "25f2deea7bfdd1d8cc590d7fafb7058a9406c61b1c56091d50cd1e3d40628a46"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-83fa2238/pages/seconds.json": {
+      "bytes": 12955208,
+      "sha256": "fa7aa8f71c2d1215c16875fab5e110647437a7f1bc565a117b65fc72bb3d523a"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-83fa2238/pages/summary.json": {
+      "bytes": 672,
+      "sha256": "ad2d201eec96495258384dd480e825880548f68bb45b885d58f025aa40f8b1dd"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-a8a34fcf/case.json": {
+      "bytes": 637844,
+      "sha256": "e8f1a3e6a36635467a24e193b6edc0f762f1b797e55b12a2d26c595da7660125"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-a8a34fcf/pages/open.json": {
+      "bytes": 530,
+      "sha256": "0e8aabfb8a139d835ea60d92e5ab30ad3b1a105fe3c73a6b5794a87cfb99cbf3"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-a8a34fcf/pages/seconds.json": {
+      "bytes": 8058460,
+      "sha256": "5f3992e016795b18b431255d06513f1f41d997798dd6dc1f7dd0bb1690cc317a"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-a8a34fcf/pages/summary.json": {
+      "bytes": 673,
+      "sha256": "c752b4755b43f4f12e066e73ecbf8e93928cb79b6f72de60c3f369b742591fb1"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-c5a6004e/case.json": {
+      "bytes": 623399,
+      "sha256": "b875b30e8266f8ef51ec81a16876ea14a5f7a2e72391613da8f5f082e14e2eff"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-c5a6004e/pages/open.json": {
+      "bytes": 531,
+      "sha256": "23828cb24cc345e403e4bb6ce5c59cb7530dcb272407f8f8a637f88e30085c80"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-c5a6004e/pages/seconds.json": {
+      "bytes": 8637159,
+      "sha256": "c542ff449e422ef562f7a0d7e058823678c548d34b4810b6c0b767c982b57451"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-c5a6004e/pages/summary.json": {
+      "bytes": 672,
+      "sha256": "aec2a7bdef54b2fb9546d623e57da7e348d7d8bb0940b307b5b5dd589c850ba7"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-d2c2dfb4/case.json": {
+      "bytes": 1081152,
+      "sha256": "0b59c066e2ae5e72b894c63c847fdb9fdf3a0fe9dc12570cbea6c66d6fe6510b"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-d2c2dfb4/pages/open.json": {
+      "bytes": 530,
+      "sha256": "93c509442605de0f92a586d89fb98e09637c011d3ebad231cd1b75da55013e9a"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-d2c2dfb4/pages/seconds.json": {
+      "bytes": 14187752,
+      "sha256": "4f1cc548e990045c10c1bda2be126c2176bbb3e1af872308752dbda4903e978c"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-d2c2dfb4/pages/summary.json": {
+      "bytes": 673,
+      "sha256": "a7555c78a38cd7ff28e833d2b85b11a4106f39598ed5941b8e11f02d2c1d4f99"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-db11bcf1/case.json": {
+      "bytes": 637828,
+      "sha256": "d6ead57a024268fc5f77a4b00d95670b4cb3a448e6c4c13c152f8bb1240dcc31"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-db11bcf1/pages/open.json": {
+      "bytes": 530,
+      "sha256": "3c95ec7c9cbdc3c905cc5ccf123a9e160cd34d152e298c850e4d8820fb7d3e63"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-db11bcf1/pages/seconds.json": {
+      "bytes": 8058460,
+      "sha256": "5f3992e016795b18b431255d06513f1f41d997798dd6dc1f7dd0bb1690cc317a"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-keeps-o-db11bcf1/pages/summary.json": {
+      "bytes": 673,
+      "sha256": "c752b4755b43f4f12e066e73ecbf8e93928cb79b6f72de60c3f369b742591fb1"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-plans-f-2eebe285/case.json": {
+      "bytes": 1301141,
+      "sha256": "e68db2264abda9531f9c557eb38c53fb43ca04af9ec2c633f0528a7c80a5ac7c"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-plans-f-2eebe285/pages/open.json": {
+      "bytes": 576,
+      "sha256": "a636e8d91f4325c61e51f657187477f0a18b84d85f793f62c279e1e974afbf5f"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-plans-f-2eebe285/pages/seconds.json": {
+      "bytes": 9402911,
+      "sha256": "84f991adee6244f39305f52330972abd68b4791f3596e812a5565ba6814fdf41"
+    },
+    "encoder-cases/export-fit-planning/record-interval-planning-at-the-garmin-connect-limit-plans-f-2eebe285/pages/summary.json": {
+      "bytes": 670,
+      "sha256": "b0014e27010b76f6cff6e46fde80aa8767e3b4db439809a4e8954e462cb7671b"
+    },
+    "encoder-cases/export-fit/fit-laps-writes-4096-laps-and-fails-at-4097-5f14b2cb/case.json": {
+      "bytes": 126669,
+      "sha256": "d5979b45c55e458243993a3c7c89ed38e29677b12e1c5b70d8224c2d699f2110"
+    },
+    "encoder-cases/export-fit/fit-laps-writes-4096-laps-and-fails-at-4097-5f14b2cb/pages/open.json": {
+      "bytes": 527,
+      "sha256": "35c60ca74f30c3853533e1465d196bca1f03d5c3a700a468f0abd608f2f38149"
+    },
+    "encoder-cases/export-fit/fit-laps-writes-4096-laps-and-fails-at-4097-5f14b2cb/pages/seconds.json": {
+      "bytes": 515096,
+      "sha256": "41c445de62aa6b5980ef28d053e7cd9d18a4c821b590d452a0b6437433a8554a"
+    },
+    "encoder-cases/export-fit/fit-laps-writes-4096-laps-and-fails-at-4097-5f14b2cb/pages/summary.json": {
+      "bytes": 527120,
+      "sha256": "faa1414fdf8b88d6ea4ec856f596c3edf4eb03581ccaebae625e6f104a1af8f7"
+    }
+  }
+}

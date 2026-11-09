@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "platform": "web",
+  "rideId": "ccb5cbb1-6905-4b20-967f-81a4dbc6dcb0",
+  "distanceSource": "controller",
+  "connections": [
+    {
+      "connection": 1,
+      "decoder": "cyc"
+    }
+  ],
+  "gpsBarriers": [],
+  "healthRepresentations": []
+}

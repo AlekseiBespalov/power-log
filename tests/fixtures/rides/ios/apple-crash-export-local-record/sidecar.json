@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "platform": "ios",
+  "rideId": "c6326e44-ea35-4462-9044-5a913a10f739",
+  "distanceSource": "controller",
+  "connections": [
+    {
+      "connection": 1,
+      "decoder": "cyc"
+    }
+  ],
+  "gpsBarriers": [],
+  "healthRepresentations": []
+}

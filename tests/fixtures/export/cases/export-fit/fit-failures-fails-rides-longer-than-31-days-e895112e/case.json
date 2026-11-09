@@ -1,0 +1,1 @@
+{"tests":["export-fit.test.ts > FIT failures > fails rides longer than 31 days"],"kind":"fit","fitPower":"rider","tuning":null,"rideId":"ride-1","context":{"exportedAt":"2026-01-02T03:04:05.000Z","platform":"ios"},"output":{"failure":{"code":"limit","message":"A FIT file cannot hold a ride longer than 31 days. The ride-data ZIP is still available."}}}

@@ -1,61 +1,18 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const bridge = 'modules/power-log-bridge/ios';
-const support = `${bridge}/Tests/Support`;
-const entry = name => `${bridge}/Tests/${name}/main.swift`;
-const exportSource = `${bridge}/ExportSource.swift`;
-const bridgeFiles = names => names.map(name => `${bridge}/${name}.swift`);
-export const librarySources = [
-  ...bridgeFiles([
-    'WorkoutActivityRuntime',
-    'PowerLogRideAttributes',
-    'WorkoutActivityPresentation',
-    'MonitorInspection',
-    'TelemetryAdapter',
-    'TelemetryCaptureClock',
-    'PowerLogCapture',
-    'WorkoutDistance',
-    'WorkoutDistanceStore',
-    'WorkoutTypes',
-    'RideSnapshot',
-    'PowerLogStore',
-    'WorkoutArchive',
-    'WorkoutControl',
-    'WorkoutSync',
-    'WorkoutHealthMembers',
-    'WorkoutHealthSeconds',
-    'WorkoutCompanion',
-    'MonitorData',
-    'WorkoutAnalysis',
-  ]),
-  ...['GPSFixtures', 'InterruptionFixture', 'ActivityFixtures', 'Telemetry', 'InspectionFixtures', 'HealthSamples'].map(
-    name => `${support}/${name}.swift`,
-  ),
-];
-export function suiteFixtures() {
-  return [];
-}
-const separatelyCompiled = new Set([`${bridge}/Tests/EnginePacing/CoreBluetooth.swift`]);
+const ios = 'modules/power-log/ios';
+const entry = name => `${ios}/Tests/${name}/main.swift`;
+const iosFiles = names => names.map(name => `${ios}/${name}.swift`);
+export const librarySources = [...iosFiles(['ridecard/PowerLogRideAttributes'])];
 const siblings = main =>
   readdirSync(resolve(import.meta.dirname, '..', dirname(main)))
     .filter(name => name.endsWith('.swift') && name !== 'main.swift')
     .map(name => `${dirname(main)}/${name}`)
-    .filter(path => !separatelyCompiled.has(path))
     .sort();
 const suite = (id, main, sources = [], options = {}) => ({
   id,
@@ -66,19 +23,43 @@ const suite = (id, main, sources = [], options = {}) => ({
   framework: 'host',
   ...options,
 });
+const standalone = (id, main, sources) => ({
+  id,
+  kind: 'standalone',
+  main,
+  sources: [...sources, ...siblings(main)],
+});
 const command = (id, inputs, options) => ({ id, kind: 'command', inputs, ...options });
-const iosTypecheckSources = readdirSync(resolve(import.meta.dirname, '..', bridge))
-  .filter(
-    name =>
-      name.endsWith('.swift') &&
-      !['PowerLogBridgeModule.swift', 'PowerLogBridgeAppDelegateSubscriber.swift'].includes(name),
-  )
-  .map(name => `${bridge}/${name}`);
-const watchTypecheckSources = [
-  ...bridgeFiles(['WorkoutCompanion', 'WorkoutCompanionTransport', 'WorkoutNativeHealth', 'WorkoutHealthMetrics']),
-  ...readdirSync(resolve(import.meta.dirname, '..', 'apple/WatchApp'))
+const swiftIn = folder =>
+  readdirSync(resolve(import.meta.dirname, '..', folder))
     .filter(name => name.endsWith('.swift'))
-    .map(name => `apple/WatchApp/${name}`),
+    .map(name => `${folder}/${name}`)
+    .sort();
+const importsExpo = path =>
+  /^(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:internal|public|private|fileprivate|package)\s+)?import\s+ExpoModulesCore\b/m.test(
+    readFileSync(resolve(import.meta.dirname, '..', path), 'utf8'),
+  );
+const appSwift = [
+  '',
+  'host',
+  'device',
+  'ble',
+  'location',
+  'permissions',
+  'health',
+  'keepalive',
+  'ridecard',
+  'watch',
+  'files',
+]
+  .map(folder => (folder ? `${ios}/${folder}` : ios))
+  .flatMap(swiftIn);
+const iosTypecheckSources = appSwift.filter(path => !importsExpo(path));
+const expoFiles = appSwift.filter(importsExpo);
+const watchTypecheckSources = [
+  `${ios}/health/HealthTypes.swift`,
+  `${ios}/health/WorkoutSession.swift`,
+  ...['', '/protocol', '/ride', '/link', '/text', '/views'].flatMap(folder => swiftIn(`targets/watch${folder}`)),
 ];
 const typecheck = (sdk, framework, target, sources) => context => [
   '/usr/bin/xcrun',
@@ -88,7 +69,7 @@ const typecheck = (sdk, framework, target, sources) => context => [
   '-typecheck',
   '-swift-version',
   '5',
-  ...(framework ? ['-F', `shared/build/bin/${framework}/releaseFramework`, '-framework', 'PowerLogCore'] : []),
+  ...(framework ? ['-F', `shared/runtime/build/bin/${framework}/releaseFramework`, '-framework', 'PowerLogCore'] : []),
   '-module-cache-path',
   join(context.cache, `modules-${sdk}`),
   '-target',
@@ -98,133 +79,112 @@ const typecheck = (sdk, framework, target, sources) => context => [
   ...sources,
 ];
 export const swiftUnits = [
-  suite('telemetry', `${bridge}/Tests/main.swift`, bridgeFiles(['TelemetryDiagnostics'])),
-  suite('read-errors', entry('ReadErrors'), [`${support}/SummaryReview.swift`]),
-  suite('companion', entry('Companion')),
-  suite('watch-engine', entry('WatchEngine'), [
-    'apple/WatchApp/WatchWorkoutEngine.swift',
-    'apple/WatchApp/WatchWorkoutPresentation.swift',
+  suite('device-info', entry('DeviceInfo'), [`${ios}/device/AppleDeviceInfo.swift`]),
+  suite('host-smoke', entry('HostSmoke'), [
+    `${ios}/files/AppleFilePicker.swift`,
+    `${ios}/device/AppleDeviceInfo.swift`,
+    `${ios}/permissions/ApplePermissionGate.swift`,
+    `${ios}/host/SessionBox.swift`,
+  ]),
+  suite('crash-hook', entry('CrashHook'), [
+    `${ios}/files/AppleFilePicker.swift`,
+    `${ios}/device/AppleDeviceInfo.swift`,
+    `${ios}/permissions/ApplePermissionGate.swift`,
+  ]),
+  suite('ble-central', entry('BleCentral'), [`${ios}/ble/AppleBleCentral.swift`, `${ios}/ble/CoreBluetoothSeam.swift`]),
+  standalone('watch-app', 'targets/watch/Tests/App/main.swift', [
+    `${ios}/health/HealthTypes.swift`,
+    `${ios}/health/WorkoutSession.swift`,
+    ...['protocol', 'ride', 'link', 'text'].flatMap(folder => swiftIn(`targets/watch/${folder}`)),
+    'targets/watch/views/WatchRideModel.swift',
+  ]),
+  standalone('watch-protocol', 'targets/watch/Tests/Protocol/main.swift', [
+    `${ios}/health/HealthTypes.swift`,
+    'targets/watch/protocol/WatchMessages.swift',
+  ]),
+  suite('watch-link', entry('WatchLink'), [
+    `${ios}/watch/AppleWatchLink.swift`,
+    `${ios}/watch/SystemWatchSession.swift`,
+  ]),
+  suite('location-source', entry('LocationSource'), [`${ios}/location/AppleLocationSource.swift`]),
+  suite('workout-session', entry('WorkoutSession'), [
+    `${ios}/health/HealthTypes.swift`,
+    `${ios}/health/WorkoutSession.swift`,
   ]),
   suite(
-    'phone-engine',
-    entry('PhoneEngine'),
-    bridgeFiles(['WorkoutEngine', 'WorkoutPreferences', 'WorkoutExampleRides']),
-    {
-      defines: ['POWER_LOG_ENGINE_TEST'],
-    },
-  ),
-  suite('preferences', entry('Preferences'), bridgeFiles(['WorkoutPreferences'])),
-  suite('health-metrics', entry('HealthMetrics'), bridgeFiles(['WorkoutHealthMetrics'])),
-  suite('interrupted-finish', entry('InterruptedFinish'), bridgeFiles(['ExportSource'])),
-  suite('storage', entry('Storage')),
-  suite('capture', entry('Capture')),
-  suite('engine-pacing', entry('EnginePacing'), bridgeFiles(['TelemetryDiagnostics', 'ControllerEngine']), {
-    coreBluetooth: `${bridge}/Tests/EnginePacing/CoreBluetooth.swift`,
-  }),
-  suite(
-    'controller-capture',
-    `${bridge}/Tests/Capture/Controller/main.swift`,
-    bridgeFiles(['TelemetryDiagnostics', 'ControllerEngine']),
-    {
-      coreBluetooth: `${bridge}/Tests/EnginePacing/CoreBluetooth.swift`,
-    },
-  ),
-  suite('live-timing', entry('LiveTiming')),
-  suite('activity-runtime', entry('ActivityRuntime')),
-  suite('monitor', entry('Monitor')),
-  suite('monitor-distance', entry('MonitorDistance'), [`${support}/DistanceFixtures.swift`]),
-  suite('energy-per-distance', entry('EnergyPerDistance')),
-  suite('example-rides', entry('ExampleRides'), bridgeFiles(['WorkoutExampleRides'])),
-  command(
-    'screenshot-examples',
+    'health-provider',
+    entry('HealthProvider'),
     [
-      ...librarySources,
-      ...bridgeFiles(['WorkoutExampleRides', 'ExportSource']),
-      'artifacts/app-store/source/generate.sh',
-      'artifacts/app-store/source/generate.mjs',
-      'artifacts/app-store/source/main.swift',
-      'artifacts/app-store/source/check-iphone-examples.mjs',
-      'shared/scripts/build-apple.sh',
-      'src/core/**',
-      'shared/js/**',
-      'package.json',
-      'package-lock.json',
+      `${ios}/health/HealthTypes.swift`,
+      `${ios}/health/WorkoutSession.swift`,
+      `${ios}/health/AppleHealthProvider.swift`,
     ],
-    {
-      framework: 'host',
-      tools: ['swift', 'node', 'java'],
-      resources: ['gradle:shared'],
-      main: 'artifacts/app-store/source/main.swift',
-      command: context => [
-        'sh',
-        'artifacts/app-store/source/generate.sh',
-        join(context.scratch, 'PowerLog'),
-        '--smoke',
-      ],
-    },
+    { defines: ['POWER_LOG_DEV_TOOLS'] },
   ),
-  suite('export-source', entry('ExportSource'), bridgeFiles(['ExportSource', 'WorkoutExampleRides']), {
-    inputs: ['tests/fixtures/export/native.ts'],
-    tools: ['swift', 'node'],
-  }),
-  suite('export-sink', entry('ExportSink'), bridgeFiles(['ExportSource', 'ExportSink'])),
-  suite('distance', entry('WorkoutDistance'), [`${support}/DistanceFixtures.swift`]),
-  suite('distance-build', entry('DistanceBuild'), [`${support}/DistanceFixtures.swift`]),
-  suite('projection-cache', entry('ProjectionCache')),
-  suite('plot-summary', entry('PlotSummary')),
-  suite('range-statistics', entry('RangeStatistics')),
-  suite('level-of-detail', entry('LevelOfDetail')),
+  suite('permission-gate', entry('PermissionGate'), [`${ios}/permissions/ApplePermissionGate.swift`]),
+  suite('recording-keep-alive', entry('RecordingKeepAlive'), [`${ios}/keepalive/AppleRecordingKeepAlive.swift`]),
+  suite('ride-card', entry('RideCard'), [`${ios}/ridecard/AppleRideCard.swift`]),
+  suite('host-foreground', entry('HostForeground'), [`${ios}/host/PowerLogForeground.swift`]),
+  suite(
+    'host',
+    entry('Host'),
+    [
+      'host/PowerLogHost.swift',
+      'host/PowerLogForeground.swift',
+      'host/PowerLogBackground.swift',
+      'host/AppleUiContext.swift',
+      'device/AppleDeviceInfo.swift',
+      'ble/AppleBleCentral.swift',
+      'ble/CoreBluetoothSeam.swift',
+      'location/AppleLocationSource.swift',
+      'permissions/ApplePermissionGate.swift',
+      'keepalive/AppleRecordingKeepAlive.swift',
+      'ridecard/AppleRideCard.swift',
+      'watch/AppleWatchLink.swift',
+      'watch/SystemWatchSession.swift',
+      'files/AppleFilePicker.swift',
+    ].map(path => `${ios}/${path}`),
+    { stubs: { UIKit: `${ios}/Tests/Host/UIKit/UIKit.swift` } },
+  ),
+  suite('export-sink', entry('ExportSink'), [`${ios}/files/ExportSinks.swift`]),
+  suite('file-picker', entry('FilePicker'), [`${ios}/files/AppleFilePicker.swift`]),
   suite(
     'raster',
     entry('Raster'),
-    bridgeFiles(['Scene', 'Renderer', 'Worker', 'Frames', 'Markers', 'View'].map(part => `MonitorRaster${part}`)),
+    iosFiles(['Scene', 'Renderer', 'Worker', 'Frames', 'Markers', 'View'].map(part => `charts/ChartRaster${part}`)),
   ),
-  suite('catalog', 'tests/catalog-native/main.swift'),
-  suite('workout-summary', entry('WorkoutSummary'), [`${support}/SummaryFixtures.swift`], {
-    optimize: true,
-    estimate: 60,
-    args: context => [join(context.scratch, 'workout-summary')],
+  command('expo-module-parse', expoFiles, {
+    command: () => ['/usr/bin/xcrun', 'swiftc', '-frontend', '-parse', ...expoFiles],
   }),
-  command(
-    'lab-bootstrap',
-    [
-      'scripts/test-apple-sdk-bootstrap.sh',
-      `${bridge}/WorkoutLabCrash.swift`,
-      `${bridge}/PowerLogBridgeAppDelegateSubscriber.swift`,
-      'tests/lab-apple/sdk-bootstrap/UIKit.swift',
-      'tests/lab-apple/sdk-bootstrap/ExpoModulesCore.swift',
-      'tests/lab-apple/sdk-bootstrap/main.swift',
-    ],
-    {
-      main: 'tests/lab-apple/sdk-bootstrap/main.swift',
-      framework: 'host',
-      command: () => ['sh', 'scripts/test-apple-sdk-bootstrap.sh'],
-    },
-  ),
-  command('expo-module-parse', bridgeFiles(['PowerLogBridgeModule', 'PowerLogBridgeAppDelegateSubscriber']), {
-    command: () => [
-      '/usr/bin/xcrun',
-      'swiftc',
-      '-frontend',
-      '-parse',
-      ...bridgeFiles(['PowerLogBridgeModule', 'PowerLogBridgeAppDelegateSubscriber']),
-    ],
-  }),
-  command('privacy-manifest', [`${bridge}/PrivacyInfo.xcprivacy`], {
-    command: () => ['/usr/bin/plutil', '-lint', `${bridge}/PrivacyInfo.xcprivacy`],
+  command('privacy-manifest', [`${ios}/PrivacyInfo.xcprivacy`], {
+    command: () => ['/usr/bin/plutil', '-lint', `${ios}/PrivacyInfo.xcprivacy`],
   }),
   command('ios-typecheck', iosTypecheckSources, {
     tier: 'release',
     framework: 'devices',
     command: typecheck('iphoneos', 'iosArm64', 'arm64-apple-ios26.0', iosTypecheckSources),
   }),
+  command(
+    'health-simulator',
+    [
+      `${ios}/health/HealthTypes.swift`,
+      `${ios}/health/WorkoutSession.swift`,
+      `${ios}/health/AppleHealthProvider.swift`,
+      entry('WorkoutSession'),
+      entry('HealthProvider'),
+      'scripts/test-health-simulator.sh',
+    ],
+    {
+      tier: 'release',
+      framework: 'devices',
+      command: () => ['sh', 'scripts/test-health-simulator.sh'],
+    },
+  ),
   command('watchos-typecheck', watchTypecheckSources, {
     tier: 'release',
     framework: 'host',
     command: typecheck('watchos', null, 'arm64-apple-watchos10.0', watchTypecheckSources),
   }),
-  suite('live-ride-soak', entry('LiveRideSoak'), [exportSource], { optimize: true, long: true, estimate: 150 }),
-  suite('whole-ride', entry('WholeRide'), [], { optimize: true, long: true, estimate: 300 }),
 ];
 
 const unitById = id => {
@@ -235,8 +195,6 @@ const unitById = id => {
 
 export const swiftRunners = {
   '': () => swiftUnits.filter(unit => !unit.long),
-  '--lab': () => ['companion', 'storage', 'capture'].map(unitById),
-  '--live-soak': () => [unitById('live-ride-soak')],
   '--only': ids => ids.split(',').map(unitById),
 };
 
@@ -253,7 +211,7 @@ export class SwiftHost {
     this.root = root;
     this.env = env;
     this.cache = cache;
-    this.framework = resolve(root, 'shared/build/bin/macosArm64/releaseFramework');
+    this.framework = resolve(root, 'shared/runtime/build/bin/macosArm64/debugFramework');
     this.memo = new Map();
   }
 
@@ -359,21 +317,21 @@ export class SwiftHost {
     );
   }
 
-  coreBluetooth(path, context) {
-    return this.compile(context, 'core-bluetooth', [path], output => [
+  stub(name, path, context) {
+    return this.compile(context, `stub-${name}`, [path], output => [
       '-swift-version',
       '5',
       '-emit-module',
       '-emit-library',
       '-module-name',
-      'CoreBluetooth',
+      name,
       '-Xlinker',
       '-install_name',
       '-Xlinker',
-      '@rpath/libCoreBluetooth.dylib',
+      `@rpath/lib${name}.dylib`,
       path,
       '-o',
-      join(output, 'libCoreBluetooth.dylib'),
+      join(output, `lib${name}.dylib`),
     ]);
   }
 
@@ -389,9 +347,11 @@ export class SwiftHost {
       ]);
       return join(directory, unit.id);
     }
-    const sources = [...suiteFixtures(unit.main), ...unit.sources, unit.main];
+    const sources = [...unit.sources, unit.main];
     const library = await this.library(unit.optimize, context);
-    const bluetooth = unit.coreBluetooth ? await this.coreBluetooth(unit.coreBluetooth, context) : undefined;
+    const stubs = await Promise.all(
+      Object.entries(unit.stubs ?? {}).map(async ([name, path]) => [name, await this.stub(name, path, context)]),
+    );
     const directory = await this.compile(
       context,
       `binary-${unit.id}`,
@@ -413,9 +373,17 @@ export class SwiftHost {
         '-testable-import-module',
         '-Xfrontend',
         'PowerLogHostBase',
-        ...(bluetooth
-          ? ['-I', bluetooth, '-L', bluetooth, '-lCoreBluetooth', '-Xlinker', '-rpath', '-Xlinker', bluetooth]
-          : []),
+        ...stubs.flatMap(([name, stub]) => [
+          '-I',
+          stub,
+          '-L',
+          stub,
+          `-l${name}`,
+          '-Xlinker',
+          '-rpath',
+          '-Xlinker',
+          stub,
+        ]),
         ...sources,
         '-F',
         this.framework,
@@ -423,6 +391,8 @@ export class SwiftHost {
         'PowerLogCore',
         '-lsqlite3',
         '-lcompression',
+        '-Xlinker',
+        '-dead_strip',
         '-o',
         join(output, unit.id),
       ],
@@ -439,32 +409,11 @@ export class SwiftHost {
     }
     const env = { POWER_LOG_CONTRACT_FIXTURES: await this.contractFixtures(context) };
     const binary = await this.binary(unit, context);
-    if (!unit.projection) return context.exec(binary, unit.args?.(local) ?? [], { env });
-    const output = join(context.scratch, 'bridge-projection');
-    mkdirSync(output, { recursive: true });
-    const descriptor = openSync(join(output, 'log'), 'w');
-    let status = 0;
-    try {
-      await context.exec(binary, [output], { env, stdout: descriptor, stderr: descriptor });
-    } catch {
-      status = 1;
-    } finally {
-      closeSync(descriptor);
-    }
-    writeFileSync(join(output, 'status'), `${status}\n`);
-    context.write(readFileSync(join(output, 'log'), 'utf8'));
-    await context.exec('npx', ['vitest', 'run', 'tests/services/workout-swift-projection.test.ts'], {
-      env: { POWER_LOG_BRIDGE_PROJECTION: output },
-    });
+    return context.exec(binary, unit.args?.(local) ?? [], { env });
   }
 }
 
-export const swiftFixtures = [
-  'tests/fixtures/contract/**',
-  'tests/fixtures/protocol.json',
-  'tests/fixtures/distance-controller.json',
-  'tests/fixtures/health/**',
-];
+export const swiftFixtures = ['tests/fixtures/contract/**'];
 
 const swiftDefinition = [
   'scripts/swift-suites.mjs',
@@ -476,9 +425,9 @@ const swiftDefinition = [
 export function unitInputs(unit) {
   if (unit.kind === 'command') return [...unit.inputs, 'scripts/swift-suites.mjs'];
   const sources = [
-    ...(unit.kind === 'suite' ? [...librarySources, ...suiteFixtures(unit.main)] : []),
+    ...(unit.kind === 'suite' ? librarySources : []),
     ...unit.sources,
-    ...(unit.coreBluetooth ? [unit.coreBluetooth] : []),
+    ...Object.values(unit.stubs ?? {}),
     unit.main,
   ];
   return [...new Set([...sources, ...(unit.inputs ?? []), ...swiftDefinition])];
@@ -491,7 +440,7 @@ export function swiftTasks({ host, units, frameworks = {}, extra = [] }) {
     tier: unit.tier ?? (unit.long ? 'release' : 'everyday'),
     groups: ['swift'],
     inputs: unitInputs(unit),
-    tools: unit.tools ?? (unit.projection ? ['swift', 'node'] : ['swift']),
+    tools: unit.tools ?? ['swift'],
     resources: unit.resources ?? [],
     needs: unit.framework && frameworks[unit.framework] ? [frameworks[unit.framework]] : [],
     isolate: true,
@@ -509,7 +458,7 @@ async function main() {
   const selection = flag === '--only' ? argv[1] : undefined;
   const extra = argv.slice(flag ? (selection === undefined ? 1 : 2) : 0);
   if (!swiftRunners[flag] || (flag === '--only' && !selection))
-    throw new Error('Usage: bash scripts/test-swift.sh [--lab | --live-soak | --only id[,id]] [suite arguments]');
+    throw new Error('Usage: bash scripts/test-swift.sh [--only id[,id]] [suite arguments]');
   const units = swiftRunners[flag](selection);
   const macos = units.every(unit => !deviceFrameworks.has(unit.id));
   const apple = spawnSync('sh', ['shared/scripts/build-apple.sh', ...(macos ? ['--macos'] : [])], {

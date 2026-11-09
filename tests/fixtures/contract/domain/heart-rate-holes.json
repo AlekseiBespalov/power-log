@@ -1,0 +1,13 @@
+{
+  "metric": "heartRateBpm",
+  "rangeUs": [0, 200000000],
+  "cases": [
+    { "name": "a 29 s hole keeps one line", "samplesUs": [0, 5000000, 34000000, 39000000], "segments": [0, 0, 0, 0] },
+    {
+      "name": "a 30 s hole starts a new line",
+      "samplesUs": [0, 5000000, 35000000, 40000000],
+      "segments": [0, 0, 1, 1]
+    },
+    { "name": "a 31 s hole starts a new line", "samplesUs": [0, 5000000, 36000000, 41000000], "segments": [0, 0, 1, 1] }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "identities": {
+    "x6": { "decoder": "cyc", "model": "X6", "firmware": "20250725", "protocol": "5.3" },
+    "other": { "decoder": "cyc", "model": "X6", "firmware": "20260101", "protocol": "5.3" }
+  },
+  "cases": [
+    {
+      "name": "a 5 s controller loss in one controller session",
+      "sessions": { "1": "x6" },
+      "readings": [
+        { "atUs": 0, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 1000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 6000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 7000000, "session": 1, "interval": 1, "run": 1 }
+      ],
+      "segments": 1
+    },
+    {
+      "name": "a 7 s controller loss in one controller session",
+      "sessions": { "1": "x6" },
+      "readings": [
+        { "atUs": 0, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 1000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 8000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 9000000, "session": 1, "interval": 1, "run": 1 }
+      ],
+      "segments": 2
+    },
+    {
+      "name": "a 5 s loss across a reconnect with the same identity",
+      "sessions": { "1": "x6", "2": "x6" },
+      "readings": [
+        { "atUs": 0, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 1000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 6000000, "session": 2, "interval": 1, "run": 2 },
+        { "atUs": 7000000, "session": 2, "interval": 1, "run": 2 }
+      ],
+      "segments": 1
+    },
+    {
+      "name": "a 5 s loss across a reconnect with another identity",
+      "sessions": { "1": "x6", "2": "other" },
+      "readings": [
+        { "atUs": 0, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 1000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 6000000, "session": 2, "interval": 1, "run": 2 },
+        { "atUs": 7000000, "session": 2, "interval": 1, "run": 2 }
+      ],
+      "segments": 2
+    },
+    {
+      "name": "a 2 s gap across Pause and Resume",
+      "sessions": { "1": "x6" },
+      "readings": [
+        { "atUs": 0, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 1000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 3000000, "session": 1, "interval": 2, "run": 2 },
+        { "atUs": 4000000, "session": 1, "interval": 2, "run": 2 }
+      ],
+      "segments": 2
+    },
+    {
+      "name": "an imported ride with two controller sessions without identity",
+      "sessions": { "1": null, "2": null },
+      "readings": [
+        { "atUs": 0, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 1000000, "session": 1, "interval": 1, "run": 1 },
+        { "atUs": 2000000, "session": 2, "interval": 1, "run": 2 },
+        { "atUs": 3000000, "session": 2, "interval": 1, "run": 2 }
+      ],
+      "segments": 1
+    },
+    {
+      "name": "a counter rise across a 5 s loss within 200 A and 25 kW",
+      "sessions": { "1": "x6", "2": "x6" },
+      "readings": [
+        { "atUs": 0, "session": 1, "interval": 1, "run": 1, "consumedWh": 10000, "consumedAh": 200 },
+        { "atUs": 1000000, "session": 1, "interval": 1, "run": 1, "consumedWh": 10100, "consumedAh": 202 },
+        { "atUs": 6000000, "session": 2, "interval": 1, "run": 2, "consumedWh": 15100, "consumedAh": 302 },
+        { "atUs": 7000000, "session": 2, "interval": 1, "run": 2, "consumedWh": 15200, "consumedAh": 304 }
+      ],
+      "segments": 1,
+      "indivisible": { "metric": "controllerEnergyWh", "startUs": 1000000, "endUs": 6000000, "amount": 0.5 },
+      "total": { "metric": "controllerEnergyWh", "amount": 0.52 }
+    }
+  ]
+}

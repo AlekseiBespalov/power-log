@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "maximumFileBytes": 4194304,
   "files": ["events.previous.jsonl", "events.jsonl"],
   "events": [
@@ -101,5 +101,204 @@
     "AndroidGattStatus",
     "AndroidBluetoothStatus"
   ],
-  "unknownErrorDomain": "OtherErrorDomain"
+  "unknownErrorDomain": "OtherErrorDomain",
+  "v2": {
+    "levels": ["info", "warning", "error"],
+    "maximumLineBytes": 4096,
+    "events": {
+      "launch": {
+        "reason": "enum:LaunchReason",
+        "outcome": ["ready", "refused"],
+        "refusal": "enum:RefusalDetail",
+        "launchMs": "integer",
+        "appVersion": "text",
+        "appBuild": "text",
+        "pragmas": "object"
+      },
+      "foreground": {
+        "foreground": "flag"
+      },
+      "searchStarted": {
+        "inventory": "flag"
+      },
+      "searchEnded": {
+        "reason": ["windowEnded", "stopped", "chooserCancelled", "searchFailed"],
+        "found": "integer",
+        "platform": "platform"
+      },
+      "connectAttempt": {
+        "attempt": "integer",
+        "adopt": "flag",
+        "known": "flag"
+      },
+      "linkUp": {
+        "attempt": "integer",
+        "elapsedMs": "integer"
+      },
+      "linkDown": {
+        "initiator": ["app", "peerOrSystem"],
+        "reason": [
+          "replyTimeout",
+          "attemptTimeout",
+          "writeTimeout",
+          "rider",
+          "rideEnded",
+          "radio",
+          "servicesInvalidated",
+          "plannedReconnect",
+          "gattSetup",
+          "rejected",
+          "writeCapacity",
+          "pendingReconnect"
+        ],
+        "systemReconnecting": "flag",
+        "linkMs": "integer",
+        "sampleAgeMs": "integer",
+        "platform": "platform"
+      },
+      "linkFailed": {
+        "attempt": "integer",
+        "platform": "platform"
+      },
+      "ready": {
+        "outcome": "enum:GattResult",
+        "maxWriteBytes": "integer",
+        "platform": "platform"
+      },
+      "identity": {
+        "outcome": ["verified", "rejected"],
+        "rejection": "enum:ControllerRequest"
+      },
+      "telemetryGap": {
+        "gapMs": "integer"
+      },
+      "location": {
+        "state": "enum:LocationProviderState"
+      },
+      "cancellationDeadline": {
+        "released": "flag",
+        "platform": "platform"
+      },
+      "requestResent": {},
+      "replyTimeout": {
+        "request": "enum:ControllerRequest",
+        "held": "flag",
+        "waitedMs": "integer"
+      },
+      "writeFailed": {
+        "result": ["accepted", "blocked", "tooLong", "notConnected", "failed"],
+        "platform": "platform"
+      },
+      "reconnectScheduled": {
+        "attempt": "integer",
+        "delayMs": "integer",
+        "reason": [
+          "replyTimeout",
+          "attemptTimeout",
+          "writeTimeout",
+          "rider",
+          "rideEnded",
+          "radio",
+          "servicesInvalidated",
+          "plannedReconnect",
+          "gattSetup",
+          "rejected",
+          "writeCapacity",
+          "pendingReconnect",
+          "peerOrSystem",
+          "linkFailed"
+        ]
+      },
+      "terminate": {
+        "finished": "flag"
+      },
+      "reconnectGaveUp": {
+        "attempts": "integer",
+        "code": "enum:FailureCode"
+      },
+      "rateChanged": {
+        "hz": [1, 2, 4, 8],
+        "background": "flag"
+      },
+      "radio": {
+        "state": "enum:RadioState"
+      },
+      "bikeForgotten": {
+        "reason": ["rider", "gaveUp", "radio", "rideEnded"]
+      },
+      "captureSummary": {
+        "windowMs": "integer",
+        "requestedHz": "integer",
+        "receivedHz": "decimal",
+        "admitted": "integer",
+        "dropped": "integer",
+        "committed": "integer",
+        "busy": "integer",
+        "inboxHigh": "integer",
+        "commitMaxMs": "integer",
+        "background": "flag",
+        "recording": "flag",
+        "replyMeanMs": "integer",
+        "replyMaxMs": "integer",
+        "notificationErrors": "integer",
+        "discardedBytes": "integer",
+        "timerLateMs": "integer",
+        "fixesDropped": "object",
+        "processCpuMs": "integer",
+        "footprintBytes": "integer",
+        "thermal": "enum:ThermalLevel",
+        "powerSave": "flag"
+      },
+      "storageFailed": {
+        "kind": "enum:StorageErrorKind",
+        "stage": ["capture", "command", "launch", "maintenance", "health", "read", "cache"],
+        "platform": "platform"
+      },
+      "ridePhase": {
+        "phase": "enum:RidePhase|discarded",
+        "issuer": "enum:CommandIssuer",
+        "code": "enum:FailureCode"
+      },
+      "healthOutcome": {
+        "outcome": "enum:HealthOutcome",
+        "reason": "enum:HealthReason",
+        "provider": "enum:HealthProviderKind"
+      },
+      "failure": {
+        "source": [
+          "health",
+          "workoutSession",
+          "keepAlive",
+          "rideCard",
+          "permissions",
+          "files",
+          "watchLink",
+          "watch",
+          "exports"
+        ],
+        "error": "enum:PortErrorKind|enum:FailureCode",
+        "platform": "platform"
+      },
+      "unexpected": {
+        "component": "text",
+        "exception": "text",
+        "frames": "texts",
+        "image": "text",
+        "load": "text"
+      },
+      "crash": {
+        "exception": "text",
+        "image": "text",
+        "load": "text",
+        "frames": "texts",
+        "thread": "text"
+      },
+      "exit": {
+        "reason": "text",
+        "status": "integer",
+        "importance": "integer",
+        "atUtcUs": "integer"
+      }
+    }
+  }
 }

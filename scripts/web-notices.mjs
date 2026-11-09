@@ -24,10 +24,10 @@ export function generateWebNotices(root, exportDirectory) {
   const exportFiles = filesIn(exportDirectory);
 
   function record(source, content = '') {
-    if (source.includes('shared/js/')) {
+    if (source.includes('shared/generated/js/kit/')) {
       const kotlin = source.includes('kotlin-kotlin-stdlib.mjs');
       const name = kotlin ? 'kotlin-stdlib' : '@power-log/core';
-      const license = join(root, 'shared/js', kotlin ? 'KOTLIN_LICENSE' : 'LICENSE');
+      const license = join(root, 'shared/generated/js/kit', kotlin ? 'KOTLIN_LICENSE' : 'LICENSE');
       packages.set(name, {
         name,
         version: kotlin ? '2.4.20' : '0.3.0',

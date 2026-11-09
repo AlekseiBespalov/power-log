@@ -1,8 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { UART_WRITE } from '../../src/services/controller-gatt';
+import { UART_WRITE } from '../fixtures/browser-bike';
 import { framePayload } from '../support/controller-frames';
 import fixture from '../fixtures/protocol.json';
-import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 
 async function syntheticBike(page: Page) {
   const identity = framePayload(Uint8Array.from(Buffer.from(fixture.identity.payloadHex, 'hex')));
@@ -10,7 +9,7 @@ async function syntheticBike(page: Page) {
     ({ identity, telemetry, writerID }) => {
       class Characteristic extends EventTarget {
         value?: DataView;
-        properties = { writeWithoutResponse: true };
+        properties = { writeWithoutResponse: true, notify: true };
         async startNotifications() {
           return this;
         }
@@ -127,13 +126,11 @@ test('full metric labels fit narrow number cells without moving value baselines'
 test('Finish and Delete keep their text and actions reachable in a short window', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await syntheticBike(page);
-  const preferences = defaultMonitorPreferences();
-  preferences.workoutOptions.recordGPS = false;
-  await page.addInitScript(
-    preferences => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences)),
-    JSON.parse(monitorPreferencesJson(preferences)),
-  );
-  await page.goto('/');
+  await page.goto('/settings');
+  const gps = page.getByRole('switch', { name: 'Record GPS route', exact: true });
+  await gps.click();
+  await expect(gps).toHaveAttribute('aria-checked', 'false');
+  await page.getByRole('link', { name: 'Ride', exact: true }).click();
   await page.getByTestId('ride-setup').click();
   await page.getByTestId('ride-setup-sheet').getByTestId('setup-find-bike').click();
   await page.getByRole('button', { name: /^Connect CYC/ }).click();

@@ -1,0 +1,1 @@
+[{"rows":2,"next":[2],"done":true,"connections":[],"columns":{"timestamp":["2026-07-04T10:00:01.000Z","2026-07-04T10:00:05.000Z"],"elapsedSeconds":[1,5],"controllerEnergyWh":[null,null],"controllerChargeAh":[null,null],"calculatedEnergyWh":[null,null],"calculatedChargeAh":[null,null]}}]

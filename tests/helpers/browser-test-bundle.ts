@@ -21,6 +21,8 @@ export function browserTestBundle(
       `${file}.tsx`,
       `${file}.js`,
       `${file}.mjs`,
+      path.join(file, 'index.ts'),
+      path.join(file, 'index.tsx'),
       path.join(file, 'index.js'),
       ...(main ? [main] : []),
     ].find(value => fs.existsSync(value) && fs.statSync(value).isFile());

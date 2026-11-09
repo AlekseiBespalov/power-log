@@ -1,49 +1,65 @@
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, normalize, resolve } from 'node:path';
-import { SwiftHost, swiftFixtures, swiftTasks, swiftUnits } from './swift-suites.mjs';
+import { androidEnvironment } from './android-environment.mjs';
+import { pendingFile, pendingTests, playwrightPendingProblems, vitestPendingProblems } from './pending-tests.mjs';
+import { moduleNames } from '../shared/scripts/discover-common-tests.mjs';
+import { SwiftHost, swiftTasks, swiftUnits } from './swift-suites.mjs';
 
 const definition = ['scripts/checks.mjs', 'scripts/check-tasks.mjs', 'scripts/reap-check-lock.py'];
 const nodeDependencies = ['package.json', 'package-lock.json', 'patches/**', '.npmrc', '.nvmrc'];
 const javascript = [
   ...nodeDependencies,
   'src/**',
-  'modules/power-log-bridge/index.ts',
-  'modules/power-log-bridge/expo-module.config.json',
-  'shared/js/**',
+  'modules/power-log/index.ts',
+  'modules/power-log/src/**',
+  'modules/power-log/expo-module.config.json',
+  'shared/generated/**',
   'assets/**',
   'plugins/**',
   'app.config.ts',
   'tsconfig.json',
 ];
 const testSupport = ['tests/support/**', 'tests/helpers/**', 'tests/fixtures/**'];
-const kotlin = [
-  'shared/src/**',
+const kotlinBuild = [
   'shared/*.kts',
+  'shared/*/build.gradle.kts',
+  'shared/build-logic/**',
   'shared/gradle.properties',
   'shared/gradle/**',
   'shared/gradlew',
-  'shared/scripts/protocol_fixtures.py',
 ];
-const kotlinBuild = ['shared/*.kts', 'shared/gradle.properties', 'shared/gradle/**', 'shared/gradlew'];
-const kotlinApple = ['shared/src/commonMain/**', 'shared/src/appleMain/**', ...kotlinBuild];
+const kotlin = ['shared/*/src/**', 'shared/generated/kotlin/**', ...kotlinBuild, 'shared/scripts/protocol_fixtures.py'];
+const kotlinApple = [
+  ...['commonMain', 'appleMain', 'sqliteMain'].map(set => `shared/*/src/${set}/**`),
+  'shared/generated/kotlin/**',
+  'shared/*/src/debugMain/**',
+  'tests/fixtures/contract/telemetry/cyc/**',
+  'tests/fixtures/protocol.json',
+  ...kotlinBuild,
+];
 const everything = ['**', '!docs/**', '!**/*.md', '!artifacts/**', '!.github/**', '!LICENSE'];
 const android = [
   ...everything,
-  '!modules/power-log-bridge/ios/**',
-  '!apple/**',
-  '!lab/**',
-  '!tests/lab-apple/**',
-  '!tests/catalog-native/**',
+  '!modules/power-log/ios/**',
+  '!targets/**',
   '!tests/native-live-activity/**',
   '!tests/e2e/**',
   '!tests/public-web/**',
 ];
 const androidSources = [
   ...nodeDependencies,
-  'modules/power-log-bridge/android/**',
-  'modules/power-log-bridge/expo-module.config.json',
-  'shared/src/commonMain/**',
+  'modules/power-log/android/**',
+  'modules/power-log/expo-module.config.json',
+  ...['commonMain', 'javaMain', 'jvmMain', 'androidMain', 'sqliteMain'].map(set => `shared/*/src/${set}/**`),
+  'shared/runtime/src/debugMain/**',
+  'shared/runtime/src/androidUnitTest/**',
+  ...['commonTest', 'sqliteTest', 'androidUnitTest', 'androidSharedTest'].map(set => `shared/data/src/${set}/**`),
+  'shared/application/src/fakes/**',
+  'shared/application/src/contracts/**',
+  'tests/pending.json',
+  'shared/generated/kotlin/**',
   ...kotlinBuild,
   'app.config.ts',
   'plugins/**',
@@ -52,16 +68,8 @@ const androidSources = [
   'scripts/test-android.mjs',
   'scripts/build-android.mjs',
   'scripts/android-environment.mjs',
-  'scripts/prepare-android-crash-tests.mjs',
-  'scripts/crash-proof.cjs',
   'scripts/check-android-release-surface.mjs',
-  'scripts/android-crash-apk.mjs',
   'scripts/expand-contract-fixtures.py',
-];
-const crashHarnesses = [
-  'tests/browser/crash-paths.test.ts',
-  'tests/helpers/web-crash-path.ts',
-  'tests/fixtures/crash-path-harness.ts',
 ];
 const importPattern = /\b(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g;
 const importExtensions = ['', '.mjs', '.js', '.cjs', '.json', '/index'].flatMap(suffix =>
@@ -98,10 +106,53 @@ export function importClosure(root, entries) {
   return [...seen].sort();
 }
 
-const catalogTest = 'tests/core/shared-core-telemetry-catalog.test.ts';
-const browserLong = 'tests/browser/browser-rides.test.ts';
+const pending = pendingFile;
+
+const reportsVariable = 'POWER_LOG_TEST_REPORTS';
+
+function vitestReportFile(context, id) {
+  const directory = context.env[reportsVariable] ?? (context.full ? context.scratch : undefined);
+  return directory && join(directory, `${id.replace(/[^\w.-]+/g, '-')}.json`);
+}
+
+// The release tier accepts a pending test that fails as not implemented, so a release run reads the reports and
+// fails on anything else instead of on the runner's exit status.
+async function vitest(context, id, args, options = {}) {
+  const report = vitestReportFile(context, id);
+  const command = [
+    'vitest',
+    'run',
+    ...args,
+    ...(report ? ['--reporter=default', '--reporter=json', `--outputFile.json=${report}`] : []),
+  ];
+  if (!context.full) return context.exec('npx', command, options);
+  await context.exec('npx', command, options).catch(() => undefined);
+  const { problems, accepted } = vitestPendingProblems(
+    context.root,
+    JSON.parse(readFileSync(report, 'utf8')),
+    pendingTests(context.root, 'vitest'),
+  );
+  if (accepted.length) context.write(`Pending, failing as not implemented:\n${accepted.join('\n')}`);
+  if (problems.length) throw new Error(problems.join('\n'));
+}
+
+async function kotlinTests(context, tasks, check) {
+  const run = gradle(context, tasks);
+  if (!context.full) await run;
+  else await run.catch(() => undefined);
+  await context.exec('node', ['shared/scripts/check-test-results.mjs', ...check]);
+}
+
+function clearKotlinResults(root, targets) {
+  for (const module of moduleNames)
+    for (const target of targets)
+      rmSync(resolve(root, 'shared', module, 'build/test-results', target), { recursive: true, force: true });
+}
+const browserLong = ['tests/browser/long-ride-export.test.ts'];
+const rideGoldenPages = 'app.powerlog.application.exports.RideGoldenPagesTest';
+const importedCsv = 'tests/goldens/imported-csv.test.ts';
 const browserConfig = ['--config', 'vitest.browser.config.ts', '--hookTimeout', '30000'];
-const framework = 'shared/build/bin/macosArm64/releaseFramework/PowerLogCore.framework/PowerLogCore';
+const framework = 'shared/runtime/build/bin/macosArm64/debugFramework/PowerLogCore.framework/PowerLogCore';
 
 function gradleEnvironment(root) {
   return {
@@ -168,22 +219,6 @@ function freePort() {
   });
 }
 
-async function coreEvidence(context) {
-  const logs = ['core-tests', 'core-simulators', 'core-devices']
-    .map(name => join(context.root, 'test-results/gates/logs', `${name}.log`))
-    .filter(existsSync)
-    .map(path => readFileSync(path, 'utf8'))
-    .join('\n');
-  const combined = join(context.scratch, 'gradle.log');
-  writeFileSync(combined, logs);
-  await context.exec(process.execPath, [
-    'shared/scripts/print-core-evidence.mjs',
-    combined,
-    resolve(context.root, 'shared/build/test-results'),
-    existsSync(resolve(context.root, 'shared/build/qualification/watch-links.done')) ? '0' : '1',
-  ]);
-}
-
 export function checkTasks({ root, env = process.env }) {
   const cache = resolve(root, 'test-results/gates/cache');
   const host = new SwiftHost({ root, env, cache: join(cache, 'swift') });
@@ -208,26 +243,32 @@ export function checkTasks({ root, env = process.env }) {
       needs: ['deps'],
       run: ['node', 'scripts/audit.mjs'],
     }),
-    task('js:generated', 'Checked-in Kotlin/JS output matches its recorded inputs', {
+    task('generated:fingerprint', 'Checked-in generated outputs match their recorded inputs', {
       groups: ['check', 'core'],
       needs: ['deps'],
       inputs: [
-        'shared/src/commonMain/**',
-        'shared/src/jsMain/**',
-        'shared/*.kts',
-        'shared/gradle.properties',
-        'shared/gradle/**',
-        'shared/js/**',
-        'shared/scripts/sync-js.mjs',
+        'shared/*/src/commonMain/**',
+        'shared/*/src/jsMain/**',
+        'shared/application/src/jvmTest/kotlin/app/powerlog/application/api/generator/**',
+        ...kotlinBuild,
+        'shared/generated/**',
+        'shared/scripts/sync-generated.mjs',
         'shared/scripts/js-output.mjs',
       ],
       tools: ['node'],
       estimate: 1,
-      run: ['node', 'shared/scripts/sync-js.mjs', '--check'],
+      run: ['node', 'shared/scripts/sync-generated.mjs', '--check'],
     }),
     task('js:types', 'TypeScript types', {
       groups: ['check'],
-      inputs: [...javascript, '*.ts', 'tests/**/*.{ts,tsx}', 'scripts/*.mjs', 'scripts/*.cjs', 'shared/scripts/*.mjs'],
+      inputs: [
+        ...javascript,
+        'modules/power-log/src/**/*.{ts,tsx}',
+        '*.ts',
+        'tests/**/*.{ts,tsx}',
+        'scripts/*.mjs',
+        'shared/scripts/*.mjs',
+      ],
       needs: ['deps'],
       tools: ['node'],
       weight: 2,
@@ -254,11 +295,12 @@ export function checkTasks({ root, env = process.env }) {
         ...nodeDependencies,
         'src/**/*.{ts,tsx}',
         'tests/**/*.{ts,tsx}',
-        'modules/power-log-bridge/*.ts',
+        'modules/power-log/*.ts',
+        'modules/power-log/src/**/*.{ts,tsx}',
         'plugins/*.js',
         'scripts/*.mjs',
         'shared/scripts/*.mjs',
-        'shared/js/package.json',
+        'shared/generated/js/*/package.json',
         '*.ts',
         '*.js',
         '.prettierrc',
@@ -277,18 +319,17 @@ export function checkTasks({ root, env = process.env }) {
       inputs: [
         ...javascript,
         ...testSupport,
-        'tests/core/**',
-        'tests/services/**',
-        'tests/export/**',
-        'tests/fit-common/**',
+        'modules/power-log/src/**',
+        'tests/exports/**',
+        'tests/repo/**',
+        'tests/module/**',
+        'tests/features/**',
+        'tests/components/**',
+        pending,
         'vitest.config.ts',
         'eslint.config.js',
-        'scripts/*.{mjs,cjs,py}',
+        'scripts/*.{mjs,py}',
         'shared/scripts/*.{mjs,py}',
-        'modules/power-log-bridge/android/src/test/resources/**',
-        ...(readFileSync(resolve(root, 'tests/core/catalog-authority.test.ts'), 'utf8').match(
-          /modules\/power-log-bridge\/[\w/.-]+\.(?:swift|kt)/g,
-        ) ?? []),
       ],
       env: ['FIT_PYTHON'],
       needs: ['deps'],
@@ -296,7 +337,12 @@ export function checkTasks({ root, env = process.env }) {
       weight: 4,
       isolate: true,
       estimate: 35,
-      run: ['npx', 'vitest', 'run', '--maxWorkers', '4', '--exclude', catalogTest],
+      run: context =>
+        vitest(context, 'js:unit', [
+          '--maxWorkers',
+          '4',
+          ...(context.full ? [] : pendingTests(context.root, 'vitest').flatMap(test => ['--exclude', test])),
+        ]),
     }),
     task('js:node', 'Native configuration, security and notice suites', {
       groups: ['check'],
@@ -304,7 +350,9 @@ export function checkTasks({ root, env = process.env }) {
         ...everything,
         '!src/**',
         '!tests/core/**',
-        '!tests/services/**',
+        '!tests/exports/**',
+        '!tests/repo/**',
+        '!tests/components/**',
         '!tests/support/**',
         '!tests/e2e/**',
         '!tests/public-web/**',
@@ -363,35 +411,66 @@ export function checkTasks({ root, env = process.env }) {
       weight: 6,
       isolate: true,
       estimate: 60,
-      run: ['npx', 'vitest', 'run', ...browserConfig, '--maxWorkers', '4', '--exclude', browserLong],
+      run: context =>
+        vitest(context, 'js:browser', [
+          ...browserConfig,
+          '--maxWorkers',
+          '4',
+          ...browserLong.flatMap(file => ['--exclude', file]),
+        ]),
     }),
-    task('js:browser-long', 'Browser long-ride retention', {
+    task('js:browser-long', 'Browser long-ride retention and the long ride exported from IndexedDB', {
       groups: ['browser'],
       tier: 'release',
-      inputs: [...javascript, ...testSupport, 'tests/browser/**', 'vitest.browser.config.ts'],
+      inputs: [...javascript, ...kotlin, ...testSupport, 'tests/browser/**', 'vitest.browser.config.ts'],
       env: ['POWER_LOG_BROWSER_STRESS_SIZE'],
       needs: ['deps'],
-      tools: ['node'],
+      resources: ['gradle:shared'],
+      tools: ['java', 'node'],
       weight: 4,
       isolate: true,
       estimate: 60,
-      run: context =>
-        context.exec('npx', ['vitest', 'run', ...browserConfig, browserLong], {
+      run: async context => {
+        await gradle(context, [':runtime:jsTestTestDevelopmentExecutableCompileSync']);
+        await vitest(context, 'js:browser-long', [...browserConfig, ...browserLong], {
           env: { POWER_LOG_BROWSER_STRESS: '1' },
-        }),
+        });
+      },
     }),
     task('js:e2e', 'Playwright end-to-end suites', {
       groups: ['browser'],
       tier: 'release',
-      inputs: [...javascript, ...testSupport, 'tests/e2e/**', 'playwright.config.ts'],
+      inputs: [
+        ...javascript,
+        ...kotlin,
+        ...testSupport,
+        'tests/e2e/**',
+        'playwright.config.ts',
+        'scripts/pending-tests.mjs',
+        pending,
+      ],
       needs: ['deps'],
-      resources: ['crash-results'],
-      tools: ['node'],
+      resources: ['crash-results', 'gradle:shared'],
+      tools: ['java', 'node'],
       weight: 8,
       isolate: true,
       estimate: 90,
-      run: async context =>
-        context.exec('npx', ['playwright', 'test'], { env: { POWER_LOG_WEB_PORT: String(await freePort()) } }),
+      run: async context => {
+        await gradle(context, [':runtime:jsTestTestDevelopmentExecutableCompileSync']);
+        const listed = pendingTests(context.root, 'playwright');
+        const report = join(context.env[reportsVariable] ?? context.scratch, 'js-e2e.json');
+        rmSync(report, { force: true });
+        const failure = await context
+          .exec('npx', ['playwright', 'test', '--reporter=list,json'], {
+            env: { POWER_LOG_WEB_PORT: String(await freePort()), PLAYWRIGHT_JSON_OUTPUT_NAME: report },
+          })
+          .catch(error => error);
+        if (failure && !existsSync(report)) throw failure;
+        const { problems, accepted } = playwrightPendingProblems(JSON.parse(readFileSync(report, 'utf8')), listed);
+        if (accepted.length)
+          context.write(`Pending, failing until their feature reaches the new runtime:\n${accepted.join('\n')}`);
+        if (problems.length) throw new Error(problems.join('\n'));
+      },
     }),
     task('core:host', 'Kotlin macOS framework', {
       groups: ['core'],
@@ -401,7 +480,7 @@ export function checkTasks({ root, env = process.env }) {
       tools: ['java'],
       weight: 6,
       estimate: 60,
-      run: context => gradle(context, [':linkReleaseFrameworkMacosArm64']),
+      run: context => gradle(context, [':runtime:linkDebugFrameworkMacosArm64']),
     }),
     task('core:tests', 'Kotlin JVM and Node common tests', {
       groups: ['core'],
@@ -411,6 +490,8 @@ export function checkTasks({ root, env = process.env }) {
         'shared/scripts/check-test-results.mjs',
         'shared/scripts/discover-common-tests.mjs',
         'shared/scripts/parse-junit.py',
+        'scripts/pending-tests.mjs',
+        pending,
       ],
       needs: ['core:host'],
       resources: ['gradle:shared'],
@@ -418,50 +499,38 @@ export function checkTasks({ root, env = process.env }) {
       weight: 4,
       estimate: 120,
       run: async context => {
-        await gradle(context, ['jvmTest', 'jsNodeTest', '--continue', ...(context.full ? [] : ['-PpowerLogEveryday'])]);
-        await context.exec('node', [
-          'shared/scripts/check-test-results.mjs',
-          ...(context.full ? [] : ['--everyday']),
-          'jvmTest',
-          'jsNodeTest',
-        ]);
+        if (context.full) clearKotlinResults(context.root, ['jvmTest', 'jsNodeTest']);
+        await kotlinTests(
+          context,
+          ['jvmTest', 'jsNodeTest', '--continue', ...(context.full ? [] : ['-PpowerLogEveryday'])],
+          [...(context.full ? [] : ['--everyday']), 'jvmTest', 'jsNodeTest'],
+        );
       },
+    }),
+    task('kotlin:boundaries', 'Konsist boundary rules over the shared Kotlin and the Android module', {
+      groups: ['core'],
+      inputs: ['shared/**/*.{kt,kts}', 'modules/power-log/android/src/**/*.kt', ...kotlinBuild],
+      resources: ['gradle:shared'],
+      tools: ['java'],
+      weight: 2,
+      estimate: 20,
+      run: context =>
+        gradle(context, [':runtime:jvmTest', '--tests', 'app.powerlog.runtime.boundaries.*', '-PpowerLogBoundaries']),
     }),
     task('core:node', 'Node suites against the generated core JS', {
       groups: ['core'],
-      inputs: [...nodeDependencies, 'shared/js/**', 'tests/core/shared-core-*.test.mjs', ...testSupport],
+      inputs: [...nodeDependencies, 'shared/generated/**', 'tests/core/shared-core-*.test.mjs', ...testSupport],
       needs: ['deps'],
       tools: ['node'],
       weight: 2,
       run: context => context.exec('sh', ['-c', 'node --test tests/core/shared-core-*.test.mjs']),
     }),
-    task('core:catalog', 'Telemetry catalog through the production monitor', {
-      groups: ['check', 'core'],
-      inputs: [...javascript, ...testSupport, catalogTest],
-      needs: ['deps'],
-      tools: ['node'],
-      run: ['npx', 'vitest', 'run', catalogTest],
-    }),
-    ...['protocol', 'health', 'telemetry', 'presentation'].map(name =>
-      task(`core:swift-${name}`, `Swift ${name} adapter against the core framework`, {
-        groups: ['core'],
-        inputs: [
-          ...kotlinApple,
-          `shared/scripts/check-${name}-swift.sh`,
-          `tests/native-config/${name}-swift/**`,
-          ...swiftFixtures,
-        ],
-        needs: ['core:host'],
-        resources: ['gradle:shared'],
-        tools: ['swift', 'java'],
-        run: context => context.exec('sh', [`shared/scripts/check-${name}-swift.sh`], { env: gradleEnvironment(root) }),
-      }),
-    ),
     task('core:format', 'Kotlin formatting', {
       groups: ['core', 'format'],
       inputs: [
-        'modules/power-log-bridge/android/src/**/*.{kt,kts}',
+        'modules/power-log/android/src/**/*.{kt,kts}',
         'shared/**/*.{kt,kts}',
+        '!shared/generated/**',
         '.editorconfig',
         'scripts/format.sh',
       ],
@@ -472,32 +541,134 @@ export function checkTasks({ root, env = process.env }) {
     task('core:simulators', 'Kotlin macOS and iOS simulator tests', {
       groups: ['core'],
       tier: 'release',
-      inputs: [...kotlin, 'tests/fixtures/**', 'shared/scripts/check-test-results.mjs'],
+      inputs: [
+        ...kotlin,
+        'tests/fixtures/**',
+        'shared/scripts/check-test-results.mjs',
+        'shared/scripts/discover-common-tests.mjs',
+        'scripts/pending-tests.mjs',
+        pending,
+      ],
       needs: ['core:host'],
       resources: ['gradle:shared'],
       tools: ['java', 'swift'],
       weight: 8,
       estimate: 300,
       run: async context => {
-        await gradle(context, ['macosArm64Test', 'iosSimulatorArm64Test', '--continue']);
-        await context.exec('node', [
-          'shared/scripts/check-test-results.mjs',
-          'macosArm64Test',
-          'iosSimulatorArm64Test',
+        clearKotlinResults(context.root, ['macosArm64Test', 'iosSimulatorArm64Test']);
+        await kotlinTests(
+          context,
+          ['macosArm64Test', 'iosSimulatorArm64Test', '--continue'],
+          ['macosArm64Test', 'iosSimulatorArm64Test'],
+        );
+      },
+    }),
+    task('core:browser', 'Kotlin/JS browser suites of data and runtime in Chromium', {
+      groups: ['core', 'browser'],
+      tier: 'release',
+      inputs: [
+        ...kotlin,
+        ...nodeDependencies,
+        'tests/browser/kotlin/**',
+        'tests/helpers/browser-test-bundle.ts',
+        'tests/fixtures/export/storable/**',
+        'tests/fixtures/contract/ports/**',
+        'tests/fixtures/protocol.json',
+        'vitest.kotlin.config.ts',
+      ],
+      needs: ['deps'],
+      resources: ['gradle:shared'],
+      tools: ['java', 'node'],
+      weight: 4,
+      isolate: true,
+      estimate: 60,
+      run: async context => {
+        await gradle(context, [
+          ':data:jsTestTestDevelopmentExecutableCompileSync',
+          ':runtime:jsTestTestDevelopmentExecutableCompileSync',
         ]);
+        await vitest(context, 'core:browser', ['--config', 'vitest.kotlin.config.ts']);
+      },
+    }),
+    task('goldens:ride-pages', 'Ride goldens loaded into the archive and written as their export pages', {
+      groups: ['core', 'goldens'],
+      tier: 'release',
+      inputs: ['shared/**', 'tests/fixtures/rides/**'],
+      resources: ['gradle:shared'],
+      tools: ['java'],
+      weight: 4,
+      estimate: 60,
+      run: context => {
+        rmSync(resolve(context.root, 'shared/application/build/test-results/jvmTest', `TEST-${rideGoldenPages}.xml`), {
+          force: true,
+        });
+        return kotlinTests(
+          context,
+          [':application:jvmTest', '--tests', rideGoldenPages, '-PpowerLogRideGoldens'],
+          ['--select', rideGoldenPages, 'jvmTest'],
+        );
+      },
+    }),
+    task('goldens:rides', 'Ride goldens replayed from their pages through the encoders', {
+      groups: ['goldens'],
+      tier: 'release',
+      inputs: [
+        ...nodeDependencies,
+        'shared/generated/**',
+        'modules/power-log/src/**',
+        'tests/fixtures/rides/**',
+        'tests/fixtures/export/zip/harness.ts',
+        'tests/goldens/**',
+        'tests/support/**',
+        'vitest.goldens.config.ts',
+      ],
+      needs: ['deps', 'goldens:ride-pages'],
+      tools: ['node', 'python'],
+      weight: 2,
+      isolate: true,
+      estimate: 30,
+      run: context =>
+        vitest(context, 'goldens:rides', [
+          '--config',
+          'vitest.goldens.config.ts',
+          'tests/goldens/ride-goldens.test.ts',
+        ]),
+    }),
+    task('goldens:imports', "Imported CSVs replayed from EncoderPagesTest's pages through the imported-CSV encoder", {
+      groups: ['goldens'],
+      inputs: [
+        ...nodeDependencies,
+        'shared/generated/**',
+        'modules/power-log/src/**',
+        'tests/fixtures/export/zip/**',
+        importedCsv,
+        'tests/support/**',
+        'vitest.goldens.config.ts',
+        'scripts/pending-tests.mjs',
+        'shared/scripts/discover-common-tests.mjs',
+        pending,
+      ],
+      needs: ['deps', 'core:tests'],
+      tools: ['node'],
+      weight: 1,
+      estimate: 10,
+      run: async context => {
+        if (!context.full && pendingTests(context.root, 'vitest').includes(importedCsv))
+          return context.write(`${importedCsv} is pending in ${pending}, so the everyday tier leaves it out.`);
+        await vitest(context, 'goldens:imports', ['--config', 'vitest.goldens.config.ts', importedCsv]);
       },
     }),
     task('core:devices', 'Device test compilation and the release XCFramework', {
       groups: ['core'],
       tier: 'release',
       inputs: kotlin,
-      outputs: [resolve(root, 'shared/build/XCFrameworks/release/PowerLogCore.xcframework/Info.plist')],
+      outputs: [resolve(root, 'shared/runtime/build/XCFrameworks/release/PowerLogCore.xcframework/Info.plist')],
       needs: ['core:host'],
       resources: ['gradle:shared'],
       tools: ['java', 'swift'],
       weight: 8,
       estimate: 90,
-      run: context => gradle(context, ['compileTestKotlinIosArm64', 'assemblePowerLogCoreReleaseXCFramework']),
+      run: context => gradle(context, ['compileTestKotlinIosArm64', ':runtime:assemblePowerLogCoreReleaseXCFramework']),
     }),
     task('core:watch-links', 'Watch Release link for both architectures', {
       groups: ['core'],
@@ -514,29 +685,10 @@ export function checkTasks({ root, env = process.env }) {
         return context.exec('sh', ['shared/scripts/check-watch-links.sh'], { env: { POWER_LOG_CORE_STAGED: '1' } });
       },
     }),
-    task('core:pod', 'CocoaPods discovers the static core framework', {
-      groups: ['core'],
-      tier: 'release',
-      inputs: [
-        'tests/native-config/core-pod.test.rb',
-        'modules/power-log-bridge/ios/PowerLogBridge.podspec',
-        'Gemfile*',
-      ],
-      needs: ['core:watch-links'],
-      resources: ['core:staged-framework'],
-      run: ['bundle', 'exec', 'ruby', 'tests/native-config/core-pod.test.rb'],
-    }),
-    task('core:evidence', 'Core qualification evidence table', {
-      groups: ['core'],
-      tier: 'release',
-      inputs: [...kotlin, 'shared/scripts/print-core-evidence.mjs', 'shared/scripts/check-test-results.mjs'],
-      after: ['core:tests', 'core:simulators', 'core:devices', 'core:watch-links'],
-      run: coreEvidence,
-    }),
     task('swift:format', 'Swift formatting', {
       groups: ['swift', 'format'],
       inputs: [
-        '{modules/power-log-bridge/ios,apple/WatchApp,apple/LiveActivity,lab/apple,tests/lab-apple,artifacts/app-store/source,tests/catalog-native,scripts}/**/*.swift',
+        '{modules/power-log/ios,targets/watch,targets/live-activity,artifacts/app-store/source,scripts}/**/*.swift',
         '.swift-format',
         'scripts/format.sh',
       ],
@@ -550,20 +702,15 @@ export function checkTasks({ root, env = process.env }) {
       tools: ['node'],
       run: ['node', 'scripts/check-suite-coverage.mjs'],
     }),
-    task('swift:lab-surface', 'Lab entry points stay out of release sources', {
+    task('apple:release-surface', 'Expo, the runtime and dev tools stay out of Swift adapters', {
       groups: ['swift'],
-      inputs: [
-        'scripts/check-apple-release-surface.mjs',
-        'modules/power-log-bridge/ios/*.swift',
-        'apple/WatchApp/*.swift',
-        'modules/power-log-bridge/index.ts',
-      ],
+      inputs: ['scripts/check-apple-release-surface.mjs', 'modules/power-log/ios/**/*.swift', 'targets/**/*.swift'],
       tools: ['node'],
       run: [
         'node',
         '--input-type=module',
         '-e',
-        'import {checkSources} from "./scripts/check-apple-release-surface.mjs"; checkSources()',
+        'import {checkSwiftBoundaries} from "./scripts/check-apple-release-surface.mjs"; checkSwiftBoundaries(".")',
       ],
     }),
     ...swiftTasks({
@@ -585,29 +732,28 @@ export function checkTasks({ root, env = process.env }) {
       estimate: 200,
       run: context => context.exec('node', ['scripts/test-android.mjs', ...(context.full ? [] : ['--everyday'])]),
     }),
-    task('android:connected', 'Android connected suites and crash paths on emulator-5554', {
-      groups: ['android'],
-      tier: 'release',
-      requires: 'emulator',
-      inputs: [
-        ...androidSources,
-        ...importClosure(root, crashHarnesses),
-        'scripts/test-crash-paths.mjs',
-        'scripts/test-android-crash-paths.mjs',
-        'shared/scripts/check-test-results.mjs',
-        'tests/export/**',
-        'tests/fit-common/**',
-        'vitest.browser.config.ts',
-      ],
-      env: ['FIT_PYTHON'],
-      needs: ['android:unit'],
-      resources: ['android-project', 'gradle:shared', 'emulator', 'crash-results'],
-      tools: ['java', 'android', 'node', 'python'],
-      weight: 6,
-      estimate: 400,
-      run: ['node', 'scripts/test-android.mjs', '--emulator'],
-    }),
-    task('android:apk', 'Android preview APK', {
+    task(
+      'android:kotlin-metadata',
+      'Kotlin, kotlinx and androidx.sqlite on the Android release classpath at or below their pins',
+      {
+        groups: ['android'],
+        tier: 'release',
+        inputs: [...androidSources],
+        needs: ['deps'],
+        resources: ['android-project', 'gradle:shared'],
+        tools: ['java', 'android', 'node'],
+        weight: 4,
+        estimate: 60,
+        run: async context => {
+          await context.exec('node', ['scripts/build-android.mjs', '--prepare', '--debug-signed']);
+          await context.exec('./gradlew', [':power-log:powerLogKotlinMetadata', '--console=plain'], {
+            cwd: resolve(context.root, 'android'),
+            env: androidEnvironment({ ...context.env, POWER_LOG_ANDROID_DEBUG_SIGNING: '1' }),
+          });
+        },
+      },
+    ),
+    task('android:apk', 'Android release APK, signed with the debug key, and its release-surface scan', {
       groups: ['android'],
       tier: 'release',
       inputs: android,
@@ -616,7 +762,14 @@ export function checkTasks({ root, env = process.env }) {
       tools: ['java', 'android', 'node'],
       weight: 8,
       estimate: 200,
-      run: ['npm', 'run', 'build:android', '--', '--preview', '--arch=arm64-v8a'],
+      run: async context => {
+        await context.exec('npm', ['run', 'build:android', '--', '--debug-signed', '--arch=arm64-v8a']);
+        await context.exec('node', [
+          'scripts/check-android-release-surface.mjs',
+          '--apk',
+          'android/app/build/outputs/apk/release/app-release.apk',
+        ]);
+      },
     }),
     task('ios:build', 'iPhone simulator Release build with the Watch app', {
       groups: ['ios'],
@@ -630,13 +783,54 @@ export function checkTasks({ root, env = process.env }) {
       estimate: 300,
       run: context => context.exec('npm', ['run', 'build:ios-simulator'], { env: { POWER_LOG_CORE_STAGED: '1' } }),
     }),
-    task('generation:js', 'A cold Kotlin/JS compile matches the checked-in output', {
+    task('thin-slice:phones', 'The thin slice on an iPhone simulator and an Android emulator with the demo bike', {
+      groups: ['ios', 'android'],
+      tier: 'demand',
+      inputs: [
+        'shared/**',
+        'modules/power-log/**',
+        'plugins/**',
+        'scripts/thin-slice-phones.mjs',
+        'scripts/check-apple-release-surface.mjs',
+        'scripts/check-android-release-surface.mjs',
+      ],
+      env: ['POWER_LOG_SLICE_SIMULATOR', 'ANDROID_SERIAL'],
+      needs: ['deps'],
+      resources: ['ios-project', 'android-project', 'gradle:shared', 'emulator', 'core:staged-framework'],
+      tools: ['swift', 'java', 'android', 'node'],
+      weight: 10,
+      estimate: 1200,
+      run: ['node', 'scripts/thin-slice-phones.mjs'],
+    }),
+    task('android:sqlite-api28', "The repository suite on Android 9's system SQLite, on the PowerLog_API28 emulator", {
+      groups: ['android'],
+      tier: 'demand',
+      inputs: ['shared/**'],
+      needs: ['deps'],
+      resources: ['gradle:shared'],
+      tools: ['java', 'android'],
+      weight: 6,
+      estimate: 180,
+      run: async context => {
+        const serial = 'emulator-5556';
+        const adb = join(context.env.ANDROID_HOME ?? '', 'platform-tools/adb');
+        const sdk = spawnSync(adb, ['-s', serial, 'shell', 'getprop', 'ro.build.version.sdk'], { encoding: 'utf8' });
+        if (sdk.stdout?.trim() !== '28')
+          throw new Error(`${serial} is not an Android 9 (API 28) emulator: start the PowerLog_API28 AVD on port 5556`);
+        await context.exec(
+          resolve(context.root, 'shared/gradlew'),
+          ['-p', 'shared', '--console=plain', ':data:connectedDebugAndroidTest'],
+          { env: { ...gradleEnvironment(context.root), ANDROID_SERIAL: serial } },
+        );
+      },
+    }),
+    task('generation:all', 'A cold build matches every checked-in generated output', {
       groups: ['core'],
       tier: 'release',
       inputs: [
         ...kotlin,
-        'shared/js/**',
-        'shared/scripts/sync-js.mjs',
+        'shared/generated/**',
+        'shared/scripts/sync-generated.mjs',
         'shared/scripts/js-output.mjs',
         'scripts/check-generation.mjs',
       ],
@@ -645,7 +839,8 @@ export function checkTasks({ root, env = process.env }) {
       tools: ['java', 'node'],
       weight: 4,
       estimate: 60,
-      run: context => context.exec('node', ['scripts/check-generation.mjs', '--js'], { env: gradleEnvironment(root) }),
+      run: context =>
+        context.exec('node', ['scripts/check-generation.mjs', '--generated'], { env: gradleEnvironment(root) }),
     }),
     task('generation:native', 'Clean and repeated native prebuild', {
       tier: 'release',

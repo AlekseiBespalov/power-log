@@ -1,55 +1,21 @@
 import { expect, test, type Page } from '@playwright/test';
-import { browserRow } from '../support/browser-ride';
-import { browserTestBundle } from '../helpers/browser-test-bundle';
+import { exportCsv } from '../helpers/export-csv';
+import { saveRides } from '../helpers/saved-rides';
+import { syntheticSample } from '../fixtures/synthetic-sample';
 import { expectTouchTargets } from '../helpers/ui-targets';
-
-declare global {
-  interface Window {
-    historyNavigationStore: typeof import('../../src/services/browser-ride-store');
-  }
-}
-const storeBundle = browserTestBundle('src/services/browser-ride-store.ts', 'historyNavigationStore');
 
 async function seedHistory(page: Page, count = 2) {
   await page.goto('/sessions');
   await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
-  const startedAt = '2026-09-06T11:30:00.000Z';
-  const samples = [0, 1.25, 2.75].map((time, sequence) => ({
-    ...browserRow(time, sequence, new Date(Date.parse(startedAt) + time * 1000).toISOString()),
-    humanPowerW: [100, 604, 200][sequence]!,
-  }));
-  await page.addScriptTag({ content: storeBundle });
-  const ids = await page.evaluate(
-    async ({ startedAt, count, samples }) => {
-      const store = new window.historyNavigationStore.BrowserRideStore();
-      const ids: string[] = [];
-      for (let index = 0; index < count; index++) {
-        const at = new Date(Date.parse(startedAt) + index * 60000).toISOString();
-        const end = new Date(Date.parse(at) + 2750).toISOString();
-        const ride = await store.begin('navigation-tests', { indoor: true, recordGPS: false, sampleHz: 2 }, at);
-        await store.transition(ride.id, 'navigation-tests', 'lap', 0, 0, at);
-        await store.append(
-          ride.id,
-          'navigation-tests',
-          samples.map(sample => {
-            const timestamp = new Date(Date.parse(at) + sample.elapsedSeconds * 1000).toISOString();
-            return {
-              ...sample,
-              recordingId: ride.id,
-              timestamp,
-              queryUs: window.historyNavigationStore.timestampUs(timestamp),
-            };
-          }),
-          2.75,
-          2.75,
-          end,
-        );
-        await store.transition(ride.id, 'navigation-tests', 'stop', 2.75, 2.75, end);
-        ids.push(ride.id);
-      }
-      return ids;
-    },
-    { startedAt, count, samples },
+  const ids = await saveRides(
+    page,
+    Array.from({ length: count }, (_, index) => ({
+      startUtcMs: Date.parse('2026-09-06T11:30:00.000Z') + index * 60_000,
+      durationMs: 2750,
+      atMs: [0, 1250, 2750],
+      powerW: [100, 604, 200],
+      lapsMs: [0],
+    })),
   );
   await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -73,7 +39,7 @@ test('saved ride routing survives reload, keeps History active, and returns to t
   await expect(page.getByRole('link', { name: 'History', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.reload();
   await expect(page.getByTestId('ride-summary')).toBeVisible();
-  await expect(page.getByTestId('ride-health-sync')).toBeEmpty();
+  await expect(page.getByTestId('ride-health-sync')).toHaveCount(0);
   await expectTouchTargets(page.locator('body'));
   await expect(page.getByRole('heading', { name: 'Ride summary', exact: true })).toHaveCSS('font-size', '18px');
   await expect(page.getByRole('link', { name: 'History', exact: true })).toHaveAttribute('aria-current', 'page');
@@ -87,6 +53,28 @@ test('saved ride routing survives reload, keeps History active, and returns to t
   await expectTouchTargets(menu);
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expectTouchTargets(page.locator('body'));
+});
+
+test('the ride page keeps the History actions, and Open CSV from it shows the imported ride in History', async ({
+  page,
+}) => {
+  await seedHistory(page);
+  await page
+    .getByRole('button', { name: /^Open ride,/ })
+    .first()
+    .click();
+  await expect(page.getByTestId('ride-summary')).toBeVisible();
+  await page.getByRole('button', { name: 'History actions', exact: true }).click();
+  const menu = page.getByTestId('history-actions-menu');
+  await expect(menu.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+  const chooser = page.waitForEvent('filechooser');
+  await menu.getByRole('button', { name: 'Open CSV', exact: true }).click();
+  const rows = Array.from({ length: 20 }, (_, i) =>
+    syntheticSample(i / 2, i, new Date(Date.UTC(2026, 8, 12) + i * 500).toISOString()),
+  );
+  await (await chooser).setFiles({ name: 'Picked.csv', mimeType: 'text/csv', buffer: Buffer.from(exportCsv(rows)) });
+  await expect(page).toHaveURL(/\/sessions$/);
+  await expect(page.getByText('Picked.csv', { exact: true })).toBeVisible();
 });
 
 test('a cold deep link reads a ride outside the first catalog page', async ({ page }) => {
@@ -133,9 +121,21 @@ test('History separates the summary from cursor and visible-range readouts and o
     'background-color',
     'rgb(255, 137, 148)',
   );
+  const strava = (await page.getByRole('button', { name: 'Open Strava upload', exact: true }).boundingBox())!;
+  await expect(page.getByRole('button', { name: 'Export FIT', exact: true })).toHaveCSS(
+    'background-color',
+    'rgb(255, 135, 60)',
+  );
+  await expect(page.getByText('Export FIT, then select the file on Strava.', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('monitor-range-picker')).toHaveText('Whole ride');
+  await chart.press('ArrowLeft');
+  await expect(page.getByTestId('monitor-range-picker')).toHaveText('Custom');
+  await chart.press('Escape');
+  await expect(page.getByTestId('monitor-range-picker')).toHaveText('Whole ride');
   expect(fit.y + fit.height).toBeLessThan(summaryBounds.y);
   expect(summaryBounds.y + summaryBounds.height).toBeLessThan(inspection.y);
-  expect(deletion.y).toBeGreaterThan(inspection.y);
+  expect(strava.y).toBeGreaterThan(inspection.y);
+  expect(deletion.y).toBeGreaterThan(strava.y);
   await page.getByRole('button', { name: 'Delete ride', exact: true }).click();
   await expect(page.getByTestId('delete-ride-sheet')).toBeVisible();
   await page.getByRole('button', { name: 'Keep ride', exact: true }).click();

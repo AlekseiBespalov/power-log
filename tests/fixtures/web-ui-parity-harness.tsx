@@ -2,31 +2,14 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { View } from 'react-native';
 import { Body, Button, Chip, Heading, Label, Metric } from '../../src/components/ui';
-import { RideActionBar, RideControlsProvider, RideStatus } from '../../src/features/workout/workout-screen';
-import { MonitorEditor } from '../../src/features/monitor/monitor-editor';
-import { ConnectionSettings } from '../../src/features/dashboard/connection-settings';
+import { chartMetrics } from '../../src/components/charts/chart-groups';
+import { ChartsEditor } from '../../src/features/charts/charts-editor';
 import { TabTransition } from '../../src/components/tab-transition';
-import { defaultMonitorPreferences } from '../../src/core/monitor';
-export {
-  setPlatform,
-  setConnection,
-  setRidePhase,
-  setWorkoutHealth,
-  disconnects,
-  recoveries,
-  stops,
-} from './web-ui-parity-platform';
+export { setPlatform } from './web-ui-parity-platform';
 
-function Harness({ surface }: { surface: 'editor' | 'ride' | 'type' }) {
+function Harness({ surface }: { surface: 'editor' | 'type' }) {
   const [index, setIndex] = useState(0);
-  const view = defaultMonitorPreferences().views.ride;
-  if (surface === 'ride')
-    return (
-      <RideControlsProvider>
-        <RideActionBar />
-        <RideStatus connection={<ConnectionSettings />} />
-      </RideControlsProvider>
-    );
+  const view = { id: 'ride', name: 'Ride', numbers: ['humanPowerW'], charts: ['humanPowerW'] };
   if (surface === 'type')
     return (
       <>
@@ -45,8 +28,14 @@ function Harness({ surface }: { surface: 'editor' | 'ride' | 'type' }) {
     );
   return (
     <>
-      <ConnectionSettings />
-      <MonitorEditor visible view={view} speedUnit="km/h" onChange={() => {}} onReset={() => {}} onClose={() => {}} />
+      <ChartsEditor
+        visible
+        view={view}
+        metric={chartMetrics('metric', 'celsius')}
+        onChange={() => {}}
+        onReset={() => {}}
+        onClose={() => {}}
+      />
       <button onClick={() => setIndex(value => 1 - value)}>Switch tab</button>
       <TabTransition index={index}>
         <div data-testid="route-content">Route {index}</div>
@@ -55,7 +44,7 @@ function Harness({ surface }: { surface: 'editor' | 'ride' | 'type' }) {
   );
 }
 let root: ReturnType<typeof createRoot>;
-export function mount(surface: 'editor' | 'ride' | 'type' = 'editor') {
+export function mount(surface: 'editor' | 'type' = 'editor') {
   if (root) {
     root.render(<Harness key={surface} surface={surface} />);
     return;

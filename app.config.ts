@@ -1,7 +1,6 @@
 import type { ExpoConfig } from 'expo/config';
 import { version } from './package.json';
 
-const lab = process.env.POWER_LOG_LAB === '1';
 const [major, minor, patch] = version.split('.').map(Number) as [number, number, number];
 const iosBuildNumber = process.env.POWER_LOG_IOS_BUILD_NUMBER ?? String(major * 10000 + minor * 100 + patch);
 if (!/^[1-9]\d*$/.test(iosBuildNumber) || !Number.isSafeInteger(Number(iosBuildNumber)))
@@ -11,17 +10,17 @@ if (!Number.isSafeInteger(androidVersionCode) || androidVersionCode < 1 || andro
   throw new Error('Invalid Android version code');
 
 const config: ExpoConfig = {
-  name: process.env.POWER_LOG_ANDROID_PREVIEW === '1' ? 'Power Log Preview' : 'Power Log',
+  name: 'Power Log',
   slug: 'power-log',
   version,
-  scheme: lab ? 'power-log-lab' : 'power-log',
+  scheme: 'power-log',
   icon: './assets/Assets.xcassets/AppIcon.appiconset/AppIcon.png',
   orientation: 'default',
   userInterfaceStyle: 'dark',
   platforms: ['ios', 'android', 'web'],
   android: {
     allowBackup: false,
-    package: process.env.POWER_LOG_ANDROID_PREVIEW === '1' ? 'app.powerlog.mobile.preview' : 'app.powerlog.mobile',
+    package: 'app.powerlog.mobile',
     versionCode: androidVersionCode,
     permissions: [
       'BLUETOOTH_SCAN',
@@ -40,28 +39,12 @@ const config: ExpoConfig = {
   ios: {
     deploymentTarget: '26.0',
     buildNumber: iosBuildNumber,
-    bundleIdentifier: lab ? 'app.powerlog.lab' : (process.env.POWER_LOG_BUNDLE_ID ?? 'app.powerlog.mobile'),
+    bundleIdentifier: process.env.POWER_LOG_BUNDLE_ID ?? 'app.powerlog.mobile',
     appleTeamId: process.env.POWER_LOG_APPLE_TEAM_ID,
     supportsTablet: false,
     entitlements: { 'com.apple.developer.healthkit': true },
     privacyManifests: { NSPrivacyTracking: false, NSPrivacyAccessedAPITypes: [] },
     infoPlist: {
-      ...(lab
-        ? {
-            CFBundleDisplayName: 'Power Log Lab',
-            UIApplicationSceneManifest: {
-              UIApplicationSupportsMultipleScenes: false,
-              UISceneConfigurations: {
-                UIWindowSceneSessionRoleApplication: [
-                  {
-                    UISceneConfigurationName: 'Default Configuration',
-                    UISceneDelegateClassName: 'EXExpoAppSceneDelegate',
-                  },
-                ],
-              },
-            },
-          }
-        : {}),
       NSBluetoothAlwaysUsageDescription:
         'Power Log connects to the CYC controller on your bike over Bluetooth to show and record your rides.',
       NSHealthShareUsageDescription:
@@ -78,8 +61,6 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     './plugins/with-power-log-dev-client',
-    'expo-document-picker',
-    ...(lab ? ['./plugins/with-power-log-lab'] : []),
     // Precompiled Expo modules require React.framework; building them from source keeps the app launchable
     // when the React Native prebuilt is unavailable and pod install falls back to a source build.
     [

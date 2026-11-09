@@ -3,7 +3,6 @@ set -eu
 power_log_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$power_log_root"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-unset POWER_LOG_LAB
 power_log_prebuild=--no-clean
 if [ "$(cat ios/.power-log-flavor 2>/dev/null)" != production ]; then
   power_log_prebuild=--clean

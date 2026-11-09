@@ -1,6 +1,6 @@
 import { Link, usePathname, useRootNavigationState, type Href } from 'expo-router';
 import { Platform, Text, View, useWindowDimensions } from 'react-native';
-import { haptics } from '../services/haptics';
+import { haptics } from './haptics';
 import { colors, type, MIN_TOUCH_TARGET } from './ui';
 import { APP_NAVIGATION, appNavigationIndex } from './app-navigation';
 

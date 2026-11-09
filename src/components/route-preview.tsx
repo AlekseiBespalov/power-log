@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import Svg, { Path, Rect } from 'react-native-svg';
-import type { RoutePoint } from '../core/workouts';
-import { routePaths } from '../core/route';
+import { routePaths, type RoutePoint } from './route-paths';
 import { Body, colors } from './ui';
 
 export function RoutePreview({ points }: { points: RoutePoint[] }) {

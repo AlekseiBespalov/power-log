@@ -1,6 +1,7 @@
 import { expect, test, type CDPSession, type Locator, type Page } from '@playwright/test';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
+import { syntheticBike } from '../fixtures/browser-bike';
 
 const noSelection = /Rider power: (avg|min)/;
 
@@ -420,7 +421,8 @@ test('touch scrubbing inspects values while vertical gestures scroll the page', 
   await context.close();
 });
 
-test('retained Ride screen suspends its monitor clocks in History and resumes one consumer', async ({ page }) => {
+test('retained Ride screen suspends its live chart clock in History and resumes one', async ({ page }) => {
+  await syntheticBike(page);
   await page.addInitScript(() => {
     const originalSet = window.setInterval,
       originalClear = window.clearInterval;
@@ -445,46 +447,43 @@ test('retained Ride screen suspends its monitor clocks in History and resumes on
       const probe = (
         window as unknown as { monitorClockProbe: { active: () => number[]; fired: Record<number, number> } }
       ).monitorClockProbe;
-      return {
-        read: probe.active().filter(value => value === 750).length,
-        display: probe.active().filter(value => value === 250).length,
-        fired: probe.fired[750] ?? 0,
-      };
+      return { live: probe.active().filter(value => value === 250).length, fired: probe.fired[250] ?? 0 };
     });
   await page.goto('/');
-  await expect.poll(async () => (await clocks()).read).toBe(1);
+  await page.getByTestId('ride-setup').click();
+  const setup = page.getByTestId('ride-setup-sheet');
+  await setup.getByTestId('setup-find-bike').click();
+  await setup.getByRole('button', { name: /^Connect CYC/ }).click();
+  await expect(setup.getByTestId('bike-connection-status')).toHaveText('Connected');
+  await setup.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect.poll(async () => (await clocks()).live).toBe(1);
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await expect.poll(async () => (await clocks()).read).toBe(0);
-  await expect.poll(async () => (await clocks()).display).toBe(0);
+  await expect.poll(async () => (await clocks()).live).toBe(0);
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await expect.poll(async () => (await clocks()).read).toBe(1);
-  await expect.poll(async () => (await clocks()).display).toBe(1);
+  await expect.poll(async () => (await clocks()).live).toBe(1);
   await page.getByTestId('monitor-view-picker').evaluate(element => element.setAttribute('data-retained-ride', 'true'));
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await expect(page).toHaveURL(/\/sessions$/);
   await expect(page.locator('[data-retained-ride="true"]')).toHaveCount(1);
   await expect(page.locator('[data-retained-ride="true"]')).toBeHidden();
-  await expect.poll(async () => (await clocks()).read).toBe(0);
-  await expect.poll(async () => (await clocks()).display).toBe(0);
+  await expect.poll(async () => (await clocks()).live).toBe(0);
   const frozen = (await clocks()).fired;
   await page.waitForTimeout(900);
   expect((await clocks()).fired).toBe(frozen);
   await page.getByRole('link', { name: 'Ride', exact: true }).click();
-  await expect.poll(async () => (await clocks()).read).toBe(1);
-  await expect.poll(async () => (await clocks()).display).toBe(1);
+  await expect.poll(async () => (await clocks()).live).toBe(1);
   await expect(page.locator('[data-testid="monitor-view-picker"]:visible')).toHaveCount(1);
   await page.goBack();
-  await expect.poll(async () => (await clocks()).read).toBe(0);
+  await expect.poll(async () => (await clocks()).live).toBe(0);
   await page.goBack();
   await expect(page.locator('[data-testid="monitor-view-picker"]:visible')).toHaveCount(1);
-  await expect.poll(async () => (await clocks()).read).toBe(1);
-  await expect.poll(async () => (await clocks()).display).toBe(1);
+  await expect.poll(async () => (await clocks()).live).toBe(1);
 });
 
 test('pending and current exact minima keep the narrow chart card height stable', async ({ page }) => {

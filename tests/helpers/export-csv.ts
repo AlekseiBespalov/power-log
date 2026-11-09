@@ -1,6 +1,12 @@
-import { TELEMETRY_LAYOUT } from '../../src/core/export/tables/telemetry';
-import { csvHeader } from '../../src/core/export/tables/text';
-import type { TelemetrySample } from '../../src/core';
+import { table } from '../../modules/power-log/src/exports/catalog';
+import { CELL_COUNT, CELL_ID, csvHeader, tableLayout } from '../../modules/power-log/src/exports/text';
+import type { TelemetrySample } from '../support/telemetry-sample';
+
+const TELEMETRY_LAYOUT = tableLayout(table('telemetry'), 'a telemetry reading', {
+  activeInterval: CELL_ID,
+  run: CELL_COUNT,
+  connection: CELL_ID,
+});
 
 /** telemetry.csv for live-shaped samples: each interruption opens an interval, and runs follow interruption and connection changes. */
 export function exportCsv(samples: readonly TelemetrySample[]): string {

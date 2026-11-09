@@ -9,7 +9,9 @@ final class ActivityQualification: XCTestCase {
     let caseName = environment["POWER_LOG_ACTIVITY_CASE"]!
     let acquired = Double(environment["POWER_LOG_ACTIVITY_ACQUIRED"]!)!
     let app = XCUIApplication(bundleIdentifier: environment["POWER_LOG_ACTIVITY_BUNDLE"]!)
-    app.launchArguments = ["--activity-qualification", "--activity-qualification-acquiredAt", String(acquired)]
+    app.launchArguments = [
+      "-PowerLogDevBike", "YES", "--activity-qualification", "--activity-qualification-acquiredAt", String(acquired),
+    ]
     if caseName == "A" { app.launchArguments.append("--activity-qualification-running") }
     app.launch()
     if caseName == "F" {

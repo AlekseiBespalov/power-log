@@ -23,12 +23,25 @@ const noNumericFontSize = {
     };
   },
 };
+const restricted = (...patterns) => ({
+  'no-restricted-imports': ['error', { patterns: patterns.map(([regex, message]) => ({ regex, message })) }],
+});
+const ban = {
+  expoModulesCore: ['^expo-modules-core(?:/|$)', 'Reach native code through modules/power-log.'],
+  shared: ['(?:^|/)shared/', 'Reach the shared Kotlin through modules/power-log.'],
+  moduleFiles: ['(?:^|/)modules/power-log/.+', 'Import modules/power-log itself, not a file inside it.'],
+  ui: [
+    '(?:^|/)src/(?:app|features|components)(?:/|$)|^@/(?:app|features|components)(?:/|$)',
+    'The module never imports the UI.',
+  ],
+  generatedJs: ['(?:^|/)shared/generated/js/', 'Only the platform transport and kit files load a Kotlin/JS build.'],
+  webBuild: ['(?:^|/)shared/generated/js/web(?:/|$)', 'Native files load kit’s own build, never the web runtime.'],
+  kitBuild: ['(?:^|/)shared/generated/js/kit(?:/|$)', 'Web takes kit from the web runtime build.'],
+  sharedButTypes: ['(?:^|/)shared/(?!generated/ts(?:/|$))', 'The encoders read only the generated types from shared/.'],
+  reactAndExpo: ['^(?:react|react-native|expo-[^/]+)(?:/|$)', 'The encoders are plain TypeScript.'],
+};
 module.exports = defineConfig([
   expo,
-  {
-    files: ['scripts/*.cjs'],
-    languageOptions: { sourceType: 'commonjs', globals: { __dirname: 'readonly' } },
-  },
   {
     files: ['src/**/*.{ts,tsx}'],
     ignores: ['src/components/ui.tsx'],
@@ -39,15 +52,43 @@ module.exports = defineConfig([
     ignores: [
       'dist/**',
       'shared/build/**',
+      'shared/*/build/**',
       'shared/.gradle/**',
       'shared/.kotlin/**',
-      'shared/js/**',
+      'shared/generated/**',
       '.expo/**',
       'ios/**',
       'android/**',
-      'modules/power-log-bridge/android/build/**',
+      'modules/power-log/android/build/**',
       'playwright-report/**',
       'test-results/**',
     ],
+  },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: restricted(ban.expoModulesCore, ban.shared, ban.moduleFiles),
+  },
+  {
+    files: ['modules/power-log/index.ts', 'modules/power-log/src/**/*.{ts,tsx}'],
+    ignores: [
+      'modules/power-log/src/exports/**',
+      'modules/power-log/src/**/*.native.*',
+      'modules/power-log/src/**/*.web.*',
+    ],
+    rules: restricted(ban.ui, ban.generatedJs),
+  },
+  {
+    files: ['modules/power-log/src/**/*.native.{ts,tsx}'],
+    ignores: ['modules/power-log/src/exports/**'],
+    rules: restricted(ban.ui, ban.webBuild),
+  },
+  {
+    files: ['modules/power-log/src/**/*.web.{ts,tsx}'],
+    ignores: ['modules/power-log/src/exports/**'],
+    rules: restricted(ban.ui, ban.kitBuild, ban.expoModulesCore),
+  },
+  {
+    files: ['modules/power-log/src/exports/**/*.{ts,tsx}'],
+    rules: restricted(ban.ui, ban.sharedButTypes, ban.reactAndExpo),
   },
 ]);

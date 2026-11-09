@@ -17,6 +17,12 @@ for filename in sys.argv[1:]:
             if element.tag in ("testsuite", "testsuites"):
                 suites.append(element)
             elif element.tag == "testcase" and suite.tag == "testsuite":
-                failed |= element.get("status", "").lower() in ("skipped", "ignored", "notrun", "disabled")
-                cases.append({"name": element.attrib["name"], "classname": element.attrib["classname"]})
+                skipped = element.get("status", "").lower() in ("skipped", "ignored", "notrun", "disabled")
+                failed |= skipped
+                problems = [child for child in element if child.tag in ("failure", "error")]
+                status = "failed" if problems else "skipped" if skipped or element.find("skipped") is not None else "passed"
+                message = "\n".join(f'{child.get("message", "")}\n{child.text or ""}' for child in problems)
+                cases.append(
+                    {"name": element.attrib["name"], "classname": element.attrib["classname"], "status": status, "message": message}
+                )
 print(json.dumps({"cases": cases, "failed": failed}))

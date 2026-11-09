@@ -1,0 +1,8 @@
+{
+  "name": "@power-log/core",
+  "version": "0.3.0",
+  "type": "module",
+  "main": "./power-log-kit.mjs",
+  "types": "./power-log-kit.d.ts",
+  "license": "Apache-2.0"
+}

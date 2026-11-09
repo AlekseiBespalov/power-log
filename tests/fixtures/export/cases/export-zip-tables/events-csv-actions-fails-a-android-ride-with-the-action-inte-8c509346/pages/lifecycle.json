@@ -1,0 +1,1 @@
+[{"rows":3,"next":[3],"done":true,"connections":[],"columns":{"elapsedSeconds":[0,5,10],"timestamp":["t0","t1","t2"],"producer":["phone","phone","phone"],"action":["start","pause","stop"],"interrupted":[0,1,0]}}]

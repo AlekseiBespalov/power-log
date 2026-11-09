@@ -3,12 +3,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export function swiftSuiteInventory(root = '.') {
-  const directories = [
-    'modules/power-log-bridge/ios/Tests',
-    'apple/WatchApp/Tests',
-    'tests/catalog-native',
-    'tests/lab-apple',
-  ];
+  const directories = ['modules/power-log/ios/Tests', 'targets/watch/Tests'];
   return directories
     .filter(directory => existsSync(resolve(root, directory)))
     .flatMap(directory =>

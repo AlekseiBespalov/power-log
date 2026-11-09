@@ -1,2 +1,0 @@
-expression -l Swift -- { $drLock.lock(); defer { $drLock.unlock() }; $drPages.removeAll(); $drFootprints.removeAll(); print("idlePhysFootprintBytes", $drFootprint()) }()
-continue

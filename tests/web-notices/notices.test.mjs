@@ -117,11 +117,11 @@ test('public files exclude maps and drop map references from scripts and styles'
 
 test('the unbundled shared core includes the Kotlin stdlib licence', t => {
   const { root, output, write, finish } = fixture(t);
-  write('shared/js/package.json', { name: '@power-log/core', version: '0.3.0', license: 'Apache-2.0' });
-  write('shared/js/LICENSE', 'Power Log Apache-2.0');
-  write('shared/js/KOTLIN_LICENSE', 'Copyright 2010-2026 JetBrains s.r.o.\nApache License, Version 2.0');
+  write('shared/generated/js/kit/package.json', { name: '@power-log/core', version: '0.3.0', license: 'Apache-2.0' });
+  write('shared/generated/js/kit/LICENSE', 'Power Log Apache-2.0');
+  write('shared/generated/js/kit/KOTLIN_LICENSE', 'Copyright 2010-2026 JetBrains s.r.o.\nApache License, Version 2.0');
   finish();
-  write('export/bundle.js.map', { sources: ['/shared/js/power-log-core.mjs', '/shared/js/kotlin-kotlin-stdlib.mjs'] });
+  write('export/bundle.js.map', { sources: ['/shared/generated/js/kit/power-log-kit.mjs', '/shared/generated/js/kit/kotlin-kotlin-stdlib.mjs'] });
   const { notices } = generateWebNotices(root, output);
   assert.match(notices, /kotlin-stdlib@2\.4\.20/);
   assert.match(notices, /JetBrains s\.r\.o\./);

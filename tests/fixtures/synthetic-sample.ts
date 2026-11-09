@@ -1,6 +1,5 @@
-import type { TelemetrySample } from '../../src/core/types';
-import { controllerProtocol } from '../../shared/js';
-import { telemetrySample } from '../../src/core/telemetry';
+import type { TelemetrySample } from '../support/telemetry-sample';
+import { controllerProtocol } from '../../shared/generated/js/kit';
 import { controllerReadingFrame } from '../support/controller-frames';
 
 export function syntheticSample(
@@ -31,9 +30,21 @@ export function syntheticSample(
     raceMode: 0,
     speedRaw: 0,
   });
-  const reply = controllerProtocol().feed(new Int8Array(frame), null).replies[0]!;
+  const reading = controllerProtocol().feed(new Int8Array(frame), null).replies[0]!.reading!;
+  const identity = reading.identity;
   return {
-    ...telemetrySample(reply.reading!, { timestamp, elapsedSeconds: seconds, sequence }),
+    ...Object.fromEntries(reading.metrics.map(value => [value.metric, value.value])),
+    timestamp,
+    elapsedSeconds: seconds,
+    sequence,
+    ...(identity
+      ? {
+          controllerModel: identity.controllerModel,
+          firmwareLabel: identity.firmwareLabel,
+          controllerProtocol: identity.controllerProtocol,
+        }
+      : {}),
+    interruptionIndex: 0,
     connectionEpoch: 'synthetic-connection',
-  };
+  } as TelemetrySample;
 }

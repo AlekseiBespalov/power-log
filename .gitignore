@@ -36,9 +36,9 @@ expo-env.d.ts
 *.aab
 *.jks
 *.keystore
-/modules/power-log-bridge/android/build/
-/modules/power-log-bridge/android/.gradle/
-/modules/power-log-bridge/ios/Frameworks/
+/modules/power-log/android/build/
+/modules/power-log/android/.gradle/
+/modules/power-log/ios/Frameworks/
 *.xcarchive/
 *.dSYM/
 
@@ -70,23 +70,18 @@ expo-env.d.ts
 ._*
 __MACOSX/
 
-# Local dependency installations and generated screenshot data.
+# Local dependency installations and the screenshot capture's browser state.
 .bundle/
 vendor/bundle/
 .venv/
 __pycache__/
 *.pyc
-/artifacts/app-store/source/example-values.json
-/artifacts/app-store/source/monitor-preferences.json
 /artifacts/app-store/.cache/
-/artifacts/app-store/screenshots/web/
-/artifacts/app-store/screenshots/macos/
-/artifacts/app-store/screenshots/overview/web-overview.png
-/artifacts/app-store/screenshots/overview/macos-overview.png
-
-modules/power-log-bridge/android/.cxx/
 
 /shared/.gradle/
 /shared/.kotlin/
 /shared/build/
+/shared/*/build/
+/shared/build-logic/.gradle/
+/shared/build-logic/.kotlin/
 /shared/kotlin-js-store/

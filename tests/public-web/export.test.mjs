@@ -59,11 +59,11 @@ test('public export works under the Pages path without external requests', { tim
       await page.goto(`${origin}${prefix}/`);
       await expect(page.getByTestId('ride-setup')).toBeVisible();
       await page.getByRole('link', { name: 'Settings', exact: true }).click();
-      await expect(page.getByTestId('settings-speed')).toBeVisible();
+      await expect(page.getByTestId('settings-units')).toBeVisible();
       await expect(page.getByTestId('settings-screen')).not.toContainText('Strava');
       assert.equal(new URL(page.url()).pathname, `${prefix}/settings`);
       await page.reload();
-      await expect(page.getByTestId('settings-speed')).toBeVisible();
+      await expect(page.getByTestId('settings-units')).toBeVisible();
       const about = page.getByTestId('settings-about');
       const privacy = about.getByRole('link', { name: 'Privacy policy', exact: true });
       await expect(privacy).toHaveAttribute('href', `${prefix}/privacy`);

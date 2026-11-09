@@ -1,0 +1,434 @@
+{
+  "fixtures": [
+    "F-088",
+    "F-104"
+  ],
+  "distance": [
+    {
+      "distanceM": 0,
+      "units": "metric",
+      "symbol": "km",
+      "text": "0.00"
+    },
+    {
+      "distanceM": 0,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "0.00"
+    },
+    {
+      "distanceM": 5,
+      "units": "metric",
+      "symbol": "km",
+      "text": "0.01"
+    },
+    {
+      "distanceM": 5,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "0.00"
+    },
+    {
+      "distanceM": 994.999,
+      "units": "metric",
+      "symbol": "km",
+      "text": "0.99"
+    },
+    {
+      "distanceM": 994.999,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "0.62"
+    },
+    {
+      "distanceM": 1005,
+      "units": "metric",
+      "symbol": "km",
+      "text": "1.01"
+    },
+    {
+      "distanceM": 1005,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "0.62"
+    },
+    {
+      "distanceM": 1234.56,
+      "units": "metric",
+      "symbol": "km",
+      "text": "1.23"
+    },
+    {
+      "distanceM": 1234.56,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "0.77"
+    },
+    {
+      "distanceM": 1609.344,
+      "units": "metric",
+      "symbol": "km",
+      "text": "1.61"
+    },
+    {
+      "distanceM": 1609.344,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "1.00"
+    },
+    {
+      "distanceM": 42195,
+      "units": "metric",
+      "symbol": "km",
+      "text": "42.20"
+    },
+    {
+      "distanceM": 42195,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "26.22"
+    },
+    {
+      "distanceM": 160934.4,
+      "units": "metric",
+      "symbol": "km",
+      "text": "160.93"
+    },
+    {
+      "distanceM": 160934.4,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "100.00"
+    },
+    {
+      "distanceM": 999994.999,
+      "units": "metric",
+      "symbol": "km",
+      "text": "999.99"
+    },
+    {
+      "distanceM": 999994.999,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "621.37"
+    },
+    {
+      "distanceM": null,
+      "units": "metric",
+      "symbol": "km",
+      "text": "—"
+    },
+    {
+      "distanceM": -1,
+      "units": "imperial",
+      "symbol": "mi",
+      "text": "—"
+    }
+  ],
+  "metrics": [
+    {
+      "metric": "speedMps",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "km/h",
+      "text": "0.0"
+    },
+    {
+      "metric": "speedMps",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "mph",
+      "text": "0.0"
+    },
+    {
+      "metric": "speedMps",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 2.5,
+      "symbol": "km/h",
+      "text": "9.0"
+    },
+    {
+      "metric": "speedMps",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 2.5,
+      "symbol": "mph",
+      "text": "5.6"
+    },
+    {
+      "metric": "speedMps",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 8.33,
+      "symbol": "km/h",
+      "text": "30.0"
+    },
+    {
+      "metric": "speedMps",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 8.33,
+      "symbol": "mph",
+      "text": "18.6"
+    },
+    {
+      "metric": "speedMps",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 10,
+      "symbol": "km/h",
+      "text": "36.0"
+    },
+    {
+      "metric": "speedMps",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 10,
+      "symbol": "mph",
+      "text": "22.4"
+    },
+    {
+      "metric": "speedMps",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 13.89,
+      "symbol": "km/h",
+      "text": "50.0"
+    },
+    {
+      "metric": "speedMps",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 13.89,
+      "symbol": "mph",
+      "text": "31.1"
+    },
+    {
+      "metric": "controllerSpeedMps",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "km/h",
+      "text": "0.0"
+    },
+    {
+      "metric": "controllerSpeedMps",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "mph",
+      "text": "0.0"
+    },
+    {
+      "metric": "controllerSpeedMps",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 12.345,
+      "symbol": "km/h",
+      "text": "44.4"
+    },
+    {
+      "metric": "controllerSpeedMps",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 12.345,
+      "symbol": "mph",
+      "text": "27.6"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": -12.4,
+      "symbol": "m",
+      "text": "-12"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": -12.4,
+      "symbol": "ft",
+      "text": "-41"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "m",
+      "text": "0"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "ft",
+      "text": "0"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 100.5,
+      "symbol": "m",
+      "text": "101"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 100.5,
+      "symbol": "ft",
+      "text": "330"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 1234.5,
+      "symbol": "m",
+      "text": "1235"
+    },
+    {
+      "metric": "altitudeMeters",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 1234.5,
+      "symbol": "ft",
+      "text": "4050"
+    },
+    {
+      "metric": "horizontalAccuracyM",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 3.25,
+      "symbol": "m",
+      "text": "3.3"
+    },
+    {
+      "metric": "horizontalAccuracyM",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 3.25,
+      "symbol": "ft",
+      "text": "10.7"
+    },
+    {
+      "metric": "horizontalAccuracyM",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 50,
+      "symbol": "m",
+      "text": "50.0"
+    },
+    {
+      "metric": "horizontalAccuracyM",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 50,
+      "symbol": "ft",
+      "text": "164.0"
+    },
+    {
+      "metric": "batteryWhPerKm",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 12.34,
+      "symbol": "Wh/km",
+      "text": "12.3"
+    },
+    {
+      "metric": "batteryWhPerKm",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 12.34,
+      "symbol": "Wh/mi",
+      "text": "19.9"
+    },
+    {
+      "metric": "batteryWhPerKm",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "Wh/km",
+      "text": "0.0"
+    },
+    {
+      "metric": "batteryWhPerKm",
+      "units": "imperial",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "Wh/mi",
+      "text": "0.0"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": -10,
+      "symbol": "°C",
+      "text": "-10.0"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "fahrenheit",
+      "value": -10,
+      "symbol": "°F",
+      "text": "14.0"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 0,
+      "symbol": "°C",
+      "text": "0.0"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "fahrenheit",
+      "value": 0,
+      "symbol": "°F",
+      "text": "32.0"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 36.6,
+      "symbol": "°C",
+      "text": "36.6"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "fahrenheit",
+      "value": 36.6,
+      "symbol": "°F",
+      "text": "97.9"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "celsius",
+      "value": 100,
+      "symbol": "°C",
+      "text": "100.0"
+    },
+    {
+      "metric": "motorTempC",
+      "units": "metric",
+      "temperature": "fahrenheit",
+      "value": 100,
+      "symbol": "°F",
+      "text": "212.0"
+    }
+  ]
+}

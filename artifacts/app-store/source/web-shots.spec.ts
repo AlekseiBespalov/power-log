@@ -1,17 +1,13 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { UART_WRITE } from '../../../src/services/controller-gatt';
+import { UART_WRITE } from '../../../tests/fixtures/browser-bike';
 import { controllerReadingFrame, framePayload } from '../../../tests/support/controller-frames';
 import fixture from '../../../tests/fixtures/protocol.json';
-import type { RideTile } from '../../../src/services/browser-ride-store';
-import { int64 } from '../../../src/services/browser-storage-keys';
+import { saveRides, type SavedRide } from '../../../tests/helpers/saved-rides';
 
 const STATE = path.resolve(__dirname, '../.cache/web-shots-state.json');
-type IndexedDBOrigin = {
-  indexedDB?: { name: string; version: number; stores: { name: string; records: unknown[] }[] }[];
-};
-type CheckpointRecord = { value: RideTile & { revision: string } };
+type IndexedDBOrigin = { indexedDB?: { name: string }[] };
 const out = (platform: string, name: string) => path.resolve(__dirname, `../screenshots/${platform}/${name}.png`);
 
 const smooth = (edge: number) => edge * edge * (3 - 2 * edge);
@@ -45,8 +41,10 @@ function shape(fraction: number) {
   };
 }
 
-function rideFrames(seconds: number, stepSeconds = 0.25) {
-  const frames: string[] = [];
+type Reading = Parameters<typeof controllerReadingFrame>[0];
+
+function rideReadings(seconds: number, stepSeconds = 0.25) {
+  const readings: { atMs: number; reading: Reading }[] = [];
   let ampSeconds = 0,
     wattSeconds = 0,
     motorTemp = 32,
@@ -64,27 +62,65 @@ function rideFrames(seconds: number, stepSeconds = 0.25) {
     controllerTemp += (29 + 28 * (motorInput / PEAK_WATTS) - controllerTemp) * (stepSeconds / 60);
     ampSeconds += current * stepSeconds;
     wattSeconds += motorInput * stepSeconds;
-    const frame = controllerReadingFrame({
-      controllerTempC: controllerTemp,
-      motorTempC: motorTemp,
-      motorCurrentA: current * 1.9,
-      batteryCurrentA: current,
-      motorRpm: Math.round(cadence * 45),
-      batteryVoltageV: voltage,
-      consumedAh: ampSeconds / 3600,
-      consumedWh: wattSeconds / 3600,
-      cadenceRpm: cadence,
-      throttleVoltageV: 0.83,
-      pedalTorqueNm: cadence > 0 ? watts / ((cadence * 2 * Math.PI) / 60) : 0,
-      faultCode: 0,
-      humanPowerW: Math.round(watts),
-      speedRaw: 0,
-      raceMode: 0,
-      assistLevel: 3,
+    readings.push({
+      atMs: Math.round(time * 1000),
+      reading: {
+        controllerTempC: controllerTemp,
+        motorTempC: motorTemp,
+        motorCurrentA: current * 1.9,
+        batteryCurrentA: current,
+        motorRpm: Math.round(cadence * 45),
+        batteryVoltageV: voltage,
+        consumedAh: ampSeconds / 3600,
+        consumedWh: wattSeconds / 3600,
+        cadenceRpm: cadence,
+        throttleVoltageV: 0.83,
+        pedalTorqueNm: cadence > 0 ? watts / ((cadence * 2 * Math.PI) / 60) : 0,
+        faultCode: 0,
+        humanPowerW: Math.round(watts),
+        speedRaw: 0,
+        raceMode: 0,
+        assistLevel: 3,
+      },
     });
-    frames.push(Buffer.from(frame).toString('hex'));
   }
-  return frames;
+  return readings;
+}
+
+function rideFrames(seconds: number) {
+  return rideReadings(seconds).map(({ reading }) => Buffer.from(controllerReadingFrame(reading)).toString('hex'));
+}
+
+function savedRide(startUtcMs: number, seconds: number): SavedRide {
+  const readings = rideReadings(seconds);
+  const column = (name: keyof Reading) => readings.map(({ reading }) => Number(reading[name]));
+  return {
+    startUtcMs,
+    durationMs: seconds * 1000,
+    indoor: false,
+    atMs: readings.map(({ atMs }) => atMs),
+    powerW: column('humanPowerW'),
+    columns: {
+      ...Object.fromEntries(
+        (
+          [
+            'cadenceRpm',
+            'batteryCurrentA',
+            'batteryVoltageV',
+            'motorCurrentA',
+            'motorRpm',
+            'motorTempC',
+            'controllerTempC',
+            'consumedAh',
+            'consumedWh',
+            'pedalTorqueNm',
+            'speedRaw',
+          ] as const
+        ).map(name => [name, column(name)]),
+      ),
+      motorInputPowerW: readings.map(({ reading }) => Number(reading.batteryVoltageV) * Number(reading.batteryCurrentA)),
+    },
+  };
 }
 
 async function syntheticBike(page: Page, seconds: number) {
@@ -95,7 +131,7 @@ async function syntheticBike(page: Page, seconds: number) {
       const bytes = (hex: string) => Uint8Array.from(hex.match(/../g)!.map(pair => parseInt(pair, 16)));
       class Characteristic extends EventTarget {
         value?: DataView;
-        properties = { writeWithoutResponse: true };
+        properties = { writeWithoutResponse: true, notify: true };
         async startNotifications() {
           return this;
         }
@@ -143,6 +179,16 @@ async function connect(page: Page) {
   await expect(gps).toBeVisible();
   if ((await gps.getAttribute('aria-checked')) === 'true') await gps.click();
   await expect(gps).toHaveAttribute('aria-checked', 'false');
+  for (const [field, choice] of [
+    ['units', 'Metric'],
+    ['temperature', '°C'],
+  ] as const) {
+    const row = page.getByTestId(`settings-${field}`);
+    await row.click();
+    await page.getByRole('radio', { name: choice, exact: true }).click();
+    await expect(page.getByTestId('settings-options')).toBeHidden();
+    await expect(row).toHaveAccessibleName(new RegExp(`, ${choice}$`));
+  }
   await page.goto('/');
   await page.getByTestId('ride-setup').click();
   const setup = page.getByTestId('ride-setup-sheet');
@@ -208,6 +254,7 @@ async function chooseView(page: Page, name: 'Ride' | 'Battery' | 'Temperature') 
 async function expectChart(page: Page, group: string, metrics: readonly string[], live = false) {
   const chart = page.getByTestId(`monitor-chart-${group}`).filter({ visible: true }).first();
   await expect(chart).toBeVisible();
+  await chart.scrollIntoViewIfNeeded();
   await expect
     .poll(() =>
       chart
@@ -279,33 +326,17 @@ async function capture(page: Page, platform: string, name: string, surface: Loca
 test.describe.configure({ mode: 'serial' });
 
 test('record the example rides', async ({ page, context }) => {
-  await syntheticBike(page, 240);
-  await connect(page);
-  await recordRide(page, 240);
-  await saveRide(page);
-  await recordRide(page, 100);
-  await saveRide(page);
+  await page.goto('/sessions');
+  await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
+  const now = Date.now();
+  await saveRides(page, [savedRide(now - 3 * 3_600_000, 240), savedRide(now - 3_600_000, 100)]);
   const state = await context.storageState({ indexedDB: true });
-  for (const origin of state.origins) {
-    for (const database of (origin as typeof origin & IndexedDBOrigin).indexedDB ?? []) {
-      if (database.name !== 'power-log') continue;
-      expect(database.version).toBe(9);
-      expect(database.stores.find(store => store.name === 'recordings')?.records).toHaveLength(2);
-      expect(database.stores.find(store => store.name === 'samples')?.records.length).toBeGreaterThan(600);
-      for (const store of database.stores) {
-        if (store.name !== 'ride-tiles') continue;
-        const latest = new Map<string, CheckpointRecord>();
-        for (const entry of store.records as CheckpointRecord[]) {
-          const tile = entry.value;
-          const key = JSON.stringify([tile.recordingId, tile.level, tile.bucket]);
-          const previous = latest.get(key);
-          if (!previous || int64(tile.revision) > int64(previous.value.revision)) latest.set(key, entry);
-        }
-        expect(latest.size).toBeGreaterThan(0);
-        store.records = [...latest.values()];
-      }
-    }
-  }
+  const archives = state.origins.flatMap(origin =>
+    ((origin as typeof origin & IndexedDBOrigin).indexedDB ?? []).filter(database =>
+      database.name.startsWith('power-log-archive-'),
+    ),
+  );
+  expect(archives).toHaveLength(1);
   await mkdir(path.dirname(STATE), { recursive: true });
   await writeFile(STATE, JSON.stringify(state));
 });
@@ -387,6 +418,13 @@ for (const [platform, viewport, scale] of [
       await expect(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
       await expectChart(page, 'power', ['humanPowerW', 'motorInputPowerW']);
       await expectChart(page, 'cadenceRpm', ['cadenceRpm']);
+      await summary.evaluate(node => {
+        for (let parent = node.parentElement; parent; parent = parent.parentElement)
+          if (/(auto|scroll)/.test(getComputedStyle(parent).overflowY) && parent.scrollHeight > parent.clientHeight) {
+            parent.scrollTop = 0;
+            return;
+          }
+      });
       await capture(page, platform, '03-ride-summary', summary);
 
       await scrollTo(
@@ -432,7 +470,12 @@ for (const [platform, viewport, scale] of [
           await expect(page.getByTestId(`monitor-number-${metric}`).filter({ visible: true })).toContainText(/\d/);
         }
       }
-      await scrollTo(page, page.getByTestId('monitor-header').filter({ visible: true }), platform === 'macos' ? 16 : 0);
+      await scrollTo(
+        page,
+        platform === 'macos'
+          ? page.getByRole('heading', { name: 'Chart inspection', exact: true })
+          : page.getByTestId('monitor-header').filter({ visible: true }),
+      );
       await inspect(page, 'batteryVoltageV', 'batteryVoltageV', 0.42);
       if (platform === 'macos') {
         await expect(page.getByTestId('monitor-chart-current').filter({ visible: true })).toBeInViewport({ ratio: 1 });
@@ -471,7 +514,8 @@ for (const [platform, viewport, scale] of [
       await page.getByRole('link', { name: 'Settings', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
       await expect(page.getByTestId('settings-loading')).toHaveCount(0);
-      await expect(page.getByTestId('settings-speed')).toHaveAccessibleName('Speed units, km/h');
+      await expect(page.getByTestId('settings-units')).toHaveAccessibleName('Units, Metric');
+      await expect(page.getByTestId('settings-temperature')).toHaveAccessibleName('Temperature, °C');
       await expect(page.getByTestId('settings-distance')).toHaveAccessibleName('Distance source, Auto');
       await expect(page.getByTestId('settings-sampleHz')).toHaveAccessibleName('Bike sample rate, 2 Hz');
       await expect(page.getByRole('switch', { name: 'Record GPS route', exact: true })).toHaveAttribute(

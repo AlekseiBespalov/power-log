@@ -1,0 +1,39 @@
+{
+  "cases": [
+    {
+      "name": "the larger coverage of the ride window wins",
+      "origins": [
+        { "dataOrigin": "app.a", "coveredUs": 6000000 },
+        { "dataOrigin": "app.b", "coveredUs": 10000000 }
+      ],
+      "selected": "app.b"
+    },
+    {
+      "name": "equal coverage goes to the first origin in UTF-8 order",
+      "origins": [
+        { "dataOrigin": "app.b", "coveredUs": 10000000 },
+        { "dataOrigin": "app.a", "coveredUs": 10000000 }
+      ],
+      "selected": "app.a"
+    },
+    {
+      "name": "UTF-8 order, not UTF-16 order, breaks a tie",
+      "origins": [
+        { "dataOrigin": "watch.😀", "coveredUs": 1800000000 },
+        { "dataOrigin": "watch.｡", "coveredUs": 1800000000 },
+        { "dataOrigin": "Zwift", "coveredUs": 900000000 }
+      ],
+      "selected": "watch.｡"
+    },
+    {
+      "name": "an origin that covered nothing is still a source",
+      "origins": [{ "dataOrigin": "com.apple.health", "coveredUs": 0 }],
+      "selected": "com.apple.health"
+    },
+    {
+      "name": "no origin, no source",
+      "origins": [],
+      "selected": null
+    }
+  ]
+}

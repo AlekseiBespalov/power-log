@@ -1,0 +1,8 @@
+{
+  "name": "@power-log/web",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./index.mjs",
+  "types": "./index.d.ts",
+  "license": "Apache-2.0"
+}

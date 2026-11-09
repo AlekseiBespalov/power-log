@@ -1,0 +1,129 @@
+{
+  "failures": {
+    "actionPending": {
+      "message": "Another ride action is still running.",
+      "nextStep": "Wait for it to finish."
+    },
+    "actionUnavailable": {
+      "message": "This action isn't available right now.",
+      "nextStep": "Check the current ride, then try again."
+    },
+    "bikeRequired": {
+      "message": "Connect your bike to start.",
+      "nextStep": ""
+    },
+    "gpsRequired": {
+      "message": "This distance source needs GPS recording.",
+      "nextStep": "Turn on GPS route, or choose another distance source in Settings."
+    },
+    "healthDenied": {
+      "message": "Power Log can't save to Health.",
+      "nextStep": "Allow it in the Health app, then start again."
+    },
+    "healthLocked": {
+      "message": "Health data is unavailable while this device is locked.",
+      "nextStep": "Unlock it, then try again."
+    },
+    "healthUnavailable": {
+      "message": "Health isn't available on this device.",
+      "nextStep": "Turn off Save to Health, then start again."
+    },
+    "locationDenied": {
+      "message": "Power Log can't use your location.",
+      "nextStep": "Allow location in Settings, or turn off GPS for this ride."
+    },
+    "ownerForeign": {
+      "message": "Another browser tab is recording this ride.",
+      "nextStep": "Use that tab to control it."
+    },
+    "rideActive": {
+      "message": "A ride is already in progress.",
+      "nextStep": "Finish or discard it before starting another."
+    },
+    "rideChanged": {
+      "message": "This ride changed.",
+      "nextStep": "Check the current ride, then try again."
+    },
+    "settingsSaveFailed": {
+      "message": "Your settings weren’t saved.",
+      "nextStep": "Try again."
+    },
+    "settingsUnreadable": {
+      "message": "Power Log couldn't read your saved settings.",
+      "nextStep": "Open Settings on your iPhone and reset them, then start again."
+    },
+    "startCancelled": {
+      "message": "This start was cancelled before the ride began.",
+      "nextStep": "Start again."
+    },
+    "startExpired": {
+      "message": "This start arrived too late to begin the ride.",
+      "nextStep": "Start again."
+    },
+    "startInterrupted": {
+      "message": "The ride didn't start.",
+      "nextStep": "Start again."
+    },
+    "startUnconfirmed": {
+      "message": "Power Log couldn't confirm the start.",
+      "nextStep": "Start again."
+    },
+    "storageBusy": {
+      "message": "Power Log is busy saving your ride.",
+      "nextStep": "Try again in a moment."
+    },
+    "storageFailed": {
+      "message": "Power Log couldn't save this change.",
+      "nextStep": "Try again. Your recorded data is kept."
+    },
+    "storageFull": {
+      "message": "This device is out of storage.",
+      "nextStep": "Free up space, then try again."
+    },
+    "uiUnavailable": {
+      "message": "Power Log couldn't open this screen.",
+      "nextStep": "Open Power Log, then try again."
+    },
+    "unknown": {
+      "message": "Something went wrong.",
+      "nextStep": "Try again. Your recorded data is kept."
+    },
+    "watchBusy": {
+      "message": "Your Apple Watch is still busy with another ride.",
+      "nextStep": "Finish or discard it on your Apple Watch, then start again."
+    },
+    "watchLaunchFailed": {
+      "message": "Power Log couldn't open on your Apple Watch.",
+      "nextStep": "Unlock your Apple Watch and keep it near your iPhone, then start again."
+    },
+    "watchMessageInvalid": {
+      "message": "Your Apple Watch sent something Power Log couldn't read.",
+      "nextStep": "Install the same Power Log build on your iPhone and Apple Watch."
+    },
+    "watchNotInstalled": {
+      "message": "Power Log isn't installed on your Apple Watch.",
+      "nextStep": "Install it from the Watch app on your iPhone, or turn off Apple Watch in Settings."
+    },
+    "watchStartUnconfirmed": {
+      "message": "Your Apple Watch didn't confirm the start.",
+      "nextStep": "Open Power Log on your Apple Watch, keep it unlocked and nearby, then start again."
+    },
+    "watchVersionMismatch": {
+      "message": "Power Log on your Apple Watch is a different version.",
+      "nextStep": "Install the same Power Log build on your iPhone and Apple Watch, or turn off Apple Watch in Settings."
+    }
+  },
+  "issues": {
+    "phoneUnreachableAtStart": "Open Power Log on your phone to start a ride.",
+    "commandUnconfirmed": "Your phone didn't confirm. Check Power Log on your phone, then try again.",
+    "endedLocallyUnreachable": "Your phone isn't reachable, so the ride ended on your Watch. Finish it on your phone.",
+    "endedLocallyUnconfirmed": "Your phone didn't confirm, so the ride ended on your Watch. Check it on your phone.",
+    "orphanRecovered": "Your last ride was interrupted. Finish or discard it on your phone."
+  },
+  "reasons": {
+    "phoneUnreachable": "Your phone isn't reachable.",
+    "commandPending": "Waiting for your phone.",
+    "sessionBusy": "Apple Health is still finishing the last ride.",
+    "noActiveRide": "No ride in progress."
+  }
+}

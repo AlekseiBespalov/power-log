@@ -1,0 +1,4 @@
+[
+  { "code": "readFailed", "retryable": false, "occurrence": null, "detail": null },
+  { "code": "storageRefused", "retryable": false, "occurrence": "77777777-7777-4777-8777-777777777777", "detail": "unavailable" }
+]

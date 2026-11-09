@@ -5,6 +5,15 @@ const { withXcodeProject } = require('@expo/config-plugins');
 const targetName = 'PowerLogWatch';
 const unquote = value => String(value ?? '').replace(/^"|"$/g, '');
 
+function watchSources(projectRoot) {
+  return fs
+    .readdirSync(path.join(projectRoot, 'targets/watch'), { recursive: true })
+    .filter(file => file.endsWith('.swift') && !file.split(path.sep).includes('Tests'))
+    .map(file => `targets/watch/${file.split(path.sep).join('/')}`)
+    .concat(['WorkoutSession', 'HealthTypes'].map(name => `modules/power-log/ios/health/${name}.swift`))
+    .sort();
+}
+
 function configureWatchProject(project, projectRoot, config) {
   const {
     version,
@@ -36,8 +45,8 @@ function configureWatchProject(project, projectRoot, config) {
     Object.assign(configuration.buildSettings, {
       PRODUCT_BUNDLE_IDENTIFIER: `"${bundleIdentifier}.watchkitapp"`,
       POWER_LOG_PHONE_BUNDLE_IDENTIFIER: `"${bundleIdentifier}"`,
-      INFOPLIST_FILE: '"../apple/WatchApp/Info.plist"',
-      CODE_SIGN_ENTITLEMENTS: '"../apple/WatchApp/PowerLogWatch.entitlements"',
+      INFOPLIST_FILE: '"../targets/watch/Info.plist"',
+      CODE_SIGN_ENTITLEMENTS: '"../targets/watch/PowerLogWatch.entitlements"',
       CODE_SIGN_STYLE: 'Automatic',
       GENERATE_INFOPLIST_FILE: 'NO',
       SDKROOT: 'watchos',
@@ -58,20 +67,11 @@ function configureWatchProject(project, projectRoot, config) {
     if (teamId) configuration.buildSettings.DEVELOPMENT_TEAM = teamId;
     delete configuration.buildSettings.IPHONEOS_DEPLOYMENT_TARGET;
   }
-  const sourcePaths = fs
-    .readdirSync(path.join(projectRoot, 'apple/WatchApp'))
-    .filter(file => file.endsWith('.swift'))
-    .sort()
-    .map(file => `../apple/WatchApp/${file}`);
-  sourcePaths.push(
-    ...['WorkoutCompanion', 'WorkoutCompanionTransport', 'WorkoutNativeHealth', 'WorkoutHealthMetrics'].map(
-      name => `../modules/power-log-bridge/ios/${name}.swift`,
-    ),
-  );
+  const sourcePaths = watchSources(projectRoot).map(file => `../${file}`);
 
   const expectedPhases = [
     ['PBXSourcesBuildPhase', sourcePaths],
-    ['PBXResourcesBuildPhase', ['../assets/Assets.xcassets', '../apple/WatchApp/PrivacyInfo.xcprivacy']],
+    ['PBXResourcesBuildPhase', ['../assets/Assets.xcassets', '../targets/watch/PrivacyInfo.xcprivacy']],
     ['PBXFrameworksBuildPhase', []],
   ];
   let phases = expectedPhases.map(([type]) => ({
@@ -112,16 +112,13 @@ function configureWatchProject(project, projectRoot, config) {
     phases = [
       project.addBuildPhase(sourcePaths, 'PBXSourcesBuildPhase', 'Sources', targetId),
       project.addBuildPhase(
-        ['../assets/Assets.xcassets', '../apple/WatchApp/PrivacyInfo.xcprivacy'],
+        ['../assets/Assets.xcassets', '../targets/watch/PrivacyInfo.xcprivacy'],
         'PBXResourcesBuildPhase',
         'Resources',
         targetId,
       ),
     ];
     phases.push(project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', targetId));
-  }
-  for (const file of phases.at(-1).buildPhase.files) {
-    objects.PBXFileReference[objects.PBXBuildFile[file.value].fileRef].lastKnownFileType = 'wrapper.xcframework';
   }
   // CocoaPods resolves a file's path through its group; an ungrouped reference makes
   // React Native's privacy manifest aggregation fail during pod install.
@@ -162,3 +159,4 @@ module.exports = config =>
     return config;
   });
 module.exports.configureWatchProject = configureWatchProject;
+module.exports.watchSources = watchSources;

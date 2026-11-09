@@ -12,7 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useModalAccessibility } from '../services/modal-accessibility';
+import { useModalAccessibility } from './modal-accessibility';
 
 type Props = {
   visible: boolean;

@@ -1,0 +1,1 @@
+{"tests":["export-fit-core.test.ts > FIT core contracts > refuses an interruption without the retained telemetry cutoff"],"kind":"fit","fitPower":"rider","tuning":null,"rideId":"ride-1","context":{"exportedAt":"2026-01-02T03:04:05.000Z","platform":"android"},"output":{"failure":{"code":"page","message":"An interruption in this ride has no retained telemetry sequence."}}}

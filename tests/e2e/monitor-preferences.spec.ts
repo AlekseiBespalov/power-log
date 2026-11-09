@@ -1,13 +1,13 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
-import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
+import { seedSettings } from '../helpers/settings-store';
 
 const epoch = Date.UTC(2026, 8, 8);
 const samples = Array.from({ length: 2401 }, (_, index) => {
   const seconds = index / 2;
   const sample = syntheticSample(seconds, index, new Date(epoch + seconds * 1000).toISOString());
-  const batteryVoltageV = seconds === 137.5 ? 44.12 : seconds === 813.5 ? 45.62 : 52 - seconds / 1000;
+  const batteryVoltageV = seconds === 137.5 ? 44.1 : seconds === 813.5 ? 45.6 : Math.round(520 - seconds / 100) / 10;
   return { ...sample, batteryVoltageV, motorInputPowerW: batteryVoltageV * sample.batteryCurrentA };
 });
 const csv = exportCsv(samples);
@@ -58,15 +58,9 @@ async function waitForAncestorAnimations(handle: Locator) {
 }
 
 async function seedRideNumbers(page: Page) {
-  const preferences = defaultMonitorPreferences();
-  preferences.views.ride.numbers = ['humanPowerW', 'cadenceRpm', 'heartRateBpm', 'speedMps'];
-  await page.addInitScript(
-    value => {
-      if (!localStorage.getItem('power-log.monitor-preferences.v1'))
-        localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value));
-    },
-    JSON.parse(monitorPreferencesJson(preferences)),
-  );
+  await seedSettings(page, {
+    app: { views: { ride: { numbers: ['humanPowerW', 'cadenceRpm', 'heartRateBpm', 'speedMps'] } } },
+  });
 }
 
 async function numberOrder(page: Page) {
@@ -361,15 +355,15 @@ test('ten-minute and whole-ride ranges retain older samples and use interval-spe
   const chart = page.getByTestId('monitor-chart-batteryVoltageV');
   const readout = page.getByTestId('monitor-readout-batteryVoltageV');
   await expectRange(chart, 0, 1200);
-  await expect(readout).toContainText('Min 44.12 V · 02:17');
+  await expect(readout).toContainText('Min 44.10 V · 02:17');
   await chooseRange(page, '10 min');
   await expectRange(chart, 600, 1200);
-  await expect(readout).toContainText('Min 45.62 V · 13:33');
+  await expect(readout).toContainText('Min 45.60 V · 13:33');
   await chart.scrollIntoViewIfNeeded();
   await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('monitor-battery-390.png') });
   await chooseRange(page, 'Whole ride');
   await expectRange(chart, 0, 1200);
-  await expect(readout).toContainText('Min 44.12 V · 02:17');
+  await expect(readout).toContainText('Min 44.10 V · 02:17');
 });
 
 test('battery comparison resolves original observations outside the current window', async ({ page }) => {
@@ -383,18 +377,18 @@ test('battery comparison resolves original observations outside the current wind
   await inspectCentered(chart, 123.5);
   await expect(chart).toHaveAttribute(
     'aria-valuetext',
-    /Battery voltage 51\.88 V, 02:03 elapsed, 2026-09-08T00:02:03\.500Z/,
+    /Battery voltage 51\.90 V, 02:03 elapsed, 2026-09-08T00:02:03\.500Z/,
   );
   await page.getByTestId('monitor-reference-set').click();
   await inspectCentered(chart, 876.5);
   await expect(chart).toHaveAttribute(
     'aria-valuetext',
-    /Battery voltage 51\.12 V, 14:36 elapsed, 2026-09-08T00:14:36\.500Z/,
+    /Battery voltage 51\.10 V, 14:36 elapsed, 2026-09-08T00:14:36\.500Z/,
   );
   const comparison = page.getByTestId('monitor-compare-batteryVoltageV');
-  await expect(comparison).toContainText('Δ -0.75 V');
-  await expect(comparison).toContainText('A 51.88 V · 02:03');
-  await expect(comparison).toContainText('B 51.12 V · 14:36');
+  await expect(comparison).toContainText('Δ -0.80 V');
+  await expect(comparison).toContainText('A 51.90 V · 02:03');
+  await expect(comparison).toContainText('B 51.10 V · 14:36');
   await page.getByTestId('monitor-reference-clear').click();
   await expect(comparison).toHaveCount(0);
 });
@@ -405,13 +399,13 @@ test('chart navigation preserves layout while exact viewport statistics catch up
   await chooseView(page, 'Battery');
   const chart = page.getByTestId('monitor-chart-batteryVoltageV');
   const readout = page.getByTestId('monitor-readout-batteryVoltageV');
-  await expect(readout).toContainText('Min 44.12 V');
+  await expect(readout).toContainText('Min 44.10 V');
   await chart.scrollIntoViewIfNeeded();
   const before = (await chart.boundingBox())!;
   await page.clock.install();
   await chart.dispatchEvent('wheel', { ctrlKey: true, deltaY: -40, clientX: before.x + before.width / 2 });
   await page.clock.runFor(32);
-  await expect(readout).toContainText('Min 44.12 V');
+  await expect(readout).toContainText('Min 44.10 V');
   await expect(readout).toContainText('Previous range 00:00–20:00');
   expect((await chart.boundingBox())!.y).toBeCloseTo(before.y, 1);
   await expect(page.getByText('Updating charts…', { exact: true })).toHaveCount(0);

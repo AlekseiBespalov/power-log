@@ -1,0 +1,17 @@
+[
+  {
+    "ok": false,
+    "failure": {
+      "code": "storageRefused",
+      "retryable": false,
+      "occurrence": "77777777-7777-4777-8777-777777777777",
+      "detail": "unreadable"
+    },
+    "now": 1793520000123456
+  },
+  {
+    "ok": false,
+    "failure": { "code": "storageBusy", "retryable": true, "occurrence": null, "detail": null },
+    "now": 1
+  }
+]

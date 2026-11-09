@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "platform": "android",
+  "rideId": "93369f63-e4f4-43f6-a6e4-efb1430c828f",
+  "distanceSource": "controller",
+  "connections": [
+    {
+      "connection": 1,
+      "decoder": "cyc"
+    }
+  ],
+  "gpsBarriers": [],
+  "healthRepresentations": []
+}

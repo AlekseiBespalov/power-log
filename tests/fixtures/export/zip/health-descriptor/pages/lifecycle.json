@@ -1,0 +1,1 @@
+[{"rows":4,"next":[4],"done":true,"connections":[],"columns":{"elapsedSeconds":[0,20,30,40],"timestamp":["2026-05-01T07:30:00.000Z","2026-05-01T07:30:20.000Z","2026-05-01T07:30:30.000Z","2026-05-01T07:30:40.000Z"],"producer":["watch","watch","watch","watch"],"action":["start","pause","resume","stop"],"interrupted":[0,0,0,0],"timerSeconds":[0,20,20,30]}}]

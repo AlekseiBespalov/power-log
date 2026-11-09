@@ -1,0 +1,39 @@
+{
+  "timestamp": [
+    { "utcUs": 1772355600000000, "text": "2026-03-01T09:00:00.000Z" },
+    { "utcUs": 1772355600123000, "text": "2026-03-01T09:00:00.123Z" },
+    { "utcUs": 1772355600123456, "text": "2026-03-01T09:00:00.123Z" },
+    { "utcUs": 1772355600999999, "text": "2026-03-01T09:00:00.999Z" },
+    { "utcUs": 951782400000500, "text": "2000-02-29T00:00:00.000Z" },
+    { "utcUs": 4102444799999999, "text": "2099-12-31T23:59:59.999Z" }
+  ],
+  "healthTimestamp": [
+    { "utcUs": 1772355600000000, "platform": "ios", "text": "2026-03-01T09:00:00.000000000Z" },
+    { "utcUs": 1772355600123000, "platform": "ios", "text": "2026-03-01T09:00:00.123000000Z" },
+    { "utcUs": 1772355600123456, "platform": "ios", "text": "2026-03-01T09:00:00.123456000Z" },
+    { "utcUs": 1772355600000000, "platform": "android", "text": "2026-03-01T09:00:00Z" },
+    { "utcUs": 1772355600500000, "platform": "android", "text": "2026-03-01T09:00:00.500Z" },
+    { "utcUs": 1772355600123456, "platform": "android", "text": "2026-03-01T09:00:00.123456Z" },
+    { "utcUs": 1772355600000100, "platform": "android", "text": "2026-03-01T09:00:00.000100Z" },
+    { "utcUs": 1772355600000000, "platform": "web", "text": "2026-03-01T09:00:00Z" },
+    { "utcUs": 1772355600123000, "platform": "web", "text": "2026-03-01T09:00:00.123Z" }
+  ],
+  "seconds": [
+    { "us": 0, "seconds": 0 },
+    { "us": 60000000, "seconds": 60 },
+    { "us": 511, "seconds": 0.000511 },
+    { "us": 1234567, "seconds": 1.234567 },
+    { "us": -1500000, "seconds": -1.5 },
+    { "us": -511, "seconds": -0.000511 }
+  ],
+  "provider": [
+    { "platform": "ios", "provider": "appleHealth" },
+    { "platform": "android", "provider": "healthConnect" },
+    { "platform": "web", "provider": null }
+  ],
+  "eventProducer": [
+    { "platform": "ios", "producer": "phone" },
+    { "platform": "android", "producer": "phone" },
+    { "platform": "web", "producer": "browser" }
+  ]
+}

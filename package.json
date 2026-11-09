@@ -12,6 +12,7 @@
     "ios": "POWER_LOG_DEV_CLIENT=1 expo run:ios --device",
     "prebuild:ios": "POWER_LOG_DEV_CLIENT=1 expo prebuild --platform ios --no-install",
     "build:ios-simulator": "sh scripts/build-ios-simulator.sh",
+    "build:ios-device": "sh scripts/build-ios-device.sh",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -19,7 +20,6 @@
     "test:watch": "vitest",
     "test:swift": "sh scripts/test-swift.sh",
     "test:ios-bundle": "node scripts/check-ios-bundle.mjs",
-    "test:lab-apple": "sh scripts/test-lab-apple.sh",
     "test:native-config": "node --test tests/native-config/*.test.cjs",
     "test:e2e": "playwright test",
     "build:web": "node scripts/build-pages.mjs /",
@@ -37,12 +37,10 @@
     "build:android": "node scripts/build-android.mjs",
     "test:android": "node scripts/test-android.mjs",
     "verify": "sh scripts/verify.sh --full",
-    "verify:stress": "sh scripts/verify-stress.sh",
     "release:android": "sh scripts/release-android.sh",
-    "check:core-js": "node shared/scripts/sync-js.mjs --check",
-    "build:core-js": "node shared/scripts/sync-js.mjs",
-    "test:core": "sh shared/scripts/verify-core.sh",
-    "test:crash-paths": "node scripts/test-crash-paths.mjs"
+    "check:generated": "node shared/scripts/sync-generated.mjs --check",
+    "build:generated": "node shared/scripts/sync-generated.mjs",
+    "test:core": "sh shared/scripts/verify-core.sh"
   },
   "dependencies": {
     "@expo/metro-runtime": "57.0.15",
@@ -50,8 +48,6 @@
     "expo-build-properties": "^57.0.20",
     "expo-constants": "~57.0.17",
     "expo-dev-client": "~57.0.19",
-    "expo-document-picker": "~57.0.2",
-    "expo-file-system": "~57.0.6",
     "expo-haptics": "~57.0.3",
     "expo-linking": "~57.0.10",
     "expo-modules-core": "~57.0.16",
@@ -71,7 +67,6 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/react": "~19.2.2",
-    "@types/web-bluetooth": "^0.0.21",
     "eslint": "^9.39.0",
     "eslint-config-expo": "~57.0.2",
     "patch-package": "8.0.1",

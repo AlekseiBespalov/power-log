@@ -1,0 +1,1 @@
+{"tests":["export-fit-core.test.ts > FIT core contracts > rejects a Health distance profile"],"kind":"fit","fitPower":"rider","tuning":null,"rideId":"ride-1","context":{"exportedAt":"2026-01-02T03:04:05.000Z","platform":"ios"},"output":{"failure":{"code":"page","message":"The ride data could not be read for export: its distance settings are not valid."}}}

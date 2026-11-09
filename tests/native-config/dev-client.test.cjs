@@ -36,8 +36,8 @@ function setEnvironment(values) {
 }
 
 async function prebuild(root, developmentClient) {
-  const previous = { POWER_LOG_DEV_CLIENT: process.env.POWER_LOG_DEV_CLIENT, POWER_LOG_LAB: process.env.POWER_LOG_LAB };
-  setEnvironment({ POWER_LOG_DEV_CLIENT: developmentClient ? '1' : undefined, POWER_LOG_LAB: undefined });
+  const previous = { POWER_LOG_DEV_CLIENT: process.env.POWER_LOG_DEV_CLIENT };
+  setEnvironment({ POWER_LOG_DEV_CLIENT: developmentClient ? '1' : undefined });
   try {
     const platforms = ['ios', 'android'];
     const { exp } = await getPrebuildConfigAsync(root, { platforms });

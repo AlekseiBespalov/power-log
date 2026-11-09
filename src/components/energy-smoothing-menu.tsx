@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
 import { Modal, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ENERGY_SMOOTHING_SECONDS, type EnergySmoothingSeconds } from '../core/energy-per-distance';
-import { useModalAccessibility } from '../services/modal-accessibility';
+import { useModalAccessibility } from './modal-accessibility';
 import { useFocusedModal } from './modal-dialog';
 import { colors, Pressable, type } from './ui';
+
+export const ENERGY_SMOOTHING_SECONDS = [0, 5, 30, 60] as const;
+export type EnergySmoothingSeconds = (typeof ENERGY_SMOOTHING_SECONDS)[number];
 
 export function EnergySmoothingMenu({
   value,

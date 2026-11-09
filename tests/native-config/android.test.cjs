@@ -9,7 +9,7 @@ test('Android prebuild signing stays idempotent and release keys are not silentl
   const followed = configureSigning(first + '\n// Another plugin\nandroid { lint { abortOnError true } }\n');
   assert.match(followed, /\/\/ Another plugin\nandroid \{ lint \{ abortOnError true \} \}/);
   assert.equal(configureSigning(followed), followed);
-  assert.match(first, /POWER_LOG_ANDROID_PREVIEW'\) == '1' \? signingConfigs.debug : System/);
+  assert.match(first, /POWER_LOG_ANDROID_DEBUG_SIGNING'\) == '1' \? signingConfigs.debug : System/);
   assert.match(first, /storePassword System.getenv\('POWER_LOG_ANDROID_STORE_PASSWORD'\)/);
 });
 
@@ -26,11 +26,11 @@ test('Android App Bundles are signed with the upload key and carry native symbol
 });
 
 test('Android capture uses non-exported foreground services and private file sharing', () => {
-  const manifest = fs.readFileSync('modules/power-log-bridge/android/src/main/AndroidManifest.xml', 'utf8');
+  const manifest = fs.readFileSync('modules/power-log/android/src/main/AndroidManifest.xml', 'utf8');
   assert.match(manifest, /android:foregroundServiceType="connectedDevice\|location"/);
   assert.match(manifest, /<service[^>]*android:exported="false"/);
   assert.match(manifest, /<provider[^>]*android:exported="false"/);
-  assert.match(manifest, /<activity android:name=".HealthPermissionsActivity" android:exported="false"/);
+  assert.doesNotMatch(manifest, /HealthPermissionsActivity/);
   assert.doesNotMatch(manifest, /WRITE_EXTERNAL_STORAGE|ACCESS_BACKGROUND_LOCATION/);
   assert.deepEqual(
     [...manifest.matchAll(/android\.permission\.health\.(READ_[A-Z_]+)/g)].map(match => match[1]).sort(),
@@ -47,23 +47,21 @@ test('Android capture uses non-exported foreground services and private file sha
       'READ_SPEED',
     ],
   );
-  assert.doesNotMatch(
-    fs.readFileSync('modules/power-log-bridge/android/src/androidTest/AndroidManifest.xml', 'utf8'),
-    /READ_HEALTH_DATA_HISTORY/,
-  );
-  const paths = fs.readFileSync('modules/power-log-bridge/android/src/main/res/xml/power_log_files.xml', 'utf8');
+  const paths = fs.readFileSync('modules/power-log/android/src/main/res/xml/power_log_files.xml', 'utf8');
   assert.match(paths, /path="exports\/"/);
   assert.doesNotMatch(paths, /root-path|external-path/);
 });
 
 test('Health Connect privacy links reach the privacy activity from the rationale action and permission usage', () => {
-  const manifest = fs.readFileSync('modules/power-log-bridge/android/src/main/AndroidManifest.xml', 'utf8');
-  const activity = manifest.match(/<activity android:name=".HealthPrivacyActivity"[^>]*>([\s\S]*?)<\/activity>/);
+  const manifest = fs.readFileSync('modules/power-log/android/src/main/AndroidManifest.xml', 'utf8');
+  const activity = manifest.match(
+    /<activity android:name="app\.powerlog\.platform\.health\.HealthPrivacyActivity"[^>]*>([\s\S]*?)<\/activity>/,
+  );
   assert.ok(activity);
   assert.match(activity[0], /android:exported="true"/);
   assert.match(activity[1], /<action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" \/>/);
   const alias = manifest.match(
-    /<activity-alias[^>]*android:targetActivity=".HealthPrivacyActivity"[^>]*>([\s\S]*?)<\/activity-alias>/,
+    /<activity-alias[^>]*android:targetActivity="app\.powerlog\.platform\.health\.HealthPrivacyActivity"[^>]*>([\s\S]*?)<\/activity-alias>/,
   );
   assert.ok(alias);
   assert.match(alias[0], /android:exported="true"/);

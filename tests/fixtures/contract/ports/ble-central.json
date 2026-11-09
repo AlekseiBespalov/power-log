@@ -1,0 +1,826 @@
+{
+  "os": {
+    "radio": ["state"],
+    "remembered": ["bike"],
+    "restored": ["bike", "state"],
+    "discovered": ["bike", "name", "rssi", "services", "manufacturerData", "atMonoUs"],
+    "scanFailed": ["code"],
+    "chooserCancelled": [],
+    "noActivation": [],
+    "connected": ["bike"],
+    "connectFailed": ["bike", "platform"],
+    "disconnected": ["bike", "systemReconnecting", "platform"],
+    "database": ["bike", "services", "maxWriteBytes", "notifyFails"],
+    "servicesModified": ["bike"],
+    "notify": ["bytes", "atMonoUs"],
+    "notifyError": ["platform"],
+    "writeBusy": [],
+    "writeReady": [],
+    "writeError": ["platform"]
+  },
+  "osCalls": ["connect", "cancel"],
+  "profiles": {
+    "uart": {"service": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "notify": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "write": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "namePrefixes": []}
+  },
+  "scenarios": [
+    {
+      "name": "the iPhone's radio is unknown until the central reports its state",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "radio", "returns": "unknown"},
+        {"call": "prepare"},
+        {"call": "radio", "returns": "unknown"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "radio", "returns": "poweredOn"},
+        {"call": "prepare"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "the radio is known before prepare on Android and web",
+      "platforms": ["android", "web"],
+      "steps": [
+        {"call": "radio", "returns": "poweredOn"},
+        {"call": "prepare"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a search reports each result, stamped in the callback",
+      "platforms": ["ios", "android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "startSearch", "args": {"profiles": ["uart"], "inventory": false}},
+        {"os": "discovered", "args": {"bike": "D1", "name": "X6", "rssi": -60, "services": ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"], "manufacturerData": "UEw=", "atMonoUs": 1000}},
+        {"expect": "advertised", "args": {"advertisement": {"bike": "D1", "name": "X6", "rssi": -60, "services": ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"], "manufacturerData": null, "at": {"monoUs": 1000}}}},
+        {"os": "discovered", "args": {"bike": "D2", "name": null, "rssi": -70, "services": ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"], "atMonoUs": 2000}},
+        {"expect": "advertised", "args": {"advertisement": {"bike": "D2", "name": null, "rssi": -70, "at": {"monoUs": 2000}}}},
+        {"call": "stopSearch"},
+        {"os": "discovered", "args": {"bike": "D3", "name": "X12", "rssi": -50, "services": ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"], "atMonoUs": 3000}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "the web chooser reports its one choice, then ends the search",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "startSearch", "args": {"profiles": ["uart"], "inventory": false}},
+        {"os": "discovered", "args": {"bike": "D1", "name": "X6", "rssi": null, "services": ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"], "atMonoUs": 1000}},
+        {"expect": "advertised", "args": {"advertisement": {"bike": "D1", "name": "X6", "rssi": null, "at": {"monoUs": 1000}}}},
+        {"expect": "searchEnded", "args": {"error": null}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a web choice after stopSearch is still delivered",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "startSearch", "args": {"profiles": ["uart"], "inventory": false}},
+        {"call": "stopSearch"},
+        {"os": "discovered", "args": {"bike": "D1", "name": "X6", "rssi": null, "services": ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"], "atMonoUs": 1000}},
+        {"expect": "advertised", "args": {"advertisement": {"bike": "D1"}}},
+        {"expect": "searchEnded", "args": {"error": null}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "closing the web chooser ends the search as cancelled",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "startSearch", "args": {"profiles": ["uart"], "inventory": false}},
+        {"os": "chooserCancelled"},
+        {"expect": "searchEnded", "args": {"error": {"kind": "cancelled"}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a web search outside the tap's activation ends as noUserActivation",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "startSearch", "args": {"profiles": ["uart"], "inventory": false}},
+        {"os": "noActivation"},
+        {"expect": "searchEnded", "args": {"error": {"kind": "noUserActivation"}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a failed Android scan ends the search with its code",
+      "platforms": ["android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "startSearch", "args": {"profiles": ["uart"], "inventory": false}},
+        {"os": "scanFailed", "args": {"code": "2"}},
+        {"expect": "searchEnded", "args": {"error": {"kind": "searchFailed", "platform": {"domain": "AndroidScan", "code": "2"}}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "connect with the radio off fails without an OS connection",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "radio", "args": {"state": "poweredOff"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOff"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"expect": "linkFailed", "args": {"link": 1, "error": {"kind": "poweredOff"}}},
+        {"expectNoOs": "connect"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an iPhone connect before the central reports its state fails notReady",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"expect": "linkFailed", "args": {"link": 1, "error": {"kind": "notReady"}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an iPhone connect to a peripheral the OS can't retrieve fails unknownBike",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "connect", "args": {"bike": "D9", "profile": "uart", "adopt": false}, "returns": 1},
+        {"expect": "linkFailed", "args": {"link": 1, "error": {"kind": "unknownBike"}}},
+        {"expectNoOs": "connect"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "adopting a restored connected peripheral takes it over and drops the other restored one",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "restored", "args": {"bike": "D1", "state": "connected"}},
+        {"os": "restored", "args": {"bike": "D2", "state": "connected"}},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": true}, "returns": 1},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"expectOs": "cancel", "args": {"bike": "D2"}},
+        {"expectNoOs": "connect"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "adopting a restored connecting peripheral takes it over and drops the other restored one",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "restored", "args": {"bike": "D1", "state": "connecting"}},
+        {"os": "restored", "args": {"bike": "D2", "state": "connected"}},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": true}, "returns": 1},
+        {"expectOs": "cancel", "args": {"bike": "D2"}},
+        {"expectNoOs": "connect"},
+        {"expectNone": true},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "adopting a restored disconnected peripheral takes it over and drops the other restored one",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "restored", "args": {"bike": "D1", "state": "disconnected"}},
+        {"os": "restored", "args": {"bike": "D2", "state": "connected"}},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": true}, "returns": 1},
+        {"expectOs": "cancel", "args": {"bike": "D2"}},
+        {"expectOs": "connect", "args": {"bike": "D1"}},
+        {"expectNone": true},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "adopting a peripheral the iPhone neither restored nor can retrieve fails unknownBike",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "restored", "args": {"bike": "D2", "state": "connected"}},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "connect", "args": {"bike": "D9", "profile": "uart", "adopt": true}, "returns": 1},
+        {"expect": "linkFailed", "args": {"link": 1, "error": {"kind": "unknownBike"}}},
+        {"expectOs": "cancel", "args": {"bike": "D2"}},
+        {"expectNoOs": "connect"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "adopt on Android and web is a fresh connect",
+      "platforms": ["android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": true}, "returns": 1},
+        {"expectNone": true},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a failed connect is linkFailed with connectionFailed",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connectFailed", "args": {"bike": "D1"}},
+        {"expect": "linkFailed", "args": {"link": 1, "error": {"kind": "connectionFailed"}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an unexpected end of a live link is linkDown with linkLost",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": false}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "linkLost"}, "systemReconnecting": false}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "the radio turning off ends a live link the OS didn't end",
+      "platforms": ["ios", "android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "radio", "args": {"state": "poweredOff"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOff"}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "poweredOff"}, "systemReconnecting": false}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "ready with every piece answers ready with the write limit",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready", "maxWriteBytes": 182, "inventory": null, "error": null}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "ready on Android answers the default ATT payload, since nothing asks for a larger MTU",
+      "platforms": ["android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 20}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready", "maxWriteBytes": 20, "inventory": null, "error": null}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "ready on web answers ready without a write limit, which Web Bluetooth does not report",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready", "maxWriteBytes": null, "inventory": null, "error": null}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "ready without the service answers serviceMissing, never linkFailed",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "0000180a-0000-1000-8000-00805f9b34fb", "characteristics": [{"uuid": "00002a24-0000-1000-8000-00805f9b34fb", "properties": 2}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "serviceMissing", "maxWriteBytes": null}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "ready without write-without-response answers characteristicMissing",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 8}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "characteristicMissing"}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "ready whose notifications fail answers notifyFailed",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182, "notifyFails": true}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "notifyFailed"}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an inventory search carries the manufacturer bytes",
+      "platforms": ["ios", "android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "startSearch", "args": {"profiles": ["uart"], "inventory": true}},
+        {"os": "discovered", "args": {"bike": "D1", "name": "X6", "rssi": -60, "services": ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"], "manufacturerData": "UEw=", "atMonoUs": 1000}},
+        {"expect": "advertised", "args": {"advertisement": {"bike": "D1", "manufacturerData": "UEw="}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an inventory ready lists every service and characteristic",
+      "platforms": ["ios", "android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}, {"uuid": "0000180a-0000-1000-8000-00805f9b34fb", "characteristics": [{"uuid": "00002a24-0000-1000-8000-00805f9b34fb", "properties": 2}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": true}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready", "inventory": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}, {"uuid": "0000180a-0000-1000-8000-00805f9b34fb", "characteristics": [{"uuid": "00002a24-0000-1000-8000-00805f9b34fb", "properties": 2}]}]}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an inventory ready on web lists the profile's service only",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}, {"uuid": "0000180a-0000-1000-8000-00805f9b34fb", "characteristics": [{"uuid": "00002a24-0000-1000-8000-00805f9b34fb", "properties": 2}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": true}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready", "inventory": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}]}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an inventory ready on web without the service answers an empty inventory",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "0000180a-0000-1000-8000-00805f9b34fb", "characteristics": [{"uuid": "00002a24-0000-1000-8000-00805f9b34fb", "properties": 2}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": true}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "serviceMissing", "maxWriteBytes": null, "inventory": []}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a busy write path answers blocked, then canSend",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready"}}},
+        {"os": "writeBusy"},
+        {"call": "send", "args": {"link": 1, "request": "identity"}, "returns": "blocked"},
+        {"expectNone": true},
+        {"os": "writeReady"},
+        {"expect": "canSend", "args": {"link": 1}},
+        {"call": "send", "args": {"link": 1, "request": "telemetry"}, "returns": "accepted"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a frame over the write limit is tooLong",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 5}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready", "maxWriteBytes": 5}}},
+        {"call": "send", "args": {"link": 1, "request": "identity"}, "returns": "tooLong"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "send without a live link is notConnected",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"call": "send", "args": {"link": 1, "request": "identity"}, "returns": "notConnected"},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"call": "send", "args": {"link": 1, "request": "identity"}, "returns": "notConnected"},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a later OS write error is writeFailed",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready"}}},
+        {"call": "send", "args": {"link": 1, "request": "identity"}, "returns": "accepted"},
+        {"os": "writeError"},
+        {"expect": "writeFailed", "args": {"link": 1, "error": {"kind": "writeFailed"}}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "notifications arrive in order, copied and stamped in the callback",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready"}}},
+        {"os": "notify", "args": {"bytes": "AQID", "atMonoUs": 1000}},
+        {"os": "notify", "args": {"bytes": "BAUG", "atMonoUs": 2000}},
+        {"expect": "notified", "args": {"link": 1, "bytes": "AQID", "at": {"monoUs": 1000}}},
+        {"expect": "notified", "args": {"link": 1, "bytes": "BAUG", "at": {"monoUs": 2000}}},
+        {"os": "notifyError"},
+        {"expect": "notificationFailed", "args": {"link": 1}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "cancelling a pending link twice ends it once",
+      "platforms": ["ios", "android", "web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"call": "cancel", "args": {"link": 1}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "cancelling a live link twice ends it once, after the OS releases it",
+      "platforms": ["ios", "android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expectOs": "cancel", "args": {"bike": "D1"}},
+        {"expectNoOs": "cancel"},
+        {"expectNone": true},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": false}},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "cancelling a live web link ends it at once",
+      "platforms": ["web"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"call": "release", "args": {"link": 1}, "returns": false},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": false}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "cancelling an iPhone-reconnecting link ends it once and stops the reconnect",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": true}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "linkLost"}, "systemReconnecting": true}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"expectOs": "cancel", "args": {"bike": "D1"}},
+        {"expectNoOs": "cancel"},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "the iPhone keeps a system reconnect until connect takes it over",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expectNoOs": "cancel"},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": true}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "linkLost"}, "systemReconnecting": true}},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expectNone": true},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": true}, "returns": 2},
+        {"expectNoOs": "connect"},
+        {"expectNoOs": "cancel"},
+        {"expect": "linkUp", "args": {"link": 2, "bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "the iPhone drops a connection no link asked for",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "connected", "args": {"bike": "D7"}},
+        {"expectOs": "cancel", "args": {"bike": "D7"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "an Android connect while a cancelled link is still open is notReady",
+      "platforms": ["android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 2},
+        {"expect": "linkFailed", "args": {"link": 2, "error": {"kind": "notReady"}}},
+        {"expectOs": "connect", "args": {"bike": "D1"}},
+        {"expectNoOs": "connect"},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": false}},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 3},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 3, "bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "release forces an Android link's end, then a new link connects",
+      "platforms": ["android"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expectOs": "cancel", "args": {"bike": "D1"}},
+        {"expectNone": true},
+        {"call": "release", "args": {"link": 1}, "returns": true},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": false}},
+        {"expectNone": true},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 2},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 2, "bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "release can't force an iPhone link, whose end comes from the OS",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"call": "release", "args": {"link": 1}, "returns": false},
+        {"expectNone": true},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": false}},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "the radio turning off ends an iPhone reconnect kept for an ended link",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": true}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "linkLost"}, "systemReconnecting": true}},
+        {"os": "radio", "args": {"state": "poweredOff"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOff"}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "poweredOff"}, "systemReconnecting": false}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "iOS giving up its reconnect ends the kept link",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": true}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "linkLost"}, "systemReconnecting": true}},
+        {"os": "disconnected", "args": {"bike": "D1", "systemReconnecting": false, "platform": {"domain": "CBErrorDomain", "code": "6"}}},
+        {"expect": "linkDown", "args": {"link": 1, "error": {"kind": "linkLost", "platform": {"domain": "CBErrorDomain", "code": "6"}}, "systemReconnecting": false}},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expectNone": true},
+        {"expectNoOs": "cancel"}
+      ]
+    },
+    {
+      "name": "a late failure of a cancelled iPhone attempt leaves the next attempt alone",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"call": "cancel", "args": {"link": 1}},
+        {"expect": "linkDown", "args": {"link": 1, "error": null, "systemReconnecting": false}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 2},
+        {"os": "connectFailed", "args": {"bike": "D1"}},
+        {"expectNone": true},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 2, "bike": "D1"}},
+        {"expectNone": true}
+      ]
+    },
+    {
+      "name": "a modified service invalidates the iPhone's link",
+      "platforms": ["ios"],
+      "steps": [
+        {"call": "prepare"},
+        {"os": "radio", "args": {"state": "poweredOn"}},
+        {"expect": "radioChanged", "args": {"state": "poweredOn"}},
+        {"os": "remembered", "args": {"bike": "D1"}},
+        {"call": "connect", "args": {"bike": "D1", "profile": "uart", "adopt": false}, "returns": 1},
+        {"os": "connected", "args": {"bike": "D1"}},
+        {"expect": "linkUp", "args": {"link": 1, "bike": "D1"}},
+        {"os": "database", "args": {"bike": "D1", "services": [{"uuid": "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "characteristics": [{"uuid": "6e400002-b5a3-f393-e0a9-e50e24dcca9e", "properties": 12}, {"uuid": "6e400003-b5a3-f393-e0a9-e50e24dcca9e", "properties": 16}]}], "maxWriteBytes": 182}},
+        {"call": "ready", "args": {"link": 1, "inventory": false}},
+        {"expect": "linkReady", "args": {"link": 1, "result": {"outcome": "ready", "maxWriteBytes": 182}}},
+        {"os": "servicesModified", "args": {"bike": "D1"}},
+        {"expect": "servicesInvalidated", "args": {"link": 1}},
+        {"expectNone": true}
+      ]
+    }
+  ]
+}

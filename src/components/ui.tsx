@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import type { ComponentProps, ReactNode } from 'react';
 
-export { formatDuration } from '../core/formatting';
 export const colors = {
   bg: '#0b0d10',
   surface: '#15191f',
@@ -95,6 +94,7 @@ export function Button({
   testID,
   icon,
   accessibilityLabel,
+  accessibilityHint,
 }: {
   children?: ReactNode;
   onPress: () => void;
@@ -105,12 +105,14 @@ export function Button({
   testID?: string;
   icon?: ReactNode;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }) {
   const { fontScale } = useWindowDimensions();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
       testID={testID}
       onPress={onPress}

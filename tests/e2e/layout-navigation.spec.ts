@@ -1,11 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { presentationDefaultPreferences, presentationLoadPreferences } from '../../shared/js';
 import { exportCsv } from '../helpers/export-csv';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 import { expectTouchTargets } from '../helpers/ui-targets';
+import { seedSettings } from '../helpers/settings-store';
 
 async function importedMonitor(page: Page) {
-  await page.goto('/sessions');
   const chooser = page.waitForEvent('filechooser');
   if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
     await page.getByRole('button', { name: 'History actions', exact: true }).click();
@@ -44,19 +43,9 @@ for (const width of [320, 390, 900])
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.addInitScript(() => {
-      const get = Storage.prototype.getItem;
-      Storage.prototype.getItem = function (key) {
-        if (key === 'power-log.monitor-preferences.v1') throw new Error('Settings unavailable for layout regression');
-        return get.call(this, key);
-      };
-    });
+    await seedSettings(page, '{');
     await importedMonitor(page);
-    const settingsError = presentationLoadPreferences(
-      presentationDefaultPreferences(),
-      null,
-      'Saved monitor settings could not be read.',
-    ).error!;
+    const settingsError = "Power Log couldn't read your saved settings. Reset settings to use the defaults.";
     await expect(page.getByTestId('monitor-status')).toContainText('Settings error');
     const withStatus = await layout(page);
     expect(withStatus.header.height).toBe(width >= 760 ? 54 : 48);
@@ -64,9 +53,6 @@ for (const width of [320, 390, 900])
     expect(withStatus.grid.y - withStatus.header.y - withStatus.header.height).toBeCloseTo(12, 0);
     await page.getByTestId('monitor-status').click();
     await expect(page.getByTestId('monitor-status-details')).toHaveText(settingsError);
-    await expect(page.getByTestId('monitor-status-details')).not.toContainText(
-      'Settings unavailable for layout regression',
-    );
     await page.getByRole('button', { name: /^Ride\s+✓$/ }).click();
     await expect(page.getByTestId('monitor-status')).toContainText('Settings error');
     const four = await layout(page);

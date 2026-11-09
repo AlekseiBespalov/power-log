@@ -126,13 +126,6 @@ function writeJson(path, value) {
 const safeName = id => id.replace(/[^A-Za-z0-9_.-]+/g, '-');
 const seconds = milliseconds => `${(milliseconds / 1000).toFixed(1)}s`;
 
-export function emulatorAvailable(env) {
-  if (env.POWER_LOG_SKIP_CONNECTED === '1') return false;
-  const adb = join(env.ANDROID_HOME ?? '', 'platform-tools/adb');
-  const result = spawnSync(adb, ['-s', 'emulator-5554', 'get-state'], { encoding: 'utf8', env, timeout: 20000 });
-  return result.status === 0 && result.stdout.trim() === 'device';
-}
-
 function tail(path, lines) {
   try {
     return readFileSync(path, 'utf8').split('\n').slice(-lines).join('\n');
@@ -198,6 +191,7 @@ export function planChecks({
     selects(task, only) &&
     !(skip.length && selects(task, skip)) &&
     (full || task.tier !== 'release') &&
+    (task.tier !== 'demand' || only.includes(task.id)) &&
     (!task.when || task.when(env, full));
   if (only.length && !tasks.some(task => selects(task, only))) throw new Error(`No check matches ${only.join(', ')}`);
   if (skip.length && !tasks.some(task => selects(task, skip))) throw new Error(`No check matches ${skip.join(', ')}`);
@@ -338,7 +332,7 @@ export async function runChecks({
     );
     for (const task of queue) print(`  ${task.id}: ${reasons.get(task.id)}`);
     if (explain) {
-      return { failed: [], passed: [], pending: [], unchanged, total: 0 };
+      return { failed: [], passed: [], unchanged, total: 0 };
     }
     const snapshot = `${Date.now().toString(36)}-${process.pid}`;
     writeJson(join(stateDirectory, 'snapshots', `${snapshot}.json`), Object.fromEntries(files));
@@ -350,7 +344,6 @@ export async function runChecks({
     const children = new Set();
     const runDirectory = join(tmpdir(), `power-log-checks-${process.pid}`);
     let used = 0;
-    let emulator;
     let interrupted = false;
     const stop = signal => {
       interrupted = true;
@@ -428,7 +421,6 @@ export async function runChecks({
     const blockedBy = task => {
       const states = (task.needs ?? []).filter(need => reasons.has(need)).map(need => status.get(need));
       if (states.some(state => ['failed', 'blocked', 'interrupted'].includes(state))) return 'blocked';
-      if (states.includes('pending')) return 'pending';
       return undefined;
     };
     const reserve = weight => {
@@ -491,20 +483,6 @@ export async function runChecks({
             if (weight > reservation.spare) continue;
             reservation.spare -= weight;
           }
-          if (task.requires === 'emulator') {
-            emulator ??= emulatorAvailable(env);
-            if (!emulator) {
-              const required = full && env.POWER_LOG_SKIP_CONNECTED !== '1';
-              status.set(task.id, required ? 'failed' : 'pending');
-              timings.push([task.id, 0, status.get(task.id), '']);
-              print(
-                required
-                  ? `${task.id} failed: emulator-5554 is required. Start it with: $ANDROID_HOME/emulator/emulator -avd PowerLog_API36 -port 5554`
-                  : `${task.id} not run: emulator-5554 is not available.`,
-              );
-              continue;
-            }
-          }
           const load = loadavg()
             .map(value => value.toFixed(2))
             .join(' ');
@@ -553,14 +531,12 @@ export async function runChecks({
       const log = join(stateDirectory, 'logs', `${safeName(id)}.log`);
       print(`\n--- ${id} failed; full log: ${log}\n${tail(log, byId.get(id).tailLines ?? 80)}`);
     }
-    const pending = outcome('pending');
     const notRun = [...outcome('blocked'), ...outcome('interrupted')];
     print(
-      `\n${outcome('passed').length} passed, ${failed.length} failed, ${notRun.length} blocked or interrupted, ${pending.length} not run, ${unchanged.length} unchanged; ${total} s wall time.`,
+      `\n${outcome('passed').length} passed, ${failed.length} failed, ${notRun.length} blocked or interrupted, ${unchanged.length} unchanged; ${total} s wall time.`,
     );
     if (notRun.length) print(`Blocked or interrupted: ${notRun.join(', ')}.`);
-    if (pending.length) print(`Not run without emulator-5554: ${pending.join(', ')}.`);
-    return { failed: [...failed, ...notRun], passed: outcome('passed'), pending, unchanged, total, status };
+    return { failed: [...failed, ...notRun], passed: outcome('passed'), unchanged, total, status };
   } finally {
     if (readJson(lock, undefined)?.token === token) rmSync(lock, { force: true });
   }

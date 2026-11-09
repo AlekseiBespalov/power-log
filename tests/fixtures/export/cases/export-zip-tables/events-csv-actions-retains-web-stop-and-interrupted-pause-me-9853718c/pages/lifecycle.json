@@ -1,0 +1,1 @@
+[{"rows":6,"next":[6],"done":true,"connections":[],"columns":{"elapsedSeconds":[0,2,3,4,9,10],"timestamp":["t0","t1","t2","t3","t4","t5"],"producer":["browser","browser","browser","browser","browser","browser"],"action":["start","pause","resume","lap","pause","stop"],"interrupted":[0,0,0,0,1,0]}}]

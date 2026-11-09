@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "platform": "android",
+  "rideId": "e1f10cac-f931-44cc-a57e-b530cbe1c031",
+  "distanceSource": "gps:phone",
+  "connections": [],
+  "gpsBarriers": [],
+  "healthRepresentations": [
+    {
+      "line": 2,
+      "representation": "intervalRecord"
+    },
+    {
+      "line": 3,
+      "representation": "rawSeries"
+    },
+    {
+      "line": 4,
+      "representation": "rawSeries"
+    },
+    {
+      "line": 5,
+      "representation": "rawSeries"
+    }
+  ]
+}

@@ -1,14 +1,14 @@
 import { Link, useIsFocused, useRoute } from 'expo-router';
-import { Platform, Text, View, useWindowDimensions, type RefreshControlProps } from 'react-native';
+import { Platform, View, useWindowDimensions, type RefreshControlProps } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ReactElement, ReactNode } from 'react';
-import { useSession } from '../services/session-context';
-import { useWorkout } from '../services/workout-context';
-import { workoutInProgress } from '../core/workouts';
-import { Button, colors, MIN_TOUCH_TARGET, formatDuration, lineHeight } from './ui';
+import { StoreRefusedScreen } from '../features/shell/store-refused-screen';
+import { NoticeBanner } from './notice-banner';
+import { colors, MIN_TOUCH_TARGET } from './ui';
 import { TabTransition } from './tab-transition';
 import { appNavigationIndex } from './app-navigation';
+import { useModelSnapshot, useUiEnv } from './use-screen-model';
 
 export function AppShell({
   children,
@@ -25,7 +25,10 @@ export function AppShell({
   const { width } = useWindowDimensions();
   const navigationIndex = appNavigationIndex(navigationRoute ?? route.name);
   const focused = useIsFocused();
+  const { shell } = useUiEnv();
+  const state = useModelSnapshot(shell);
   const desktop = Platform.OS === 'web' && width >= 1100;
+  const refused = state.mode === 'refused' && state.message !== null;
   return (
     <View style={{ flex: 1, display: Platform.OS === 'web' && !focused ? 'none' : 'flex' }}>
       <TabTransition index={navigationIndex}>
@@ -43,9 +46,27 @@ export function AppShell({
               testID="app-workspace"
               style={{ width: '100%', maxWidth: 1400, alignSelf: 'center', gap: desktop ? 16 : 12 }}
             >
-              {navigationIndex !== 0 && <ActiveRideLink />}
-              <SessionError />
-              {children}
+              {navigationIndex !== 0 && state.activeRide && (
+                <Link
+                  href="/"
+                  style={{
+                    color: colors.accent,
+                    backgroundColor: colors.surfaceRaised,
+                    borderRadius: 10,
+                    padding: 14,
+                    fontWeight: '600',
+                    minHeight: MIN_TOUCH_TARGET,
+                  }}
+                >
+                  {state.activeRide.text}
+                </Link>
+              )}
+              {state.notice && <NoticeBanner notice={state.notice} onAction={() => shell.retry()} />}
+              {state.bikeNotice && (
+                <NoticeBanner notice={state.bikeNotice} onAction={() => shell.dismiss(state.bikeNotice!.id)} />
+              )}
+              {refused && <StoreRefusedScreen message={state.message!} />}
+              {refused && navigationIndex <= 1 ? null : children}
             </View>
           </ScrollView>
           {footer && (
@@ -66,44 +87,4 @@ export function AppShell({
       </TabTransition>
     </View>
   );
-}
-
-function ActiveRideLink() {
-  const { state } = useWorkout();
-  return workoutInProgress(state.phase) ? (
-    <Link
-      href="/"
-      style={{
-        color: colors.accent,
-        backgroundColor: colors.surfaceRaised,
-        borderRadius: 10,
-        padding: 14,
-        fontWeight: '600',
-        minHeight: MIN_TOUCH_TARGET,
-      }}
-    >
-      ● {state.phase === 'paused' ? 'Ride paused' : 'Ride in progress'} · {formatDuration(state.timerSeconds)} →
-    </Link>
-  ) : null;
-}
-function SessionError() {
-  const session = useSession();
-  return session.error ? (
-    <View
-      accessibilityRole="alert"
-      style={{
-        padding: 12,
-        borderRadius: 12,
-        backgroundColor: '#412b27',
-        flexDirection: 'row',
-        gap: 12,
-        alignItems: 'center',
-      }}
-    >
-      <Text style={{ color: colors.red, flex: 1, lineHeight: lineHeight.body }}>{session.error}</Text>
-      <Button secondary onPress={session.clearError}>
-        Dismiss
-      </Button>
-    </View>
-  ) : null;
 }

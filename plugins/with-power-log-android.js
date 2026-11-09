@@ -26,7 +26,7 @@ android {
             }
         }
     }
-    buildTypes.release.signingConfig = System.getenv('POWER_LOG_ANDROID_PREVIEW') == '1' ? signingConfigs.debug : System.getenv('POWER_LOG_ANDROID_BUNDLE') == '1' ? signingConfigs.powerLogUpload : signingConfigs.powerLogRelease
+    buildTypes.release.signingConfig = System.getenv('POWER_LOG_ANDROID_DEBUG_SIGNING') == '1' ? signingConfigs.debug : System.getenv('POWER_LOG_ANDROID_BUNDLE') == '1' ? signingConfigs.powerLogUpload : signingConfigs.powerLogRelease
     buildTypes.release.ndk.debugSymbolLevel = 'SYMBOL_TABLE'
 }
 `;

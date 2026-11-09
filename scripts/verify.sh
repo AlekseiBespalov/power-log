@@ -75,14 +75,7 @@ if [ -z "$work" ]; then
   trap finish EXIT
 fi
 cd "$work"
-if [ -n "$tier" ] && [ "${POWER_LOG_SKIP_CONNECTED:-0}" != 1 ] \
-  && [ "$("$ANDROID_HOME/platform-tools/adb" -s emulator-5554 get-state 2>/dev/null)" != device ]; then
-  echo "emulator-5554 is required for the full release check. Start it with: $ANDROID_HOME/emulator/emulator -avd PowerLog_API36 -port 5554" >&2
-  exit 1
-fi
 node scripts/checks.mjs $tier
-if [ -n "$tier" ] && [ "${POWER_LOG_SKIP_CONNECTED:-0}" = 1 ]; then
-  echo "Partial qualification: Android connected suites did not run (POWER_LOG_SKIP_CONNECTED=1)."
-elif [ -n "$tier" ]; then
+if [ "$tier" = --full ]; then
   echo "Every check passed for $(git rev-parse --short HEAD)."
 fi

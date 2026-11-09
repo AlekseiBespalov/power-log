@@ -5,16 +5,17 @@ const plist = require('@expo/plist').default;
 const withWatch = require('../../plugins/with-power-log-watch');
 const { projectFixture } = require('./project-fixture.cjs');
 
-const watchSources = fs
-  .readdirSync('apple/WatchApp')
-  .filter(file => file.endsWith('.swift'))
-  .map(file => `apple/WatchApp/${file}`)
-  .concat(
-    ['WorkoutCompanion', 'WorkoutCompanionTransport', 'WorkoutNativeHealth', 'WorkoutHealthMetrics'].map(
-      name => `modules/power-log-bridge/ios/${name}.swift`,
-    ),
-  )
-  .sort();
+const watchSources = withWatch.watchSources(process.cwd());
+
+test('the Watch compiles its own folders and the shared workout session, never its tests or the phone engines', () => {
+  assert.ok(watchSources.includes('targets/watch/ride/WatchRideController.swift'));
+  assert.ok(watchSources.includes('targets/watch/PowerLogWatchApp.swift'));
+  assert.deepEqual(
+    watchSources.filter(file => file.startsWith('modules/')),
+    ['modules/power-log/ios/health/HealthTypes.swift', 'modules/power-log/ios/health/WorkoutSession.swift'],
+  );
+  assert.equal(watchSources.filter(file => file.includes('/Tests/')).length, 0);
+});
 
 test('prebuild embeds the Watch privacy manifest once alongside assets and preserves the compiled source set', async () => {
   const project = projectFixture(),
@@ -34,7 +35,7 @@ test('prebuild embeds the Watch privacy manifest once alongside assets and prese
     );
     for (const [phaseType, expected] of [
       ['PBXSourcesBuildPhase', expectedSources],
-      ['PBXResourcesBuildPhase', ['../apple/WatchApp/PrivacyInfo.xcprivacy', '../assets/Assets.xcassets']],
+      ['PBXResourcesBuildPhase', ['../assets/Assets.xcassets', '../targets/watch/PrivacyInfo.xcprivacy']],
     ]) {
       const phases = watch.buildPhases.map(reference => objects[phaseType][reference.value]).filter(Boolean);
       assert.equal(phases.length, 1);
@@ -48,7 +49,7 @@ test('prebuild embeds the Watch privacy manifest once alongside assets and prese
     const watchReferences = Object.entries(objects.PBXFileReference).filter(
       ([key, reference]) =>
         !key.endsWith('_comment') &&
-        /^"?\.\.\/(apple\/WatchApp|modules\/power-log-bridge\/ios|assets\/Assets\.xcassets)/.test(reference.path),
+        /^"?\.\.\/(targets\/watch|modules\/power-log\/ios|assets\/Assets\.xcassets)/.test(reference.path),
     );
     assert.equal(watchReferences.length, expectedSources.length + 2);
     const grouped = Object.values(objects.PBXGroup)
@@ -58,8 +59,8 @@ test('prebuild embeds the Watch privacy manifest once alongside assets and prese
   }
 });
 
-test('Watch and PowerLogBridge privacy manifests declare only app-local defaults and elapsed timers', () => {
-  for (const file of ['apple/WatchApp/PrivacyInfo.xcprivacy', 'modules/power-log-bridge/ios/PrivacyInfo.xcprivacy']) {
+test('Watch and PowerLogPlatform privacy manifests declare only app-local defaults and elapsed timers', () => {
+  for (const file of ['targets/watch/PrivacyInfo.xcprivacy', 'modules/power-log/ios/PrivacyInfo.xcprivacy']) {
     const manifest = plist.parse(fs.readFileSync(file, 'utf8'));
     assert.equal(manifest.NSPrivacyTracking, false);
     assert.deepEqual(manifest.NSPrivacyTrackingDomains, []);
@@ -81,7 +82,7 @@ test('Watch and PowerLogBridge privacy manifests declare only app-local defaults
 });
 
 test('the Watch states its Health use and asks for no location because it never runs Core Location', () => {
-  const info = plist.parse(fs.readFileSync('apple/WatchApp/Info.plist', 'utf8'));
+  const info = plist.parse(fs.readFileSync('targets/watch/Info.plist', 'utf8'));
   assert.match(info.NSHealthShareUsageDescription, /\S/);
   assert.match(info.NSHealthUpdateUsageDescription, /\S/);
   assert.deepEqual(

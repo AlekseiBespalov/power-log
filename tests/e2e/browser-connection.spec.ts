@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { syntheticBike } from '../fixtures/browser-bike';
-import type { BrowserRide, RideRow } from '../../src/services/browser-ride-store';
+
+type StoredRide = { id: string; phase: string };
+type StoredRow = { elapsedUs: number; sessionNo: number; seq: number; utcUs: number };
 
 for (const outcome of ['cancel', 'timeout'] as const) {
   test(`a stalled bike connection can ${outcome} without leaving the controls busy`, async ({ page }) => {
@@ -64,23 +65,39 @@ for (const outcome of ['cancel', 'timeout'] as const) {
   });
 }
 
-async function storedRide(page: Page): Promise<{ rides: BrowserRide[]; rows: RideRow[] }> {
+async function storedRide(page: Page): Promise<{ rides: StoredRide[]; rows: StoredRow[] }> {
   return page.evaluate(async () => {
+    const name = (await indexedDB.databases())
+      .map(database => database.name)
+      .find(database => database?.startsWith('power-log-archive-'));
+    if (!name) return { rides: [], rows: [] };
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('power-log');
+      const request = indexedDB.open(name);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
     try {
-      const transaction = db.transaction(['recordings', 'samples']);
-      const read = <T>(name: string) =>
+      const transaction = db.transaction(['ride', 'facts']);
+      const read = <T>(store: string) =>
         new Promise<T[]>((resolve, reject) => {
-          const request = transaction.objectStore(name).getAll();
+          const request = transaction.objectStore(store).getAll();
           request.onsuccess = () => resolve(request.result);
           request.onerror = () => reject(request.error);
         });
-      const [rides, rows] = await Promise.all([read<BrowserRide>('recordings'), read<RideRow>('samples')]);
-      return { rides, rows };
+      type Batch = { kind: string; batchNo: number; rows: number; values: ArrayLike<number> };
+      const [rides, facts] = await Promise.all([read<{ uuid: string; phase: string }>('ride'), read<Batch>('facts')]);
+      const rows = facts
+        .filter(batch => batch.kind === 'telemetry')
+        .sort((a, b) => a.batchNo - b.batchNo)
+        .flatMap(({ rows: count, values }) =>
+          Array.from({ length: count }, (_, row) => ({
+            elapsedUs: values[row]!,
+            sessionNo: values[count + row]!,
+            seq: values[2 * count + row]!,
+            utcUs: values[3 * count + row]!,
+          })),
+        );
+      return { rides: rides.map(ride => ({ id: ride.uuid, phase: ride.phase })), rows };
     } finally {
       db.close();
     }
@@ -90,13 +107,11 @@ async function storedRide(page: Page): Promise<{ rides: BrowserRide[]; rows: Rid
 test('a ride survives short and long bike outages, keeping actual gaps and resuming its charts', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await syntheticBike(page);
-  const preferences = defaultMonitorPreferences();
-  preferences.workoutOptions.recordGPS = false;
-  await page.addInitScript(
-    preferences => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences)),
-    JSON.parse(monitorPreferencesJson(preferences)),
-  );
-  await page.goto('/');
+  await page.goto('/settings');
+  const gps = page.getByRole('switch', { name: 'Record GPS route', exact: true });
+  await gps.click();
+  await expect(gps).toHaveAttribute('aria-checked', 'false');
+  await page.getByRole('link', { name: 'Ride', exact: true }).click();
   await page.getByTestId('ride-setup').click();
   await page.getByTestId('ride-setup-sheet').getByTestId('setup-find-bike').click();
   await page.clock.install();
@@ -149,10 +164,9 @@ test('a ride survives short and long bike outages, keeping actual gaps and resum
   expect(after.rows.slice(0, before.rows.length)).toEqual(before.rows);
   const lastBefore = beforeLongGap.rows.at(-1)!;
   const firstAfter = after.rows[beforeLongGap.rows.length]!;
-  expect(firstAfter.elapsedSeconds - lastBefore.elapsedSeconds).toBeGreaterThan(6);
-  expect(firstAfter.originalElapsedSeconds! - lastBefore.originalElapsedSeconds!).toBeGreaterThan(6);
-  expect(firstAfter.originalSequence).toBe(lastBefore.originalSequence! + 1);
-  expect(firstAfter.connectionEpoch).not.toBe(lastBefore.connectionEpoch);
+  expect(firstAfter.elapsedUs - lastBefore.elapsedUs).toBeGreaterThan(6_000_000);
+  expect(firstAfter.utcUs - lastBefore.utcUs).toBeGreaterThan(6_000_000);
+  expect(firstAfter.sessionNo).not.toBe(lastBefore.sessionNo);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.getByTestId('monitor-chart-power').locator('path').first()).toHaveAttribute('d', /L/);
   await page.getByRole('button', { name: 'Finish', exact: true }).click();
@@ -161,5 +175,6 @@ test('a ride survives short and long bike outages, keeping actual gaps and resum
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await page.getByRole('button', { name: /^Open ride,/ }).click();
   const chart = page.getByTestId('tab-transition-1').getByTestId('monitor-chart-power');
+  await chart.scrollIntoViewIfNeeded();
   await expect(chart.locator('path').first()).toHaveAttribute('d', /L/);
 });

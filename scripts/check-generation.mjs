@@ -71,26 +71,26 @@ export function withNativeBuildCache(root, generate) {
 function main() {
   const started = Date.now();
   const mode = process.argv[2];
-  if (process.argv.length > 3 || (mode && !['--js', '--native'].includes(mode)))
-    throw new Error('Usage: node scripts/check-generation.mjs [--js|--native]');
+  if (process.argv.length > 3 || (mode && !['--generated', '--native'].includes(mode)))
+    throw new Error('Usage: node scripts/check-generation.mjs [--generated|--native]');
   const run = (command, args) =>
     execFileSync(command, args, { stdio: 'inherit', env: { ...process.env, CI: '1', EXPO_NO_DOTENV: '1' } });
   if (mode !== '--native') {
-    run('npm', ['run', 'check:core-js']);
-    const javascript = treeSnapshot('shared/js');
-    run(process.execPath, ['shared/scripts/sync-js.mjs', '--compare']);
-    assertSameGeneration(javascript, treeSnapshot('shared/js'), 'Kotlin/JS');
+    run('npm', ['run', 'check:generated']);
+    const generated = treeSnapshot('shared/generated');
+    run(process.execPath, ['shared/scripts/sync-generated.mjs', '--compare']);
+    assertSameGeneration(generated, treeSnapshot('shared/generated'), 'Generated outputs');
   }
-  if (mode !== '--js') {
+  if (mode !== '--generated') {
     const prebuild = ['node_modules/expo/bin/cli', 'prebuild', '--platform', 'all', '--no-install'];
-    const maintainedApple = treeSnapshot('apple');
+    const maintainedApple = treeSnapshot('targets');
     withNativeBuildCache('.', () => {
       run(process.execPath, [...prebuild, '--clean']);
-      assertSameGeneration(maintainedApple, treeSnapshot('apple'), 'Maintained Apple sources');
+      assertSameGeneration(maintainedApple, treeSnapshot('targets'), 'Maintained Apple sources');
       const ios = treeSnapshot('ios');
       const android = treeSnapshot('android');
       run(process.execPath, [...prebuild, '--no-clean']);
-      assertSameGeneration(maintainedApple, treeSnapshot('apple'), 'Maintained Apple sources');
+      assertSameGeneration(maintainedApple, treeSnapshot('targets'), 'Maintained Apple sources');
       assertSameGeneration(ios, treeSnapshot('ios'), 'iOS prebuild');
       assertSameGeneration(android, treeSnapshot('android'), 'Android prebuild');
     });

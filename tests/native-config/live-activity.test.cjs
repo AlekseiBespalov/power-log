@@ -33,9 +33,9 @@ test('prebuild embeds one activity and keeps native intent available in both tar
     );
     assert.equal(sources(phone).filter(source => source.endsWith('PowerLogRideIntent.swift')).length, 1);
     assert.deepEqual(sources(activity).sort(), [
-      '../apple/LiveActivity/PowerLogRideIntent.swift',
-      '../apple/LiveActivity/PowerLogRideWidget.swift',
-      '../modules/power-log-bridge/ios/PowerLogRideAttributes.swift',
+      '../modules/power-log/ios/ridecard/PowerLogRideAttributes.swift',
+      '../targets/live-activity/PowerLogRideIntent.swift',
+      '../targets/live-activity/PowerLogRideWidget.swift',
     ]);
     const embedded = phone.buildPhases
       .flatMap(reference => objects.PBXCopyFilesBuildPhase?.[reference.value]?.files ?? [])
@@ -91,9 +91,9 @@ for (const scheme of ['power-log', 'power-log-lab']) {
       modRequest: { projectRoot: process.cwd() },
     });
     assert.equal(result.modResults.PowerLogURLScheme, scheme);
-    const extension = plist.parse(fs.readFileSync('apple/LiveActivity/Info.plist', 'utf8'));
+    const extension = plist.parse(fs.readFileSync('targets/live-activity/Info.plist', 'utf8'));
     assert.equal(extension.PowerLogURLScheme, '$(POWER_LOG_URL_SCHEME)');
-    const widget = fs.readFileSync('apple/LiveActivity/PowerLogRideWidget.swift', 'utf8');
+    const widget = fs.readFileSync('targets/live-activity/PowerLogRideWidget.swift', 'utf8');
     assert.doesNotMatch(widget, /power-log:\/\//);
     assert.match(widget, /Bundle\.main\.object\(forInfoDictionaryKey: "PowerLogURLScheme"\)/);
     assert.equal(widget.match(/\.widgetURL\(rideURL\)/g)?.length, 2);

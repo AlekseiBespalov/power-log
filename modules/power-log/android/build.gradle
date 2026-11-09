@@ -1,0 +1,100 @@
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+
+group = 'app.powerlog.platform'
+version = '0.3.0'
+
+android {
+    namespace 'app.powerlog.platform'
+    defaultConfig {
+        versionCode 1
+        versionName '0.3.0'
+    }
+    sourceSets.test.java.srcDir "../../../shared/application/src/contracts/kotlin/app/powerlog/application/contracts"
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            maxParallelForks = Math.max(1, Runtime.runtime.availableProcessors().intdiv(4))
+            systemProperty 'user.home', layout.buildDirectory.dir('test-home').get().asFile.absolutePath
+            systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+            inputs.dir(new File(projectDir, '../../../tests/fixtures'))
+                .withPropertyName('fixtures')
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+            inputs.files(
+                new File(projectDir, '../../../scripts/expand-contract-fixtures.py'),
+                new File(projectDir, '../../../shared/scripts/protocol_fixtures.py'))
+                .withPropertyName('fixtureExpansion')
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+            inputs.property('environment',
+                System.getenv().findAll { it.key.startsWith('POWER_LOG_') && it.key != 'POWER_LOG_CONTRACT_FIXTURES' })
+            doFirst { layout.buildDirectory.dir('test-home').get().asFile.mkdirs() }
+        }
+    }
+}
+
+dependencies {
+    implementation 'app.powerlog:runtime:1.0.0'
+    implementation 'androidx.core:core-ktx:1.17.0'
+    implementation 'androidx.core:core-location-altitude:1.0.0'
+    implementation 'androidx.health.connect:connect-client:1.1.0'
+    implementation 'androidx.work:work-runtime-ktx:2.10.1'
+    testImplementation 'androidx.work:work-testing:2.10.1'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+}
+
+tasks.register('powerLogKotlinMetadata') {
+    def catalog = new File(projectDir, '../../../shared/gradle/libs.versions.toml')
+    def graph = configurations.releaseRuntimeClasspath.incoming.resolutionResult.rootComponent
+    inputs.file(catalog)
+    doLast {
+        def versions = [:]
+        def section = ''
+        catalog.eachLine { line ->
+            def header = line =~ /^\[(.+)\]\s*$/
+            if (header) section = header[0][1]
+            def entry = line =~ /^([\w-]+)\s*=\s*"([^"]+)"/
+            if (section == 'versions' && entry) versions[entry[0][1]] = entry[0][2]
+        }
+        def pins = [
+            ['org.jetbrains.kotlin', '', versions['kotlin-stdlib-resolved']],
+            ['org.jetbrains.kotlinx', 'kotlinx-coroutines-', versions['kotlinx-coroutines']],
+            ['org.jetbrains.kotlinx', 'kotlinx-serialization-', versions['kotlinx-serialization']],
+            ['androidx.sqlite', '', versions['androidx-sqlite']],
+        ]
+        def parts = { String version -> version.tokenize('.-').collect { it.isInteger() ? it as int : 0 } }
+        def above = { String version, String pin ->
+            def a = parts(version)
+            def b = parts(pin)
+            for (int i = 0; i < Math.max(a.size(), b.size()); i++) {
+                int x = i < a.size() ? a[i] : 0
+                int y = i < b.size() ? b[i] : 0
+                if (x != y) return x > y
+            }
+            false
+        }
+        def failures = []
+        def components = [] as Set
+        def pending = [graph.get()]
+        while (pending) {
+            def component = pending.pop()
+            if (!components.add(component.id)) continue
+            component.dependencies.findAll { it instanceof org.gradle.api.artifacts.result.ResolvedDependencyResult }
+                .each { pending << it.selected }
+        }
+        def ids = components
+            .findAll { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            .findAll { it.group.startsWith('org.jetbrains.kotlin') || it.group.startsWith('androidx.sqlite') }
+            .sort { it.displayName }
+        for (id in ids) {
+            def pin = pins.find { id.group == it[0] && id.module.startsWith(it[1]) }
+            if (pin == null) failures << "${id.displayName} has no pin"
+            else if (above(id.version, pin[2])) failures << "${id.displayName} is above its pin ${pin[2]}"
+            else println "Kotlin metadata: ${id.displayName} at or below ${pin[2]}"
+        }
+        if (ids.every { it.group != 'androidx.sqlite' }) failures << 'androidx.sqlite is not on the release classpath'
+        if (failures) throw new GradleException('Kotlin metadata pins exceeded:\n' + failures.join('\n'))
+    }
+}
+

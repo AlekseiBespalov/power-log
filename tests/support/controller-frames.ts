@@ -1,4 +1,4 @@
-import { controllerCrc, controllerSelectedMask, controllerWireFields } from '../../shared/js';
+import { controllerCrc, controllerSelectedMask, controllerWireFields } from '../../shared/generated/js/kit';
 
 export function framePayload(payload: Uint8Array): Uint8Array {
   const crc = controllerCrc(new Int8Array(payload));

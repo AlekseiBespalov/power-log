@@ -1,42 +1,44 @@
 import { expect, test, type Page } from '@playwright/test';
-import { browserTestBundle } from '../helpers/browser-test-bundle';
-import type * as Harness from '../fixtures/browser-ride-harness';
-declare global {
-  interface Window {
-    catalogStorage: typeof Harness;
-  }
-}
-const bundle = browserTestBundle('tests/fixtures/browser-ride-harness.ts', 'catalogStorage');
-async function seed(page: Page, count: number, day = 1, withSamples = false): Promise<string[]> {
-  await page.addScriptTag({ content: bundle });
-  return page.evaluate(
-    async ({ count, day, withSamples }) => {
-      const h = window.catalogStorage,
-        ids: string[] = [];
-      const start = `2026-01-${String(day).padStart(2, '0')}T00:00:00.000Z`,
-        end = `2026-01-${String(day).padStart(2, '0')}T00:01:00.000Z`;
-      for (let n = 0; n < count; n++) {
-        const ride = await h.store.begin('catalog-owner', { indoor: true, sampleHz: 2, recordGPS: false }, start);
-        if (withSamples) {
-          const rows = [0, 1, 2].map(time => ({
-            ...h.browserRow(time, time, `2026-01-${String(day).padStart(2, '0')}T00:00:0${time}.000Z`),
-            recordingId: ride.id,
-          }));
-          await h.store.append(ride.id, 'catalog-owner', rows, 2, 2, rows[2]!.timestamp);
-        }
-        await h.store.transition(ride.id, 'catalog-owner', 'stop', 60, 60, end);
-        ids.push(ride.id);
-      }
-      return ids;
-    },
-    { count, day, withSamples },
-  );
+import { saveRides } from '../helpers/saved-rides';
+
+const day = (n: number) => Date.UTC(2026, 0, n);
+const withSamples = (n: number) => ({
+  startUtcMs: day(n),
+  durationMs: 60_000,
+  atMs: [0, 1000, 2000],
+  powerW: [150, 150, 150],
+});
+
+async function archived(page: Page, store: 'ride' | 'facts'): Promise<string[]> {
+  return page.evaluate(async store => {
+    const name = (await indexedDB.databases())
+      .map(database => database.name)
+      .find(name => name?.startsWith('power-log-archive-'))!;
+    const db = await new Promise<IDBDatabase>(resolve => {
+      const request = indexedDB.open(name);
+      request.onsuccess = () => resolve(request.result);
+    });
+    const values = await new Promise<unknown[]>(resolve => {
+      const request = db.transaction(store).objectStore(store).getAll();
+      request.onsuccess = () => resolve(request.result);
+    });
+    db.close();
+    return values.map(value => {
+      const record = value as { uuid?: string; ride?: string };
+      return (record.uuid ?? record.ride)!;
+    });
+  }, store);
 }
 
-test('ride history pages beyond 100 IndexedDB records and refresh resets to the newest page', async ({ page }) => {
+test('ride history pages beyond 100 rides and refresh keeps the loaded rows with the newest first', async ({
+  page,
+}) => {
   await page.goto('/sessions');
   await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
-  await seed(page, 123);
+  await saveRides(
+    page,
+    Array.from({ length: 123 }, () => ({ startUtcMs: Date.UTC(2026, 0, 1), durationMs: 60_000 })),
+  );
   if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
     await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -47,11 +49,11 @@ test('ride history pages beyond 100 IndexedDB records and refresh resets to the 
   await page.getByRole('button', { name: 'Load more rides', exact: true }).click();
   await expect(rows).toHaveCount(123);
   await expect(page.getByRole('button', { name: 'Load more rides', exact: true })).toHaveCount(0);
-  await seed(page, 1, 2);
+  await saveRides(page, [{ startUtcMs: Date.UTC(2026, 0, 2), durationMs: 60_000 }]);
   if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
     await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-  await expect(rows).toHaveCount(50);
+  await expect(rows).toHaveCount(124);
   await expect(rows.first()).toContainText('Jan 2');
 });
 
@@ -60,8 +62,8 @@ for (const width of [390, 1440])
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/sessions');
     await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
-    await seed(page, 1, 2, true);
-    const keep = (await seed(page, 1, 1, true))[0]!;
+    await saveRides(page, [withSamples(2)]);
+    const [keep] = await saveRides(page, [withSamples(1)]);
     if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
       await page.getByRole('button', { name: 'History actions', exact: true }).click();
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -81,20 +83,8 @@ for (const width of [390, 1440])
     await page.getByRole('button', { name: 'Delete ride', exact: true }).click();
     await expect(page.getByTestId('delete-ride-sheet')).toHaveCount(0);
     await expect(rows).toHaveCount(1);
-    expect(
-      await page.evaluate(async () => {
-        const db = await new Promise<IDBDatabase>(resolve => {
-          const request = indexedDB.open('power-log');
-          request.onsuccess = () => resolve(request.result);
-        });
-        const values = await new Promise<unknown[]>(resolve => {
-          const request = db.transaction('samples').objectStore('samples').getAll();
-          request.onsuccess = () => resolve(request.result);
-        });
-        db.close();
-        return values.map(value => (value as { recordingId: string }).recordingId);
-      }),
-    ).toEqual([keep, keep, keep]);
+    expect(await archived(page, 'ride')).toEqual([keep]);
+    expect(new Set(await archived(page, 'facts'))).toEqual(new Set([keep]));
     await page.reload();
     await expect(rows).toHaveCount(1);
     await expect(rows).toContainText('Jan 1');
@@ -104,7 +94,7 @@ test('deleting the open ride closes its charts', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/sessions');
   await expect(page.getByText('No saved rides yet.', { exact: true })).toBeVisible();
-  await seed(page, 1, 1, true);
+  await saveRides(page, [withSamples(1)]);
   if (!(await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible()))
     await page.getByRole('button', { name: 'History actions', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();

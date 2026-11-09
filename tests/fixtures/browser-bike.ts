@@ -1,7 +1,8 @@
 import type { Page } from '@playwright/test';
-import { UART_WRITE } from '../../src/services/controller-gatt';
 import { framePayload } from '../support/controller-frames';
 import fixture from './protocol.json';
+
+export const UART_WRITE = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 
 declare global {
   interface Window {
@@ -15,7 +16,7 @@ export async function syntheticBike(page: Page) {
     ({ identity, telemetry, writerID }) => {
       class Characteristic extends EventTarget {
         value?: DataView;
-        properties = { writeWithoutResponse: true };
+        properties = { writeWithoutResponse: true, notify: true };
         async startNotifications() {
           return this;
         }

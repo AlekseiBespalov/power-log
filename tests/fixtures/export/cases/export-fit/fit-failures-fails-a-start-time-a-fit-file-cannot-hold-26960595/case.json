@@ -1,0 +1,1 @@
+{"tests":["export-fit.test.ts > FIT failures > fails a start time a FIT file cannot hold"],"kind":"fit","fitPower":"rider","tuning":null,"rideId":"ride-1","context":{"exportedAt":"2026-01-02T03:04:05.000Z","platform":"ios"},"output":{"failure":{"code":"gate","message":"This ride's start time can't be read, so it can't be exported."}}}

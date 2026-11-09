@@ -5,7 +5,7 @@ import type { Tabs } from 'expo-router';
 import { APP_NAVIGATION, appNavigationIndex } from './app-navigation';
 import { Icon, type IconName } from './icon';
 import { colors, type, Pressable } from './ui';
-import { haptics } from '../services/haptics';
+import { haptics } from './haptics';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 const icons: Record<string, IconName> = { index: 'bike', sessions: 'history', settings: 'settings' };

@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
 import { syntheticBike } from '../fixtures/browser-bike';
 import { expectTouchTargets } from '../helpers/ui-targets';
 
@@ -9,12 +8,6 @@ for (const width of [320, 390, 1440]) {
   test(`Ride empty state and setup have one primary action at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await syntheticBike(page);
-    const preferences = defaultMonitorPreferences();
-    preferences.workoutOptions.recordGPS = false;
-    await page.addInitScript(
-      preferences => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(preferences)),
-      JSON.parse(monitorPreferencesJson(preferences)),
-    );
     await page.goto('/');
     for (const id of ['humanPowerW', 'cadenceRpm', 'motorInputPowerW', 'controllerSpeedMps'])
       await expect(page.getByTestId(`monitor-number-${id}`)).toContainText('—');
@@ -39,12 +32,14 @@ for (const width of [320, 390, 1440]) {
       'GPS route Off',
       'Health Off',
       'Connection details',
-      'Permissions',
       'No permission changes needed',
       'Outdoor ·',
       'Firmware',
     ])
       await expect(sheet).not.toContainText(removed);
+    await expect(sheet.getByText('Permissions', { exact: true })).toBeVisible();
+    await expect(sheet).not.toContainText('needs location access');
+    await expect(sheet.getByRole('button', { name: 'Allow location', exact: true })).toBeVisible();
     await expect(sheet.getByRole('link', { name: 'Ride settings', exact: true })).toBeVisible();
     await expect(sheet.getByRole('button', { name: 'Done', exact: true })).toHaveCSS(
       'background-color',
@@ -76,6 +71,9 @@ for (const width of [320, 390, 1440]) {
     await sheet.getByTestId('setup-find-bike').click();
     await sheet.getByRole('button', { name: /^Connect CYC/ }).click();
     await expect(sheet.getByTestId('bike-connection-status')).toContainText('Connected');
+    await page.context().grantPermissions(['geolocation']);
+    await sheet.getByRole('button', { name: 'Allow location', exact: true }).click();
+    await expect(sheet.getByText('Permissions', { exact: true })).toHaveCount(0);
     await expect(sheet.getByTestId('setup-start-ride')).toBeEnabled();
     await expect(sheet.getByTestId('setup-start-ride')).toHaveCSS('background-color', accent);
     await page.screenshot({

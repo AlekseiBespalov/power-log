@@ -30,37 +30,6 @@ titles, captions, borders or audio. It retains every workflow step, accelerates 
 Handle drags run at 1.25×; other sections use 1–5× playback. The final recorded frame is held for 2.5 seconds. The edit
 plan and ffmpeg filter are retained as `dynamic-video-plan.json` and `dynamic-filter.txt` under the live-demo directory.
 
-This uses the separate `app.powerlog.lab` simulator build with bundled JavaScript (`Release` configuration and
-`ENABLE_TESTABILITY=YES` for the Lab's internal adapter access). It is not a production distribution build. The
-simulator-only `lab/apple/PowerLogLiveDemo.swift` source is enabled by the `-PowerLogLiveDemo YES` launch arguments.
-It supplies controller-precision readings at 8 Hz through the existing native Lab capture entry point; recording,
-storage, charts, controls and export use the normal app implementations. Health saving, GPS and Watch use are off.
-The normal generated production Xcode project was restored after capture.
-
-After preparing and validating an isolated Lab simulator app, capture with:
-
-```sh
-python3 artifacts/app-store/source/native-shots.py PHONE_SIMULATOR_ID /new/absolute/live-output --live --video
-python3 artifacts/app-store/source/native-shots.py PHONE_SIMULATOR_ID /new/absolute/all-metrics-output --all-metrics --video
-```
-
-The run retained 864 controller originals, five lifecycle events and a completed ride. The native UI check verified
-different cursor readings after dragging horizontally below the lines. Visual review confirmed both power markers
-move with the handle. SQLite integrity passed, and Garmin's FIT SDK validated the exported file with 110 records
-and two laps. These qualify the simulated demonstration, not physical controller or Health behavior.
-
-The `--all-metrics` capture uses `source/all-metrics.swift` and the additional `-PowerLogDemoAllMetrics YES` Lab
-argument. It enables all 31 selectable metrics in Numbers and Graphs before starting, scrolls through the 23 combined
-chart cards while recording, then demonstrates inspection, zoom, controls and export. This mode adds fictional GPS,
-heart rate and active energy directly through the local archive adapters and live-acquisition evidence. It does not
-write to HealthKit or require a Watch. The original default demo remains controller-only.
-
-`PowerLog-all-metrics.mp4` is the 63.3-second app-only cut of that capture. The complete native frame stays intact,
-without captions or borders. The local sources, edit timings and checks are in `artifacts/builds/apple/all-metrics-demo/`.
-The successful native UI run showed every chart, completed the ride and exported a FIT validated by Garmin's SDK:
-1,756 controller originals, 220 locations, 440 physiological observations, 221 FIT records and two laps. This is
-synthetic simulator evidence only. The finished video was fully decoded and all chart frames visually checked.
-
 Native capture sources are `source/native-shots.py`, `source/native-shots.swift` and `source/watch-shots.swift`.
 Prepare isolated booted simulators with the installed app and fictional data as described below, reset only those
 simulators' layout preferences, then run:
@@ -93,7 +62,7 @@ The exact first public build becomes the upgrade baseline when it is released, a
 
 ## Earlier reference sets
 
-Browser PNGs and their overview sheets are ignored generated output under `artifacts/app-store/screenshots/`; a fresh checkout uses the commands below to create them. The iPhone reference captures and overview remain tracked until their replacement capture is validated. Keep all capture sources and fictional example definitions in Git. These images are not application assets.
+All three sets and their overview sheets are tracked under `artifacts/app-store/screenshots/`; the commands below recreate them. Keep all capture sources and fictional example definitions in Git. These images are not application assets.
 
 | Set         | Captures                                                                                                                               | Local output          |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
@@ -120,17 +89,18 @@ macOS captures show the browser app, not a native Mac application. Example value
 
 ## Reproduce from the repository root
 
-For mobile and desktop web:
+For mobile and desktop web, build the runtime's browser test bundle once, then capture:
 
 ```sh
+shared/gradlew -p shared :runtime:jsTestTestDevelopmentExecutableCompileSync
 npx playwright test --config artifacts/app-store/source/web-shots.config.ts
 ```
 
-This starts the web app, records synthetic rides through the UI and writes both sets in about ten minutes. Playwright PNGs have no alpha channel.
+This starts the web app, saves two example rides through that bundle, records a third through the UI with a synthetic bike and writes both sets in about five minutes. Playwright PNGs have no alpha channel.
 
-The capture server uses `--no-dev --minify` so Settings has no development controls. GPS recording is switched off through Settings; no location or Health readings are injected. Start is pressed inside Ride setup; if the sheet remains open, Done dismisses it while the ride continues. The script verifies that the sheet is closed and recording is running, then waits for the actual ride timer, populated charts, original-observation cursor readings, loaded settings and completed modal animations before capturing; a missing state fails the run. Playwright failure output goes to `test-results/web-shots/`, separately from the iPhone examples.
+The capture server uses `--no-dev --minify` so Settings has no development controls. Settings switches GPS recording off and sets Metric units and °C; no location or Health readings are injected. Start is pressed inside Ride setup; if the sheet remains open, Done dismisses it while the ride continues. The script verifies that the sheet is closed and recording is running, then waits for the actual ride timer, populated charts, original-observation cursor readings, loaded settings and completed modal animations before capturing; a missing state fails the run. Playwright failure output goes to `test-results/web-shots/`, separately from the iPhone examples.
 
-The shared browser state retains the recorded rides, original samples, lifecycle events, revision records, preferences and chart checkpoints. For each ride/level/bucket it keeps the newest checkpoint, which the current History reader selects; older duplicate checkpoint revisions are omitted from the copy. This keeps Playwright's context restore small without changing the recorded data, selected checkpoints or database schema. Mobile live recording and effort inspection are scrolled to the readings; its live plots and recording controls must fit completely. Desktop live recording preserves the first-viewport framing: app header, timer, Pause/Lap/Finish, view and column controls, both chart headers and visible plotted lines. The scrollable chart cards may continue below the fold. Mobile Battery uses the layout editor to show its voltage graph with all three battery readings; desktop retains all three graphs.
+Both sets start from the same browser state: the archive saved after the two example rides. Charts load their data as they scroll into view, so each chart is scrolled to before its check. Mobile live recording and effort inspection are scrolled to the readings; its live plots and recording controls must fit completely. Desktop live recording preserves the first-viewport framing: app header, timer, Pause/Lap/Finish, view and column controls, both chart headers and visible plotted lines. The scrollable chart cards may continue below the fold. Mobile Battery uses the layout editor to show its voltage graph with all three battery readings; desktop retains all three graphs.
 
 Run the capture command above directly from the checkout in an environment with browser access.
 
@@ -138,9 +108,18 @@ After each run, inspect all sixteen PNGs individually. Verify mobile files are e
 
 For iPhone:
 
-1. Run `sh artifacts/app-store/source/generate.sh /new/absolute/output/PowerLog`. In a screenshot lane, use a fresh directory under the worktree's `test-results/iphone-shots/`. It builds the macOS shared core and reuses the host test source grouping and build cache (including its test support), then runs the current example writer. It verifies completion, Health origins, summary/plot readability and native export admission, and refuses to overwrite the output directory. Add `--smoke` to generate only three short rides; the everyday screenshot check runs this actual entry point and checks overwrite refusal. The sibling `example-values.json` reports the generated ride IDs, counts and summary values; hand off both paths to the simulator capture owner.
-2. Build for an iPhone 18 Pro Max simulator (1320 × 2868). Before installing, run `npm run test:ios-bundle -- /absolute/path/to/PowerLog.app` and verify its signing. Confirm the installed app remains alive after launch. Stop the app before copying the generated `PowerLog` into its `Library/Application Support/`. Use default layouts/units and Auto distance; do not copy personal data or a live SQLite database.
-3. Use `simctl status_bar` for 9:41, full Wi-Fi/battery, then run `python3 artifacts/app-store/source/native-shots.py <simulator-id> /new/absolute/output`. Copy its `01-history`, `02-ride-summary`, `03-power-cadence`, `06-battery-voltage`, `08-temperature`, `09-custom-dashboard` and `11-settings` captures to `screenshots/iphone/` as `01-history`, `02-ride-summary`, `03-effort-analysis`, `04-battery`, `05-temperature`, `06-custom-dashboard` and `07-settings`.
+1. Build a development build for an iPhone 18 Pro Max simulator (1320 × 2868) the way `thin-slice:phones` does: with
+   `POWER_LOG_DEV_CLIENT=1 POWER_LOG_APPLE_SLICE=simulator`, run `node scripts/prebuild.mjs --platform ios --no-install
+   --clean`, `sh scripts/install-pods.sh` and a Debug `xcodebuild` for `iphonesimulator`. Install it on a fresh
+   simulator and start Metro on IPv4 localhost
+   (`NODE_OPTIONS=--dns-result-order=ipv4first npx expo start --dev-client --localhost`). Open the build on Metro with
+   `xcrun simctl openurl <simulator-id> 'exp+power-log://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081&disableOnboarding=1&disableFab=1&disableAutoLaunch=1'`
+   and confirm Open; the flags keep the development client's onboarding and tools button out of the captures. In
+   Settings set Units to Metric and Temperature to °C, then Add example rides, which writes the three fictional example
+   rides with their Watch-origin Health observations and Health saving off through the app itself. Keep the default
+   layouts and Auto distance; never copy personal data into the simulator.
+2. Check History shows the three example rides as Example, each with its summary, charts and exports.
+3. Use `simctl status_bar` for 9:41, full Wi-Fi/battery, then, with Metro still running, run `python3 artifacts/app-store/source/native-shots.py <simulator-id> /new/absolute/output`. Copy its `01-history`, `02-ride-summary`, `03-power-cadence`, `06-battery-voltage`, `08-temperature`, `09-custom-dashboard` and `11-settings` captures to `screenshots/iphone/` as `01-history`, `02-ride-summary`, `03-effort-analysis`, `04-battery`, `05-temperature`, `06-custom-dashboard` and `07-settings`.
 4. Run `xcrun swift artifacts/app-store/source/export-rgb.swift artifacts/app-store/screenshots/iphone/*.png`. This removes unused alpha, rejects transparency and verifies decoded pixels are unchanged.
 
 After capture, generate overview sheets with `python3 artifacts/app-store/source/overview-sheets.py` (Pillow required); only these previews scale the captures. Pass `web macos` to regenerate only the browser overviews, or `iphone` for the native set.

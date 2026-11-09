@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { exportCsv } from '../helpers/export-csv';
-import { defaultMonitorPreferences, monitorPreferencesJson } from '../../src/core/monitor';
+import { seedSettings } from '../helpers/settings-store';
 import { syntheticSample } from '../fixtures/synthetic-sample';
 
 const phase = process.env.POWER_LOG_POLISH_PHASE ?? 'after';
@@ -136,26 +136,31 @@ async function screenshotCard(page: Page, group: string, name: string) {
 
 for (const width of [320, 390, 430, 440, 768, 1440, 1920])
   test(`readout widths, missing values and timestamps preserve chart layout at ${width}px`, async ({ page }) => {
-    const preferences = defaultMonitorPreferences();
-    preferences.activeView = 'battery';
-    preferences.views.battery.charts = [
-      'batteryCurrentA',
-      'motorCurrentA',
-      'batteryVoltageV',
-      'motorTempC',
-      'controllerTempC',
-      'controllerSpeedMps',
-      'speedMps',
-    ];
-    preferences.views.battery.numbers = ['controllerSpeedMps', 'motorCurrentA', 'heartRateBpm', 'motorTempC'];
-    if (width === 430 || width === 440) preferences.views.battery.numbers = [];
-    preferences.views.battery.webColumns = 3;
     await page.setViewportSize({ width, height: 1000 });
-    await page.addInitScript(
-      value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-      JSON.parse(monitorPreferencesJson(preferences)),
-    );
-    await page.goto('/sessions');
+    await seedSettings(page, {
+      app: {
+        units: 'metric',
+        activeView: 'battery',
+        views: {
+          battery: {
+            charts: [
+              'batteryCurrentA',
+              'motorCurrentA',
+              'batteryVoltageV',
+              'motorTempC',
+              'controllerTempC',
+              'controllerSpeedMps',
+              'speedMps',
+            ],
+            numbers:
+              width === 430 || width === 440
+                ? []
+                : ['controllerSpeedMps', 'motorCurrentA', 'heartRateBpm', 'motorTempC'],
+            webColumns: 3,
+          },
+        },
+      },
+    });
     await importFixture(page);
     const chart = page.getByTestId('monitor-chart-current');
     const speedReadout = page.getByTestId('monitor-readout-controllerSpeedMps');
@@ -229,6 +234,7 @@ for (const width of [320, 390, 430, 440, 768, 1440, 1920])
     comparing.push(await measurements(page));
     await screenshotCard(page, 'batteryVoltageV', `voltage-${width}-comparison.png`);
     await importFixture(page, true);
+    await expect(chart).toHaveAttribute('aria-valuetext', /Visible 00:00 to 10:00:22/);
     await chart.focus();
     await chart.press('End');
     await expect(chart).toHaveAttribute('aria-valuetext', /10:00:22 elapsed/);
@@ -258,15 +264,13 @@ test('intermediate widths keep Controller and GPS readouts stable through resize
   page,
 }) => {
   test.setTimeout(90000);
-  const preferences = defaultMonitorPreferences();
-  preferences.activeView = 'battery';
-  preferences.views.battery.numbers = [];
-  preferences.views.battery.charts = ['batteryCurrentA', 'controllerSpeedMps', 'speedMps'];
-  await page.addInitScript(
-    value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-    JSON.parse(monitorPreferencesJson(preferences)),
-  );
-  await page.goto('/sessions');
+  await seedSettings(page, {
+    app: {
+      units: 'metric',
+      activeView: 'battery',
+      views: { battery: { numbers: [], charts: ['batteryCurrentA', 'controllerSpeedMps', 'speedMps'] } },
+    },
+  });
   await importFixture(page);
   const chart = page.getByTestId('monitor-chart-speed');
   const results = [];
@@ -319,15 +323,18 @@ test('intermediate widths keep Controller and GPS readouts stable through resize
 });
 
 test('summary readings fit and retain height as values grow or remain unavailable', async ({ page }) => {
-  const preferences = defaultMonitorPreferences();
-  preferences.activeView = 'battery';
-  preferences.views.battery.numbers = ['controllerSpeedMps', 'motorCurrentA', 'heartRateBpm', 'motorTempC'];
-  preferences.views.battery.charts = ['batteryCurrentA'];
-  await page.addInitScript(
-    value => localStorage.setItem('power-log.monitor-preferences.v1', JSON.stringify(value)),
-    JSON.parse(monitorPreferencesJson(preferences)),
-  );
-  await page.goto('/sessions');
+  await seedSettings(page, {
+    app: {
+      units: 'metric',
+      activeView: 'battery',
+      views: {
+        battery: {
+          numbers: ['controllerSpeedMps', 'motorCurrentA', 'heartRateBpm', 'motorTempC'],
+          charts: ['batteryCurrentA'],
+        },
+      },
+    },
+  });
   const results = [];
   for (const width of [320, 390, 430, 440, 768, 1440, 1920]) {
     await page.setViewportSize({ width, height: 1000 });

@@ -1,14 +1,14 @@
 import { createElement, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { useChartInteraction, type ChartInteraction } from '../../src/components/use-chart-interaction';
+import { useChartInteraction, type ChartInteraction } from '../../src/components/charts/use-chart-interaction';
 import {
   moveChartInteraction,
   type ChartInteractionEvent,
   type ChartInteractionState,
   type ChartPresentation,
-} from '../../src/core/monitor-interaction';
+} from '../../src/components/charts/chart-interaction';
 import { rnTasks, scheduleOnRN, uiTasks } from '../helpers/chart-interaction-platform';
-import { useForegroundActivity } from '../../src/services/use-foreground-activity';
+import { useForegroundActivity } from '../../src/components/use-foreground-activity';
 
 export const initial: ChartPresentation = {
   domain: { start: 0, end: 100 },

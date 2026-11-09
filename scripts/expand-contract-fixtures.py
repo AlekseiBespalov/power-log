@@ -9,7 +9,7 @@ from protocol_fixtures import expand_fixture, overlay
 
 out = Path(sys.argv[1])
 shutil.copytree(root / "tests/fixtures/contract", out)
-for directory in ("watch-protocol", "health"):
+for directory in ("health",):
     for path in (out / directory).glob("*.json"):
         path.write_text(json.dumps(expand_fixture(json.loads(path.read_text()))))
 

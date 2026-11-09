@@ -4,13 +4,11 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { SessionProvider } from '../services/session-context';
 import { colors } from '../components/ui';
-import { WorkoutProvider } from '../services/workout-context';
-import { MonitorPreferencesProvider } from '../services/monitor-preferences';
 import { AppHeader } from '../components/app-header';
 import { TabBar } from '../components/tab-bar';
 import { PrivacyPolicy } from '../features/privacy/privacy-screen';
+import { ShellRoot } from '../features/shell/shell-root';
 export { ErrorScreen as ErrorBoundary } from '../components/error-screen';
 
 const native = Platform.OS !== 'web';
@@ -30,28 +28,24 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <MonitorPreferencesProvider>
-          <SessionProvider>
-            <WorkoutProvider>
-              <StatusBar style="light" />
-              <SafeAreaView
-                edges={native ? ['left', 'right'] : ['top', 'left', 'right']}
-                style={{ flex: 1, backgroundColor: colors.bg }}
-              >
-                {!native && <AppHeader />}
-                <Tabs
-                  tabBar={native ? props => <TabBar {...props} /> : () => null}
-                  backBehavior="fullHistory"
-                  screenOptions={{
-                    headerShown: false,
-                    animation: 'none',
-                    sceneStyle: { backgroundColor: colors.bg },
-                  }}
-                />
-              </SafeAreaView>
-            </WorkoutProvider>
-          </SessionProvider>
-        </MonitorPreferencesProvider>
+        <ShellRoot>
+          <StatusBar style="light" />
+          <SafeAreaView
+            edges={native ? ['left', 'right'] : ['top', 'left', 'right']}
+            style={{ flex: 1, backgroundColor: colors.bg }}
+          >
+            {!native && <AppHeader />}
+            <Tabs
+              tabBar={native ? props => <TabBar {...props} /> : () => null}
+              backBehavior="fullHistory"
+              screenOptions={{
+                headerShown: false,
+                animation: 'none',
+                sceneStyle: { backgroundColor: colors.bg },
+              }}
+            />
+          </SafeAreaView>
+        </ShellRoot>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

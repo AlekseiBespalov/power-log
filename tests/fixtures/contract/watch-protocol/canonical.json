@@ -1,15 +1,0 @@
-{
-"cases":[
-{"id":"negative-zero","component":"finiteBinary64Printer","input":{"binary64BitsHex":"8000000000000000"},"expected":{"canonicalUtf8":"0","wireNumericAdmissible":true}},
-{"id":"positive-zero","component":"finiteBinary64Printer","input":{"binary64BitsHex":"0000000000000000"},"expected":{"canonicalUtf8":"0","wireNumericAdmissible":true}},
-{"id":"plain-lower-bound","component":"finiteBinary64Printer","input":{"binary64BitsHex":"3eb0c6f7a0b5ed8d"},"expected":{"canonicalUtf8":"0.000001","wireNumericAdmissible":true}},
-{"id":"exponent-lower-bound","component":"finiteBinary64Printer","input":{"binary64BitsHex":"3e7ad7f29abcaf48"},"expected":{"canonicalUtf8":"1e-7","wireNumericAdmissible":true}},
-{"id":"plain-upper-bound","component":"finiteBinary64Printer","input":{"binary64BitsHex":"4415af1d78b58c40"},"expected":{"canonicalUtf8":"100000000000000000000","wireNumericAdmissible":false}},
-{"id":"exponent-upper-bound","component":"finiteBinary64Printer","input":{"binary64BitsHex":"444b1ae4d6e2ef50"},"expected":{"canonicalUtf8":"1e21","wireNumericAdmissible":false}},
-{"id":"smallest-subnormal","component":"finiteBinary64Printer","input":{"binary64BitsHex":"0000000000000001"},"expected":{"canonicalUtf8":"5e-324","wireNumericAdmissible":true}},
-{"id":"second-subnormal","component":"finiteBinary64Printer","input":{"binary64BitsHex":"0000000000000002"},"expected":{"canonicalUtf8":"1e-323","wireNumericAdmissible":true}},
-{"id":"negative-subnormal","component":"finiteBinary64Printer","input":{"binary64BitsHex":"8000000000000001"},"expected":{"canonicalUtf8":"-5e-324","wireNumericAdmissible":true}},
-{"id":"supplementary-key-scalar-order","component":"canonicalJSON","input":{"𐀀":2,"":1,"a":3,"🦊":4},"expected":{"canonicalUtf8":"{\"a\":3,\"\":1,\"𐀀\":2,\"🦊\":4}","keyOrder":["a","","𐀀","🦊"]}},
-{"id":"controls-and-unescaped-unicode","component":"canonicalJSON","input":{"value":"\u0000\b\t\n\f\r\u0001\u001f\"\\/é  "},"expected":{"canonicalUtf8":"{\"value\":\"\\u0000\\b\\t\\n\\f\\r\\u0001\\u001f\\\"\\\\/é  \"}"}}
-]
-}

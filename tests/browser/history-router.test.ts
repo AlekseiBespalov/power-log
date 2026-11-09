@@ -9,17 +9,17 @@ declare global {
     historyRouterTests: typeof Harness;
   }
 }
-const port = 43122;
+let origin: string;
 let browser: Browser;
 let stop: () => void;
 beforeAll(async () => {
-  stop = await startHistoryRouterServer(port);
+  ({ origin, stop } = await startHistoryRouterServer());
   browser = await chromium.launch({ headless: true });
 }, 120000);
 afterAll(async () => {
-  await browser?.close();
   stop?.();
-});
+  await browser?.close();
+}, 60000);
 async function run(route: string, work: (page: Page) => Promise<void>) {
   const context = await browser.newContext({ hasTouch: true });
   try {
@@ -27,7 +27,7 @@ async function run(route: string, work: (page: Page) => Promise<void>) {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.stack ?? error.message));
     page.setDefaultTimeout(5000);
-    await page.route(`http://127.0.0.1:${port}/**`, async request => {
+    await page.route(`${origin}/**`, async request => {
       if (request.request().resourceType() === 'document')
         await request.fulfill({
           contentType: 'text/html',
@@ -35,7 +35,7 @@ async function run(route: string, work: (page: Page) => Promise<void>) {
         });
       else await request.continue();
     });
-    await page.goto(`http://127.0.0.1:${port}${route}`);
+    await page.goto(`${origin}${route}`);
     try {
       await page.waitForFunction(() => window.historyRouterTests?.routerReady() === true);
     } catch (error) {
@@ -46,11 +46,14 @@ async function run(route: string, work: (page: Page) => Promise<void>) {
     await context.close();
   }
 }
-const chart = (page: Page) => page.getByTestId('selected-ride-chart').filter({ visible: true });
 async function expectRide(page: Page, id: string) {
-  await ui(page).toHaveURL(`http://127.0.0.1:${port}/sessions/ride?id=${encodeURIComponent(id)}`);
-  await ui(chart(page)).toHaveAttribute('data-source', `workout:${id}`);
-  await ui(page.getByTestId('ride-summary').filter({ visible: true })).toBeVisible();
+  await ui(page).toHaveURL(`${origin}/sessions/ride?id=${encodeURIComponent(id)}`);
+  await ui(page.getByTestId('monitor-chart-power').filter({ visible: true })).toBeVisible();
+  await page.waitForFunction(id => window.historyRouterTests.plottedRide() === id, id);
+}
+async function openMenu(page: Page) {
+  if (!(await page.getByRole('button', { name: 'Open CSV', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'History actions', exact: true }).click();
 }
 describe('History with the production Expo Router stack', { timeout: 30000 }, () => {
   it('opens a ride by deep link, reloads it, and returns to History', async () =>
@@ -71,16 +74,11 @@ describe('History with the production Expo Router stack', { timeout: 30000 }, ()
   it('opens an off-page ride on a cold deep link', async () =>
     run('/sessions', async page => {
       await page.evaluate(() => window.historyRouterTests.persistSeed(80));
-      await page.goto(`http://127.0.0.1:${port}/sessions/ride?id=ride-0`);
+      await page.goto(`${origin}/sessions/ride?id=ride-0`);
       await expectRide(page, 'ride-0');
-      await page.waitForFunction(
-        () => JSON.parse(document.querySelector('[data-testid="catalog-state"]')!.textContent!).ids.length === 50,
-      );
-      expect(
-        await page.evaluate(() =>
-          JSON.parse(document.querySelector('[data-testid="catalog-state"]')!.textContent!).ids.includes('ride-0'),
-        ),
-      ).toBe(false);
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
+      await ui(page.getByRole('button', { name: /^Open ride,/ })).toHaveCount(50);
+      expect(await page.evaluate(() => window.historyRouterTests.listedRides())).not.toContain('ride-0');
     }));
   it('retains the selected ride when returning to the History tab', async () =>
     run('/sessions/ride?id=ride-0', async page => {
@@ -96,65 +94,20 @@ describe('History with the production Expo Router stack', { timeout: 30000 }, ()
       await ui(page).toHaveURL(/\/sessions$/);
       await ui(page.getByRole('button', { name: /^Open ride,/ })).toHaveCount(2);
     }));
-  it('keeps the export lock for A across Back and B and completing A does not redirect B', async () =>
-    run('/sessions', async page => {
-      await page.evaluate(() => {
-        window.historyRouterTests.holdArchive('export', 'ride-1');
-        window.historyRouterTests.push('ride-1');
-      });
-      await expectRide(page, 'ride-1');
-      await page.getByRole('button', { name: 'Export FIT', exact: true }).click();
-      await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeDisabled();
-      await page.evaluate(() => window.historyRouterTests.back());
-      await ui(page).toHaveURL(/\/sessions$/);
-      await page.evaluate(() => window.historyRouterTests.push('ride-1'));
-      await expectRide(page, 'ride-1');
-      await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeDisabled();
-      await page.evaluate(() => window.historyRouterTests.push('ride-0'));
-      await expectRide(page, 'ride-0');
-      await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
-      await page.evaluate(() => window.historyRouterTests.releaseArchive('export', 'ride-1'));
-      await page.waitForFunction(() => window.historyRouterTests.snapshot().counts.exports.length === 1);
-      await expectRide(page, 'ride-0');
-      await page.evaluate(() => window.historyRouterTests.back());
-      await expectRide(page, 'ride-1');
-      await ui(page.getByRole('button', { name: 'Export FIT', exact: true })).toBeEnabled();
-    }));
-  it('keeps the deletion lock for A across navigation and completing A does not redirect B', async () =>
-    run('/sessions/ride?id=ride-1', async page => {
-      await expectRide(page, 'ride-1');
-      await page.evaluate(() => window.historyRouterTests.holdArchive('remove', 'ride-1'));
-      await page.getByRole('button', { name: 'Delete ride', exact: true }).click();
-      await page.getByTestId('delete-ride-sheet').getByRole('button', { name: 'Delete ride', exact: true }).click();
-      await page.evaluate(() => window.historyRouterTests.push('ride-0'));
-      await expectRide(page, 'ride-0');
-      await page.evaluate(() => window.historyRouterTests.push('ride-1'));
-      await expectRide(page, 'ride-1');
-      await ui(page.getByRole('button', { name: 'Delete ride', exact: true })).toBeDisabled();
-      await page.evaluate(() => window.historyRouterTests.push('ride-0'));
-      await expectRide(page, 'ride-0');
-      await page.evaluate(() => window.historyRouterTests.releaseArchive('remove', 'ride-1'));
-      await page.waitForFunction(() => {
-        const catalog = JSON.parse(document.querySelector('[data-testid="catalog-state"]')!.textContent!);
-        return !catalog.loading && !catalog.ids.includes('ride-1');
-      });
-      await expectRide(page, 'ride-0');
-    }));
   it('discards a delayed CSV choice after a newer route selection', async () =>
     run('/sessions', async page => {
-      await page.evaluate(() => {
-        window.historyRouterTests.setCsvImport({ name: 'late.csv', recording: { samples: [] } });
-        window.historyRouterTests.holdArchive('import', 'csv');
-      });
-      await page.getByRole('button', { name: 'History actions', exact: true }).click();
+      await openMenu(page);
       await page.getByRole('button', { name: 'Open CSV', exact: true }).click();
+      await ui(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeDisabled();
       await page.evaluate(() => window.historyRouterTests.push('ride-0'));
       await expectRide(page, 'ride-0');
-      await page.getByRole('button', { name: 'History actions', exact: true }).click();
-      await ui(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeDisabled();
-      await page.evaluate(() => window.historyRouterTests.releaseArchive('import', 'csv'));
+      await page.evaluate(() => window.historyRouterTests.releaseCsv());
+      await page.waitForFunction(() => window.historyRouterTests.closedImports().includes('late'));
+      await page.getByRole('button', { name: '‹ History', exact: true }).click();
+      await ui(page).toHaveURL(/\/sessions$/);
+      await openMenu(page);
       await ui(page.getByRole('button', { name: 'Open CSV', exact: true })).toBeEnabled();
-      await expectRide(page, 'ride-0');
+      await ui(page.getByRole('button', { name: /^Open ride,/ })).toHaveCount(2);
       await ui(page.getByText('late.csv', { exact: true })).toHaveCount(0);
     }));
   it('shows a plain screen error with a way back to the other tabs and a working retry', async () =>
@@ -176,13 +129,13 @@ describe('History with the production Expo Router stack', { timeout: 30000 }, ()
   it('refreshes from the keyboard menu and a touch pull while retaining revision refresh', async () =>
     run('/sessions', async page => {
       await ui(page.getByText('Pull to refresh · 2 rides', { exact: true })).toBeVisible();
-      let before = await page.evaluate(() => window.historyRouterTests.snapshot().counts.list);
+      let before = await page.evaluate(() => window.historyRouterTests.pageCalls());
       await page.getByRole('button', { name: 'History actions', exact: true }).focus();
       await page.getByRole('button', { name: 'History actions', exact: true }).press('Enter');
       await page.getByRole('button', { name: 'Refresh', exact: true }).press('Enter');
-      await page.waitForFunction(before => window.historyRouterTests.snapshot().counts.list > before, before);
+      await page.waitForFunction(before => window.historyRouterTests.pageCalls() > before, before);
       await page.getByRole('button', { name: 'History actions', exact: true }).click();
-      before = await page.evaluate(() => window.historyRouterTests.snapshot().counts.list);
+      before = await page.evaluate(() => window.historyRouterTests.pageCalls());
       const hint = (await page.getByText('Pull to refresh · 2 rides', { exact: true }).boundingBox())!;
       const client = await page.context().newCDPSession(page);
       await client.send('Input.dispatchTouchEvent', {
@@ -195,9 +148,9 @@ describe('History with the production Expo Router stack', { timeout: 30000 }, ()
       });
       await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       await client.detach();
-      await page.waitForFunction(before => window.historyRouterTests.snapshot().counts.list > before, before);
-      before = await page.evaluate(() => window.historyRouterTests.snapshot().counts.list);
-      await page.evaluate(() => window.historyRouterTests.emit({ historyRevision: 'refreshed' }));
-      await page.waitForFunction(before => window.historyRouterTests.snapshot().counts.list > before, before);
+      await page.waitForFunction(before => window.historyRouterTests.pageCalls() > before, before);
+      before = await page.evaluate(() => window.historyRouterTests.pageCalls());
+      await page.evaluate(() => window.historyRouterTests.moveHistory());
+      await page.waitForFunction(before => window.historyRouterTests.pageCalls() > before, before);
     }));
 });

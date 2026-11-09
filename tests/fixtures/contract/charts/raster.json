@@ -1,0 +1,404 @@
+{
+  "source": "fixture",
+  "scene": {
+    "key": "fixture-scene",
+    "sourceId": "fixture",
+    "revision": "7",
+    "startS": 0,
+    "endS": 10,
+    "min": 0,
+    "max": 100,
+    "decimals": 1,
+    "laneCount": 2,
+    "series": [
+      {
+        "id": "humanPowerW",
+        "color": "#ff873c",
+        "step": false,
+        "points": [
+          [0, 50, true],
+          [5, 60, false],
+          [10, 55, false]
+        ]
+      },
+      {
+        "id": "assistLevel",
+        "color": "#9ba6b6",
+        "step": true,
+        "points": [
+          [2, 1, true],
+          [8, 3, true]
+        ]
+      }
+    ]
+  },
+  "selection": {
+    "sourceId": "fixture",
+    "revision": "7",
+    "epoch": 2,
+    "sequence": 3,
+    "cursorPending": false,
+    "cursorS": 5,
+    "referenceS": 2,
+    "points": [
+      {
+        "id": "humanPowerW",
+        "atS": 5,
+        "value": 60
+      }
+    ],
+    "references": [
+      {
+        "id": "humanPowerW",
+        "atS": 0,
+        "value": 50
+      }
+    ],
+    "tails": [
+      {
+        "id": "humanPowerW",
+        "startS": 10,
+        "endS": 12,
+        "value": 55
+      }
+    ]
+  },
+  "target": {
+    "epoch": 2,
+    "sequence": 3,
+    "points": [
+      {
+        "key": "view:1",
+        "id": "humanPowerW",
+        "atS": 5,
+        "value": 60
+      }
+    ]
+  },
+  "rejected": [
+    {
+      "case": "another source",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "other",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "empty time range",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 0,
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "empty value scale",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 0,
+        "decimals": 1,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "decimals outside 0–8",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 100,
+        "decimals": 9,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "lane count outside 1–128",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "laneCount": 0,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "colour not #rrggbb",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "red",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "points out of time order",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [5, 60, true],
+              [1, 50, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "duplicate series",
+      "scene": {
+        "key": "fixture-scene",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          },
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "empty key",
+      "scene": {
+        "key": "",
+        "sourceId": "fixture",
+        "revision": "7",
+        "startS": 0,
+        "endS": 10,
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "laneCount": 2,
+        "series": [
+          {
+            "id": "humanPowerW",
+            "color": "#ff873c",
+            "step": false,
+            "points": [
+              [0, 50, true],
+              [5, 60, false],
+              [10, 55, false]
+            ]
+          },
+          {
+            "id": "assistLevel",
+            "color": "#9ba6b6",
+            "step": true,
+            "points": [
+              [2, 1, true],
+              [8, 3, true]
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

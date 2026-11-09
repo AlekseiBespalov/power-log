@@ -13,24 +13,14 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('device', help='Explicit booted simulator UDID')
 parser.add_argument('output', type=Path, help='New local capture directory')
 parser.add_argument('--video', action='store_true')
-mode = parser.add_mutually_exclusive_group()
-mode.add_argument('--watch', action='store_true')
-mode.add_argument('--live', action='store_true', help='Record the simulator-only Lab sensor demo')
-mode.add_argument('--all-metrics', action='store_true', help='Record every metric in the simulator-only Lab demo')
+parser.add_argument('--watch', action='store_true')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[3]
 output = args.output.resolve()
 output.mkdir(parents=True, exist_ok=False)
 build = output / 'harness'
 build.mkdir()
-source_name = 'native-shots.swift'
-if args.watch:
-    source_name = 'watch-shots.swift'
-elif args.all_metrics:
-    source_name = 'all-metrics.swift'
-elif args.live:
-    source_name = 'live-ride.swift'
-source = Path(__file__).with_name(source_name)
+source = Path(__file__).with_name('watch-shots.swift' if args.watch else 'native-shots.swift')
 shutil.copy2(source, build / 'CaptureTests.swift')
 env = os.environ.copy()
 env.setdefault('BUNDLE_PATH', str(Path.home() / '.cache/power-log/bundle'))
@@ -39,8 +29,7 @@ def command(*argv, **kwargs):
     return subprocess.run(argv, cwd=root, env=env, check=True, **kwargs)
 
 # simctl accepts simulator identifiers only; this runner never addresses physical devices.
-lab_demo = args.live or args.all_metrics
-bundle = 'app.powerlog.lab' if lab_demo else 'app.powerlog.mobile'
+bundle = 'app.powerlog.mobile'
 if args.watch:
     bundle += '.watchkitapp'
 command('xcrun', 'simctl', 'get_app_container', args.device, bundle, 'data', stdout=subprocess.DEVNULL)
@@ -65,9 +54,6 @@ command('bundle', 'exec', 'ruby', '-e', ruby, str(build))
 test_arguments = ['-project', str(build / 'Capture.xcodeproj'), '-scheme', 'Capture',
                   '-destination', f'platform={"watchOS" if args.watch else "iOS"} Simulator,id={args.device}',
                   '-derivedDataPath', str(build / 'build'), '-parallel-testing-enabled', 'NO', 'CODE_SIGNING_ALLOWED=NO']
-if lab_demo:
-    with (output / 'harness-build.log').open('w') as log:
-        command('xcodebuild', 'build-for-testing', *test_arguments, stdout=log, stderr=subprocess.STDOUT)
 recorder = None
 metadata = {'device': args.device, 'fictionalData': True, 'platform': 'native watchOS Simulator' if args.watch else 'native iOS Simulator'}
 metadata['bundleIdentifier'] = bundle
@@ -82,7 +68,7 @@ try:
         if 'recordingStartedAt' not in metadata:
             raise RuntimeError('Simulator video did not start')
     with (output / 'capture.log').open('w') as log:
-        command('xcodebuild', 'test-without-building' if lab_demo else 'test', *test_arguments,
+        command('xcodebuild', 'test', *test_arguments,
                 '-resultBundlePath', str(output / 'capture.xcresult'), stdout=log, stderr=subprocess.STDOUT)
 finally:
     if recorder:

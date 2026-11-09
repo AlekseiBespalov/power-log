@@ -1,0 +1,30 @@
+[
+  { "ok": true, "value": { "rows": [], "next": null }, "now": 0 },
+  {
+    "ok": true,
+    "value": {
+      "rows": [
+        {
+          "rideId": "11111111-1111-4111-8111-111111111111",
+          "startedUtcUs": 1793523600000000,
+          "elapsedUs": 1800250000,
+          "phase": "completed",
+          "interrupted": false,
+          "indoor": false,
+          "example": false,
+          "health": {
+            "provider": "appleHealth",
+            "writer": "phone",
+            "outcome": "saved",
+            "reason": null,
+            "components": []
+          },
+          "open": { "enabled": true, "reason": null },
+          "delete": { "enabled": false, "reason": "exportInProgress" }
+        }
+      ],
+      "next": "1793523600000000:11111111-1111-4111-8111-111111111111"
+    },
+    "now": 9007199254740991
+  }
+]
