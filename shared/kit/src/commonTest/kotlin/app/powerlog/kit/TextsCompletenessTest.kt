@@ -141,8 +141,16 @@ class TextsCompletenessTest {
     @Test
     fun everySettingButTheViewsHasATitle() {
         val fields =
-            listOf("sampleRate", "distance", "battery", "indoor", "useWatch", "saveToHealth", "recordGps") +
-                listOf("units", "temperature", "fitPower", "activeView", "historyView", "historyRange")
+            listOf(
+                "sampleRate",
+                "distance",
+                "battery",
+                "indoor",
+                "useWatch",
+                "saveToHealth",
+                "recordGps",
+                "syncBeeps",
+            ) + listOf("units", "temperature", "fitPower", "activeView", "historyView", "historyRange")
         val declared =
             listOf(RideSettings.serializer().descriptor, AppSettings.serializer().descriptor)
                 .flatMap { descriptor -> List(descriptor.elementsCount, descriptor::getElementName) }

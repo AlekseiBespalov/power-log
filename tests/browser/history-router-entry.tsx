@@ -98,6 +98,7 @@ const settings: SettingsView = {
     useWatch: false,
     saveToHealth: false,
     recordGps: null,
+    syncBeeps: false,
   },
   app: {
     units: 'metric',

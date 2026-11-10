@@ -10,6 +10,7 @@ import app.powerlog.domain.core.ride.RideAction
 import app.powerlog.domain.core.ride.RideOptions
 import app.powerlog.domain.core.ride.RidePhase
 import app.powerlog.domain.core.ride.TimerState
+import app.powerlog.domain.recording.CueAction
 import app.powerlog.domain.recording.PermissionAction
 import app.powerlog.domain.recording.PermissionNeed
 import app.powerlog.domain.recording.RideAllowed
@@ -22,7 +23,11 @@ public interface RecordingApi {
 
     public suspend fun start(input: Empty): Outcome<Unit>
 
+    public suspend fun cancelStart(input: Empty): Outcome<Unit>
+
     public suspend fun control(input: ControlInput): Outcome<Unit>
+
+    public suspend fun testBeep(input: Empty): Outcome<Unit>
 
     public suspend fun requestPermissions(input: Empty): Outcome<Unit>
 
@@ -34,6 +39,7 @@ public data class RecordingView(
     public val phase: RidePhase?,
     public val ride: OpenRideView?,
     public val pending: RideAction?,
+    public val cue: CueView?,
     public val timer: TimerView,
     public val allowed: RideAllowed,
     public val finishRequest: FinishRequestView?,
@@ -44,6 +50,8 @@ public data class RecordingView(
 )
 
 @Serializable public data class OpenRideView(public val rideId: RideId, public val options: RideOptions)
+
+@Serializable public data class CueView(public val action: CueAction, public val atMonoUs: Long)
 
 @Serializable
 public data class TimerView(public val state: TimerState, public val baseUs: Long, public val originMonoUs: Long?)

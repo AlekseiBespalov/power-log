@@ -148,6 +148,13 @@ export interface ControllerIdentity {
   protocol: string;
 }
 
+export type CueAction = 'start' | 'resume' | 'finish';
+
+export interface CueView {
+  action: CueAction;
+  atMonoUs: number;
+}
+
 export type Device = 'iphone' | 'androidPhone' | 'browser' | 'appleWatch';
 
 export interface DeviceCapabilities {
@@ -582,6 +589,7 @@ export interface RecordingView {
   phase: RidePhase | null;
   ride: OpenRideView | null;
   pending: RideAction | null;
+  cue: CueView | null;
   timer: TimerView;
   allowed: RideAllowed;
   finishRequest: FinishRequestView | null;
@@ -647,9 +655,10 @@ export interface RideSettings {
   useWatch: boolean;
   saveToHealth: boolean;
   recordGps: boolean | null;
+  syncBeeps: boolean;
 }
 
-export type RideToggle = 'indoor' | 'useWatch' | 'saveToHealth';
+export type RideToggle = 'indoor' | 'useWatch' | 'saveToHealth' | 'syncBeeps';
 
 export interface RideView {
   rideId: string;
@@ -914,10 +923,12 @@ export interface Calls {
   'history.page': { input: HistoryPageInput; output: HistoryPage };
   'imports.close': { input: ImportInput; output: null };
   'imports.open': { input: KeyInput; output: ImportedRideView };
+  'recording.cancelStart': { input: Empty; output: null };
   'recording.control': { input: ControlInput; output: null };
   'recording.refreshPermissions': { input: Empty; output: null };
   'recording.requestPermissions': { input: Empty; output: null };
   'recording.start': { input: Empty; output: null };
+  'recording.testBeep': { input: Empty; output: null };
   'settings.change': { input: SettingsChange; output: null };
 }
 
@@ -996,7 +1007,8 @@ export type FailureCode =
   | 'importUnreadable'
   | 'settingsSaveFailed'
   | 'uiUnavailable'
+  | 'syncBeepFailed'
   | 'apiMismatch'
   | 'unknown';
 
-export const API_HASH = '06e8873292ea985e';
+export const API_HASH = '566fa83534aba78b';

@@ -465,6 +465,7 @@ abstract class DurabilityContract : ArchiveContract() {
                     useWatch = true,
                     saveToHealth = true,
                     recordGps = null,
+                    syncBeeps = false,
                 ),
             app =
                 AppSettings(

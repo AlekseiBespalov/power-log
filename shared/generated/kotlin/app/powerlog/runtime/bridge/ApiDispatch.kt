@@ -105,6 +105,8 @@ internal class ApiDispatch(private val api: PowerLogApi, private val codec: Wire
                 codec.answerUnit(api.imports.close(codec.decode(ImportInput.serializer(), input)))
             "imports.open" ->
                 codec.answer(ImportedRideView.serializer(), api.imports.open(codec.decode(KeyInput.serializer(), input)))
+            "recording.cancelStart" ->
+                codec.answerUnit(api.recording.cancelStart(codec.decode(Empty.serializer(), input)))
             "recording.control" ->
                 codec.answerUnit(api.recording.control(codec.decode(ControlInput.serializer(), input)))
             "recording.refreshPermissions" ->
@@ -113,6 +115,8 @@ internal class ApiDispatch(private val api: PowerLogApi, private val codec: Wire
                 codec.answerUnit(api.recording.requestPermissions(codec.decode(Empty.serializer(), input)))
             "recording.start" ->
                 codec.answerUnit(api.recording.start(codec.decode(Empty.serializer(), input)))
+            "recording.testBeep" ->
+                codec.answerUnit(api.recording.testBeep(codec.decode(Empty.serializer(), input)))
             "settings.change" ->
                 codec.answerUnit(api.settings.change(codec.decode(SettingsChange.serializer(), input)))
             else -> null

@@ -79,6 +79,9 @@ published on the App Store.
 - **Settings** holds the recording defaults: Watch companion, phone GPS, Health saving, distance source and the 2, 4
   or 8 Hz rate. They freeze at Start. Settings also chooses Metric or Imperial units and °C or °F.
 - **Apple Watch:** Watch Start waits up to 15 seconds. If it fails, turn off Apple Watch in Settings and start again.
+- **Video sync beeps** (Settings, off by default): the phone beeps at Start, Resume and Finish, and the ride starts,
+  resumes and ends on the beep. In OVRLEY or Telemetry Overlay, line the start of the FIT or CSV up with the start
+  beep in the camera's sound, or the end with the finish beep.
 - **After an interruption,** finish the saved portion or discard it. Finishing a ride and exporting it never wait for
   Health.
 - **History** shows each ride's status, summary, charts and exports. **Open CSV** reads the `telemetry.csv` of a

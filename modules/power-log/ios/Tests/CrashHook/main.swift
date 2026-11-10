@@ -20,7 +20,7 @@ func compose(_ root: URL) -> PowerLogRuntime {
       permissions: ApplePermissionGate(queue: ride),
       picker: AppleFilePicker(documents: AttachedDocuments.shared, queue: ride), device: AppleDeviceInfo(),
       ble: nil, location: nil, health: nil, keepAlive: nil, tabLock: nil, persistence: nil, rideCard: nil,
-      watch: nil, scheduler: nil),
+      watch: nil, scheduler: nil, tones: nil),
     directories: AppleDirectories(
       archive: root.appendingPathComponent("archive").path, cache: root.appendingPathComponent("cache").path,
       diagnostics: root.appendingPathComponent("diagnostics").path),

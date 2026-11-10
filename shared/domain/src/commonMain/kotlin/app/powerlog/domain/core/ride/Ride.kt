@@ -143,6 +143,7 @@ public data class RideSettings(
     public val useWatch: Boolean,
     public val saveToHealth: Boolean,
     public val recordGps: Boolean?,
+    public val syncBeeps: Boolean,
 )
 
 public object RideOptionsRules {

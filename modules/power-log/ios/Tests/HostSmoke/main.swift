@@ -46,7 +46,7 @@ let ports = Ports(
   permissions: ApplePermissionGate(queue: ride),
   picker: AppleFilePicker(documents: AttachedDocuments.shared, queue: ride), device: AppleDeviceInfo(),
   ble: nil, location: nil, health: nil, keepAlive: nil, tabLock: nil, persistence: nil, rideCard: nil, watch: nil,
-  scheduler: nil)
+  scheduler: nil, tones: nil)
 let switches = DevSwitches(bike: true, longRide: false, slice: false, crashAfterUs: nil, killAfterUs: nil)
 let runtime = AppleRuntime.shared.create(
   queues: queues, clock: clock, ports: ports,

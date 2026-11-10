@@ -3,6 +3,7 @@ import {
   type ApiFailure,
   type Availability,
   type ConnectionView,
+  type CueView,
   type FailureCode,
   type PermissionsView,
   type RecordingView,
@@ -70,6 +71,7 @@ export interface RideControlsState {
   bar: { label: string; opensSetup: boolean } | null;
   start: ControlState;
   startReason: string | null;
+  cancelStart: ControlState | null;
   pauseOrResume: ControlState | null;
   lap: ControlState | null;
   finish: ControlState | null;
@@ -84,7 +86,7 @@ export interface RideControlsState {
   finishSheet: FinishSheetState | null;
 }
 
-type Command = 'start' | 'pause' | 'resume' | 'lap' | 'finish' | 'discard' | 'permissions';
+type Command = 'start' | 'cancelStart' | 'pause' | 'resume' | 'lap' | 'finish' | 'discard' | 'permissions';
 
 const waitingTexts: Partial<Record<RideAction, string>> = {
   finish: 'Saving…',
@@ -93,6 +95,8 @@ const waitingTexts: Partial<Record<RideAction, string>> = {
   resume: 'Waiting for the ride to respond…',
   lap: 'Waiting for the ride to respond…',
 };
+
+const beepTexts = { resume: 'Resuming on the beep…', finish: 'Finishing on the beep…' } as const;
 
 const sourceTitles = { controller: 'Bike', heartRate: 'Heart rate', gps: 'GPS' } as const;
 
@@ -109,6 +113,7 @@ const initial: RideControlsState = {
   bar: null,
   start: initialControl,
   startReason: null,
+  cancelStart: null,
   pauseOrResume: null,
   lap: null,
   finish: null,
@@ -139,6 +144,7 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
   private stopPermissions: (() => void) | null = null;
   private stopDisplay: (() => void) | null = null;
   private tick: ReturnType<typeof setInterval> | undefined;
+  private tickMs: number | null = null;
 
   constructor(private readonly env: UiEnv) {}
 
@@ -217,6 +223,14 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
           this.haptic('success');
         } else if (answer.failure.code !== 'startCancelled') this.haptic('warning');
       },
+    );
+  }
+
+  cancelStart(): void {
+    this.command(
+      'cancelStart',
+      () => this.env.client.call('recording.cancelStart', {}),
+      () => {},
     );
   }
 
@@ -387,12 +401,20 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
     );
   }
 
-  private followTimer(running: boolean): void {
-    if (running && this.stops.length && this.tick === undefined) this.tick = setInterval(() => this.publish(), 1000);
-    if (!running && this.tick !== undefined) {
+  private secondsUntil(atMonoUs: number): number | null {
+    const at = this.env.client.localTime(atMonoUs);
+    return at === null ? null : Math.max(0, Math.ceil((at - performance.now()) / 1000));
+  }
+
+  private followTimer(running: boolean, counting: boolean): void {
+    const everyMs = counting ? 250 : running ? 1000 : null;
+    if (this.tick !== undefined && everyMs !== this.tickMs) {
       clearInterval(this.tick);
       this.tick = undefined;
     }
+    this.tickMs = everyMs;
+    if (everyMs !== null && this.stops.length && this.tick === undefined)
+      this.tick = setInterval(() => this.publish(), everyMs);
   }
 
   private permissionRow(): PermissionRow | null {
@@ -455,10 +477,12 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
       this.snapshots.set({ ...this.snapshots.get(), notice: lost });
       return;
     }
-    const { phase, ride, allowed, pending } = view;
+    const { phase, ride, allowed, pending, cue } = view;
     const open = ride !== null;
     this.followPermissions(open);
-    this.followTimer(view.timer.state === 'running');
+    const counting = cue?.action === 'start';
+    const countdown = cue?.action === 'start' ? this.secondsUntil(cue.atMonoUs) : null;
+    this.followTimer(view.timer.state === 'running', counting);
     const target = this.finishTarget;
     if (target && (!ride || ride.rideId !== target.rideId || identity(phase) !== target.identity)) {
       this.finishTarget = null;
@@ -483,6 +507,7 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
         item => item && !this.env.shell.dismissed(item.id),
       ) ?? null;
     const startReason = busy('start') ? this.text('actionPending') : this.reason(allowed.start);
+    const startLabel = countdown !== null ? `Starting in ${countdown}` : starting ? 'Starting…' : 'Start ride';
     const finishSheet = this.finishTarget
       ? {
           step: this.discardStep ? ('discard' as const) : ('confirm' as const),
@@ -513,15 +538,10 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
           }
         : null,
       details: ride ? this.details(view, ride.options) : null,
-      bar: open
-        ? null
-        : starting
-          ? { label: 'Starting…', opensSetup: false }
-          : allowed.start.enabled && !permission && bikeShown
-            ? { label: 'Start ride', opensSetup: false }
-            : { label: 'Set up ride', opensSetup: true },
-      start: control(starting ? 'Starting…' : 'Start ride', busy('start'), startReason),
+      bar: open ? null : bar(startLabel, starting || counting, allowed.start.enabled && !permission && bikeShown),
+      start: control(startLabel, busy('start'), startReason),
       startReason,
+      cancelStart: counting ? control('Cancel', busy('cancelStart'), null) : null,
       pauseOrResume:
         phase === 'running' || phase === 'paused' || phase === 'interrupted'
           ? phase === 'paused'
@@ -538,7 +558,7 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
           : null,
       stop: phase === 'preparing' ? control('Stop', busy('discard'), this.reason(allowed.discard)) : null,
       reviewRide: phase === 'interrupted',
-      waiting: phase === 'preparing' ? 'Starting ride…' : pending ? (waitingTexts[pending] ?? null) : null,
+      waiting: waiting(phase, cue, pending),
       setupOpen: this.setupOpen,
       bikeShown,
       ownerForeign: view.otherTab ? this.text('ownerForeign') : null,
@@ -550,5 +570,16 @@ export class RideControlsModel implements ScreenModel<RideControlsState> {
 }
 
 const sourceTone = (tone: string): SourceLine['tone'] => (tone === 'ready' || tone === 'warning' ? tone : 'neutral');
+
+function bar(startLabel: string, starting: boolean, ready: boolean): RideControlsState['bar'] {
+  if (starting) return { label: startLabel, opensSetup: false };
+  return ready ? { label: 'Start ride', opensSetup: false } : { label: 'Set up ride', opensSetup: true };
+}
+
+function waiting(phase: RidePhase | null, cue: CueView | null, pending: RideAction | null): string | null {
+  if (phase === 'preparing') return 'Starting ride…';
+  if (cue && cue.action !== 'start') return beepTexts[cue.action];
+  return pending ? (waitingTexts[pending] ?? null) : null;
+}
 
 const identity = (phase: RidePhase | null) => (phase === 'interrupted' ? 'interrupted' : 'active');

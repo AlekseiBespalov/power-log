@@ -1481,7 +1481,7 @@ function ride($this, fields) {
     // Inline function 'kotlin.let' call
     tmp_3 = $this.battery_1.valueOrNull_nu53nj_k$(tmp2_safe_receiver);
   }
-  return new RideSettingsDraft(tmp_0, tmp_2, tmp_3, flag($this, fields, 'indoor'), flag($this, fields, 'useWatch'), flag($this, fields, 'saveToHealth'), flag($this, fields, 'recordGps'));
+  return new RideSettingsDraft(tmp_0, tmp_2, tmp_3, flag($this, fields, 'indoor'), flag($this, fields, 'useWatch'), flag($this, fields, 'saveToHealth'), flag($this, fields, 'recordGps'), flag($this, fields, 'syncBeeps'));
 }
 function app($this, fields) {
   var tmp0_safe_receiver = text($this, fields, 'units');
@@ -4831,7 +4831,7 @@ function IdbMeasurementRepository$events$lambda(row) {
 function TelemetryCollector$take$ref(p0) {
   return constructCallableReference(function (p0_0) {
     return p0.take_g2ft2v_k$(p0_0);
-  }, 1, 0, 44, 'take', [p0]);
+  }, 1, 0, 46, 'take', [p0]);
 }
 function IdbMeasurementRepository$telemetry$lambda($page) {
   return function () {

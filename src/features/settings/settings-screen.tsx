@@ -316,6 +316,21 @@ function SettingsGroups({
               <Text style={{ color: colors.muted, fontSize: type.caption }}>{state.healthNote}</Text>
             )}
             {picker('sampleRate')}
+            {toggle('syncBeeps')}
+            {state.toggles.syncBeeps && (
+              <Text style={{ color: colors.muted, fontSize: type.caption }}>
+                Beeps at Start, Resume and Finish. The ride starts, resumes and ends on the last, higher beep, so video
+                tools can line up the ride’s files with the camera’s sound.
+              </Text>
+            )}
+            {state.testBeep && (
+              <Button secondary disabled={state.testBeep.play.busy} onPress={() => model.playTestBeep()}>
+                {state.testBeep.play.label}
+              </Button>
+            )}
+            {state.testBeep?.result && (
+              <Text style={{ color: colors.red, fontSize: type.caption }}>{state.testBeep.result}</Text>
+            )}
           </SettingsGroup>
         </View>
       </View>

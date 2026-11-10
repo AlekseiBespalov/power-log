@@ -58,6 +58,7 @@ internal object SettingsCodec {
             useWatch = fields.flag("useWatch"),
             saveToHealth = fields.flag("saveToHealth"),
             recordGps = fields.flag("recordGps"),
+            syncBeeps = fields.flag("syncBeeps"),
         )
 
     private fun app(fields: JsonObject) =

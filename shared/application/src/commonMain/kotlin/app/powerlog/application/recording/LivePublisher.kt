@@ -258,6 +258,7 @@ internal class LivePublisher(
             phase = phase,
             ride = open?.let { OpenRideView(it.id, it.options) },
             pending = state.pending,
+            cue = state.cue,
             timer = timer,
             allowed = allowed(),
             finishRequest =

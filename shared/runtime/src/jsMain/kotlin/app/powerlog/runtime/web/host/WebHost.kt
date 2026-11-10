@@ -26,6 +26,7 @@ import app.powerlog.runtime.web.persistence.StorageManager
 import app.powerlog.runtime.web.persistence.WebStoragePersistence
 import app.powerlog.runtime.web.tablock.LockManager
 import app.powerlog.runtime.web.tablock.WebTabLock
+import app.powerlog.runtime.web.tones.WebTonePlayer
 import kotlin.js.Promise
 
 @JsExport
@@ -88,6 +89,13 @@ internal object WebHost {
                 rideCard = null,
                 watch = null,
                 scheduler = null,
+                tones =
+                    WebTonePlayer(
+                        { WebTonePlayer.browser(page) },
+                        { navigator.asDynamic().userActivation?.hasBeenActive != false },
+                        clock,
+                        post,
+                    ),
             )
         val runtime = WebRuntime.create(clock, ports, archiveName)
         runtime.host.launch(LaunchContext(LaunchReason.userInterface)) {}

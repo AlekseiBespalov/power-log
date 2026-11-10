@@ -29,6 +29,7 @@ function view(
       useWatch: false,
       saveToHealth: false,
       recordGps: null,
+      syncBeeps: false,
       ...overrides,
     },
     app: {
@@ -160,16 +161,19 @@ describe('SettingsModel', () => {
       useWatch: { label: 'Apple Watch', accessibilityLabel: 'Use Apple Watch', value: false, busy: false },
       recordGps: { label: 'GPS route', accessibilityLabel: 'Record GPS route', value: true, busy: false },
       saveToHealth: { label: 'Apple Health', accessibilityLabel: 'Save to Apple Health', value: true, busy: false },
+      syncBeeps: { label: 'Video sync beeps', accessibilityLabel: 'Video sync beeps', value: false, busy: false },
     });
 
     model.setToggle('useWatch', true);
     model.setToggle('recordGps', false);
     model.setToggle('saveToHealth', false);
+    model.setToggle('syncBeeps', true);
     await settle();
     expect(sent(transport, 'settings.change')).toEqual([
       { kind: 'toggle', field: 'useWatch', on: true },
       { kind: 'recordGps', value: false },
       { kind: 'toggle', field: 'saveToHealth', on: false },
+      { kind: 'toggle', field: 'syncBeeps', on: true },
     ]);
   });
 
@@ -230,7 +234,32 @@ describe('SettingsModel', () => {
     const web = await settings('web');
     web.transport.emit('settings.state', {}, view());
     await settle();
-    expect(web.model.getSnapshot().toggles).toEqual({ useWatch: null, recordGps: null, saveToHealth: null });
+    expect(web.model.getSnapshot().toggles).toMatchObject({ useWatch: null, recordGps: null, saveToHealth: null });
+
+    const noRecording = await settings('web', { capabilities: { ...capabilities, recording: false } });
+    noRecording.transport.emit('settings.state', {}, view({ syncBeeps: true }));
+    await settle();
+    expect(noRecording.model.getSnapshot().toggles.syncBeeps).toBeNull();
+    expect(noRecording.model.getSnapshot().testBeep).toBeNull();
+  });
+
+  it('offers a test beep while sync beeps are on and says why one failed', async () => {
+    const { transport, model } = await settings('ios', { capabilities });
+    transport.emit('settings.state', {}, view());
+    await settle();
+    expect(model.getSnapshot().testBeep).toBeNull();
+    transport.emit('settings.state', {}, view({ syncBeeps: true }));
+    await settle();
+    expect(model.getSnapshot().testBeep).toEqual({
+      play: { label: 'Play test beep', enabled: true, busy: false, reason: null },
+      result: null,
+    });
+
+    transport.answer('recording.testBeep', () => ({ ok: false, failure: failure('syncBeepFailed') }));
+    model.playTestBeep();
+    await settle();
+    expect(sent(transport, 'recording.testBeep')).toEqual([{}]);
+    expect(model.getSnapshot().testBeep?.result).toBe(kitText('syncBeepFailed'));
   });
 
   it('offers Reset settings for unreadable settings and keeps the dialog dismissed until the state changes', async () => {

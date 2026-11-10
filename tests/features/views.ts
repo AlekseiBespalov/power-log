@@ -29,6 +29,7 @@ export function recordingView(overrides: Partial<RecordingView> = {}): Recording
     phase: null,
     ride: null,
     pending: null,
+    cue: null,
     timer: { state: 'unavailable', baseUs: 0, originMonoUs: null },
     allowed: rideAllowed(),
     finishRequest: null,

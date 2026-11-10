@@ -87,7 +87,8 @@ internal class Capture(
     val locationEvents: LocationEvents =
         object : LocationEvents {
             override fun fixesReceived(batch: List<LocationOriginal>, at: ClockReading) {
-                if (fenceMonoUs == null) return admitFixes(batch, at)
+                val fence = fenceMonoUs
+                if (fence == null || at.monoUs < fence) return admitFixes(batch, at)
                 val room =
                     CaptureBatchPolicy.inboxEntries -
                         (inbox.size + fixes.size + fenced.size) -
@@ -181,13 +182,13 @@ internal class Capture(
             window.dropped++
             return
         }
-        if (!state.recording) {
-            preview(values, at)
-            return
-        }
         val fence = fenceMonoUs
         if (fence != null && at.monoUs >= fence) {
             if (full()) refuse() else fenced += Fenced(values, at)
+            return
+        }
+        if (!state.recording) {
+            preview(values, at)
             return
         }
         admit(values, at)
@@ -206,9 +207,7 @@ internal class Capture(
         pendingSession = null
         cursor = emptyCursor
         inbox.clear()
-        fenced.clear()
         fixes.clear()
-        fencedFixes.clear()
         gpsClock = newGpsClock
         lastCommitMonoUs = clock.monoUs()
         committing.value = Committing.idle

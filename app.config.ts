@@ -53,7 +53,7 @@ const config: ExpoConfig = {
         'When Health saving is on, Power Log saves each ride as a cycling workout. The workout includes your GPS route, distance and speed, rider power and cadence from your bike, and the heart rate and active and resting energy measured during it.',
       NSLocationWhenInUseUsageDescription:
         'Power Log records your outdoor ride route, distance, speed and elevation while a workout is active.',
-      UIBackgroundModes: ['bluetooth-central', 'location'],
+      UIBackgroundModes: ['audio', 'bluetooth-central', 'location'],
       ITSAppUsesNonExemptEncryption: false,
     },
   },

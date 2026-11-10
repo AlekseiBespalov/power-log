@@ -29,6 +29,7 @@ public data class RideClock(
     public val activeInterval: Int?,
     public val intervalStartUs: Long?,
     public val intervalsOpened: Int,
+    public val syncBeeps: Boolean,
 )
 
 public data class StartContext(
@@ -42,6 +43,7 @@ public data class StartContext(
     public val locationDenied: Boolean,
     public val healthSessionEnding: Boolean,
     public val healthWriteDenied: Boolean,
+    public val syncBeeps: Boolean,
 )
 
 @Serializable
@@ -279,6 +281,7 @@ public object RideLifecycle {
                 activeInterval = null,
                 intervalStartUs = null,
                 intervalsOpened = 0,
+                syncBeeps = command.context.syncBeeps,
             )
         return accepted(LifecycleState(ride, rideClock), ride, RideTransition.prepared)
     }
@@ -286,17 +289,19 @@ public object RideLifecycle {
     private fun confirm(state: LifecycleState, open: Ride, clock: ClockReading): LifecycleDecision {
         val rideClock = requireNotNull(state.clock) { "a preparing ride has its clock" }
         val start = RideEvent(requireNotNull(rideClock.startEvent), RideEventKind.start, open.startedUtcUs, 0)
+        val timerOriginMonoUs = if (rideClock.syncBeeps) rideClock.elapsedOriginMonoUs else clock.monoUs
         val next =
             rideClock.copy(
                 timerBaseUs = 0,
-                timerOriginMonoUs = clock.monoUs,
+                timerOriginMonoUs = timerOriginMonoUs,
                 startDeadlineMonoUs = null,
                 startEvent = null,
                 activeInterval = 1,
                 intervalStartUs = 0,
                 intervalsOpened = 1,
             )
-        val timing = RideTiming(clock.utcUs, clock.monoUs - rideClock.elapsedOriginMonoUs, 0)
+        val timing =
+            RideTiming(clock.utcUs, clock.monoUs - rideClock.elapsedOriginMonoUs, clock.monoUs - timerOriginMonoUs)
         val running = open.copy(phase = RidePhase.running, checkpoint = timing)
         return accepted(LifecycleState(running, next), running, RideTransition.started, listOf(start))
     }

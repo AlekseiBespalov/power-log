@@ -34,6 +34,7 @@ function recording(overrides: Partial<RecordingView> = {}): RecordingView {
     phase: null,
     ride: null,
     pending: null,
+    cue: null,
     timer: { state: 'unavailable', baseUs: 0, originMonoUs: null },
     allowed: allowed(),
     finishRequest: null,
@@ -100,6 +101,32 @@ describe('RideControlsModel', () => {
     await settle();
     expect(model.getSnapshot().setupOpen).toBe(false);
     expect(ui.haptics).toEqual(['success']);
+  });
+
+  it('counts a sync-beep start down with a Cancel, and waits on the beep for Resume and Finish', async () => {
+    const { transport, model } = await controls();
+    transport.answer('recording.cancelStart', () => ({ ok: true, value: null }));
+    const pending = allowed({ start: no('actionPending') });
+    transport.emit(
+      'recording.state',
+      {},
+      recording({ cue: { action: 'start', atMonoUs: 2_500_000 }, allowed: pending }),
+    );
+    await settle();
+    expect(model.getSnapshot().bar).toEqual({ label: 'Starting in 3', opensSetup: false });
+    expect(model.getSnapshot().cancelStart).toMatchObject({ label: 'Cancel', enabled: true, busy: false });
+
+    model.cancelStart();
+    await settle();
+    expect(sent(transport, 'recording.cancelStart')).toEqual([{}]);
+
+    transport.emit('recording.state', {}, running('r1', { cue: { action: 'resume', atMonoUs: 9_000_000 } }));
+    await settle();
+    expect(model.getSnapshot().cancelStart).toBeNull();
+    expect(model.getSnapshot().waiting).toBe('Resuming on the beep…');
+    transport.emit('recording.state', {}, running('r1', { cue: { action: 'finish', atMonoUs: 9_000_000 } }));
+    await settle();
+    expect(model.getSnapshot().waiting).toBe('Finishing on the beep…');
   });
 
   it('offers Set up ride when Start is disabled, the permission row is due or the bike is unavailable', async () => {

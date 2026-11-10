@@ -17,6 +17,7 @@
         }
       },
       "pending": null,
+      "cue": null,
       "timer": { "state": "running", "baseUs": 0, "originMonoUs": 1000000 },
       "allowed": {
         "start": { "enabled": false, "reason": "rideActive" },

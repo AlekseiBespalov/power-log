@@ -381,6 +381,11 @@ internal class ControllerConnection(
         publish(urgent = true)
     }
 
+    fun requestAt(atMonoUs: Long?) {
+        link?.pin(atMonoUs)
+        repace()
+    }
+
     fun rateChanged(rate: SampleRate) {
         if (recording) return
         this.rate = rate

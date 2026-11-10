@@ -24,6 +24,7 @@ class RideRulesTest {
             useWatch = false,
             saveToHealth = true,
             recordGps = null,
+            syncBeeps = false,
         )
     private val phone =
         DeviceCapabilities(

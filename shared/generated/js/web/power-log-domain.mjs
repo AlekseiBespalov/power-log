@@ -196,6 +196,9 @@ import {
   IllegalArgumentException2asla15b5jaob as IllegalArgumentException,
   IllegalArgumentException_init_$Init$c3q2g5ghz7m0 as IllegalArgumentException_init_$Init$,
   captureStack1fzi4aczwc4hg as captureStack,
+  KProperty1ca4yb4wlo496 as KProperty1,
+  getPropertyCallableRef3hckxc0xueiaj as getPropertyCallableRef,
+  lazy2hsh8ze7j6ikd as lazy_0,
   take2da4iy543adpz as take_0,
   linkedMapOf1is69t4zkcfr3 as linkedMapOf,
   joinToString1cxrrlmo0chqs as joinToString_1,
@@ -672,29 +675,33 @@ initMetadataForClass(SourceState, 'SourceState', VOID, Enum, VOID, VOID, VOID, {
 initMetadataForObject(Sources, 'Sources');
 initMetadataForObject(FreshnessPolicy, 'FreshnessPolicy');
 initMetadataForObject(StartPolicy, 'StartPolicy');
+initMetadataForClass(Tone, 'Tone');
 initMetadataForCompanion(Companion_111);
-initMetadataForClass(ViewId, 'ViewId', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_102});
+initMetadataForClass(CueAction, 'CueAction', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_102});
+initMetadataForObject(SyncBeeps, 'SyncBeeps');
 initMetadataForCompanion(Companion_112);
-initMetadataForClass(ChartRange, 'ChartRange', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_103});
+initMetadataForClass(ViewId, 'ViewId', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_103});
 initMetadataForCompanion(Companion_113);
-initMetadataForClass(PersistenceState, 'PersistenceState', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_104});
+initMetadataForClass(ChartRange, 'ChartRange', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_104});
 initMetadataForCompanion(Companion_114);
+initMetadataForClass(PersistenceState, 'PersistenceState', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_105});
+initMetadataForCompanion(Companion_115);
 initMetadataForObject($serializer_39, '$serializer', VOID, VOID, [GeneratedSerializer]);
 initMetadataForClass(LocaleFacts, 'LocaleFacts', VOID, VOID, VOID, VOID, VOID, {0: $serializer_getInstance_39});
-initMetadataForCompanion(Companion_115);
+initMetadataForCompanion(Companion_116);
 initMetadataForObject($serializer_40, '$serializer', VOID, VOID, [GeneratedSerializer]);
 initMetadataForClass(SettingsDocument, 'SettingsDocument', VOID, VOID, VOID, VOID, VOID, {0: $serializer_getInstance_40});
-initMetadataForCompanion(Companion_116);
+initMetadataForCompanion(Companion_117);
 initMetadataForClass(SettingsDraft, 'SettingsDraft');
 initMetadataForClass(RideSettingsDraft, 'RideSettingsDraft');
 initMetadataForClass(AppSettingsDraft, 'AppSettingsDraft');
 initMetadataForClass(ViewPresetDraft, 'ViewPresetDraft');
-initMetadataForCompanion(Companion_117);
-initMetadataForClass(MeasurementSystem, 'MeasurementSystem', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_108});
 initMetadataForCompanion(Companion_118);
+initMetadataForClass(MeasurementSystem, 'MeasurementSystem', VOID, Enum, VOID, VOID, VOID, {0: Companion_getInstance_109});
+initMetadataForCompanion(Companion_119);
 initMetadataForObject($serializer_41, '$serializer', VOID, VOID, [GeneratedSerializer]);
 initMetadataForClass(AppSettings, 'AppSettings', VOID, VOID, VOID, VOID, VOID, {0: $serializer_getInstance_41});
-initMetadataForCompanion(Companion_119);
+initMetadataForCompanion(Companion_120);
 initMetadataForObject($serializer_42, '$serializer', VOID, VOID, [GeneratedSerializer]);
 initMetadataForClass(ViewPreset, 'ViewPreset', VOID, VOID, VOID, VOID, VOID, {0: $serializer_getInstance_42});
 initMetadataForObject(SettingsRules, 'SettingsRules');
@@ -3272,6 +3279,17 @@ function wait($this) {
   var tmp1_elvis_lhs = minOrNull(deadlines);
   return new Wait(tmp1_elvis_lhs == null ? new Long(-1, 2147483647) : tmp1_elvis_lhs);
 }
+function heldForPin($this, nowMonoUs) {
+  var tmp0_safe_receiver = $this.pinMonoUs_1;
+  var tmp;
+  if (tmp0_safe_receiver == null) {
+    tmp = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    tmp = compare(nowMonoUs, subtract(tmp0_safe_receiver, new Long(1000000, 0))) >= 0;
+  }
+  return tmp === true;
+}
 function plannedAgeUs($this) {
   if (!$this.plansLinkLimit_1 || !$this.planning_1 || $this.linkAges_1.size_1 < 3)
     return null;
@@ -3331,7 +3349,11 @@ function ControllerLink(decoder, known, plansLinkLimit, remembered) {
   this.awaitingRelease_1 = null;
   this.linkAges_1 = ArrayDeque_init_$Create$();
   this.planning_1 = true;
+  this.pinMonoUs_1 = null;
 }
+protoOf(ControllerLink).pin_441xk0_k$ = function (atMonoUs) {
+  this.pinMonoUs_1 = atMonoUs;
+};
 protoOf(ControllerLink).attempt_bx3ufr_k$ = function (nowMonoUs) {
   endLink(this);
   var deadline = add(nowMonoUs, new Long(20000000, 0));
@@ -3360,12 +3382,23 @@ protoOf(ControllerLink).next_rogczi_k$ = function (nowMonoUs, rate, background, 
     return wait(this);
   var planned = plannedAgeUs(this);
   var linkUp = this.linkUpMonoUs_1;
-  if (recording && !(planned == null) && !(linkUp == null) && equals(this.lastReadingMonoUs_1, nowMonoUs) && compare(subtract(nowMonoUs, linkUp), planned) >= 0)
+  if (recording && !(planned == null) && !(linkUp == null) && equals(this.lastReadingMonoUs_1, nowMonoUs) && compare(subtract(nowMonoUs, linkUp), planned) >= 0 && !heldForPin(this, nowMonoUs))
     return awaitRelease(this, new Reconnect(nowMonoUs, false), nowMonoUs);
   if (!(this.inFlight_1 == null) || !(this.waiting_1 == null))
     return wait(this);
   var tmp2_elvis_lhs = this.nextPollMonoUs_1;
-  var due = tmp2_elvis_lhs == null ? nowMonoUs : tmp2_elvis_lhs;
+  var scheduled = tmp2_elvis_lhs == null ? nowMonoUs : tmp2_elvis_lhs;
+  var tmp3_safe_receiver = this.pinMonoUs_1;
+  var tmp_0;
+  if (tmp3_safe_receiver == null) {
+    tmp_0 = null;
+  } else {
+    // Inline function 'kotlin.let' call
+    // Inline function 'kotlin.comparisons.minOf' call
+    tmp_0 = compare(scheduled, tmp3_safe_receiver) <= 0 ? scheduled : tmp3_safe_receiver;
+  }
+  var tmp4_elvis_lhs = tmp_0;
+  var due = tmp4_elvis_lhs == null ? scheduled : tmp4_elvis_lhs;
   return compare(nowMonoUs, due) >= 0 ? send(this, ControllerRequest_telemetry_getInstance(), false) : new Wait(due);
 };
 protoOf(ControllerLink).accepted_85vt4z_k$ = function (nowMonoUs) {
@@ -3504,6 +3537,16 @@ protoOf(ControllerLink).replies_z1vupd_k$ = function (result, nowMonoUs) {
       this.lastReadingMonoUs_1 = nowMonoUs;
       if (compare(subtract(nowMonoUs, first), new Long(3000000, 0)) >= 0)
         this.retries_1 = 0;
+      var tmp4_safe_receiver = this.pinMonoUs_1;
+      var tmp_2;
+      if (tmp4_safe_receiver == null) {
+        tmp_2 = null;
+      } else {
+        // Inline function 'kotlin.let' call
+        tmp_2 = compare(nowMonoUs, tmp4_safe_receiver) >= 0;
+      }
+      if (tmp_2 === true)
+        this.pinMonoUs_1 = null;
     } else {
       if (!(reply instanceof Refused)) {
         noWhenBranchMatchedException();
@@ -10037,6 +10080,7 @@ function ControllerPolicy() {
   this.linkLimitDrops_1 = 3;
   this.linkLimitSpreadUs_1 = new Long(1000000, 0);
   this.linkLimitMarginUs_1 = new Long(2000000, 0);
+  this.pinHoldUs_1 = new Long(1000000, 0);
   this.unknownIdentityAttempts_1 = 2;
   this.backgroundPollHz_1 = 1;
   this.joinUs_1 = new Long(6000000, 0);
@@ -10333,8 +10377,9 @@ function static_init_7() {
   FailureCode_importUnreadable_instance = new FailureCode('importUnreadable', 51, false);
   FailureCode_settingsSaveFailed_instance = new FailureCode('settingsSaveFailed', 52, true);
   FailureCode_uiUnavailable_instance = new FailureCode('uiUnavailable', 53, true);
-  FailureCode_apiMismatch_instance = new FailureCode('apiMismatch', 54, false);
-  FailureCode_unknown_instance = new FailureCode('unknown', 55, true);
+  FailureCode_syncBeepFailed_instance = new FailureCode('syncBeepFailed', 54, false);
+  FailureCode_apiMismatch_instance = new FailureCode('apiMismatch', 55, false);
+  FailureCode_unknown_instance = new FailureCode('unknown', 56, true);
   if (Companion_instance_50 == null) {
     Companion_instance;
     new Companion_49();
@@ -10394,11 +10439,12 @@ var FailureCode_exportLeftScreen_instance;
 var FailureCode_importUnreadable_instance;
 var FailureCode_settingsSaveFailed_instance;
 var FailureCode_uiUnavailable_instance;
+var FailureCode_syncBeepFailed_instance;
 var FailureCode_apiMismatch_instance;
 var FailureCode_unknown_instance;
 function values_7() {
   static_init_7();
-  return [FailureCode_bikeRequired_getInstance(), FailureCode_rideActive_getInstance(), FailureCode_actionPending_getInstance(), FailureCode_actionUnavailable_getInstance(), FailureCode_rideChanged_getInstance(), FailureCode_startUnconfirmed_getInstance(), FailureCode_startInterrupted_getInstance(), FailureCode_startCancelled_getInstance(), FailureCode_startExpired_getInstance(), FailureCode_ownerForeign_getInstance(), FailureCode_settingsUnreadable_getInstance(), FailureCode_rideInProgress_getInstance(), FailureCode_exportInProgress_getInstance(), FailureCode_locationDenied_getInstance(), FailureCode_gpsRequired_getInstance(), FailureCode_healthUnavailable_getInstance(), FailureCode_healthDenied_getInstance(), FailureCode_healthLocked_getInstance(), FailureCode_watchNotInstalled_getInstance(), FailureCode_watchLaunchFailed_getInstance(), FailureCode_watchBusy_getInstance(), FailureCode_watchStartUnconfirmed_getInstance(), FailureCode_watchVersionMismatch_getInstance(), FailureCode_watchMessageInvalid_getInstance(), FailureCode_bluetoothDenied_getInstance(), FailureCode_bluetoothOff_getInstance(), FailureCode_bluetoothNotReady_getInstance(), FailureCode_bluetoothUnsupported_getInstance(), FailureCode_bluetoothUnavailable_getInstance(), FailureCode_bluetoothSearchFailed_getInstance(), FailureCode_bikeNotFound_getInstance(), FailureCode_bikeUnavailable_getInstance(), FailureCode_bikeReconnecting_getInstance(), FailureCode_controllerNoReply_getInstance(), FailureCode_controllerUnsupported_getInstance(), FailureCode_firmwareUnsupported_getInstance(), FailureCode_differentBike_getInstance(), FailureCode_disconnectFirst_getInstance(), FailureCode_storageBusy_getInstance(), FailureCode_storageFull_getInstance(), FailureCode_storageFailed_getInstance(), FailureCode_storageRefused_getInstance(), FailureCode_readFailed_getInstance(), FailureCode_chartCapacity_getInstance(), FailureCode_rideDeleted_getInstance(), FailureCode_exportNotReady_getInstance(), FailureCode_exportChanged_getInstance(), FailureCode_exportLimit_getInstance(), FailureCode_exportNoRecords_getInstance(), FailureCode_exportSinkFailed_getInstance(), FailureCode_exportLeftScreen_getInstance(), FailureCode_importUnreadable_getInstance(), FailureCode_settingsSaveFailed_getInstance(), FailureCode_uiUnavailable_getInstance(), FailureCode_apiMismatch_getInstance(), FailureCode_unknown_getInstance()];
+  return [FailureCode_bikeRequired_getInstance(), FailureCode_rideActive_getInstance(), FailureCode_actionPending_getInstance(), FailureCode_actionUnavailable_getInstance(), FailureCode_rideChanged_getInstance(), FailureCode_startUnconfirmed_getInstance(), FailureCode_startInterrupted_getInstance(), FailureCode_startCancelled_getInstance(), FailureCode_startExpired_getInstance(), FailureCode_ownerForeign_getInstance(), FailureCode_settingsUnreadable_getInstance(), FailureCode_rideInProgress_getInstance(), FailureCode_exportInProgress_getInstance(), FailureCode_locationDenied_getInstance(), FailureCode_gpsRequired_getInstance(), FailureCode_healthUnavailable_getInstance(), FailureCode_healthDenied_getInstance(), FailureCode_healthLocked_getInstance(), FailureCode_watchNotInstalled_getInstance(), FailureCode_watchLaunchFailed_getInstance(), FailureCode_watchBusy_getInstance(), FailureCode_watchStartUnconfirmed_getInstance(), FailureCode_watchVersionMismatch_getInstance(), FailureCode_watchMessageInvalid_getInstance(), FailureCode_bluetoothDenied_getInstance(), FailureCode_bluetoothOff_getInstance(), FailureCode_bluetoothNotReady_getInstance(), FailureCode_bluetoothUnsupported_getInstance(), FailureCode_bluetoothUnavailable_getInstance(), FailureCode_bluetoothSearchFailed_getInstance(), FailureCode_bikeNotFound_getInstance(), FailureCode_bikeUnavailable_getInstance(), FailureCode_bikeReconnecting_getInstance(), FailureCode_controllerNoReply_getInstance(), FailureCode_controllerUnsupported_getInstance(), FailureCode_firmwareUnsupported_getInstance(), FailureCode_differentBike_getInstance(), FailureCode_disconnectFirst_getInstance(), FailureCode_storageBusy_getInstance(), FailureCode_storageFull_getInstance(), FailureCode_storageFailed_getInstance(), FailureCode_storageRefused_getInstance(), FailureCode_readFailed_getInstance(), FailureCode_chartCapacity_getInstance(), FailureCode_rideDeleted_getInstance(), FailureCode_exportNotReady_getInstance(), FailureCode_exportChanged_getInstance(), FailureCode_exportLimit_getInstance(), FailureCode_exportNoRecords_getInstance(), FailureCode_exportSinkFailed_getInstance(), FailureCode_exportLeftScreen_getInstance(), FailureCode_importUnreadable_getInstance(), FailureCode_settingsSaveFailed_getInstance(), FailureCode_uiUnavailable_getInstance(), FailureCode_syncBeepFailed_getInstance(), FailureCode_apiMismatch_getInstance(), FailureCode_unknown_getInstance()];
 }
 function Companion_49() {
   Companion_instance_50 = this;
@@ -10820,6 +10866,10 @@ function FailureCode_settingsSaveFailed_getInstance() {
 function FailureCode_uiUnavailable_getInstance() {
   static_init_7();
   return FailureCode_uiUnavailable_instance;
+}
+function FailureCode_syncBeepFailed_getInstance() {
+  static_init_7();
+  return FailureCode_syncBeepFailed_instance;
 }
 function FailureCode_apiMismatch_getInstance() {
   static_init_7();
@@ -15443,7 +15493,7 @@ function Companion_83() {
   // Inline function 'kotlin.arrayOf' call
   // Inline function 'kotlin.js.unsafeCast' call
   // Inline function 'kotlin.js.asDynamic' call
-  tmp.$childSerializers_1 = [tmp_1, tmp_3, lazy(tmp_4, RideSettings$Companion$$childSerializers$_anonymous__4b8o41_1), null, null, null, null];
+  tmp.$childSerializers_1 = [tmp_1, tmp_3, lazy(tmp_4, RideSettings$Companion$$childSerializers$_anonymous__4b8o41_1), null, null, null, null, null];
 }
 var Companion_instance_84;
 function Companion_getInstance_80() {
@@ -15453,7 +15503,7 @@ function Companion_getInstance_80() {
 }
 function $serializer_30() {
   $serializer_instance_30 = this;
-  var tmp0_serialDesc = new PluginGeneratedSerialDescriptor('app.powerlog.domain.core.ride.RideSettings', this, 7);
+  var tmp0_serialDesc = new PluginGeneratedSerialDescriptor('app.powerlog.domain.core.ride.RideSettings', this, 8);
   tmp0_serialDesc.addElement_5pzumi_k$('sampleRate', false);
   tmp0_serialDesc.addElement_5pzumi_k$('distance', false);
   tmp0_serialDesc.addElement_5pzumi_k$('battery', false);
@@ -15461,6 +15511,7 @@ function $serializer_30() {
   tmp0_serialDesc.addElement_5pzumi_k$('useWatch', false);
   tmp0_serialDesc.addElement_5pzumi_k$('saveToHealth', false);
   tmp0_serialDesc.addElement_5pzumi_k$('recordGps', false);
+  tmp0_serialDesc.addElement_5pzumi_k$('syncBeeps', false);
   this.descriptor_1 = tmp0_serialDesc;
 }
 protoOf($serializer_30).serialize_uirm22_k$ = function (encoder, value) {
@@ -15474,6 +15525,7 @@ protoOf($serializer_30).serialize_uirm22_k$ = function (encoder, value) {
   tmp1_output.encodeBooleanElement_ydht7q_k$(tmp0_desc, 4, value.useWatch_1);
   tmp1_output.encodeBooleanElement_ydht7q_k$(tmp0_desc, 5, value.saveToHealth_1);
   tmp1_output.encodeNullableSerializableElement_5lquiv_k$(tmp0_desc, 6, BooleanSerializer_getInstance(), value.recordGps_1);
+  tmp1_output.encodeBooleanElement_ydht7q_k$(tmp0_desc, 7, value.syncBeeps_1);
   tmp1_output.endStructure_1xqz0n_k$(tmp0_desc);
 };
 protoOf($serializer_30).serialize_5ase3y_k$ = function (encoder, value) {
@@ -15491,64 +15543,71 @@ protoOf($serializer_30).deserialize_sy6x50_k$ = function (decoder) {
   var tmp8_local4 = false;
   var tmp9_local5 = false;
   var tmp10_local6 = null;
-  var tmp11_input = decoder.beginStructure_yljocp_k$(tmp0_desc);
-  var tmp12_cached = Companion_getInstance_80().$childSerializers_1;
-  if (tmp11_input.decodeSequentially_xlblqy_k$()) {
-    tmp4_local0 = tmp11_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 0, tmp12_cached[0].get_value_j01efc_k$(), tmp4_local0);
+  var tmp11_local7 = false;
+  var tmp12_input = decoder.beginStructure_yljocp_k$(tmp0_desc);
+  var tmp13_cached = Companion_getInstance_80().$childSerializers_1;
+  if (tmp12_input.decodeSequentially_xlblqy_k$()) {
+    tmp4_local0 = tmp12_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 0, tmp13_cached[0].get_value_j01efc_k$(), tmp4_local0);
     tmp3_bitMask0 = tmp3_bitMask0 | 1;
-    tmp5_local1 = tmp11_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 1, tmp12_cached[1].get_value_j01efc_k$(), tmp5_local1);
+    tmp5_local1 = tmp12_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 1, tmp13_cached[1].get_value_j01efc_k$(), tmp5_local1);
     tmp3_bitMask0 = tmp3_bitMask0 | 2;
-    tmp6_local2 = tmp11_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 2, tmp12_cached[2].get_value_j01efc_k$(), tmp6_local2);
+    tmp6_local2 = tmp12_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 2, tmp13_cached[2].get_value_j01efc_k$(), tmp6_local2);
     tmp3_bitMask0 = tmp3_bitMask0 | 4;
-    tmp7_local3 = tmp11_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 3);
+    tmp7_local3 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 3);
     tmp3_bitMask0 = tmp3_bitMask0 | 8;
-    tmp8_local4 = tmp11_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 4);
+    tmp8_local4 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 4);
     tmp3_bitMask0 = tmp3_bitMask0 | 16;
-    tmp9_local5 = tmp11_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 5);
+    tmp9_local5 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 5);
     tmp3_bitMask0 = tmp3_bitMask0 | 32;
-    tmp10_local6 = tmp11_input.decodeNullableSerializableElement_k2y6ab_k$(tmp0_desc, 6, BooleanSerializer_getInstance(), tmp10_local6);
+    tmp10_local6 = tmp12_input.decodeNullableSerializableElement_k2y6ab_k$(tmp0_desc, 6, BooleanSerializer_getInstance(), tmp10_local6);
     tmp3_bitMask0 = tmp3_bitMask0 | 64;
+    tmp11_local7 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 7);
+    tmp3_bitMask0 = tmp3_bitMask0 | 128;
   } else
     while (tmp1_flag) {
-      tmp2_index = tmp11_input.decodeElementIndex_bstkhp_k$(tmp0_desc);
+      tmp2_index = tmp12_input.decodeElementIndex_bstkhp_k$(tmp0_desc);
       switch (tmp2_index) {
         case -1:
           tmp1_flag = false;
           break;
         case 0:
-          tmp4_local0 = tmp11_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 0, tmp12_cached[0].get_value_j01efc_k$(), tmp4_local0);
+          tmp4_local0 = tmp12_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 0, tmp13_cached[0].get_value_j01efc_k$(), tmp4_local0);
           tmp3_bitMask0 = tmp3_bitMask0 | 1;
           break;
         case 1:
-          tmp5_local1 = tmp11_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 1, tmp12_cached[1].get_value_j01efc_k$(), tmp5_local1);
+          tmp5_local1 = tmp12_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 1, tmp13_cached[1].get_value_j01efc_k$(), tmp5_local1);
           tmp3_bitMask0 = tmp3_bitMask0 | 2;
           break;
         case 2:
-          tmp6_local2 = tmp11_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 2, tmp12_cached[2].get_value_j01efc_k$(), tmp6_local2);
+          tmp6_local2 = tmp12_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 2, tmp13_cached[2].get_value_j01efc_k$(), tmp6_local2);
           tmp3_bitMask0 = tmp3_bitMask0 | 4;
           break;
         case 3:
-          tmp7_local3 = tmp11_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 3);
+          tmp7_local3 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 3);
           tmp3_bitMask0 = tmp3_bitMask0 | 8;
           break;
         case 4:
-          tmp8_local4 = tmp11_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 4);
+          tmp8_local4 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 4);
           tmp3_bitMask0 = tmp3_bitMask0 | 16;
           break;
         case 5:
-          tmp9_local5 = tmp11_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 5);
+          tmp9_local5 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 5);
           tmp3_bitMask0 = tmp3_bitMask0 | 32;
           break;
         case 6:
-          tmp10_local6 = tmp11_input.decodeNullableSerializableElement_k2y6ab_k$(tmp0_desc, 6, BooleanSerializer_getInstance(), tmp10_local6);
+          tmp10_local6 = tmp12_input.decodeNullableSerializableElement_k2y6ab_k$(tmp0_desc, 6, BooleanSerializer_getInstance(), tmp10_local6);
           tmp3_bitMask0 = tmp3_bitMask0 | 64;
+          break;
+        case 7:
+          tmp11_local7 = tmp12_input.decodeBooleanElement_vuyhtj_k$(tmp0_desc, 7);
+          tmp3_bitMask0 = tmp3_bitMask0 | 128;
           break;
         default:
           throw UnknownFieldException_init_$Create$(tmp2_index);
       }
     }
-  tmp11_input.endStructure_1xqz0n_k$(tmp0_desc);
-  return RideSettings_init_$Create$(tmp3_bitMask0, tmp4_local0, tmp5_local1, tmp6_local2, tmp7_local3, tmp8_local4, tmp9_local5, tmp10_local6, null);
+  tmp12_input.endStructure_1xqz0n_k$(tmp0_desc);
+  return RideSettings_init_$Create$(tmp3_bitMask0, tmp4_local0, tmp5_local1, tmp6_local2, tmp7_local3, tmp8_local4, tmp9_local5, tmp10_local6, tmp11_local7, null);
 };
 protoOf($serializer_30).get_descriptor_wjt6a0_k$ = function () {
   return this.descriptor_1;
@@ -15558,7 +15617,7 @@ protoOf($serializer_30).childSerializers_5ghqw5_k$ = function () {
   // Inline function 'kotlin.arrayOf' call
   // Inline function 'kotlin.js.unsafeCast' call
   // Inline function 'kotlin.js.asDynamic' call
-  return [tmp0_cached[0].get_value_j01efc_k$(), tmp0_cached[1].get_value_j01efc_k$(), tmp0_cached[2].get_value_j01efc_k$(), BooleanSerializer_getInstance(), BooleanSerializer_getInstance(), BooleanSerializer_getInstance(), get_nullable(BooleanSerializer_getInstance())];
+  return [tmp0_cached[0].get_value_j01efc_k$(), tmp0_cached[1].get_value_j01efc_k$(), tmp0_cached[2].get_value_j01efc_k$(), BooleanSerializer_getInstance(), BooleanSerializer_getInstance(), BooleanSerializer_getInstance(), get_nullable(BooleanSerializer_getInstance()), BooleanSerializer_getInstance()];
 };
 var $serializer_instance_30;
 function $serializer_getInstance_30() {
@@ -15566,9 +15625,9 @@ function $serializer_getInstance_30() {
     new $serializer_30();
   return $serializer_instance_30;
 }
-function RideSettings_init_$Init$(seen0, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, serializationConstructorMarker, $this) {
-  if (!(127 === (127 & seen0))) {
-    throwMissingFieldException(seen0, 127, $serializer_getInstance_30().descriptor_1);
+function RideSettings_init_$Init$(seen0, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps, serializationConstructorMarker, $this) {
+  if (!(255 === (255 & seen0))) {
+    throwMissingFieldException(seen0, 255, $serializer_getInstance_30().descriptor_1);
   }
   $this.sampleRate_1 = sampleRate;
   $this.distance_1 = distance;
@@ -15577,12 +15636,13 @@ function RideSettings_init_$Init$(seen0, sampleRate, distance, battery, indoor, 
   $this.useWatch_1 = useWatch;
   $this.saveToHealth_1 = saveToHealth;
   $this.recordGps_1 = recordGps;
+  $this.syncBeeps_1 = syncBeeps;
   return $this;
 }
-function RideSettings_init_$Create$(seen0, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, serializationConstructorMarker) {
-  return RideSettings_init_$Init$(seen0, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, serializationConstructorMarker, objectCreate(protoOf(RideSettings)));
+function RideSettings_init_$Create$(seen0, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps, serializationConstructorMarker) {
+  return RideSettings_init_$Init$(seen0, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps, serializationConstructorMarker, objectCreate(protoOf(RideSettings)));
 }
-function RideSettings(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps) {
+function RideSettings(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps) {
   Companion_getInstance_80();
   this.sampleRate_1 = sampleRate;
   this.distance_1 = distance;
@@ -15591,11 +15651,12 @@ function RideSettings(sampleRate, distance, battery, indoor, useWatch, saveToHea
   this.useWatch_1 = useWatch;
   this.saveToHealth_1 = saveToHealth;
   this.recordGps_1 = recordGps;
+  this.syncBeeps_1 = syncBeeps;
 }
-protoOf(RideSettings).copy_58ied0_k$ = function (sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps) {
-  return new RideSettings(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps);
+protoOf(RideSettings).copy_ljs4cv_k$ = function (sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps) {
+  return new RideSettings(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps);
 };
-protoOf(RideSettings).copy$default_4ynegs_k$ = function (sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, $super) {
+protoOf(RideSettings).copy$default_275xiu_k$ = function (sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps, $super) {
   sampleRate = sampleRate === VOID ? this.sampleRate_1 : sampleRate;
   distance = distance === VOID ? this.distance_1 : distance;
   battery = battery === VOID ? this.battery_1 : battery;
@@ -15603,10 +15664,11 @@ protoOf(RideSettings).copy$default_4ynegs_k$ = function (sampleRate, distance, b
   useWatch = useWatch === VOID ? this.useWatch_1 : useWatch;
   saveToHealth = saveToHealth === VOID ? this.saveToHealth_1 : saveToHealth;
   recordGps = recordGps === VOID ? this.recordGps_1 : recordGps;
-  return $super === VOID ? this.copy_58ied0_k$(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps) : $super.copy_58ied0_k$.call(this, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps);
+  syncBeeps = syncBeeps === VOID ? this.syncBeeps_1 : syncBeeps;
+  return $super === VOID ? this.copy_ljs4cv_k$(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps) : $super.copy_ljs4cv_k$.call(this, sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps);
 };
 protoOf(RideSettings).toString = function () {
-  return 'RideSettings(sampleRate=' + this.sampleRate_1.toString() + ', distance=' + this.distance_1.toString() + ', battery=' + this.battery_1.toString() + ', indoor=' + this.indoor_1 + ', useWatch=' + this.useWatch_1 + ', saveToHealth=' + this.saveToHealth_1 + ', recordGps=' + this.recordGps_1 + ')';
+  return 'RideSettings(sampleRate=' + this.sampleRate_1.toString() + ', distance=' + this.distance_1.toString() + ', battery=' + this.battery_1.toString() + ', indoor=' + this.indoor_1 + ', useWatch=' + this.useWatch_1 + ', saveToHealth=' + this.saveToHealth_1 + ', recordGps=' + this.recordGps_1 + ', syncBeeps=' + this.syncBeeps_1 + ')';
 };
 protoOf(RideSettings).hashCode = function () {
   var result = this.sampleRate_1.hashCode();
@@ -15616,6 +15678,7 @@ protoOf(RideSettings).hashCode = function () {
   result = imul(result, 31) + getBooleanHashCode(this.useWatch_1) | 0;
   result = imul(result, 31) + getBooleanHashCode(this.saveToHealth_1) | 0;
   result = imul(result, 31) + (this.recordGps_1 == null ? 0 : getBooleanHashCode(this.recordGps_1)) | 0;
+  result = imul(result, 31) + getBooleanHashCode(this.syncBeeps_1) | 0;
   return result;
 };
 protoOf(RideSettings).equals = function (other) {
@@ -15636,6 +15699,8 @@ protoOf(RideSettings).equals = function (other) {
   if (!(this.saveToHealth_1 === other.saveToHealth_1))
     return false;
   if (!(this.recordGps_1 == other.recordGps_1))
+    return false;
+  if (!(this.syncBeeps_1 === other.syncBeeps_1))
     return false;
   return true;
 };
@@ -23345,7 +23410,7 @@ protoOf(LifecycleState).equals = function (other) {
     return false;
   return true;
 };
-function StartContext(ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied) {
+function StartContext(ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied, syncBeeps) {
   this.ownerForeign_1 = ownerForeign;
   this.settingsSaveFailed_1 = settingsSaveFailed;
   this.settingsReadable_1 = settingsReadable;
@@ -23356,11 +23421,12 @@ function StartContext(ownerForeign, settingsSaveFailed, settingsReadable, bikeVe
   this.locationDenied_1 = locationDenied;
   this.healthSessionEnding_1 = healthSessionEnding;
   this.healthWriteDenied_1 = healthWriteDenied;
+  this.syncBeeps_1 = syncBeeps;
 }
-protoOf(StartContext).copy_qwuwyd_k$ = function (ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied) {
-  return new StartContext(ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied);
+protoOf(StartContext).copy_3x1mvk_k$ = function (ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied, syncBeeps) {
+  return new StartContext(ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied, syncBeeps);
 };
-protoOf(StartContext).copy$default_rvk7or_k$ = function (ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied, $super) {
+protoOf(StartContext).copy$default_86aopb_k$ = function (ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied, syncBeeps, $super) {
   ownerForeign = ownerForeign === VOID ? this.ownerForeign_1 : ownerForeign;
   settingsSaveFailed = settingsSaveFailed === VOID ? this.settingsSaveFailed_1 : settingsSaveFailed;
   settingsReadable = settingsReadable === VOID ? this.settingsReadable_1 : settingsReadable;
@@ -23371,10 +23437,11 @@ protoOf(StartContext).copy$default_rvk7or_k$ = function (ownerForeign, settingsS
   locationDenied = locationDenied === VOID ? this.locationDenied_1 : locationDenied;
   healthSessionEnding = healthSessionEnding === VOID ? this.healthSessionEnding_1 : healthSessionEnding;
   healthWriteDenied = healthWriteDenied === VOID ? this.healthWriteDenied_1 : healthWriteDenied;
-  return $super === VOID ? this.copy_qwuwyd_k$(ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied) : $super.copy_qwuwyd_k$.call(this, ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied);
+  syncBeeps = syncBeeps === VOID ? this.syncBeeps_1 : syncBeeps;
+  return $super === VOID ? this.copy_3x1mvk_k$(ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied, syncBeeps) : $super.copy_3x1mvk_k$.call(this, ownerForeign, settingsSaveFailed, settingsReadable, bikeVerified, options, watchInstalled, fromWatch, locationDenied, healthSessionEnding, healthWriteDenied, syncBeeps);
 };
 protoOf(StartContext).toString = function () {
-  return 'StartContext(ownerForeign=' + this.ownerForeign_1 + ', settingsSaveFailed=' + this.settingsSaveFailed_1 + ', settingsReadable=' + this.settingsReadable_1 + ', bikeVerified=' + this.bikeVerified_1 + ', options=' + toString_1(this.options_1) + ', watchInstalled=' + this.watchInstalled_1 + ', fromWatch=' + this.fromWatch_1 + ', locationDenied=' + this.locationDenied_1 + ', healthSessionEnding=' + this.healthSessionEnding_1 + ', healthWriteDenied=' + this.healthWriteDenied_1 + ')';
+  return 'StartContext(ownerForeign=' + this.ownerForeign_1 + ', settingsSaveFailed=' + this.settingsSaveFailed_1 + ', settingsReadable=' + this.settingsReadable_1 + ', bikeVerified=' + this.bikeVerified_1 + ', options=' + toString_1(this.options_1) + ', watchInstalled=' + this.watchInstalled_1 + ', fromWatch=' + this.fromWatch_1 + ', locationDenied=' + this.locationDenied_1 + ', healthSessionEnding=' + this.healthSessionEnding_1 + ', healthWriteDenied=' + this.healthWriteDenied_1 + ', syncBeeps=' + this.syncBeeps_1 + ')';
 };
 protoOf(StartContext).hashCode = function () {
   var result = getBooleanHashCode(this.ownerForeign_1);
@@ -23387,6 +23454,7 @@ protoOf(StartContext).hashCode = function () {
   result = imul(result, 31) + getBooleanHashCode(this.locationDenied_1) | 0;
   result = imul(result, 31) + getBooleanHashCode(this.healthSessionEnding_1) | 0;
   result = imul(result, 31) + getBooleanHashCode(this.healthWriteDenied_1) | 0;
+  result = imul(result, 31) + getBooleanHashCode(this.syncBeeps_1) | 0;
   return result;
 };
 protoOf(StartContext).equals = function (other) {
@@ -23414,9 +23482,11 @@ protoOf(StartContext).equals = function (other) {
     return false;
   if (!(this.healthWriteDenied_1 === other.healthWriteDenied_1))
     return false;
+  if (!(this.syncBeeps_1 === other.syncBeeps_1))
+    return false;
   return true;
 };
-function RideClock(elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened) {
+function RideClock(elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened, syncBeeps) {
   this.elapsedOriginMonoUs_1 = elapsedOriginMonoUs;
   this.timerBaseUs_1 = timerBaseUs;
   this.timerOriginMonoUs_1 = timerOriginMonoUs;
@@ -23425,11 +23495,12 @@ function RideClock(elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDea
   this.activeInterval_1 = activeInterval;
   this.intervalStartUs_1 = intervalStartUs;
   this.intervalsOpened_1 = intervalsOpened;
+  this.syncBeeps_1 = syncBeeps;
 }
-protoOf(RideClock).copy_e99k2v_k$ = function (elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened) {
-  return new RideClock(elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened);
+protoOf(RideClock).copy_nr6yxg_k$ = function (elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened, syncBeeps) {
+  return new RideClock(elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened, syncBeeps);
 };
-protoOf(RideClock).copy$default_ivgddq_k$ = function (elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened, $super) {
+protoOf(RideClock).copy$default_wam6mc_k$ = function (elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened, syncBeeps, $super) {
   elapsedOriginMonoUs = elapsedOriginMonoUs === VOID ? this.elapsedOriginMonoUs_1 : elapsedOriginMonoUs;
   timerBaseUs = timerBaseUs === VOID ? this.timerBaseUs_1 : timerBaseUs;
   timerOriginMonoUs = timerOriginMonoUs === VOID ? this.timerOriginMonoUs_1 : timerOriginMonoUs;
@@ -23438,13 +23509,14 @@ protoOf(RideClock).copy$default_ivgddq_k$ = function (elapsedOriginMonoUs, timer
   activeInterval = activeInterval === VOID ? this.activeInterval_1 : activeInterval;
   intervalStartUs = intervalStartUs === VOID ? this.intervalStartUs_1 : intervalStartUs;
   intervalsOpened = intervalsOpened === VOID ? this.intervalsOpened_1 : intervalsOpened;
+  syncBeeps = syncBeeps === VOID ? this.syncBeeps_1 : syncBeeps;
   var tmp;
   if ($super === VOID) {
-    tmp = this.copy_e99k2v_k$(elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened);
+    tmp = this.copy_nr6yxg_k$(elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, startEvent, activeInterval, intervalStartUs, intervalsOpened, syncBeeps);
   } else {
-    var tmp_0 = $super.copy_e99k2v_k$;
+    var tmp_0 = $super.copy_nr6yxg_k$;
     var tmp_1 = startEvent;
-    tmp = tmp_0.call(this, elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, tmp_1 == null ? null : new EventId(tmp_1), activeInterval, intervalStartUs, intervalsOpened);
+    tmp = tmp_0.call(this, elapsedOriginMonoUs, timerBaseUs, timerOriginMonoUs, startDeadlineMonoUs, tmp_1 == null ? null : new EventId(tmp_1), activeInterval, intervalStartUs, intervalsOpened, syncBeeps);
   }
   return tmp;
 };
@@ -23454,7 +23526,7 @@ protoOf(RideClock).toString = function () {
   var tmp_1 = toString_1(this.timerOriginMonoUs_1);
   var tmp_2 = toString_1(this.startDeadlineMonoUs_1);
   var tmp_3 = this.startEvent_1;
-  return 'RideClock(elapsedOriginMonoUs=' + tmp + ', timerBaseUs=' + tmp_0 + ', timerOriginMonoUs=' + tmp_1 + ', startDeadlineMonoUs=' + tmp_2 + ', startEvent=' + toString_1(tmp_3 == null ? null : new EventId(tmp_3)) + ', activeInterval=' + this.activeInterval_1 + ', intervalStartUs=' + toString_1(this.intervalStartUs_1) + ', intervalsOpened=' + this.intervalsOpened_1 + ')';
+  return 'RideClock(elapsedOriginMonoUs=' + tmp + ', timerBaseUs=' + tmp_0 + ', timerOriginMonoUs=' + tmp_1 + ', startDeadlineMonoUs=' + tmp_2 + ', startEvent=' + toString_1(tmp_3 == null ? null : new EventId(tmp_3)) + ', activeInterval=' + this.activeInterval_1 + ', intervalStartUs=' + toString_1(this.intervalStartUs_1) + ', intervalsOpened=' + this.intervalsOpened_1 + ', syncBeeps=' + this.syncBeeps_1 + ')';
 };
 protoOf(RideClock).hashCode = function () {
   var result = this.elapsedOriginMonoUs_1.hashCode();
@@ -23473,6 +23545,7 @@ protoOf(RideClock).hashCode = function () {
   result = imul(result, 31) + (this.activeInterval_1 == null ? 0 : this.activeInterval_1) | 0;
   result = imul(result, 31) + (this.intervalStartUs_1 == null ? 0 : this.intervalStartUs_1.hashCode()) | 0;
   result = imul(result, 31) + this.intervalsOpened_1 | 0;
+  result = imul(result, 31) + getBooleanHashCode(this.syncBeeps_1) | 0;
   return result;
 };
 protoOf(RideClock).equals = function (other) {
@@ -23498,6 +23571,8 @@ protoOf(RideClock).equals = function (other) {
   if (!equals(this.intervalStartUs_1, other.intervalStartUs_1))
     return false;
   if (!(this.intervalsOpened_1 === other.intervalsOpened_1))
+    return false;
+  if (!(this.syncBeeps_1 === other.syncBeeps_1))
     return false;
   return true;
 };
@@ -23698,7 +23773,7 @@ function start($this, open, command, clock) {
   }
   var tmp$ret$2 = tmp$ret$3;
   var ride = new Ride(command.rideId_1, command.recordedBy_1, false, clock.utcUs_1, tmp$ret$2, RidePhase_preparing_getInstance(), false, new RideTiming(clock.utcUs_1, new Long(0, 0), new Long(0, 0)), null);
-  var rideClock = new RideClock(clock.monoUs_1, new Long(0, 0), null, StartPolicy_getInstance().deadline_4c90j0_k$(clock.monoUs_1), command.event_1, null, null, 0);
+  var rideClock = new RideClock(clock.monoUs_1, new Long(0, 0), null, StartPolicy_getInstance().deadline_4c90j0_k$(clock.monoUs_1), command.event_1, null, null, 0, command.context_1.syncBeeps_1);
   return accepted($this, new LifecycleState(ride, rideClock), ride, RideTransition_prepared_getInstance());
 }
 function confirm($this, state, open, clock) {
@@ -23731,8 +23806,9 @@ function confirm($this, state, open, clock) {
   }
   var tmp$ret$2 = tmp$ret$3.value_1;
   var start = new RideEvent(tmp$ret$2, RideEventKind_start_getInstance(), open.startedUtcUs_1, new Long(0, 0));
-  var next = rideClock.copy$default_ivgddq_k$(VOID, new Long(0, 0), clock.monoUs_1, null, null, 1, new Long(0, 0), 1);
-  var timing = new RideTiming(clock.utcUs_1, subtract(clock.monoUs_1, rideClock.elapsedOriginMonoUs_1), new Long(0, 0));
+  var timerOriginMonoUs = rideClock.syncBeeps_1 ? rideClock.elapsedOriginMonoUs_1 : clock.monoUs_1;
+  var next = rideClock.copy$default_wam6mc_k$(VOID, new Long(0, 0), timerOriginMonoUs, null, null, 1, new Long(0, 0), 1);
+  var timing = new RideTiming(clock.utcUs_1, subtract(clock.monoUs_1, rideClock.elapsedOriginMonoUs_1), subtract(clock.monoUs_1, timerOriginMonoUs));
   var running = open.copy$default_4q2w13_k$(VOID, VOID, VOID, VOID, VOID, RidePhase_running_getInstance(), VOID, timing);
   return accepted($this, new LifecycleState(running, next), running, RideTransition_started_getInstance(), listOf_0(start));
 }
@@ -23781,13 +23857,13 @@ function move($this, state, open, transition, event, clock, finish) {
   switch (transition.ordinal_1) {
     case 2:
       var paused = open.copy$default_4q2w13_k$(VOID, VOID, VOID, VOID, VOID, RidePhase_paused_getInstance(), VOID, now);
-      var next = rideClock.copy$default_ivgddq_k$(VOID, now.timerUs_1, null, VOID, VOID, null, null);
+      var next = rideClock.copy$default_wam6mc_k$(VOID, now.timerUs_1, null, VOID, VOID, null, null);
       tmp = accepted($this, new LifecycleState(paused, next), paused, transition, listOf_0(event_0($this, event, RideEventKind_pause_getInstance(), now)));
       break;
     case 3:
       var running = open.copy$default_4q2w13_k$(VOID, VOID, VOID, VOID, VOID, RidePhase_running_getInstance(), VOID, now);
       var opened = rideClock.intervalsOpened_1 + 1 | 0;
-      var next_0 = rideClock.copy$default_ivgddq_k$(VOID, VOID, clock.monoUs_1, VOID, VOID, opened, now.elapsedUs_1, opened);
+      var next_0 = rideClock.copy$default_wam6mc_k$(VOID, VOID, clock.monoUs_1, VOID, VOID, opened, now.elapsedUs_1, opened);
       tmp = accepted($this, new LifecycleState(running, next_0), running, transition, listOf_0(event_0($this, event, RideEventKind_resume_getInstance(), now)));
       break;
     case 4:
@@ -24874,43 +24950,42 @@ function SourceState_backfilled_getInstance() {
   static_init_45();
   return SourceState_backfilled_instance;
 }
+function Tone(atMonoUs, samples, sampleRateHz) {
+  this.atMonoUs_1 = atMonoUs;
+  this.samples_1 = samples;
+  this.sampleRateHz_1 = sampleRateHz;
+}
 function _get_$cachedSerializer__te6jhj_34($this) {
   return $this.$cachedSerializer$delegate_1.get_value_j01efc_k$();
 }
-function ViewId$Companion$_anonymous__ifgykx() {
-  return createSimpleEnumSerializer('app.powerlog.domain.settings.ViewId', values_45());
+function CueAction$Companion$_anonymous__u8q6re() {
+  return createSimpleEnumSerializer('app.powerlog.domain.recording.CueAction', values_45());
 }
 var static_init_called_46;
 function static_init_46() {
   if (static_init_called_46)
     return Unit_instance;
   static_init_called_46 = true;
-  ViewId_ride_instance = new ViewId('ride', 0);
-  ViewId_battery_instance = new ViewId('battery', 1);
-  ViewId_temperature_instance = new ViewId('temperature', 2);
+  CueAction_start_instance = new CueAction('start', 0);
+  CueAction_resume_instance = new CueAction('resume', 1);
+  CueAction_finish_instance = new CueAction('finish', 2);
   if (Companion_instance_112 == null) {
     Companion_instance;
     new Companion_111();
   }
 }
-var ViewId_ride_instance;
-var ViewId_battery_instance;
-var ViewId_temperature_instance;
+var CueAction_start_instance;
+var CueAction_resume_instance;
+var CueAction_finish_instance;
 function values_45() {
   static_init_46();
-  return [ViewId_ride_getInstance(), ViewId_battery_getInstance(), ViewId_temperature_getInstance()];
-}
-function get_entries_20() {
-  static_init_46();
-  if ($ENTRIES_20 == null)
-    $ENTRIES_20 = enumEntries(values_45());
-  return $ENTRIES_20;
+  return [CueAction_start_getInstance(), CueAction_resume_getInstance(), CueAction_finish_getInstance()];
 }
 function Companion_111() {
   Companion_instance_112 = this;
   var tmp = this;
   var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
-  tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, ViewId$Companion$_anonymous__ifgykx);
+  tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, CueAction$Companion$_anonymous__u8q6re);
 }
 protoOf(Companion_111).serializer_9w0wvi_k$ = function () {
   return _get_$cachedSerializer__te6jhj_34(this);
@@ -24920,49 +24995,179 @@ function Companion_getInstance_102() {
   static_init_46();
   return Companion_instance_112;
 }
-var $ENTRIES_20;
-function ViewId(name, ordinal) {
+function CueAction(name, ordinal) {
   Enum.call(this, name, ordinal);
+}
+function _get_pip__e6eqxm($this) {
+  var tmp0 = $this.pip$delegate_1;
+  var tmp = KProperty1;
+  // Inline function 'kotlin.getValue' call
+  getPropertyCallableRef('pip', 1, tmp, SyncBeeps$_get_pip_$ref_h6oqsv(), null);
+  return tmp0.get_value_j01efc_k$();
+}
+function _get_sync__ddyg40($this) {
+  var tmp0 = $this.sync$delegate_1;
+  var tmp = KProperty1;
+  // Inline function 'kotlin.getValue' call
+  getPropertyCallableRef('sync', 1, tmp, SyncBeeps$_get_sync_$ref_umpjxj(), null);
+  return tmp0.get_value_j01efc_k$();
+}
+function ceilDiv($this, value, divisor) {
+  // Inline function 'kotlin.floorDiv' call
+  var this_0 = negate(value);
+  var q = divide(this_0, divisor);
+  if (compare(bitwiseXor(this_0, divisor), new Long(0, 0)) < 0 && !equalsLong(multiply(q, divisor), this_0)) {
+    var _unary__edvuaz = q;
+    q = subtract(_unary__edvuaz, get_ONE());
+  }
+  var tmp$ret$0 = q;
+  return negate(tmp$ret$0);
+}
+function SyncBeeps$pip$delegate$lambda() {
+  return SyncBeeps_getInstance().pcm_ekwsjh_k$(1000, new Long(100000, 0));
+}
+function SyncBeeps$_get_pip_$ref_h6oqsv() {
+  return constructCallableReference(function (p0) {
+    return _get_pip__e6eqxm(p0);
+  }, 1, 0, 9);
+}
+function SyncBeeps$sync$delegate$lambda() {
+  return SyncBeeps_getInstance().pcm_ekwsjh_k$(2000, new Long(200000, 0));
+}
+function SyncBeeps$_get_sync_$ref_umpjxj() {
+  return constructCallableReference(function (p0) {
+    return _get_sync__ddyg40(p0);
+  }, 1, 0, 10);
+}
+function SyncBeeps() {
+  SyncBeeps_instance = this;
+  this.sampleRateHz_1 = 48000;
+  this.startLeadUs_1 = new Long(3500000, 0);
+  this.controlLeadUs_1 = new Long(1000000, 0);
+  this.finishRequestLeadUs_1 = new Long(450000, 0);
+  this.testLeadUs_1 = new Long(300000, 0);
+  this.SECOND_US_1 = new Long(1000000, 0);
+  this.PIP_HZ_1 = 1000;
+  this.PIP_US_1 = new Long(100000, 0);
+  this.SYNC_HZ_1 = 2000;
+  this.SYNC_US_1 = new Long(200000, 0);
+  this.RAMP_US_1 = new Long(1000, 0);
+  this.LEVEL_DB_1 = -1.0;
+  var tmp = this;
+  tmp.pip$delegate_1 = lazy_0(SyncBeeps$pip$delegate$lambda);
+  var tmp_0 = this;
+  tmp_0.sync$delegate_1 = lazy_0(SyncBeeps$sync$delegate$lambda);
+}
+protoOf(SyncBeeps).startAt_dprn8g_k$ = function (press) {
+  var utcUs = multiply(ceilDiv(this, add(press.utcUs_1, new Long(3500000, 0)), new Long(1000000, 0)), new Long(1000000, 0));
+  return new ClockReading(add(press.monoUs_1, subtract(utcUs, press.utcUs_1)), utcUs);
+};
+protoOf(SyncBeeps).controlAt_ozmy7r_k$ = function (press, originMonoUs) {
+  var monoUs = add(originMonoUs, multiply(ceilDiv(this, subtract(add(press.monoUs_1, new Long(1000000, 0)), originMonoUs), new Long(1000000, 0)), new Long(1000000, 0)));
+  return new ClockReading(monoUs, add(press.utcUs_1, subtract(monoUs, press.monoUs_1)));
+};
+protoOf(SyncBeeps).cued_ylsrim_k$ = function (phase, action) {
+  return phase.equals(RidePhase_paused_getInstance()) && action.equals(RideAction_resume_getInstance()) || (phase.equals(RidePhase_running_getInstance()) && action.equals(RideAction_finish_getInstance()));
+};
+protoOf(SyncBeeps).requestAt_ov16f3_k$ = function (action, atMonoUs) {
+  return action.equals(CueAction_finish_getInstance()) ? subtract(atMonoUs, new Long(450000, 0)) : atMonoUs;
+};
+protoOf(SyncBeeps).startTones_pr89zv_k$ = function (atMonoUs) {
+  return listOf([new Tone(subtract(atMonoUs, new Long(3000000, 0)), _get_pip__e6eqxm(this), 48000), new Tone(subtract(atMonoUs, new Long(2000000, 0)), _get_pip__e6eqxm(this), 48000), new Tone(subtract(atMonoUs, new Long(1000000, 0)), _get_pip__e6eqxm(this), 48000), new Tone(atMonoUs, _get_sync__ddyg40(this), 48000)]);
+};
+protoOf(SyncBeeps).syncTones_bd5cki_k$ = function (atMonoUs) {
+  return listOf_0(new Tone(atMonoUs, _get_sync__ddyg40(this), 48000));
+};
+protoOf(SyncBeeps).pcm_ekwsjh_k$ = function (frequencyHz, durationUs) {
+  // Inline function 'kotlin.Long.times' call
+  var tmp$ret$0 = multiply(durationUs, fromInt(48000));
+  var count = convertToInt(divide(tmp$ret$0, new Long(1000000, 0)));
+  // Inline function 'kotlin.Long.times' call
+  var this_0 = new Long(1000, 0);
+  var tmp$ret$1 = multiply(this_0, fromInt(48000));
+  var ramp = convertToInt(divide(tmp$ret$1, new Long(1000000, 0)));
+  // Inline function 'kotlin.math.pow' call
+  var x = -1.0 / 20;
+  var amplitude = Math.pow(10.0, x);
+  var tmp = 0;
+  var tmp_0 = new Float32Array(count);
+  while (tmp < count) {
+    var tmp_1 = tmp;
+    // Inline function 'kotlin.comparisons.minOf' call
+    var b = (count - 1 | 0) - tmp_1 | 0;
+    var edge = Math.min(tmp_1, b);
+    var tmp_2;
+    if (edge < ramp) {
+      // Inline function 'kotlin.math.cos' call
+      var x_0 = 3.141592653589793 * edge / ramp;
+      tmp_2 = 0.5 - 0.5 * Math.cos(x_0);
+    } else {
+      tmp_2 = 1.0;
+    }
+    var envelope = tmp_2;
+    var tmp_3 = amplitude * envelope;
+    // Inline function 'kotlin.math.sin' call
+    var x_1 = 2 * 3.141592653589793 * frequencyHz * tmp_1 / 48000;
+    tmp_0[tmp_1] = tmp_3 * Math.sin(x_1);
+    tmp = tmp + 1 | 0;
+  }
+  return tmp_0;
+};
+var SyncBeeps_instance;
+function SyncBeeps_getInstance() {
+  if (SyncBeeps_instance == null)
+    new SyncBeeps();
+  return SyncBeeps_instance;
+}
+function CueAction_start_getInstance() {
+  static_init_46();
+  return CueAction_start_instance;
+}
+function CueAction_resume_getInstance() {
+  static_init_46();
+  return CueAction_resume_instance;
+}
+function CueAction_finish_getInstance() {
+  static_init_46();
+  return CueAction_finish_instance;
 }
 function _get_$cachedSerializer__te6jhj_35($this) {
   return $this.$cachedSerializer$delegate_1.get_value_j01efc_k$();
 }
-function ChartRange$Companion$_anonymous__iwdy5s() {
-  return createSimpleEnumSerializer('app.powerlog.domain.settings.ChartRange', values_46());
+function ViewId$Companion$_anonymous__ifgykx() {
+  return createSimpleEnumSerializer('app.powerlog.domain.settings.ViewId', values_46());
 }
 var static_init_called_47;
 function static_init_47() {
   if (static_init_called_47)
     return Unit_instance;
   static_init_called_47 = true;
-  ChartRange_seconds30_instance = new ChartRange('seconds30', 0);
-  ChartRange_seconds120_instance = new ChartRange('seconds120', 1);
-  ChartRange_seconds600_instance = new ChartRange('seconds600', 2);
-  ChartRange_all_instance = new ChartRange('all', 3);
+  ViewId_ride_instance = new ViewId('ride', 0);
+  ViewId_battery_instance = new ViewId('battery', 1);
+  ViewId_temperature_instance = new ViewId('temperature', 2);
   if (Companion_instance_113 == null) {
     Companion_instance;
     new Companion_112();
   }
 }
-var ChartRange_seconds30_instance;
-var ChartRange_seconds120_instance;
-var ChartRange_seconds600_instance;
-var ChartRange_all_instance;
+var ViewId_ride_instance;
+var ViewId_battery_instance;
+var ViewId_temperature_instance;
 function values_46() {
   static_init_47();
-  return [ChartRange_seconds30_getInstance(), ChartRange_seconds120_getInstance(), ChartRange_seconds600_getInstance(), ChartRange_all_getInstance()];
+  return [ViewId_ride_getInstance(), ViewId_battery_getInstance(), ViewId_temperature_getInstance()];
 }
-function get_entries_21() {
+function get_entries_20() {
   static_init_47();
-  if ($ENTRIES_21 == null)
-    $ENTRIES_21 = enumEntries(values_46());
-  return $ENTRIES_21;
+  if ($ENTRIES_20 == null)
+    $ENTRIES_20 = enumEntries(values_46());
+  return $ENTRIES_20;
 }
 function Companion_112() {
   Companion_instance_113 = this;
   var tmp = this;
   var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
-  tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, ChartRange$Companion$_anonymous__iwdy5s);
+  tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, ViewId$Companion$_anonymous__ifgykx);
 }
 protoOf(Companion_112).serializer_9w0wvi_k$ = function () {
   return _get_$cachedSerializer__te6jhj_35(this);
@@ -24972,41 +25177,49 @@ function Companion_getInstance_103() {
   static_init_47();
   return Companion_instance_113;
 }
-var $ENTRIES_21;
-function ChartRange(name, ordinal) {
+var $ENTRIES_20;
+function ViewId(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
 function _get_$cachedSerializer__te6jhj_36($this) {
   return $this.$cachedSerializer$delegate_1.get_value_j01efc_k$();
 }
-function PersistenceState$Companion$_anonymous__g33d99() {
-  return createSimpleEnumSerializer('app.powerlog.domain.settings.PersistenceState', values_47());
+function ChartRange$Companion$_anonymous__iwdy5s() {
+  return createSimpleEnumSerializer('app.powerlog.domain.settings.ChartRange', values_47());
 }
 var static_init_called_48;
 function static_init_48() {
   if (static_init_called_48)
     return Unit_instance;
   static_init_called_48 = true;
-  PersistenceState_persisted_instance = new PersistenceState('persisted', 0);
-  PersistenceState_notPersisted_instance = new PersistenceState('notPersisted', 1);
-  PersistenceState_unsupported_instance = new PersistenceState('unsupported', 2);
+  ChartRange_seconds30_instance = new ChartRange('seconds30', 0);
+  ChartRange_seconds120_instance = new ChartRange('seconds120', 1);
+  ChartRange_seconds600_instance = new ChartRange('seconds600', 2);
+  ChartRange_all_instance = new ChartRange('all', 3);
   if (Companion_instance_114 == null) {
     Companion_instance;
     new Companion_113();
   }
 }
-var PersistenceState_persisted_instance;
-var PersistenceState_notPersisted_instance;
-var PersistenceState_unsupported_instance;
+var ChartRange_seconds30_instance;
+var ChartRange_seconds120_instance;
+var ChartRange_seconds600_instance;
+var ChartRange_all_instance;
 function values_47() {
   static_init_48();
-  return [PersistenceState_persisted_getInstance(), PersistenceState_notPersisted_getInstance(), PersistenceState_unsupported_getInstance()];
+  return [ChartRange_seconds30_getInstance(), ChartRange_seconds120_getInstance(), ChartRange_seconds600_getInstance(), ChartRange_all_getInstance()];
+}
+function get_entries_21() {
+  static_init_48();
+  if ($ENTRIES_21 == null)
+    $ENTRIES_21 = enumEntries(values_47());
+  return $ENTRIES_21;
 }
 function Companion_113() {
   Companion_instance_114 = this;
   var tmp = this;
   var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
-  tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, PersistenceState$Companion$_anonymous__g33d99);
+  tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, ChartRange$Companion$_anonymous__iwdy5s);
 }
 protoOf(Companion_113).serializer_9w0wvi_k$ = function () {
   return _get_$cachedSerializer__te6jhj_36(this);
@@ -25016,17 +25229,61 @@ function Companion_getInstance_104() {
   static_init_48();
   return Companion_instance_114;
 }
+var $ENTRIES_21;
+function ChartRange(name, ordinal) {
+  Enum.call(this, name, ordinal);
+}
+function _get_$cachedSerializer__te6jhj_37($this) {
+  return $this.$cachedSerializer$delegate_1.get_value_j01efc_k$();
+}
+function PersistenceState$Companion$_anonymous__g33d99() {
+  return createSimpleEnumSerializer('app.powerlog.domain.settings.PersistenceState', values_48());
+}
+var static_init_called_49;
+function static_init_49() {
+  if (static_init_called_49)
+    return Unit_instance;
+  static_init_called_49 = true;
+  PersistenceState_persisted_instance = new PersistenceState('persisted', 0);
+  PersistenceState_notPersisted_instance = new PersistenceState('notPersisted', 1);
+  PersistenceState_unsupported_instance = new PersistenceState('unsupported', 2);
+  if (Companion_instance_115 == null) {
+    Companion_instance;
+    new Companion_114();
+  }
+}
+var PersistenceState_persisted_instance;
+var PersistenceState_notPersisted_instance;
+var PersistenceState_unsupported_instance;
+function values_48() {
+  static_init_49();
+  return [PersistenceState_persisted_getInstance(), PersistenceState_notPersisted_getInstance(), PersistenceState_unsupported_getInstance()];
+}
+function Companion_114() {
+  Companion_instance_115 = this;
+  var tmp = this;
+  var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
+  tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, PersistenceState$Companion$_anonymous__g33d99);
+}
+protoOf(Companion_114).serializer_9w0wvi_k$ = function () {
+  return _get_$cachedSerializer__te6jhj_37(this);
+};
+var Companion_instance_115;
+function Companion_getInstance_105() {
+  static_init_49();
+  return Companion_instance_115;
+}
 function PersistenceState(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
 function LocaleFacts$Companion$$childSerializers$_anonymous__iw3dur() {
-  return Companion_getInstance_108().serializer_9w0wvi_k$();
+  return Companion_getInstance_109().serializer_9w0wvi_k$();
 }
 function LocaleFacts$Companion$$childSerializers$_anonymous__iw3dur_0() {
   return Companion_getInstance_70().serializer_9w0wvi_k$();
 }
-function Companion_114() {
-  Companion_instance_115 = this;
+function Companion_115() {
+  Companion_instance_116 = this;
   var tmp = this;
   var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
   var tmp_1 = lazy(tmp_0, LocaleFacts$Companion$$childSerializers$_anonymous__iw3dur);
@@ -25036,11 +25293,11 @@ function Companion_114() {
   // Inline function 'kotlin.js.asDynamic' call
   tmp.$childSerializers_1 = [null, tmp_1, lazy(tmp_2, LocaleFacts$Companion$$childSerializers$_anonymous__iw3dur_0)];
 }
-var Companion_instance_115;
-function Companion_getInstance_105() {
-  if (Companion_instance_115 == null)
-    new Companion_114();
-  return Companion_instance_115;
+var Companion_instance_116;
+function Companion_getInstance_106() {
+  if (Companion_instance_116 == null)
+    new Companion_115();
+  return Companion_instance_116;
 }
 function $serializer_39() {
   $serializer_instance_39 = this;
@@ -25053,7 +25310,7 @@ function $serializer_39() {
 protoOf($serializer_39).serialize_bkl6mv_k$ = function (encoder, value) {
   var tmp0_desc = this.descriptor_1;
   var tmp1_output = encoder.beginStructure_yljocp_k$(tmp0_desc);
-  var tmp2_cached = Companion_getInstance_105().$childSerializers_1;
+  var tmp2_cached = Companion_getInstance_106().$childSerializers_1;
   tmp1_output.encodeNullableSerializableElement_5lquiv_k$(tmp0_desc, 0, StringSerializer_getInstance(), value.region_1);
   tmp1_output.encodeNullableSerializableElement_5lquiv_k$(tmp0_desc, 1, tmp2_cached[1].get_value_j01efc_k$(), value.measurementSystem_1);
   tmp1_output.encodeNullableSerializableElement_5lquiv_k$(tmp0_desc, 2, tmp2_cached[2].get_value_j01efc_k$(), value.temperature_1);
@@ -25071,7 +25328,7 @@ protoOf($serializer_39).deserialize_sy6x50_k$ = function (decoder) {
   var tmp5_local1 = null;
   var tmp6_local2 = null;
   var tmp7_input = decoder.beginStructure_yljocp_k$(tmp0_desc);
-  var tmp8_cached = Companion_getInstance_105().$childSerializers_1;
+  var tmp8_cached = Companion_getInstance_106().$childSerializers_1;
   if (tmp7_input.decodeSequentially_xlblqy_k$()) {
     tmp4_local0 = tmp7_input.decodeNullableSerializableElement_k2y6ab_k$(tmp0_desc, 0, StringSerializer_getInstance(), tmp4_local0);
     tmp3_bitMask0 = tmp3_bitMask0 | 1;
@@ -25109,7 +25366,7 @@ protoOf($serializer_39).get_descriptor_wjt6a0_k$ = function () {
   return this.descriptor_1;
 };
 protoOf($serializer_39).childSerializers_5ghqw5_k$ = function () {
-  var tmp0_cached = Companion_getInstance_105().$childSerializers_1;
+  var tmp0_cached = Companion_getInstance_106().$childSerializers_1;
   // Inline function 'kotlin.arrayOf' call
   // Inline function 'kotlin.js.unsafeCast' call
   // Inline function 'kotlin.js.asDynamic' call
@@ -25134,7 +25391,7 @@ function LocaleFacts_init_$Create$(seen0, region, measurementSystem, temperature
   return LocaleFacts_init_$Init$(seen0, region, measurementSystem, temperature, serializationConstructorMarker, objectCreate(protoOf(LocaleFacts)));
 }
 function LocaleFacts(region, measurementSystem, temperature) {
-  Companion_getInstance_105();
+  Companion_getInstance_106();
   this.region_1 = region;
   this.measurementSystem_1 = measurementSystem;
   this.temperature_1 = temperature;
@@ -25170,14 +25427,14 @@ protoOf(LocaleFacts).equals = function (other) {
     return false;
   return true;
 };
-function Companion_115() {
+function Companion_116() {
 }
-protoOf(Companion_115).serializer_9w0wvi_k$ = function () {
+protoOf(Companion_116).serializer_9w0wvi_k$ = function () {
   return $serializer_getInstance_40();
 };
-var Companion_instance_116;
-function Companion_getInstance_106() {
-  return Companion_instance_116;
+var Companion_instance_117;
+function Companion_getInstance_107() {
+  return Companion_instance_117;
 }
 function $serializer_40() {
   $serializer_instance_40 = this;
@@ -25288,12 +25545,12 @@ protoOf(SettingsDocument).equals = function (other) {
     return false;
   return true;
 };
-function Companion_116() {
+function Companion_117() {
 }
-protoOf(Companion_116).of_3btlre_k$ = function (settings) {
+protoOf(Companion_117).of_3btlre_k$ = function (settings) {
   var ride = settings.ride_1;
   var app = settings.app_1;
-  var tmp = new RideSettingsDraft(ride.sampleRate_1, ride.distance_1, ride.battery_1, ride.indoor_1, ride.useWatch_1, ride.saveToHealth_1, ride.recordGps_1);
+  var tmp = new RideSettingsDraft(ride.sampleRate_1, ride.distance_1, ride.battery_1, ride.indoor_1, ride.useWatch_1, ride.saveToHealth_1, ride.recordGps_1, ride.syncBeeps_1);
   // Inline function 'kotlin.collections.mapValues' call
   var this_0 = app.views_1;
   // Inline function 'kotlin.collections.mapValuesTo' call
@@ -25331,9 +25588,9 @@ protoOf(Companion_116).of_3btlre_k$ = function (settings) {
   }
   return new SettingsDraft(tmp, new AppSettingsDraft(app.units_1, app.temperature_1, app.fitPower_1, destination, app.activeView_1, app.historyView_1, app.historyRange_1));
 };
-var Companion_instance_117;
-function Companion_getInstance_107() {
-  return Companion_instance_117;
+var Companion_instance_118;
+function Companion_getInstance_108() {
+  return Companion_instance_118;
 }
 function SettingsDraft(ride, app) {
   this.ride_1 = ride;
@@ -25358,7 +25615,7 @@ protoOf(SettingsDraft).equals = function (other) {
     return false;
   return true;
 };
-function RideSettingsDraft(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps) {
+function RideSettingsDraft(sampleRate, distance, battery, indoor, useWatch, saveToHealth, recordGps, syncBeeps) {
   this.sampleRate_1 = sampleRate;
   this.distance_1 = distance;
   this.battery_1 = battery;
@@ -25366,9 +25623,10 @@ function RideSettingsDraft(sampleRate, distance, battery, indoor, useWatch, save
   this.useWatch_1 = useWatch;
   this.saveToHealth_1 = saveToHealth;
   this.recordGps_1 = recordGps;
+  this.syncBeeps_1 = syncBeeps;
 }
 protoOf(RideSettingsDraft).toString = function () {
-  return 'RideSettingsDraft(sampleRate=' + toString_1(this.sampleRate_1) + ', distance=' + toString_1(this.distance_1) + ', battery=' + toString_1(this.battery_1) + ', indoor=' + this.indoor_1 + ', useWatch=' + this.useWatch_1 + ', saveToHealth=' + this.saveToHealth_1 + ', recordGps=' + this.recordGps_1 + ')';
+  return 'RideSettingsDraft(sampleRate=' + toString_1(this.sampleRate_1) + ', distance=' + toString_1(this.distance_1) + ', battery=' + toString_1(this.battery_1) + ', indoor=' + this.indoor_1 + ', useWatch=' + this.useWatch_1 + ', saveToHealth=' + this.saveToHealth_1 + ', recordGps=' + this.recordGps_1 + ', syncBeeps=' + this.syncBeeps_1 + ')';
 };
 protoOf(RideSettingsDraft).hashCode = function () {
   var result = this.sampleRate_1 == null ? 0 : this.sampleRate_1.hashCode();
@@ -25378,6 +25636,7 @@ protoOf(RideSettingsDraft).hashCode = function () {
   result = imul(result, 31) + (this.useWatch_1 == null ? 0 : getBooleanHashCode(this.useWatch_1)) | 0;
   result = imul(result, 31) + (this.saveToHealth_1 == null ? 0 : getBooleanHashCode(this.saveToHealth_1)) | 0;
   result = imul(result, 31) + (this.recordGps_1 == null ? 0 : getBooleanHashCode(this.recordGps_1)) | 0;
+  result = imul(result, 31) + (this.syncBeeps_1 == null ? 0 : getBooleanHashCode(this.syncBeeps_1)) | 0;
   return result;
 };
 protoOf(RideSettingsDraft).equals = function (other) {
@@ -25398,6 +25657,8 @@ protoOf(RideSettingsDraft).equals = function (other) {
   if (!(this.saveToHealth_1 == other.saveToHealth_1))
     return false;
   if (!(this.recordGps_1 == other.recordGps_1))
+    return false;
+  if (!(this.syncBeeps_1 == other.syncBeeps_1))
     return false;
   return true;
 };
@@ -25475,45 +25736,45 @@ protoOf(ViewPresetDraft).equals = function (other) {
     return false;
   return true;
 };
-function _get_$cachedSerializer__te6jhj_37($this) {
+function _get_$cachedSerializer__te6jhj_38($this) {
   return $this.$cachedSerializer$delegate_1.get_value_j01efc_k$();
 }
 function MeasurementSystem$Companion$_anonymous__r9ckxo() {
-  return createSimpleEnumSerializer('app.powerlog.domain.settings.MeasurementSystem', values_48());
+  return createSimpleEnumSerializer('app.powerlog.domain.settings.MeasurementSystem', values_49());
 }
-var static_init_called_49;
-function static_init_49() {
-  if (static_init_called_49)
+var static_init_called_50;
+function static_init_50() {
+  if (static_init_called_50)
     return Unit_instance;
-  static_init_called_49 = true;
+  static_init_called_50 = true;
   MeasurementSystem_metric_instance = new MeasurementSystem('metric', 0);
   MeasurementSystem_us_instance = new MeasurementSystem('us', 1);
   MeasurementSystem_uk_instance = new MeasurementSystem('uk', 2);
-  if (Companion_instance_118 == null) {
+  if (Companion_instance_119 == null) {
     Companion_instance;
-    new Companion_117();
+    new Companion_118();
   }
 }
 var MeasurementSystem_metric_instance;
 var MeasurementSystem_us_instance;
 var MeasurementSystem_uk_instance;
-function values_48() {
-  static_init_49();
+function values_49() {
+  static_init_50();
   return [MeasurementSystem_metric_getInstance(), MeasurementSystem_us_getInstance(), MeasurementSystem_uk_getInstance()];
 }
-function Companion_117() {
-  Companion_instance_118 = this;
+function Companion_118() {
+  Companion_instance_119 = this;
   var tmp = this;
   var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
   tmp.$cachedSerializer$delegate_1 = lazy(tmp_0, MeasurementSystem$Companion$_anonymous__r9ckxo);
 }
-protoOf(Companion_117).serializer_9w0wvi_k$ = function () {
-  return _get_$cachedSerializer__te6jhj_37(this);
+protoOf(Companion_118).serializer_9w0wvi_k$ = function () {
+  return _get_$cachedSerializer__te6jhj_38(this);
 };
-var Companion_instance_118;
-function Companion_getInstance_108() {
-  static_init_49();
-  return Companion_instance_118;
+var Companion_instance_119;
+function Companion_getInstance_109() {
+  static_init_50();
+  return Companion_instance_119;
 }
 function MeasurementSystem(name, ordinal) {
   Enum.call(this, name, ordinal);
@@ -25528,19 +25789,19 @@ function AppSettings$Companion$$childSerializers$_anonymous__98ihoa_1() {
   return Companion_getInstance_79().serializer_9w0wvi_k$();
 }
 function AppSettings$Companion$$childSerializers$_anonymous__98ihoa_2() {
-  return new LinkedHashMapSerializer(Companion_getInstance_102().serializer_9w0wvi_k$(), $serializer_getInstance_42());
+  return new LinkedHashMapSerializer(Companion_getInstance_103().serializer_9w0wvi_k$(), $serializer_getInstance_42());
 }
 function AppSettings$Companion$$childSerializers$_anonymous__98ihoa_3() {
-  return Companion_getInstance_102().serializer_9w0wvi_k$();
-}
-function AppSettings$Companion$$childSerializers$_anonymous__98ihoa_4() {
-  return Companion_getInstance_102().serializer_9w0wvi_k$();
-}
-function AppSettings$Companion$$childSerializers$_anonymous__98ihoa_5() {
   return Companion_getInstance_103().serializer_9w0wvi_k$();
 }
-function Companion_118() {
-  Companion_instance_119 = this;
+function AppSettings$Companion$$childSerializers$_anonymous__98ihoa_4() {
+  return Companion_getInstance_103().serializer_9w0wvi_k$();
+}
+function AppSettings$Companion$$childSerializers$_anonymous__98ihoa_5() {
+  return Companion_getInstance_104().serializer_9w0wvi_k$();
+}
+function Companion_119() {
+  Companion_instance_120 = this;
   var tmp = this;
   var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
   var tmp_1 = lazy(tmp_0, AppSettings$Companion$$childSerializers$_anonymous__98ihoa);
@@ -25560,11 +25821,11 @@ function Companion_118() {
   // Inline function 'kotlin.js.asDynamic' call
   tmp.$childSerializers_1 = [tmp_1, tmp_3, tmp_5, tmp_7, tmp_9, tmp_11, lazy(tmp_12, AppSettings$Companion$$childSerializers$_anonymous__98ihoa_5)];
 }
-var Companion_instance_119;
-function Companion_getInstance_109() {
-  if (Companion_instance_119 == null)
-    new Companion_118();
-  return Companion_instance_119;
+var Companion_instance_120;
+function Companion_getInstance_110() {
+  if (Companion_instance_120 == null)
+    new Companion_119();
+  return Companion_instance_120;
 }
 function $serializer_41() {
   $serializer_instance_41 = this;
@@ -25581,7 +25842,7 @@ function $serializer_41() {
 protoOf($serializer_41).serialize_6q780w_k$ = function (encoder, value) {
   var tmp0_desc = this.descriptor_1;
   var tmp1_output = encoder.beginStructure_yljocp_k$(tmp0_desc);
-  var tmp2_cached = Companion_getInstance_109().$childSerializers_1;
+  var tmp2_cached = Companion_getInstance_110().$childSerializers_1;
   tmp1_output.encodeSerializableElement_isqxcl_k$(tmp0_desc, 0, tmp2_cached[0].get_value_j01efc_k$(), value.units_1);
   tmp1_output.encodeSerializableElement_isqxcl_k$(tmp0_desc, 1, tmp2_cached[1].get_value_j01efc_k$(), value.temperature_1);
   tmp1_output.encodeSerializableElement_isqxcl_k$(tmp0_desc, 2, tmp2_cached[2].get_value_j01efc_k$(), value.fitPower_1);
@@ -25607,7 +25868,7 @@ protoOf($serializer_41).deserialize_sy6x50_k$ = function (decoder) {
   var tmp9_local5 = null;
   var tmp10_local6 = null;
   var tmp11_input = decoder.beginStructure_yljocp_k$(tmp0_desc);
-  var tmp12_cached = Companion_getInstance_109().$childSerializers_1;
+  var tmp12_cached = Companion_getInstance_110().$childSerializers_1;
   if (tmp11_input.decodeSequentially_xlblqy_k$()) {
     tmp4_local0 = tmp11_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 0, tmp12_cached[0].get_value_j01efc_k$(), tmp4_local0);
     tmp3_bitMask0 = tmp3_bitMask0 | 1;
@@ -25669,7 +25930,7 @@ protoOf($serializer_41).get_descriptor_wjt6a0_k$ = function () {
   return this.descriptor_1;
 };
 protoOf($serializer_41).childSerializers_5ghqw5_k$ = function () {
-  var tmp0_cached = Companion_getInstance_109().$childSerializers_1;
+  var tmp0_cached = Companion_getInstance_110().$childSerializers_1;
   // Inline function 'kotlin.arrayOf' call
   // Inline function 'kotlin.js.unsafeCast' call
   // Inline function 'kotlin.js.asDynamic' call
@@ -25698,7 +25959,7 @@ function AppSettings_init_$Create$(seen0, units, temperature, fitPower, views, a
   return AppSettings_init_$Init$(seen0, units, temperature, fitPower, views, activeView, historyView, historyRange, serializationConstructorMarker, objectCreate(protoOf(AppSettings)));
 }
 function AppSettings(units, temperature, fitPower, views, activeView, historyView, historyRange) {
-  Companion_getInstance_109();
+  Companion_getInstance_110();
   this.units_1 = units;
   this.temperature_1 = temperature;
   this.fitPower_1 = fitPower;
@@ -25761,10 +26022,10 @@ function ViewPreset$Companion$$childSerializers$_anonymous__swfooq_0() {
   return new ArrayListSerializer(Companion_getInstance_68().serializer_9w0wvi_k$());
 }
 function ViewPreset$Companion$$childSerializers$_anonymous__swfooq_1() {
-  return Companion_getInstance_103().serializer_9w0wvi_k$();
+  return Companion_getInstance_104().serializer_9w0wvi_k$();
 }
-function Companion_119() {
-  Companion_instance_120 = this;
+function Companion_120() {
+  Companion_instance_121 = this;
   var tmp = this;
   var tmp_0 = LazyThreadSafetyMode_PUBLICATION_getInstance();
   var tmp_1 = lazy(tmp_0, ViewPreset$Companion$$childSerializers$_anonymous__swfooq);
@@ -25776,11 +26037,11 @@ function Companion_119() {
   // Inline function 'kotlin.js.asDynamic' call
   tmp.$childSerializers_1 = [tmp_1, tmp_3, lazy(tmp_4, ViewPreset$Companion$$childSerializers$_anonymous__swfooq_1), null];
 }
-var Companion_instance_120;
-function Companion_getInstance_110() {
-  if (Companion_instance_120 == null)
-    new Companion_119();
-  return Companion_instance_120;
+var Companion_instance_121;
+function Companion_getInstance_111() {
+  if (Companion_instance_121 == null)
+    new Companion_120();
+  return Companion_instance_121;
 }
 function $serializer_42() {
   $serializer_instance_42 = this;
@@ -25794,7 +26055,7 @@ function $serializer_42() {
 protoOf($serializer_42).serialize_pyab32_k$ = function (encoder, value) {
   var tmp0_desc = this.descriptor_1;
   var tmp1_output = encoder.beginStructure_yljocp_k$(tmp0_desc);
-  var tmp2_cached = Companion_getInstance_110().$childSerializers_1;
+  var tmp2_cached = Companion_getInstance_111().$childSerializers_1;
   tmp1_output.encodeSerializableElement_isqxcl_k$(tmp0_desc, 0, tmp2_cached[0].get_value_j01efc_k$(), value.numbers_1);
   tmp1_output.encodeSerializableElement_isqxcl_k$(tmp0_desc, 1, tmp2_cached[1].get_value_j01efc_k$(), value.charts_1);
   tmp1_output.encodeSerializableElement_isqxcl_k$(tmp0_desc, 2, tmp2_cached[2].get_value_j01efc_k$(), value.range_1);
@@ -25814,7 +26075,7 @@ protoOf($serializer_42).deserialize_sy6x50_k$ = function (decoder) {
   var tmp6_local2 = null;
   var tmp7_local3 = 0;
   var tmp8_input = decoder.beginStructure_yljocp_k$(tmp0_desc);
-  var tmp9_cached = Companion_getInstance_110().$childSerializers_1;
+  var tmp9_cached = Companion_getInstance_111().$childSerializers_1;
   if (tmp8_input.decodeSequentially_xlblqy_k$()) {
     tmp4_local0 = tmp8_input.decodeSerializableElement_uahnnv_k$(tmp0_desc, 0, tmp9_cached[0].get_value_j01efc_k$(), tmp4_local0);
     tmp3_bitMask0 = tmp3_bitMask0 | 1;
@@ -25858,7 +26119,7 @@ protoOf($serializer_42).get_descriptor_wjt6a0_k$ = function () {
   return this.descriptor_1;
 };
 protoOf($serializer_42).childSerializers_5ghqw5_k$ = function () {
-  var tmp0_cached = Companion_getInstance_110().$childSerializers_1;
+  var tmp0_cached = Companion_getInstance_111().$childSerializers_1;
   // Inline function 'kotlin.arrayOf' call
   // Inline function 'kotlin.js.unsafeCast' call
   // Inline function 'kotlin.js.asDynamic' call
@@ -25884,7 +26145,7 @@ function ViewPreset_init_$Create$(seen0, numbers, charts, range, webColumns, ser
   return ViewPreset_init_$Init$(seen0, numbers, charts, range, webColumns, serializationConstructorMarker, objectCreate(protoOf(ViewPreset)));
 }
 function ViewPreset(numbers, charts, range, webColumns) {
-  Companion_getInstance_110();
+  Companion_getInstance_111();
   this.numbers_1 = numbers;
   this.charts_1 = charts;
   this.range_1 = range;
@@ -26039,7 +26300,7 @@ protoOf(SettingsRules).defaults_irqmms_k$ = function (locale) {
   var units = tmp_0;
   var tmp2_elvis_lhs = locale.temperature_1;
   var temperature = tmp2_elvis_lhs == null ? contains(this.fahrenheitRegions_1, region) ? TemperatureUnit_fahrenheit_getInstance() : TemperatureUnit_celsius_getInstance() : tmp2_elvis_lhs;
-  return new SettingsDocument(new RideSettings(SampleRate_hz2_getInstance(), DistanceSelection_auto_getInstance(), BatteryMethod_controller_getInstance(), false, false, true, null), new AppSettings(units, temperature, FitPowerSource_rider_getInstance(), this.views_1, ViewId_ride_getInstance(), null, ChartRange_all_getInstance()));
+  return new SettingsDocument(new RideSettings(SampleRate_hz2_getInstance(), DistanceSelection_auto_getInstance(), BatteryMethod_controller_getInstance(), false, false, true, null, false), new AppSettings(units, temperature, FitPowerSource_rider_getInstance(), this.views_1, ViewId_ride_getInstance(), null, ChartRange_all_getInstance()));
 };
 protoOf(SettingsRules).sanitize_lk55qk_k$ = function (draft, locale) {
   var defaults = this.defaults_irqmms_k$(locale);
@@ -26060,13 +26321,15 @@ protoOf(SettingsRules).sanitize_lk55qk_k$ = function (draft, locale) {
   var tmp11_elvis_lhs = ride == null ? null : ride.saveToHealth_1;
   var tmp_4 = tmp11_elvis_lhs == null ? rideDefaults.saveToHealth_1 : tmp11_elvis_lhs;
   var tmp13_elvis_lhs = ride == null ? null : ride.recordGps_1;
-  var tmp_5 = new RideSettings(tmp, tmp_0, tmp_1, tmp_2, tmp_3, tmp_4, tmp13_elvis_lhs == null ? rideDefaults.recordGps_1 : tmp13_elvis_lhs);
-  var tmp15_elvis_lhs = app == null ? null : app.units_1;
-  var tmp_6 = tmp15_elvis_lhs == null ? appDefaults.units_1 : tmp15_elvis_lhs;
-  var tmp17_elvis_lhs = app == null ? null : app.temperature_1;
-  var tmp_7 = tmp17_elvis_lhs == null ? appDefaults.temperature_1 : tmp17_elvis_lhs;
-  var tmp19_elvis_lhs = app == null ? null : app.fitPower_1;
-  var tmp_8 = tmp19_elvis_lhs == null ? appDefaults.fitPower_1 : tmp19_elvis_lhs;
+  var tmp_5 = tmp13_elvis_lhs == null ? rideDefaults.recordGps_1 : tmp13_elvis_lhs;
+  var tmp15_elvis_lhs = ride == null ? null : ride.syncBeeps_1;
+  var tmp_6 = new RideSettings(tmp, tmp_0, tmp_1, tmp_2, tmp_3, tmp_4, tmp_5, tmp15_elvis_lhs == null ? rideDefaults.syncBeeps_1 : tmp15_elvis_lhs);
+  var tmp17_elvis_lhs = app == null ? null : app.units_1;
+  var tmp_7 = tmp17_elvis_lhs == null ? appDefaults.units_1 : tmp17_elvis_lhs;
+  var tmp19_elvis_lhs = app == null ? null : app.temperature_1;
+  var tmp_8 = tmp19_elvis_lhs == null ? appDefaults.temperature_1 : tmp19_elvis_lhs;
+  var tmp21_elvis_lhs = app == null ? null : app.fitPower_1;
+  var tmp_9 = tmp21_elvis_lhs == null ? appDefaults.fitPower_1 : tmp21_elvis_lhs;
   // Inline function 'kotlin.collections.associateWith' call
   var this_0 = get_entries_20();
   var result = LinkedHashMap_init_$Create$_0(coerceAtLeast(mapCapacity(collectionSizeOrDefault(this_0, 10)), 16));
@@ -26074,18 +26337,18 @@ protoOf(SettingsRules).sanitize_lk55qk_k$ = function (draft, locale) {
   var _iterator__ex2g4s = this_0.iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
     var element = _iterator__ex2g4s.next_20eer_k$();
-    var tmp_9 = SettingsRules_getInstance();
+    var tmp_10 = SettingsRules_getInstance();
     var tmp1_safe_receiver = app == null ? null : app.views_1;
-    var tmp$ret$2 = preset(tmp_9, tmp1_safe_receiver == null ? null : tmp1_safe_receiver.get_wei43m_k$(element), getValue(appDefaults.views_1, element));
+    var tmp$ret$2 = preset(tmp_10, tmp1_safe_receiver == null ? null : tmp1_safe_receiver.get_wei43m_k$(element), getValue(appDefaults.views_1, element));
     result.put_4fpzoq_k$(element, tmp$ret$2);
   }
-  var tmp_10 = result;
-  var tmp21_elvis_lhs = app == null ? null : app.activeView_1;
-  var tmp_11 = tmp21_elvis_lhs == null ? appDefaults.activeView_1 : tmp21_elvis_lhs;
-  var tmp23_elvis_lhs = app == null ? null : app.historyView_1;
-  var tmp_12 = tmp23_elvis_lhs == null ? appDefaults.historyView_1 : tmp23_elvis_lhs;
-  var tmp25_elvis_lhs = app == null ? null : app.historyRange_1;
-  return new SettingsDocument(tmp_5, new AppSettings(tmp_6, tmp_7, tmp_8, tmp_10, tmp_11, tmp_12, tmp25_elvis_lhs == null ? appDefaults.historyRange_1 : tmp25_elvis_lhs));
+  var tmp_11 = result;
+  var tmp23_elvis_lhs = app == null ? null : app.activeView_1;
+  var tmp_12 = tmp23_elvis_lhs == null ? appDefaults.activeView_1 : tmp23_elvis_lhs;
+  var tmp25_elvis_lhs = app == null ? null : app.historyView_1;
+  var tmp_13 = tmp25_elvis_lhs == null ? appDefaults.historyView_1 : tmp25_elvis_lhs;
+  var tmp27_elvis_lhs = app == null ? null : app.historyRange_1;
+  return new SettingsDocument(tmp_6, new AppSettings(tmp_7, tmp_8, tmp_9, tmp_11, tmp_12, tmp_13, tmp27_elvis_lhs == null ? appDefaults.historyRange_1 : tmp27_elvis_lhs));
 };
 var SettingsRules_instance;
 function SettingsRules_getInstance() {
@@ -26104,55 +26367,55 @@ function SettingsPolicy_getInstance() {
   return SettingsPolicy_instance;
 }
 function ViewId_ride_getInstance() {
-  static_init_46();
+  static_init_47();
   return ViewId_ride_instance;
 }
 function ViewId_battery_getInstance() {
-  static_init_46();
+  static_init_47();
   return ViewId_battery_instance;
 }
 function ViewId_temperature_getInstance() {
-  static_init_46();
+  static_init_47();
   return ViewId_temperature_instance;
 }
 function ChartRange_seconds30_getInstance() {
-  static_init_47();
+  static_init_48();
   return ChartRange_seconds30_instance;
 }
 function ChartRange_seconds120_getInstance() {
-  static_init_47();
+  static_init_48();
   return ChartRange_seconds120_instance;
 }
 function ChartRange_seconds600_getInstance() {
-  static_init_47();
+  static_init_48();
   return ChartRange_seconds600_instance;
 }
 function ChartRange_all_getInstance() {
-  static_init_47();
+  static_init_48();
   return ChartRange_all_instance;
 }
 function PersistenceState_persisted_getInstance() {
-  static_init_48();
+  static_init_49();
   return PersistenceState_persisted_instance;
 }
 function PersistenceState_notPersisted_getInstance() {
-  static_init_48();
+  static_init_49();
   return PersistenceState_notPersisted_instance;
 }
 function PersistenceState_unsupported_getInstance() {
-  static_init_48();
+  static_init_49();
   return PersistenceState_unsupported_instance;
 }
 function MeasurementSystem_metric_getInstance() {
-  static_init_49();
+  static_init_50();
   return MeasurementSystem_metric_instance;
 }
 function MeasurementSystem_us_getInstance() {
-  static_init_49();
+  static_init_50();
   return MeasurementSystem_us_instance;
 }
 function MeasurementSystem_uk_getInstance() {
-  static_init_49();
+  static_init_50();
   return MeasurementSystem_uk_instance;
 }
 function BluetoothTrace$record$lambda(it) {
@@ -26289,18 +26552,18 @@ function BluetoothTraceStatus(capturing, eventCount, byteCount, stopReason, last
   this.stopReason_1 = stopReason;
   this.lastEvent_1 = lastEvent;
 }
-var static_init_called_50;
-function static_init_50() {
-  if (static_init_called_50)
+var static_init_called_51;
+function static_init_51() {
+  if (static_init_called_51)
     return Unit_instance;
-  static_init_called_50 = true;
+  static_init_called_51 = true;
   LegacyControllerRequest_identity_instance = new LegacyControllerRequest('identity', 0);
   LegacyControllerRequest_telemetry_instance = new LegacyControllerRequest('telemetry', 1);
 }
 var LegacyControllerRequest_identity_instance;
 var LegacyControllerRequest_telemetry_instance;
 function valueOf_2(value) {
-  static_init_50();
+  static_init_51();
   switch (value) {
     case 'identity':
       return LegacyControllerRequest_identity_getInstance();
@@ -26382,11 +26645,11 @@ function ControllerRejectedReply(kind, reason) {
   }
 }
 function LegacyControllerRequest_identity_getInstance() {
-  static_init_50();
+  static_init_51();
   return LegacyControllerRequest_identity_instance;
 }
 function LegacyControllerRequest_telemetry_getInstance() {
-  static_init_50();
+  static_init_51();
   return LegacyControllerRequest_telemetry_instance;
 }
 function LegacyControllerIdentity(controllerModel, firmwareLabel, controllerProtocol, capabilities, verifier) {
@@ -26491,11 +26754,11 @@ protoOf(LegacyControllerIdentity).equals = function (other) {
 protoOf(LegacyControllerIdentity).hashCode = function () {
   return imul(31, imul(31, imul(31, getStringHashCode(this.controllerModel_1)) + getStringHashCode(this.firmwareLabel_1) | 0) + getStringHashCode(this.controllerProtocol_1) | 0) + this.capabilities_1.hashCode() | 0;
 };
-var static_init_called_51;
-function static_init_51() {
-  if (static_init_called_51)
+var static_init_called_52;
+function static_init_52() {
+  if (static_init_called_52)
     return Unit_instance;
-  static_init_called_51 = true;
+  static_init_called_52 = true;
   TelemetryMetric_humanPowerW_instance = new TelemetryMetric('humanPowerW', 0);
   TelemetryMetric_cadenceRpm_instance = new TelemetryMetric('cadenceRpm', 1);
   TelemetryMetric_heartRateBpm_instance = new TelemetryMetric('heartRateBpm', 2);
@@ -26551,12 +26814,12 @@ var TelemetryMetric_assistLevel_instance;
 var TelemetryMetric_raceMode_instance;
 var TelemetryMetric_faultCode_instance;
 var TelemetryMetric_speedRaw_instance;
-function values_49() {
-  static_init_51();
+function values_50() {
+  static_init_52();
   return [TelemetryMetric_humanPowerW_getInstance(), TelemetryMetric_cadenceRpm_getInstance(), TelemetryMetric_heartRateBpm_getInstance(), TelemetryMetric_pedalTorqueNm_getInstance(), TelemetryMetric_activeEnergyKcal_getInstance(), TelemetryMetric_basalEnergyKcal_getInstance(), TelemetryMetric_batteryVoltageV_getInstance(), TelemetryMetric_batteryCurrentA_getInstance(), TelemetryMetric_motorInputPowerW_getInstance(), TelemetryMetric_consumedAh_getInstance(), TelemetryMetric_consumedWh_getInstance(), TelemetryMetric_motorCurrentA_getInstance(), TelemetryMetric_motorTempC_getInstance(), TelemetryMetric_controllerTempC_getInstance(), TelemetryMetric_motorRpm_getInstance(), TelemetryMetric_throttleVoltageV_getInstance(), TelemetryMetric_speedMps_getInstance(), TelemetryMetric_controllerSpeedMps_getInstance(), TelemetryMetric_distanceMeters_getInstance(), TelemetryMetric_altitudeMeters_getInstance(), TelemetryMetric_horizontalAccuracyM_getInstance(), TelemetryMetric_verticalAccuracyM_getInstance(), TelemetryMetric_courseDegrees_getInstance(), TelemetryMetric_assistLevel_getInstance(), TelemetryMetric_raceMode_getInstance(), TelemetryMetric_faultCode_getInstance(), TelemetryMetric_speedRaw_getInstance()];
 }
 function valueOf_3(value) {
-  static_init_51();
+  static_init_52();
   switch (value) {
     case 'humanPowerW':
       return TelemetryMetric_humanPowerW_getInstance();
@@ -26618,9 +26881,9 @@ function valueOf_3(value) {
   }
 }
 function get_entries_22() {
-  static_init_51();
+  static_init_52();
   if ($ENTRIES_22 == null)
-    $ENTRIES_22 = enumEntries(values_49());
+    $ENTRIES_22 = enumEntries(values_50());
   return $ENTRIES_22;
 }
 var $ENTRIES_22;
@@ -26762,11 +27025,11 @@ function TelemetryException(reason) {
   captureStack(this, TelemetryException);
   this.reason_1 = reason;
 }
-var static_init_called_52;
-function static_init_52() {
-  if (static_init_called_52)
+var static_init_called_53;
+function static_init_53() {
+  if (static_init_called_53)
     return Unit_instance;
-  static_init_called_52 = true;
+  static_init_called_53 = true;
   TelemetryRejection_identity_instance = new TelemetryRejection('identity', 0);
   TelemetryRejection_retainedMetrics_instance = new TelemetryRejection('retainedMetrics', 1);
   TelemetryRejection_invalidEvidence_instance = new TelemetryRejection('invalidEvidence', 2);
@@ -26778,119 +27041,119 @@ function TelemetryRejection(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
 function TelemetryMetric_humanPowerW_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_humanPowerW_instance;
 }
 function TelemetryMetric_cadenceRpm_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_cadenceRpm_instance;
 }
 function TelemetryMetric_heartRateBpm_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_heartRateBpm_instance;
 }
 function TelemetryMetric_pedalTorqueNm_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_pedalTorqueNm_instance;
 }
 function TelemetryMetric_activeEnergyKcal_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_activeEnergyKcal_instance;
 }
 function TelemetryMetric_basalEnergyKcal_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_basalEnergyKcal_instance;
 }
 function TelemetryMetric_batteryVoltageV_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_batteryVoltageV_instance;
 }
 function TelemetryMetric_batteryCurrentA_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_batteryCurrentA_instance;
 }
 function TelemetryMetric_motorInputPowerW_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_motorInputPowerW_instance;
 }
 function TelemetryMetric_consumedAh_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_consumedAh_instance;
 }
 function TelemetryMetric_consumedWh_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_consumedWh_instance;
 }
 function TelemetryMetric_motorCurrentA_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_motorCurrentA_instance;
 }
 function TelemetryMetric_motorTempC_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_motorTempC_instance;
 }
 function TelemetryMetric_controllerTempC_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_controllerTempC_instance;
 }
 function TelemetryMetric_motorRpm_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_motorRpm_instance;
 }
 function TelemetryMetric_throttleVoltageV_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_throttleVoltageV_instance;
 }
 function TelemetryMetric_speedMps_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_speedMps_instance;
 }
 function TelemetryMetric_controllerSpeedMps_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_controllerSpeedMps_instance;
 }
 function TelemetryMetric_distanceMeters_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_distanceMeters_instance;
 }
 function TelemetryMetric_altitudeMeters_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_altitudeMeters_instance;
 }
 function TelemetryMetric_horizontalAccuracyM_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_horizontalAccuracyM_instance;
 }
 function TelemetryMetric_verticalAccuracyM_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_verticalAccuracyM_instance;
 }
 function TelemetryMetric_courseDegrees_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_courseDegrees_instance;
 }
 function TelemetryMetric_assistLevel_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_assistLevel_instance;
 }
 function TelemetryMetric_raceMode_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_raceMode_instance;
 }
 function TelemetryMetric_faultCode_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_faultCode_instance;
 }
 function TelemetryMetric_speedRaw_getInstance() {
-  static_init_51();
+  static_init_52();
   return TelemetryMetric_speedRaw_instance;
 }
 function TelemetryRejection_identity_getInstance() {
-  static_init_52();
+  static_init_53();
   return TelemetryRejection_identity_instance;
 }
 function TelemetryRejection_retainedMetrics_getInstance() {
-  static_init_52();
+  static_init_53();
   return TelemetryRejection_retainedMetrics_instance;
 }
 function CycControllerDecoder() {
@@ -27553,11 +27816,11 @@ protoOf(CycFrameDecoder).feed_7nij5u_k$ = function (bytes) {
   }
   return packets;
 };
-var static_init_called_53;
-function static_init_53() {
-  if (static_init_called_53)
+var static_init_called_54;
+function static_init_54() {
+  if (static_init_called_54)
     return Unit_instance;
-  static_init_called_53 = true;
+  static_init_called_54 = true;
   CycRequest_identity_instance = new CycRequest('identity', 0, 111);
   CycRequest_selective_instance = new CycRequest('selective', 1, 50);
 }
@@ -27641,11 +27904,11 @@ function CycException(reason) {
   captureStack(this, CycException);
   this.reason_1 = reason;
 }
-var static_init_called_54;
-function static_init_54() {
-  if (static_init_called_54)
+var static_init_called_55;
+function static_init_55() {
+  if (static_init_called_55)
     return Unit_instance;
-  static_init_called_54 = true;
+  static_init_called_55 = true;
   CycRejection_identity_instance = new CycRejection('identity', 0);
   CycRejection_telemetryCommandOrLength_instance = new CycRejection('telemetryCommandOrLength', 1);
   CycRejection_telemetryMask_instance = new CycRejection('telemetryMask', 2);
@@ -27661,31 +27924,31 @@ function CycRejection(name, ordinal) {
   Enum.call(this, name, ordinal);
 }
 function CycRequest_identity_getInstance() {
-  static_init_53();
+  static_init_54();
   return CycRequest_identity_instance;
 }
 function CycRequest_selective_getInstance() {
-  static_init_53();
+  static_init_54();
   return CycRequest_selective_instance;
 }
 function CycRejection_identity_getInstance() {
-  static_init_54();
+  static_init_55();
   return CycRejection_identity_instance;
 }
 function CycRejection_telemetryCommandOrLength_getInstance() {
-  static_init_54();
+  static_init_55();
   return CycRejection_telemetryCommandOrLength_instance;
 }
 function CycRejection_telemetryMask_getInstance() {
-  static_init_54();
+  static_init_55();
   return CycRejection_telemetryMask_instance;
 }
 function CycRejection_unknownPacket_getInstance() {
-  static_init_54();
+  static_init_55();
   return CycRejection_unknownPacket_instance;
 }
 function CycRejection_retainedMetrics_getInstance() {
-  static_init_54();
+  static_init_55();
   return CycRejection_retainedMetrics_instance;
 }
 //region block: post-declaration
@@ -27788,8 +28051,8 @@ LocationAdmission_instance = new LocationAdmission();
 Companion_instance_104 = new Companion_103();
 ProcessRestarted_instance = new ProcessRestarted();
 Unchanged_instance = new Unchanged();
-Companion_instance_116 = new Companion_115();
 Companion_instance_117 = new Companion_116();
+Companion_instance_118 = new Companion_117();
 //endregion
 //region block: exports
 export {
@@ -27833,9 +28096,10 @@ export {
   Companion_getInstance_10 as Companion_getInstance13d9ei7dhr693,
   Companion_getInstance_100 as Companion_getInstanceo3ibr9uzrhty,
   Companion_getInstance_101 as Companion_getInstanceat2v2ih8mqtt,
-  Companion_getInstance_102 as Companion_getInstance1t3lh34j4uvip,
-  Companion_getInstance_103 as Companion_getInstance133oxpbkqlr30,
-  Companion_getInstance_104 as Companion_getInstance2ajc2i24ws9n1,
+  Companion_getInstance_102 as Companion_getInstance1zn4gm5z8llem,
+  Companion_getInstance_103 as Companion_getInstance1t3lh34j4uvip,
+  Companion_getInstance_104 as Companion_getInstance133oxpbkqlr30,
+  Companion_getInstance_105 as Companion_getInstance2ajc2i24ws9n1,
   Companion_getInstance_12 as Companion_getInstance3nkk7admepckf,
   Companion_getInstance_20 as Companion_getInstance19mn9zudezkcw,
   Companion_getInstance_21 as Companion_getInstance1qj626aake4yr,
@@ -27868,8 +28132,8 @@ export {
   Companion_getInstance_98 as Companion_getInstance2yvjzv491zm8x,
   Companion_getInstance_99 as Companion_getInstanceu4vcc6nytiof,
   Companion_instance_101 as Companion_instancez4ei7bi9uv44,
-  Companion_instance_116 as Companion_instance35i5i6o8pfvyg,
-  Companion_instance_117 as Companion_instancezbsgnkfd1l0m,
+  Companion_instance_117 as Companion_instance35i5i6o8pfvyg,
+  Companion_instance_118 as Companion_instancezbsgnkfd1l0m,
   Companion_instance_18 as Companion_instance1gh2iwlmwkk1q,
   Companion_instance_66 as Companion_instance3vrmwk3xlzx3f,
   ComponentResult as ComponentResult5hrxtbpklntk,
@@ -27903,6 +28167,9 @@ export {
   ControllerRequest_identity_getInstance as ControllerRequest_identity_getInstance2ygs9ha39kemv,
   ControllerRequest_telemetry_getInstance as ControllerRequest_telemetry_getInstance2y4sjboej2jwe,
   ControllerSession as ControllerSession1nxogmdayf825,
+  CueAction_finish_getInstance as CueAction_finish_getInstance3k0cgvtmnlc53,
+  CueAction_resume_getInstance as CueAction_resume_getInstancewb63nqrrgyd5,
+  CueAction_start_getInstance as CueAction_start_getInstance2jezfnloue4s3,
   CycControllerDecoder as CycControllerDecoder1tf9eoqz40pjc,
   CycProtocol_getInstance as CycProtocol_getInstancelzv9n24eucuq,
   DeviceCapabilities as DeviceCapabilities36z2hoo5bz6zs,
@@ -27976,6 +28243,7 @@ export {
   FailureCode_storageFailed_getInstance as FailureCode_storageFailed_getInstance3tnwappfb6ji1,
   FailureCode_storageFull_getInstance as FailureCode_storageFull_getInstance3kj28sdn98xn1,
   FailureCode_storageRefused_getInstance as FailureCode_storageRefused_getInstance4gp56qyy4qv3,
+  FailureCode_syncBeepFailed_getInstance as FailureCode_syncBeepFailed_getInstance3ieb25ue4imaj,
   FailureCode_uiUnavailable_getInstance as FailureCode_uiUnavailable_getInstance2ubvgyss6uf64,
   FailureCode_unknown_getInstance as FailureCode_unknown_getInstancemeksdbm239xs,
   FailureCode_watchBusy_getInstance as FailureCode_watchBusy_getInstance1pxcbhbtpxe5d,
@@ -28195,6 +28463,7 @@ export {
   StartRequest as StartRequest2jtxupjhmbn9l,
   StartTimedOut as StartTimedOutq0016f9i31oz,
   StorageFailed as StorageFailedc2wvhtq64fmi,
+  SyncBeeps_getInstance as SyncBeeps_getInstance270y0qmegyx38,
   TelemetryAdmission_instance as TelemetryAdmission_instance2vz9q762d99ot,
   TelemetryCursor as TelemetryCursor3v3u7ygl9hh7d,
   TelemetryRows as TelemetryRowsi8u1p3rwevio,
@@ -28270,9 +28539,9 @@ export {
   values_41 as values1k17w6bjcd80f,
   values_43 as values1uxg0ubd7hqdx,
   values_44 as values2a1nf0c1mq9kv,
-  values_45 as values1wrn5ncv4w7dt,
-  values_46 as valueszr1rto9lsr8f,
-  values_47 as values3030q2ndvm4es,
+  values_46 as values1wrn5ncv4w7dt,
+  values_47 as valueszr1rto9lsr8f,
+  values_48 as values3030q2ndvm4es,
   values_7 as values9b3u2j50eyxr,
   values_8 as values2r16pl3alfkeh,
   values_9 as values28lmwdaig2w8s,

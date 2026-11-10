@@ -360,6 +360,7 @@ internal class WatchRides(
             recorder.decide(
                 RideCommand.Control(EventId(newId()), waiting.rideId, RideAction.discard, CommandIssuer.watch)
             )
+        else if (waiting == null && message.requestId != null) recorder.cancelStart(message.requestId)
         return WatchMessage.AckMessage(null, null)
     }
 

@@ -20,6 +20,7 @@ internal object SettingsTexts {
             "useWatch" to "Apple Watch",
             "saveToHealth" to "Save to Health",
             "recordGps" to "GPS route",
+            "syncBeeps" to "Video sync beeps",
             "units" to "Units",
             "temperature" to "Temperature",
             "fitPower" to "FIT power source",

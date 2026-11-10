@@ -39,6 +39,7 @@ import app.powerlog.application.port.RecordingKeepAlive
 import app.powerlog.application.port.RideCard
 import app.powerlog.application.port.StoragePersistence
 import app.powerlog.application.port.TabLock
+import app.powerlog.application.port.TonePlayer
 import app.powerlog.application.port.WatchLink
 import app.powerlog.application.recording.Capture
 import app.powerlog.application.recording.LivePublisher
@@ -99,6 +100,7 @@ public class PowerLogApplication(
     tabLock: TabLock?,
     persistence: StoragePersistence?,
     rideCard: RideCard?,
+    tones: TonePlayer?,
     watch: WatchLink?,
     watchCodec: WatchCodec?,
     scheduler: BackgroundScheduler?,
@@ -222,7 +224,7 @@ public class PowerLogApplication(
             device = device,
             permissions = permissions,
             access = access,
-            ports = RideRecorder.RecordingPorts(keepAlive, location, rideCard, providers, watch, persistence),
+            ports = RideRecorder.RecordingPorts(keepAlive, location, rideCard, providers, watch, persistence, tones),
             capabilities = capabilities::current,
             logs = logs,
             rides = rides,

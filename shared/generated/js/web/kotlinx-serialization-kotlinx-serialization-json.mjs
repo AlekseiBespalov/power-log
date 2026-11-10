@@ -1113,7 +1113,7 @@ function _get_original__l7ku1m($this) {
 function defer$o$_get_original_$ref_3cje7k() {
   return constructCallableReference(function (p0) {
     return _get_original__l7ku1m(p0);
-  }, 1, 0, 42);
+  }, 1, 0, 44);
 }
 function defer$1($deferred) {
   this.original$delegate_1 = lazy($deferred);
@@ -1299,7 +1299,7 @@ function JsonElementMarker$readIfAbsent$ref(p0) {
   return constructCallableReference(function (p0_0, p1) {
     var tmp0 = p0;
     return readIfAbsent(tmp0, p0_0, p1);
-  }, 2, 0, 43, 'readIfAbsent', [p0]);
+  }, 2, 0, 45, 'readIfAbsent', [p0]);
 }
 function JsonElementMarker(descriptor) {
   var tmp = this;

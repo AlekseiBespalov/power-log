@@ -39,7 +39,7 @@ class TelemetryAdmissionTest {
                         EventId("start"),
                         rideId,
                         Device.iphone,
-                        StartContext(false, false, true, true, options, false, false, false, false, false),
+                        StartContext(false, false, true, true, options, false, false, false, false, false, false),
                     ),
                     at(0),
                     null,

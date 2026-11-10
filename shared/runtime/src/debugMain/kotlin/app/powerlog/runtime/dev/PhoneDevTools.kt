@@ -40,6 +40,7 @@ internal class PhoneDevTools(private val switches: () -> DevSwitches, private va
             rideCard = real.rideCard,
             watch = real.watch,
             scheduler = real.scheduler,
+            tones = real.tones,
         )
     }
 

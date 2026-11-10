@@ -2718,18 +2718,18 @@ function JobSupport$registerSelectForOnJoin$ref() {
   return constructCallableReference(function (p0, p1, p2) {
     registerSelectForOnJoin(p0, p1, p2);
     return Unit_instance;
-  }, 3, 0, 9, 'registerSelectForOnJoin');
+  }, 3, 0, 11, 'registerSelectForOnJoin');
 }
 function JobSupport$onAwaitInternalRegFunc$ref() {
   return constructCallableReference(function (p0, p1, p2) {
     onAwaitInternalRegFunc(p0, p1, p2);
     return Unit_instance;
-  }, 3, 0, 10, 'onAwaitInternalRegFunc');
+  }, 3, 0, 12, 'onAwaitInternalRegFunc');
 }
 function JobSupport$onAwaitInternalProcessResFunc$ref() {
   return constructCallableReference(function (p0, p1, p2) {
     return onAwaitInternalProcessResFunc(p0, p1, p2);
-  }, 3, 0, 11, 'onAwaitInternalProcessResFunc');
+  }, 3, 0, 13, 'onAwaitInternalProcessResFunc');
 }
 function JobSupport(active) {
   this._state_1 = atomic$ref$1(active ? get_EMPTY_ACTIVE() : get_EMPTY_NEW());
@@ -3325,7 +3325,7 @@ function JobNode$invoke$ref(p0) {
   return constructCallableReference(function (p0_0) {
     p0.invoke_py2q9a_k$(p0_0);
     return Unit_instance;
-  }, 1, 0, 12, 'invoke', [p0]);
+  }, 1, 0, 14, 'invoke', [p0]);
 }
 function MainCoroutineDispatcher() {
   CoroutineDispatcher.call(this);
@@ -5433,12 +5433,12 @@ function BufferedChannel$registerSelectForReceive$ref() {
   return constructCallableReference(function (p0, p1, p2) {
     registerSelectForReceive(p0, p1, p2);
     return Unit_instance;
-  }, 3, 0, 13, 'registerSelectForReceive');
+  }, 3, 0, 15, 'registerSelectForReceive');
 }
 function BufferedChannel$processResultSelectReceive$ref() {
   return constructCallableReference(function (p0, p1, p2) {
     return processResultSelectReceive(p0, p1, p2);
-  }, 3, 0, 14, 'processResultSelectReceive');
+  }, 3, 0, 16, 'processResultSelectReceive');
 }
 function BufferedChannel$onUndeliveredElementReceiveCancellationConstructor$lambda$lambda($element, this$0, $select) {
   return function (_unused_var__etf5q3, _unused_var__etf5q3_0, _unused_var__etf5q3_1) {
@@ -5460,7 +5460,7 @@ function BufferedChannel$onCancellationChannelResultImplDoNotCall$ref(p0) {
     var tmp0 = p0;
     onCancellationChannelResultImplDoNotCall(tmp0, p0_0, p1.holder_1, p2);
     return Unit_instance;
-  }, 3, 0, 15, 'onCancellationChannelResultImplDoNotCall', [p0]);
+  }, 3, 0, 17, 'onCancellationChannelResultImplDoNotCall', [p0]);
 }
 function BufferedChannel$bindCancellationFun$lambda($this_bindCancellationFun, $element) {
   return function (_unused_var__etf5q3, _unused_var__etf5q3_0, context) {
@@ -5473,7 +5473,7 @@ function BufferedChannel$onCancellationImplDoNotCall$ref(p0) {
     var tmp0 = p0;
     onCancellationImplDoNotCall(tmp0, p0_0, p1, p2);
     return Unit_instance;
-  }, 3, 0, 16, 'onCancellationImplDoNotCall', [p0]);
+  }, 3, 0, 18, 'onCancellationImplDoNotCall', [p0]);
 }
 function $receiveCOROUTINE$(_this__u8e3s4, resultContinuation) {
   CoroutineImpl.call(this, resultContinuation);
@@ -6180,7 +6180,7 @@ function createSegment(id, prev) {
 function createSegment$ref() {
   return constructCallableReference(function (p0, p1) {
     return createSegment(p0, p1);
-  }, 2, 0, 17, 'createSegment');
+  }, 2, 0, 19, 'createSegment');
 }
 var properties_initialized_BufferedChannel_kt_58tjvw;
 function _init_properties_BufferedChannel_kt__d6uc4y() {
@@ -9463,7 +9463,7 @@ function OnTimeout$register$ref() {
   return constructCallableReference(function (p0, p1, p2) {
     register(p0, p1, p2);
     return Unit_instance;
-  }, 3, 0, 18, 'register');
+  }, 3, 0, 20, 'register');
 }
 function OnTimeout$register$lambda($select, this$0) {
   return function () {
@@ -10713,7 +10713,7 @@ function SemaphoreAndMutexImpl$onCancellationRelease$lambda(this$0) {
 function createSegment$ref_0() {
   return constructCallableReference(function (p0, p1) {
     return createSegment_0(p0, p1);
-  }, 2, 0, 19, 'createSegment');
+  }, 2, 0, 21, 'createSegment');
 }
 function SemaphoreAndMutexImpl(permits, acquiredPermits) {
   this.permits_1 = permits;
@@ -11302,7 +11302,7 @@ function Runnable$run$ref(p0) {
   return constructCallableReference(function () {
     p0.run_mvkpxh_k$();
     return Unit_instance;
-  }, 0, 0, 20, 'run', [p0]);
+  }, 0, 0, 22, 'run', [p0]);
 }
 function SchedulerTask() {
 }

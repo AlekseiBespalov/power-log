@@ -20,7 +20,8 @@ public enum PowerLogHost {
       picker: AppleFilePicker(documents: AttachedDocuments.shared, queue: ride), device: AppleDeviceInfo(),
       ble: AppleBleCentral(clock: clock, queue: ride), location: AppleLocationSource(clock: clock, queue: ride),
       health: AppleHealthProvider(queue: health, clock: clock), keepAlive: AppleRecordingKeepAlive(queue: ride),
-      tabLock: nil, persistence: nil, rideCard: rideCard(queue: ride), watch: watch, scheduler: nil)
+      tabLock: nil, persistence: nil, rideCard: rideCard(queue: ride), watch: watch, scheduler: nil,
+      tones: tonePlayer(clock: clock, queue: ride))
     #if POWER_LOG_DEV_TOOLS
       let switches = PowerLogDevSwitches.read()
       let devTools: DevTools? = DevToolsFactory.shared.create(switches: { switches }, clock: clock)
@@ -96,6 +97,14 @@ public enum PowerLogHost {
       }
     #endif
     return AppleRideCard(queue: queue)
+  }
+
+  static func tonePlayer(clock: AppleClock, queue: DispatchQueue) -> ApplicationTonePlayer? {
+    #if os(iOS)
+      AppleTonePlayer(clock: clock, queue: queue)
+    #else
+      nil
+    #endif
   }
 
   static func watchLink(clock: AppleClock, queue: DispatchQueue) -> AppleWatchLink? {

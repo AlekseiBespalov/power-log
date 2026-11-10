@@ -18,7 +18,16 @@ class SettingsRulesTest {
     fun theDefaultsAreTodaysPreferences() {
         val document = SettingsRules.defaults(unknown)
         assertEquals(
-            RideSettings(SampleRate.hz2, DistanceSelection.auto, BatteryMethod.controller, false, false, true, null),
+            RideSettings(
+                SampleRate.hz2,
+                DistanceSelection.auto,
+                BatteryMethod.controller,
+                false,
+                false,
+                true,
+                null,
+                false,
+            ),
             document.ride,
         )
         val app = document.app
@@ -75,7 +84,7 @@ class SettingsRulesTest {
         assertEquals(defaults, SettingsRules.sanitize(SettingsDraft(null, null), unknown))
         val draft =
             SettingsDraft(
-                RideSettingsDraft(SampleRate.hz8, null, null, true, null, null, null),
+                RideSettingsDraft(SampleRate.hz8, null, null, true, null, null, null, null),
                 AppSettingsDraft(UnitSystem.imperial, null, null, null, ViewId.battery, null, null),
             )
         val document = SettingsRules.sanitize(draft, unknown)

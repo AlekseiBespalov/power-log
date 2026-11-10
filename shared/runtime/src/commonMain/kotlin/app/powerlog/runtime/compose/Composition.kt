@@ -41,6 +41,7 @@ internal object Composition {
                 tabLock = composed.tabLock,
                 persistence = composed.persistence,
                 rideCard = composed.rideCard,
+                tones = composed.tones,
                 watch = composed.watch,
                 watchCodec = composed.watch?.let { JsonWatchCodec() },
                 scheduler = composed.scheduler,

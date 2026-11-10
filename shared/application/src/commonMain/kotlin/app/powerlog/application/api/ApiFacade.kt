@@ -157,9 +157,13 @@ internal class ApiFacade(
 
             override suspend fun start(input: Empty): Outcome<Unit> = onRide { recorder.start() }
 
+            override suspend fun cancelStart(input: Empty): Outcome<Unit> = onRide { recorder.cancelStart(null) }
+
             override suspend fun control(input: ControlInput): Outcome<Unit> = onRide {
                 recorder.control(input.rideId, input.action, CommandIssuer.rider, EventId(newId()))
             }
+
+            override suspend fun testBeep(input: Empty): Outcome<Unit> = onRide { recorder.testBeep() }
 
             override suspend fun requestPermissions(input: Empty): Outcome<Unit> = onRide {
                 this@ApiFacade.permissions.request()

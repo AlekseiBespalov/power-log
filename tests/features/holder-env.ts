@@ -121,6 +121,8 @@ const open = (control: ControlState | null | undefined) => control != null && (c
 
 export function rideExits(state: RideControlsState): string[] {
   if (state.phase === 'preparing' && !open(state.stop)) return ['a preparing ride without an enabled Stop'];
+  if (state.start.label.startsWith('Starting in') && !open(state.cancelStart))
+    return ['a sync-beep countdown without an enabled Cancel'];
   if (state.phase === 'interrupted' && !(state.reviewRide && open(state.finish)))
     return ['an interrupted ride without an enabled Finish or discard ride'];
   return [];

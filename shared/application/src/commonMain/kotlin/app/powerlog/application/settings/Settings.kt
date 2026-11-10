@@ -133,6 +133,7 @@ internal class Settings(
                                 ride.copy(indoor = change.on, recordGps = ride.recordGps ?: !ride.indoor)
                             RideToggle.useWatch -> ride.copy(useWatch = change.on)
                             RideToggle.saveToHealth -> ride.copy(saveToHealth = change.on)
+                            RideToggle.syncBeeps -> ride.copy(syncBeeps = change.on)
                         }
                 )
             is SettingsChange.RecordGpsTo -> document.copy(ride = ride.copy(recordGps = change.value))

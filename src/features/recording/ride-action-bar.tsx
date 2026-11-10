@@ -64,6 +64,17 @@ export function RideActionBar({
           {bar.label}
         </Button>
       )}
+      {state.cancelStart && (
+        <Button
+          testID="cancel-start"
+          block={!inline}
+          secondary
+          disabled={state.cancelStart.busy}
+          onPress={() => model.cancelStart()}
+        >
+          {state.cancelStart.label}
+        </Button>
+      )}
       {state.finish && (
         <View style={{ flexDirection: 'row', width: inline ? 360 * fontScale : '100%', maxWidth: '100%', gap: 8 }}>
           {state.pauseOrResume && (

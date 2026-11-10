@@ -82,6 +82,7 @@ public data class SettingsDraft(public val ride: RideSettingsDraft?, public val 
                     ride.useWatch,
                     ride.saveToHealth,
                     ride.recordGps,
+                    ride.syncBeeps,
                 ),
                 AppSettingsDraft(
                     units = app.units,
@@ -113,6 +114,7 @@ public data class RideSettingsDraft(
     public val useWatch: Boolean?,
     public val saveToHealth: Boolean?,
     public val recordGps: Boolean?,
+    public val syncBeeps: Boolean?,
 )
 
 public data class AppSettingsDraft(
@@ -193,6 +195,7 @@ public object SettingsRules {
                     useWatch = false,
                     saveToHealth = true,
                     recordGps = null,
+                    syncBeeps = false,
                 ),
             app =
                 AppSettings(
@@ -223,6 +226,7 @@ public object SettingsRules {
                     useWatch = ride?.useWatch ?: rideDefaults.useWatch,
                     saveToHealth = ride?.saveToHealth ?: rideDefaults.saveToHealth,
                     recordGps = ride?.recordGps ?: rideDefaults.recordGps,
+                    syncBeeps = ride?.syncBeeps ?: rideDefaults.syncBeeps,
                 ),
             app =
                 AppSettings(

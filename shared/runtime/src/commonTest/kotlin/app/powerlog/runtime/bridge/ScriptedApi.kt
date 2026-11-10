@@ -128,7 +128,11 @@ internal class ScriptedApi : PowerLogApi {
 
             override suspend fun start(input: Empty): Outcome<Unit> = answer("recording.start", input)
 
+            override suspend fun cancelStart(input: Empty): Outcome<Unit> = answer("recording.cancelStart", input)
+
             override suspend fun control(input: ControlInput): Outcome<Unit> = answer("recording.control", input)
+
+            override suspend fun testBeep(input: Empty): Outcome<Unit> = answer("recording.testBeep", input)
 
             override suspend fun requestPermissions(input: Empty): Outcome<Unit> =
                 answer("recording.requestPermissions", input)

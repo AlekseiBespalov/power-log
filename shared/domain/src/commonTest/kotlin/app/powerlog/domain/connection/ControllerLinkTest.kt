@@ -131,6 +131,38 @@ class ControllerLinkTest {
     }
 
     @Test
+    fun aPinBringsTheNextRequestForwardAndTheFirstReadingAtOrAfterItClearsIt() {
+        val driver = verified(rate = SampleRate.hz2)
+        driver.link.pin(300_000)
+        assertEquals(LinkAction.Wait(300_000), driver.reply(20_000, rate = SampleRate.hz2))
+        assertIs<LinkAction.Send>(driver.link.next(300_000, SampleRate.hz2, false, true))
+        driver.link.accepted(300_000)
+        assertEquals(LinkAction.Wait(800_000), driver.reply(350_000, rate = SampleRate.hz2))
+    }
+
+    @Test
+    fun aReplyInFlightAtThePinServesItWhenItArrivesAfterThePin() {
+        val driver = verified(rate = SampleRate.hz2)
+        driver.link.pin(100_000)
+        assertEquals(LinkAction.Wait(500_000), driver.reply(150_000, rate = SampleRate.hz2))
+    }
+
+    @Test
+    fun aPaceChangeReschedulesThePollButNeverThePin() {
+        val driver = verified(rate = SampleRate.hz2)
+        driver.link.pin(900_000)
+        assertEquals(LinkAction.Wait(500_000), driver.reply(20_000, rate = SampleRate.hz2))
+        assertEquals(
+            LinkAction.Wait(900_000),
+            driver.link.next(30_000, SampleRate.hz2, background = true, recording = false),
+        )
+        assertEquals(
+            LinkAction.Wait(145_000),
+            driver.link.next(40_000, SampleRate.hz8, background = false, recording = true),
+        )
+    }
+
+    @Test
     fun anUnansweredRequestIsSentAgainThenTheLinkEndsAfterSilence() {
         val driver = verified()
         assertEquals(LinkAction.Wait(second), driver.link.timedOut(500_000, false))
@@ -362,6 +394,22 @@ class ControllerLinkTest {
     fun aDropBeforeThePlanTurnsItOffButADropAtTheLimitKeepsIt() {
         assertTrue(!limited(95.0, 95.0, 95.0, 2.0, 95.0, 95.0, 95.0).plansAt(93_000_000))
         assertTrue(limited(95.0, 95.6, 94.9, 95.3).plansAt(92_900_000))
+    }
+
+    @Test
+    fun aPlannedReconnectWaitsForAPinDueWithinASecondUntilAReadingAtOrAfterIt() {
+        val far = limited(95.0, 95.6, 94.9)
+        far.link.pin(far.now + 95 * second)
+        assertTrue(far.plansAt(92_900_000))
+        val near = limited(95.0, 95.6, 94.9)
+        val up = near.now
+        val pin = up + 93_500_000
+        near.link.pin(pin)
+        assertTrue(!near.plansAt(92_900_000))
+        near.poll(up + 93_025_000)
+        assertTrue(near.reply(up + 93_100_000) !is LinkAction.Reconnect)
+        near.poll(pin)
+        assertEquals(LinkAction.Reconnect(pin + 20_000, adopt = false), near.reply(pin + 20_000))
     }
 
     @Test

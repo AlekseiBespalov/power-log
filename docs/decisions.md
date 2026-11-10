@@ -164,7 +164,7 @@ complexity is wrong too.
   On Android a foreground service refused at Start fails the Start, and the failed ride stays in History until the
   rider deletes it.
 - **Choices freeze at Start:** GPS, Health, indoor, the 2, 4 or 8 Hz rate, the concrete distance source, the battery
-  method and the Health writer. The phone owns the rate, distance and battery preferences; a Watch Start uses the
+  method, the Health writer and video sync beeps. The phone owns the rate, distance and battery preferences; a Watch Start uses the
   saved phone settings. Settings that can't be read block Start until Reset settings saves the defaults.
 - **Checkpoints:** the ride's checkpoint commits with every capture batch, or alone after 5 s without one while the ride
   runs; a paused ride keeps its Pause's.
@@ -182,6 +182,20 @@ complexity is wrong too.
 - **The preview is temporary:** before Start the connected bike's newest 28,800 readings stay in memory only, with no
   distance or consumption values.
 - **Lap while paused** is the Watch's alone.
+- **Video sync beeps** (a setting, off by default) let video tools line the ride's files up with a camera's sound.
+  - **The beeps.** Start plays three pips one second apart, then a shorter, higher sync beep. Resume from Paused and
+    Finish from Running play the sync beep alone.
+  - **On the beep.** The ride starts, resumes or ends at the sync beep's onset, on a whole second. Start uses a whole
+    UTC second; Resume and Finish use a whole second of ride time. So FIT's start time and first and last records, the
+    ride CSV's first and last rows and the events fall on beeps, with no change to the exports.
+  - **Timing.** The ride is created at the beep, after a 3.5–4.5 s countdown with Cancel. Resume and Finish wait 1–2 s.
+    Pause, Lap and Discard don't beep.
+  - **A reading in the beep's second.** A controller request is timed into the beep's half second, and the iPhone's
+    planned reconnect waits for it.
+  - **A tone never moves the ride.** A beep that fails or is cut short is shown on the recording failure line and
+    logged, and the ride moves on time. The iPhone declares the audio background mode, so beeps play with the phone
+    locked.
+  - **Storage.** The choice is kept in memory for the ride, and the archive stores no beep.
 - **Android holds a wake lock for the whole ride,** so reconnect and checkpoint timers keep running.
 - **Deleting a ride** is allowed while its Health work runs; the work is cancelled.
 
@@ -351,3 +365,5 @@ Designs that were considered and left out. Don't add them back without a decisio
 - A second app identity (a Lab build, an Android preview flavour), web development tools and a store-check switch.
 - Settings revision files, a "recovered" notice, per-ride "couldn't be read" counts.
 - "Start without Watch" and an Android wake lock released between polls.
+- Sync beeps on a timer during the ride, a manual beep button, beeps from the Watch's speaker, timecode in audio
+  (LTC), FIT marker events, beep rows in exports, and stored beep outcomes.

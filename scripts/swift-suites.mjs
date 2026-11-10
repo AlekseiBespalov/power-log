@@ -51,6 +51,7 @@ const appSwift = [
   'ridecard',
   'watch',
   'files',
+  'tones',
 ]
   .map(folder => (folder ? `${ios}/${folder}` : ios))
   .flatMap(swiftIn);
@@ -124,6 +125,7 @@ export const swiftUnits = [
   suite('permission-gate', entry('PermissionGate'), [`${ios}/permissions/ApplePermissionGate.swift`]),
   suite('recording-keep-alive', entry('RecordingKeepAlive'), [`${ios}/keepalive/AppleRecordingKeepAlive.swift`]),
   suite('ride-card', entry('RideCard'), [`${ios}/ridecard/AppleRideCard.swift`]),
+  suite('tone-player', entry('TonePlayer'), [`${ios}/tones/HostClock.swift`]),
   suite('host-foreground', entry('HostForeground'), [`${ios}/host/PowerLogForeground.swift`]),
   suite(
     'host',

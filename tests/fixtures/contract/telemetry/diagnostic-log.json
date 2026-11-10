@@ -259,6 +259,14 @@
         "issuer": "enum:CommandIssuer",
         "code": "enum:FailureCode"
       },
+      "syncBeep": {
+        "action": "enum:CueAction|test",
+        "outcome": ["played", "failed", "cancelled"],
+        "lateMs": "integer",
+        "route": "enum:AudioRoute",
+        "error": "enum:PortErrorKind",
+        "platform": "platform"
+      },
       "healthOutcome": {
         "outcome": "enum:HealthOutcome",
         "reason": "enum:HealthReason",

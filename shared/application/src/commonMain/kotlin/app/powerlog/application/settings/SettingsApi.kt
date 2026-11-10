@@ -97,4 +97,5 @@ public enum class RideToggle {
     indoor,
     useWatch,
     saveToHealth,
+    syncBeeps,
 }

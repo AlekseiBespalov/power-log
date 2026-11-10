@@ -53,7 +53,7 @@ export interface SettingRow<V extends string> {
   busy: boolean;
 }
 
-export type ToggleField = 'useWatch' | 'recordGps' | 'saveToHealth';
+export type ToggleField = 'useWatch' | 'recordGps' | 'saveToHealth' | 'syncBeeps';
 
 export interface ToggleRow {
   label: string;
@@ -75,6 +75,7 @@ export interface SettingsState {
   toggles: { [F in ToggleField]: ToggleRow | null };
   healthNote: string | null;
   storage: string | null;
+  testBeep: { play: ControlState; result: string | null } | null;
   examples: { add: ControlState; result: string | null } | null;
   dialog: SettingsDialog | null;
   notice: Notice | null;
@@ -101,6 +102,7 @@ export class SettingsModel implements ScreenModel<SettingsState> {
   private view: SettingsView | null = null;
   private dismissedUnreadable = false;
   private examplesResult: string | null = null;
+  private testBeepResult: string | null = null;
   private lost: Notice | null = null;
   private readonly saveFailed = new NoticeSlot();
   private stop: (() => void) | null = null;
@@ -160,6 +162,24 @@ export class SettingsModel implements ScreenModel<SettingsState> {
 
   resetSettings(): void {
     this.change('reset', { kind: 'reset' });
+  }
+
+  playTestBeep(): void {
+    this.testBeepResult = null;
+    run(
+      this.inFlight,
+      'testBeep',
+      () => this.env.client.call('recording.testBeep', {}),
+      answer => {
+        if ('cancelled' in answer) return;
+        if (!answer.ok) {
+          this.report(answer.failure);
+          this.testBeepResult = this.text(answer.failure.code);
+        }
+        this.publish();
+      },
+    );
+    this.publish();
   }
 
   addExampleRides(): void {
@@ -302,10 +322,18 @@ export class SettingsModel implements ScreenModel<SettingsState> {
             : null,
         saveToHealth:
           ride && provider !== null ? toggle(provider, `Save to ${provider}`, ride.saveToHealth, 'saveToHealth') : null,
+        syncBeeps:
+          ride && capabilities.recording
+            ? toggle(kit.textsSetting('syncBeeps'), 'Video sync beeps', ride.syncBeeps, 'syncBeeps')
+            : null,
       },
       healthNote:
         ride && platform !== 'web' ? (kit.textsHealthSetup(view.effective, ride, capabilities.health) ?? null) : null,
       storage: platform === 'web' && display.storage !== null ? kit.textsStoragePersistence(display.storage) : null,
+      testBeep:
+        ride?.syncBeeps && capabilities.recording
+          ? { play: control('Play test beep', this.inFlight.has('testBeep'), null), result: this.testBeepResult }
+          : null,
       examples: display.developerTools
         ? {
             add: control('Add example rides', this.inFlight.has('examples'), null),

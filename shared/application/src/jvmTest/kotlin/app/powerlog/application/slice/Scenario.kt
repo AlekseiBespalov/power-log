@@ -19,6 +19,7 @@ import app.powerlog.application.fakes.FakePermissionGate
 import app.powerlog.application.fakes.FakeRecordingKeepAlive
 import app.powerlog.application.fakes.FakeRideCard
 import app.powerlog.application.fakes.FakeTabLock
+import app.powerlog.application.fakes.FakeTonePlayer
 import app.powerlog.application.fakes.FakeWatchLink
 import app.powerlog.application.history.ExampleRideSource
 import app.powerlog.application.history.HistoryPage
@@ -42,6 +43,7 @@ import app.powerlog.application.port.SendResult
 import app.powerlog.application.port.StoragePersistence
 import app.powerlog.application.port.TabLease
 import app.powerlog.application.port.TabLock
+import app.powerlog.application.port.TonePlayer
 import app.powerlog.application.port.WatchLink
 import app.powerlog.application.recording.ControlInput
 import app.powerlog.application.recording.RecordingView
@@ -136,6 +138,8 @@ class Scenario(val platform: Platform = Platform.ios) {
     var persistence: StoragePersistence? = null
     var location: LocationSource? = null
     val card = FakeRideCard(post)
+    val tonePlayer = FakeTonePlayer(post)
+    var tones: TonePlayer? = tonePlayer
     val watchLink = FakeWatchLink(clock, post)
     val codec = FakeWatchCodec()
     var watch: WatchLink? = null
@@ -202,6 +206,7 @@ class Scenario(val platform: Platform = Platform.ios) {
                 tabLock = tabLock,
                 persistence = persistence,
                 rideCard = rideCard,
+                tones = tones,
                 watch = watch,
                 watchCodec = watch?.let { codec },
                 scheduler = backgroundScheduler,

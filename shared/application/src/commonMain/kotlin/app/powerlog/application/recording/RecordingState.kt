@@ -9,6 +9,7 @@ import app.powerlog.domain.recording.LifecycleState
 internal class RecordingState {
     var lifecycle: LifecycleState = LifecycleState(null, null)
     var pending: RideAction? = null
+    var cue: CueView? = null
     var deciding: Boolean = false
     var failure: ApiFailure? = null
     var otherTab: Boolean = false

@@ -1,6 +1,7 @@
 package app.powerlog.application.slice
 
 import app.powerlog.application.api.LaunchReason
+import app.powerlog.application.port.AudioRoute
 import app.powerlog.application.port.LocationProviderState
 import app.powerlog.application.port.PortErrorKind
 import app.powerlog.application.port.RadioState
@@ -17,6 +18,7 @@ import app.powerlog.domain.core.health.HealthProviderKind
 import app.powerlog.domain.core.health.HealthReason
 import app.powerlog.domain.core.ride.RidePhase
 import app.powerlog.domain.recording.CommandIssuer
+import app.powerlog.domain.recording.CueAction
 import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -43,6 +45,8 @@ object LogWhitelist {
             "HealthReason" to HealthReason.entries.names(),
             "HealthProviderKind" to HealthProviderKind.entries.names(),
             "PortErrorKind" to PortErrorKind.entries.names(),
+            "CueAction" to CueAction.entries.names(),
+            "AudioRoute" to AudioRoute.entries.names(),
         )
 
     private val events: JsonObject by lazy {

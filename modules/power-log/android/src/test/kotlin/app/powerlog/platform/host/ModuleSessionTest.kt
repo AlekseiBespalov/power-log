@@ -57,6 +57,7 @@ class ModuleSessionTest {
                 rideCard = null,
                 watch = null,
                 scheduler = null,
+                tones = null,
             )
         PowerLogAndroid.runtime = AndroidRuntime.create(application, threads, AndroidClock(), ports, devTools = null)
         val module = PowerLogModule { RuntimeEnvironment.getApplication() }

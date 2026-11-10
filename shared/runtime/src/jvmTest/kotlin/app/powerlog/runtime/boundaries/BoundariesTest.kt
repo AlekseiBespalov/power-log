@@ -456,9 +456,20 @@ class BoundariesTest {
             )
 
         val androidAdapters =
-            listOf("ble", "location", "permissions", "device", "health", "keepalive", "ridecard", "scheduler", "files")
+            listOf(
+                "ble",
+                "location",
+                "permissions",
+                "device",
+                "health",
+                "keepalive",
+                "ridecard",
+                "scheduler",
+                "files",
+                "tones",
+            )
 
-        val webAdapters = listOf("ble", "location", "permissions", "device", "tablock", "persistence", "files")
+        val webAdapters = listOf("ble", "location", "permissions", "device", "tablock", "persistence", "files", "tones")
 
         val flow = Regex("""\b(?:Flow|StateFlow|SharedFlow)\b""")
 

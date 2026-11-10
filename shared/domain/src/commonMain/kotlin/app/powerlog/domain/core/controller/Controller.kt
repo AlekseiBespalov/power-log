@@ -119,6 +119,7 @@ public object ControllerPolicy {
     public const val linkLimitDrops: Int = 3
     public const val linkLimitSpreadUs: Long = 1_000_000L
     public const val linkLimitMarginUs: Long = 2_000_000L
+    public const val pinHoldUs: Long = 1_000_000L
     public const val unknownIdentityAttempts: Int = 2
     public const val backgroundPollHz: Int = 1
     public const val joinUs: Long = 6_000_000L

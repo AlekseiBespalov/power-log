@@ -18,6 +18,7 @@ function settings(overrides: Partial<SettingsView['app']> = {}, state: SettingsV
       useWatch: false,
       saveToHealth: false,
       recordGps: null,
+      syncBeeps: false,
     },
     app: {
       units: 'metric',

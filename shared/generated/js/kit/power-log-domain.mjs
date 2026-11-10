@@ -567,8 +567,9 @@ function static_init_4() {
   FailureCode_importUnreadable_instance = new FailureCode('importUnreadable', 51, false);
   FailureCode_settingsSaveFailed_instance = new FailureCode('settingsSaveFailed', 52, true);
   FailureCode_uiUnavailable_instance = new FailureCode('uiUnavailable', 53, true);
-  FailureCode_apiMismatch_instance = new FailureCode('apiMismatch', 54, false);
-  FailureCode_unknown_instance = new FailureCode('unknown', 55, true);
+  FailureCode_syncBeepFailed_instance = new FailureCode('syncBeepFailed', 54, false);
+  FailureCode_apiMismatch_instance = new FailureCode('apiMismatch', 55, false);
+  FailureCode_unknown_instance = new FailureCode('unknown', 56, true);
   if (Companion_instance_5 == null) {
     Companion_instance;
     new Companion_4();
@@ -628,11 +629,12 @@ var FailureCode_exportLeftScreen_instance;
 var FailureCode_importUnreadable_instance;
 var FailureCode_settingsSaveFailed_instance;
 var FailureCode_uiUnavailable_instance;
+var FailureCode_syncBeepFailed_instance;
 var FailureCode_apiMismatch_instance;
 var FailureCode_unknown_instance;
 function values_4() {
   static_init_4();
-  return [FailureCode_bikeRequired_getInstance(), FailureCode_rideActive_getInstance(), FailureCode_actionPending_getInstance(), FailureCode_actionUnavailable_getInstance(), FailureCode_rideChanged_getInstance(), FailureCode_startUnconfirmed_getInstance(), FailureCode_startInterrupted_getInstance(), FailureCode_startCancelled_getInstance(), FailureCode_startExpired_getInstance(), FailureCode_ownerForeign_getInstance(), FailureCode_settingsUnreadable_getInstance(), FailureCode_rideInProgress_getInstance(), FailureCode_exportInProgress_getInstance(), FailureCode_locationDenied_getInstance(), FailureCode_gpsRequired_getInstance(), FailureCode_healthUnavailable_getInstance(), FailureCode_healthDenied_getInstance(), FailureCode_healthLocked_getInstance(), FailureCode_watchNotInstalled_getInstance(), FailureCode_watchLaunchFailed_getInstance(), FailureCode_watchBusy_getInstance(), FailureCode_watchStartUnconfirmed_getInstance(), FailureCode_watchVersionMismatch_getInstance(), FailureCode_watchMessageInvalid_getInstance(), FailureCode_bluetoothDenied_getInstance(), FailureCode_bluetoothOff_getInstance(), FailureCode_bluetoothNotReady_getInstance(), FailureCode_bluetoothUnsupported_getInstance(), FailureCode_bluetoothUnavailable_getInstance(), FailureCode_bluetoothSearchFailed_getInstance(), FailureCode_bikeNotFound_getInstance(), FailureCode_bikeUnavailable_getInstance(), FailureCode_bikeReconnecting_getInstance(), FailureCode_controllerNoReply_getInstance(), FailureCode_controllerUnsupported_getInstance(), FailureCode_firmwareUnsupported_getInstance(), FailureCode_differentBike_getInstance(), FailureCode_disconnectFirst_getInstance(), FailureCode_storageBusy_getInstance(), FailureCode_storageFull_getInstance(), FailureCode_storageFailed_getInstance(), FailureCode_storageRefused_getInstance(), FailureCode_readFailed_getInstance(), FailureCode_chartCapacity_getInstance(), FailureCode_rideDeleted_getInstance(), FailureCode_exportNotReady_getInstance(), FailureCode_exportChanged_getInstance(), FailureCode_exportLimit_getInstance(), FailureCode_exportNoRecords_getInstance(), FailureCode_exportSinkFailed_getInstance(), FailureCode_exportLeftScreen_getInstance(), FailureCode_importUnreadable_getInstance(), FailureCode_settingsSaveFailed_getInstance(), FailureCode_uiUnavailable_getInstance(), FailureCode_apiMismatch_getInstance(), FailureCode_unknown_getInstance()];
+  return [FailureCode_bikeRequired_getInstance(), FailureCode_rideActive_getInstance(), FailureCode_actionPending_getInstance(), FailureCode_actionUnavailable_getInstance(), FailureCode_rideChanged_getInstance(), FailureCode_startUnconfirmed_getInstance(), FailureCode_startInterrupted_getInstance(), FailureCode_startCancelled_getInstance(), FailureCode_startExpired_getInstance(), FailureCode_ownerForeign_getInstance(), FailureCode_settingsUnreadable_getInstance(), FailureCode_rideInProgress_getInstance(), FailureCode_exportInProgress_getInstance(), FailureCode_locationDenied_getInstance(), FailureCode_gpsRequired_getInstance(), FailureCode_healthUnavailable_getInstance(), FailureCode_healthDenied_getInstance(), FailureCode_healthLocked_getInstance(), FailureCode_watchNotInstalled_getInstance(), FailureCode_watchLaunchFailed_getInstance(), FailureCode_watchBusy_getInstance(), FailureCode_watchStartUnconfirmed_getInstance(), FailureCode_watchVersionMismatch_getInstance(), FailureCode_watchMessageInvalid_getInstance(), FailureCode_bluetoothDenied_getInstance(), FailureCode_bluetoothOff_getInstance(), FailureCode_bluetoothNotReady_getInstance(), FailureCode_bluetoothUnsupported_getInstance(), FailureCode_bluetoothUnavailable_getInstance(), FailureCode_bluetoothSearchFailed_getInstance(), FailureCode_bikeNotFound_getInstance(), FailureCode_bikeUnavailable_getInstance(), FailureCode_bikeReconnecting_getInstance(), FailureCode_controllerNoReply_getInstance(), FailureCode_controllerUnsupported_getInstance(), FailureCode_firmwareUnsupported_getInstance(), FailureCode_differentBike_getInstance(), FailureCode_disconnectFirst_getInstance(), FailureCode_storageBusy_getInstance(), FailureCode_storageFull_getInstance(), FailureCode_storageFailed_getInstance(), FailureCode_storageRefused_getInstance(), FailureCode_readFailed_getInstance(), FailureCode_chartCapacity_getInstance(), FailureCode_rideDeleted_getInstance(), FailureCode_exportNotReady_getInstance(), FailureCode_exportChanged_getInstance(), FailureCode_exportLimit_getInstance(), FailureCode_exportNoRecords_getInstance(), FailureCode_exportSinkFailed_getInstance(), FailureCode_exportLeftScreen_getInstance(), FailureCode_importUnreadable_getInstance(), FailureCode_settingsSaveFailed_getInstance(), FailureCode_uiUnavailable_getInstance(), FailureCode_syncBeepFailed_getInstance(), FailureCode_apiMismatch_getInstance(), FailureCode_unknown_getInstance()];
 }
 function Companion_4() {
   Companion_instance_5 = this;
@@ -908,6 +910,10 @@ function FailureCode_settingsSaveFailed_getInstance() {
 function FailureCode_uiUnavailable_getInstance() {
   static_init_4();
   return FailureCode_uiUnavailable_instance;
+}
+function FailureCode_syncBeepFailed_getInstance() {
+  static_init_4();
+  return FailureCode_syncBeepFailed_instance;
 }
 function FailureCode_apiMismatch_getInstance() {
   static_init_4();
@@ -4974,6 +4980,7 @@ export {
   FailureCode_storageBusy_getInstance as FailureCode_storageBusy_getInstance1fa4mzfrxzhmx,
   FailureCode_storageFailed_getInstance as FailureCode_storageFailed_getInstance3tnwappfb6ji1,
   FailureCode_storageFull_getInstance as FailureCode_storageFull_getInstance3kj28sdn98xn1,
+  FailureCode_syncBeepFailed_getInstance as FailureCode_syncBeepFailed_getInstance3ieb25ue4imaj,
   FailureCode_uiUnavailable_getInstance as FailureCode_uiUnavailable_getInstance2ubvgyss6uf64,
   FailureCode_unknown_getInstance as FailureCode_unknown_getInstancemeksdbm239xs,
   FailureCode_watchBusy_getInstance as FailureCode_watchBusy_getInstance1pxcbhbtpxe5d,

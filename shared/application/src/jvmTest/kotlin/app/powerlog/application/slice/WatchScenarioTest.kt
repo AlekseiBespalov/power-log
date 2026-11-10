@@ -151,6 +151,26 @@ class WatchScenarioTest {
     }
 
     @Test
+    fun aCancelStartDuringASyncBeepCountdownLeavesNoRide() {
+        val scenario = watching()
+        scenario.watchLink.sends.script = { Answer.Held }
+        scenario.test {
+            ready(scenario)
+            val beeps = SettingsChange.Toggle(RideToggle.syncBeeps, true)
+            assertEquals(Outcome.Ok(Unit), scenario.api.settings.change(beeps))
+            val started = scenario.watchLink.receive(scenario.codec.bytesFor(WatchDecodeResult.Valid(startRequest())))
+            scenario.recording { it.cue != null }
+            val cancel = WatchMessage.CancelStartMessage(null, "request-1", null)
+            val cancelled = scenario.watchLink.receive(scenario.codec.bytesFor(WatchDecodeResult.Valid(cancel)))
+            while (started.replies.isEmpty() || cancelled.replies.isEmpty()) delay(1)
+            assertEquals(FailureCode.startCancelled, scenario.ack(started.replies.single()).error)
+            assertEquals(null, scenario.ack(cancelled.replies.single()).error)
+            assertTrue(scenario.mutations().none { it is Mutation.CreateRide })
+            assertEquals(1, scenario.tonePlayer.stops)
+        }
+    }
+
+    @Test
     fun commandsAnswerExpiredOtherRideOrTheAppliedRide() {
         val scenario = watching()
         scenario.watchAnswers { WatchMessage.AckMessage(null, null) }

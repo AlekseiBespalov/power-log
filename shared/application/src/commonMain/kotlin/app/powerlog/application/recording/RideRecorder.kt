@@ -22,11 +22,14 @@ import app.powerlog.application.port.PermissionGate
 import app.powerlog.application.port.PermissionKind
 import app.powerlog.application.port.PermissionState
 import app.powerlog.application.port.PermissionStates
+import app.powerlog.application.port.PortError
 import app.powerlog.application.port.PortErrorKind
 import app.powerlog.application.port.RecordingKeepAlive
 import app.powerlog.application.port.Reply
 import app.powerlog.application.port.RideCard
 import app.powerlog.application.port.StoragePersistence
+import app.powerlog.application.port.ToneOnset
+import app.powerlog.application.port.TonePlayer
 import app.powerlog.application.port.WatchLink
 import app.powerlog.application.settings.Settings
 import app.powerlog.application.store.ArchiveWriter
@@ -58,6 +61,7 @@ import app.powerlog.domain.core.ride.RidePhase
 import app.powerlog.domain.core.ride.StartRequest
 import app.powerlog.domain.core.time.ClockReading
 import app.powerlog.domain.recording.CommandIssuer
+import app.powerlog.domain.recording.CueAction
 import app.powerlog.domain.recording.FinishContext
 import app.powerlog.domain.recording.LifecycleDecision
 import app.powerlog.domain.recording.RideCommand
@@ -66,6 +70,7 @@ import app.powerlog.domain.recording.RideSignal
 import app.powerlog.domain.recording.RideTransition
 import app.powerlog.domain.recording.StartContext
 import app.powerlog.domain.recording.StartPolicy
+import app.powerlog.domain.recording.SyncBeeps
 import app.powerlog.domain.settings.PersistenceState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -105,6 +110,7 @@ internal class RideRecorder(
         val health: HealthProvider?,
         val watch: WatchLink?,
         val persistence: StoragePersistence? = null,
+        val tones: TonePlayer? = null,
     )
 
     private enum class Part {
@@ -126,6 +132,23 @@ internal class RideRecorder(
 
     class Waiting(val rideId: RideId, val event: EventId, val requestId: String?)
 
+    private class Countdown(val requestId: String?) {
+        val cancelled = CompletableDeferred<Unit>()
+    }
+
+    private sealed interface Counted {
+        class At(val at: ClockReading) : Counted
+
+        class Stopped(val code: FailureCode) : Counted
+    }
+
+    private class Beep(val action: CueAction) {
+        var failed = false
+        var landed = false
+    }
+
+    private var countdown: Countdown? = null
+    private var beep: Beep? = null
     private var pendingStart: PendingStart? = null
     private var endingSession: RideId? = null
     var cardToken: () -> String? = { null }
@@ -177,12 +200,24 @@ internal class RideRecorder(
                 }
         }
         val rideId = RideId(newId())
-        val cutoff = clock.read()
-        val context = startContext(options, fromWatch).copy(ownerForeign = ownerForeign || state.otherTab)
+        val context =
+            startContext(options, fromWatch)
+                .copy(ownerForeign = ownerForeign || state.otherTab, syncBeeps = saved.syncBeeps)
+        val cutoff =
+            if (!context.syncBeeps) clock.read()
+            else
+                when (val counted = countDown(context, requestId)) {
+                    is Counted.At -> counted.at
+                    is Counted.Stopped -> {
+                        releaseLease()
+                        return CompletableDeferred(refused(counted.code))
+                    }
+                }
         val command = RideCommand.Start(event, rideId, recordedBy(), context)
         val decision = RideLifecycle.decide(state.lifecycle, command, cutoff, null)
         if (decision !is LifecycleDecision.Accepted) {
             releaseLease()
+            if (context.syncBeeps) abandonStart()
             return CompletableDeferred(refused((decision as LifecycleDecision.Refused).code))
         }
         val created = requireNotNull(decision.saved)
@@ -197,6 +232,7 @@ internal class RideRecorder(
         val failed = committedOrFailure(writer.commit(WriteBatch(mutations)))
         if (failed != null) {
             releaseLease()
+            if (context.syncBeeps) abandonStart()
             return CompletableDeferred(shown(failed))
         }
         val parts = mutableSetOf<Part>()
@@ -242,12 +278,126 @@ internal class RideRecorder(
         live.publish(urgent = true)
         val outcome =
             try {
-                decideControl(rideId, action, issuer, event)
+                decideControl(rideId, action, issuer, event, cueControl(rideId, action))
             } finally {
                 state.pending = null
+                state.cue = null
             }
         live.publish(urgent = true)
         return outcome
+    }
+
+    fun cancelStart(requestId: String?): Outcome<Unit> {
+        val counting = countdown
+        if (counting == null || requestId != null && counting.requestId != requestId)
+            return Outcome.Failed(failure(FailureCode.actionUnavailable))
+        counting.cancelled.complete(Unit)
+        return Outcome.Ok(Unit)
+    }
+
+    suspend fun testBeep(): Outcome<Unit> {
+        if (state.cue != null) return Outcome.Failed(failure(FailureCode.actionPending))
+        val tones = ports.tones ?: return Outcome.Failed(failure(FailureCode.actionUnavailable))
+        val at = clock.monoUs() + SyncBeeps.testLeadUs
+        return when (val played = answer<ToneOnset> { tones.play(SyncBeeps.syncTones(at), it) }) {
+            is Answer.Ok -> {
+                logBeep(null, played.value, null)
+                Outcome.Ok(Unit)
+            }
+            is Answer.Failed -> {
+                logBeep(null, null, played.error)
+                Outcome.Failed(failure(FailureCode.syncBeepFailed))
+            }
+        }
+    }
+
+    private suspend fun countDown(context: StartContext, requestId: String?): Counted {
+        val allowed = RideLifecycle.available(state.lifecycle, context).start
+        if (!allowed.enabled) return Counted.Stopped(requireNotNull(allowed.reason))
+        val options = requireNotNull(context.options)
+        val at = SyncBeeps.startAt(clock.read())
+        val counting = Countdown(requestId)
+        countdown = counting
+        connection.recordingChanged(true, options.sampleRate)
+        cue(CueAction.start, at)
+        val cancelled = deadlines.await(counting.cancelled, at.monoUs) != null
+        countdown = null
+        state.cue = null
+        if (!cancelled) return Counted.At(at)
+        ports.tones?.stop()
+        abandonStart()
+        return Counted.Stopped(FailureCode.startCancelled)
+    }
+
+    private suspend fun cueControl(rideId: RideId, action: RideAction): ClockReading? {
+        val open = state.open ?: return null
+        val rideClock = state.lifecycle.clock ?: return null
+        if (open.id != rideId || !rideClock.syncBeeps || !SyncBeeps.cued(open.phase, action)) return null
+        val at = SyncBeeps.controlAt(clock.read(), rideClock.elapsedOriginMonoUs)
+        cue(if (action == RideAction.resume) CueAction.resume else CueAction.finish, at)
+        deadlines.until(at.monoUs)
+        return at
+    }
+
+    private fun cue(action: CueAction, at: ClockReading) {
+        capture.fence(at.monoUs)
+        connection.requestAt(SyncBeeps.requestAt(action, at.monoUs))
+        val playing = Beep(action)
+        beep = playing
+        val tones = if (action == CueAction.start) SyncBeeps.startTones(at.monoUs) else SyncBeeps.syncTones(at.monoUs)
+        ports.tones?.play(
+            tones,
+            Reply(
+                onOk = { onset -> scope.launch(ride) { toned(playing, onset, null) } },
+                onFailed = { error -> scope.launch(ride) { toned(playing, null, error) } },
+            ),
+        )
+        state.cue = CueView(action, at.monoUs)
+        live.publish(urgent = true)
+    }
+
+    private fun abandonStart() {
+        capture.lift()
+        connection.requestAt(null)
+        connection.recordingChanged(false, settings.ride.sampleRate)
+        beep = null
+    }
+
+    private fun toned(playing: Beep, onset: ToneOnset?, error: PortError?) {
+        logBeep(playing.action, onset, error)
+        if (error == null || error.kind == PortErrorKind.cancelled) return
+        playing.failed = true
+        if (beep === playing && (playing.landed || playing.action == CueAction.start)) beepFailed()
+    }
+
+    private fun landed(action: CueAction) {
+        val playing = beep?.takeIf { it.action == action } ?: return
+        playing.landed = true
+        if (playing.failed) beepFailed()
+    }
+
+    private fun beepFailed() {
+        state.failure = occurrence(FailureCode.syncBeepFailed, state.failure)
+        live.publish(urgent = true)
+    }
+
+    private fun logBeep(action: CueAction?, onset: ToneOnset?, error: PortError?) {
+        val outcome =
+            when {
+                error == null -> "played"
+                error.kind == PortErrorKind.cancelled -> "cancelled"
+                else -> "failed"
+            }
+        logs.event(
+            if (outcome == "failed") LogLevel.warning else LogLevel.info,
+            "syncBeep",
+            "action" to (action?.name ?: "test"),
+            "outcome" to outcome,
+            "lateMs" to onset?.let { it.lateUs / 1_000 },
+            "route" to onset?.route,
+            "error" to error?.kind?.takeIf { outcome == "failed" },
+            "platform" to error?.platform,
+        )
     }
 
     private suspend fun decideControl(
@@ -255,12 +405,13 @@ internal class RideRecorder(
         action: RideAction,
         issuer: CommandIssuer,
         event: EventId,
+        at: ClockReading?,
     ): Outcome<Unit> {
         val leases = leases
         val open = state.open
         val ending = action == RideAction.finish || action == RideAction.discard
         if (leases == null || !ending || open?.id != rideId || open.phase != RidePhase.interrupted)
-            return decided(rideId, action, issuer, event)
+            return decided(rideId, action, issuer, event, at)
         if (!leases.take(waitIfHeld = true)) return refused(FailureCode.ownerForeign)
         try {
             val stored =
@@ -272,7 +423,7 @@ internal class RideRecorder(
                 rides.restore(stored)
                 return refused(FailureCode.rideChanged)
             }
-            return decided(rideId, action, issuer, event)
+            return decided(rideId, action, issuer, event, at)
         } finally {
             leases.release()
         }
@@ -283,9 +434,10 @@ internal class RideRecorder(
         action: RideAction,
         issuer: CommandIssuer,
         event: EventId,
+        at: ClockReading?,
     ): Outcome<Unit> {
         val open = state.open
-        val cutoff = clock.read()
+        val cutoff = at ?: clock.read()
         val flushing = open != null && open.id == rideId && open.phase in setOf(RidePhase.running, RidePhase.paused)
         if (flushing) {
             capture.fence(cutoff.monoUs)
@@ -320,6 +472,7 @@ internal class RideRecorder(
         accept(decision, event)
         capture.lift()
         work(before, decision, event, issuer)
+        if (at != null) landed(if (action == RideAction.resume) CueAction.resume else CueAction.finish)
         return Outcome.Ok(Unit)
     }
 
@@ -398,6 +551,7 @@ internal class RideRecorder(
                     states.locationServicesOn == false,
             healthSessionEnding = endingSession != null,
             healthWriteDenied = false,
+            syncBeeps = settings.ride.syncBeeps,
         )
     }
 
@@ -509,9 +663,12 @@ internal class RideRecorder(
         pendingStart = null
         accept(decision, pending.event)
         capture.started(pending.rideId, session)
+        val cued = decision.next.clock?.syncBeeps == true
+        if (cued) capture.lift()
         if (running.options.recordGps) ports.location?.start()
         pending.answer.complete(Outcome.Ok(Unit))
         transitioned(running, RideTransition.started, pending.event, decision.events)
+        if (cued) landed(CueAction.start)
     }
 
     private suspend fun timedOut(pending: PendingStart) {
@@ -523,6 +680,10 @@ internal class RideRecorder(
 
     private suspend fun fail(pending: PendingStart, code: FailureCode, timedOut: Boolean = false) {
         if (pendingStart !== pending) return
+        if (state.lifecycle.clock?.syncBeeps == true) {
+            capture.lift()
+            beep = null
+        }
         val signal =
             if (timedOut) RideSignal.StartTimedOut(pending.rideId) else RideSignal.StartFailed(pending.rideId, code)
         val decision =
@@ -569,6 +730,7 @@ internal class RideRecorder(
         if (decision !is LifecycleDecision.Accepted) return
         val interrupted = requireNotNull(decision.saved)
         state.lifecycle = decision.next
+        if (state.cue != null) ports.tones?.stop()
         capture.stopped()
         pendingStart?.let {
             it.window?.cancel()

@@ -104,6 +104,7 @@ class JvmRuntimeTest {
             rideCard = null,
             watch = null,
             scheduler = null,
+            tones = null,
         )
 
     private fun reply(send: ((String) -> Unit) -> Unit): JsonObject {

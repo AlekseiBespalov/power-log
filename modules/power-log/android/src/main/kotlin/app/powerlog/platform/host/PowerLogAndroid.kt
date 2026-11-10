@@ -19,6 +19,7 @@ import app.powerlog.platform.permissions.AndroidPermissionGate
 import app.powerlog.platform.ridecard.AndroidRideCard
 import app.powerlog.platform.ridecard.RideCardIntents
 import app.powerlog.platform.scheduler.AndroidBackgroundScheduler
+import app.powerlog.platform.tones.AndroidTonePlayer
 import app.powerlog.platform.ui.AndroidUiContext
 import app.powerlog.runtime.clock.AndroidClock
 import app.powerlog.runtime.compose.AndroidRuntime
@@ -70,6 +71,7 @@ object PowerLogAndroid {
                 rideCard = rideCard,
                 watch = null,
                 scheduler = AndroidBackgroundScheduler(application, HealthWorker::class.java, clock),
+                tones = AndroidTonePlayer(application, ride),
             )
         val hooks = DevHooks.create(application, clock, threads.ride)
         val created = AndroidRuntime.create(application, threads, clock, ports, hooks?.tools)

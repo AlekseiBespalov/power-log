@@ -92,6 +92,10 @@ import {
   isFinite2t9l5a275mxm6 as isFinite,
   createFailure8paxfkfa5dc7 as createFailure,
   Result3t1vadv16kmzk as Result,
+  toNumberlmbpvqo27r53 as toNumber,
+  roundToLong2s902lrwaad4n as roundToLong,
+  subtract16cg4lfi29fq9 as subtract,
+  lastOrNull1aq5oz189qoe1 as lastOrNull,
 } from './kotlin-kotlin-stdlib.mjs';
 import {
   Companion_instance32nyyuj5r40xg as Companion_instance_0,
@@ -200,6 +204,8 @@ import {
   PermissionState_granted_getInstance1qs4z242enp6a as PermissionState_granted_getInstance,
   PermissionState_denied_getInstance3v104ejvmoagq as PermissionState_denied_getInstance,
   PermissionKind_location_getInstance1hka5hlcksmy1 as PermissionKind_location_getInstance,
+  AudioRoute_other_getInstance1nwrklzsqdw88 as AudioRoute_other_getInstance,
+  ToneOnset79dc7fewk5fg as ToneOnset,
 } from './power-log-application.mjs';
 import {
   PluginGeneratedSerialDescriptorqdzeg5asqhfg as PluginGeneratedSerialDescriptor,
@@ -322,6 +328,10 @@ initMetadataForClass(WebPermissionGate, 'WebPermissionGate');
 initMetadataForClass(WebStoragePersistence, 'WebStoragePersistence');
 initMetadataForClass(Lease, 'Lease');
 initMetadataForClass(WebTabLock, 'WebTabLock');
+initMetadataForClass(Playing, 'Playing');
+initMetadataForClass(Timeline, 'Timeline');
+initMetadataForCompanion(Companion_6);
+initMetadataForClass(WebTonePlayer, 'WebTonePlayer');
 //endregion
 function $callCOROUTINE$(_this__u8e3s4, op, input, resultContinuation) {
   CoroutineImpl.call(this, resultContinuation);
@@ -336,11 +346,11 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
       var tmp = this.state_1;
       switch (tmp) {
         case 0:
-          this.exceptionState_1 = 30;
+          this.exceptionState_1 = 32;
           var tmp0_subject = this.op_1;
           if (tmp0_subject === 'cancel') {
             this.ARGUMENT1__1 = this._this__u8e3s4__1.codec_1;
-            this.state_1 = 28;
+            this.state_1 = 30;
             suspendResult = this._this__u8e3s4__1.api_1.cancel_xtqj9p_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_9.serializer_9w0wvi_k$(), this.input_1), this);
             if (suspendResult === get_COROUTINE_SUSPENDED()) {
               return suspendResult;
@@ -350,7 +360,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
             if (tmp0_subject === 'charts.inspect') {
               this.ARGUMENT3__1 = this._this__u8e3s4__1.codec_1;
               this.ARGUMENT2__1 = Companion_getInstance_13().serializer_9w0wvi_k$();
-              this.state_1 = 27;
+              this.state_1 = 29;
               suspendResult = this._this__u8e3s4__1.api_1.get_charts_bw3nfi_k$().inspect_1j036i_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_14().serializer_9w0wvi_k$(), this.input_1), this);
               if (suspendResult === get_COROUTINE_SUSPENDED()) {
                 return suspendResult;
@@ -360,7 +370,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
               if (tmp0_subject === 'charts.latest') {
                 this.ARGUMENT5__1 = this._this__u8e3s4__1.codec_1;
                 this.ARGUMENT4__1 = Companion_getInstance_11().serializer_9w0wvi_k$();
-                this.state_1 = 26;
+                this.state_1 = 28;
                 suspendResult = this._this__u8e3s4__1.api_1.get_charts_bw3nfi_k$().latest_40q4hd_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_12().serializer_9w0wvi_k$(), this.input_1), this);
                 if (suspendResult === get_COROUTINE_SUSPENDED()) {
                   return suspendResult;
@@ -370,7 +380,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                 if (tmp0_subject === 'charts.plot') {
                   this.ARGUMENT7__1 = this._this__u8e3s4__1.codec_1;
                   this.ARGUMENT6__1 = Companion_getInstance_9().serializer_9w0wvi_k$();
-                  this.state_1 = 25;
+                  this.state_1 = 27;
                   suspendResult = this._this__u8e3s4__1.api_1.get_charts_bw3nfi_k$().plot_9wj16z_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_10().serializer_9w0wvi_k$(), this.input_1), this);
                   if (suspendResult === get_COROUTINE_SUSPENDED()) {
                     return suspendResult;
@@ -380,7 +390,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                   if (tmp0_subject === 'charts.statistics') {
                     this.ARGUMENT9__1 = this._this__u8e3s4__1.codec_1;
                     this.ARGUMENT8__1 = Companion_getInstance_7().serializer_9w0wvi_k$();
-                    this.state_1 = 24;
+                    this.state_1 = 26;
                     suspendResult = this._this__u8e3s4__1.api_1.get_charts_bw3nfi_k$().statistics_7mruj1_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_8().serializer_9w0wvi_k$(), this.input_1), this);
                     if (suspendResult === get_COROUTINE_SUSPENDED()) {
                       return suspendResult;
@@ -389,7 +399,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                   } else {
                     if (tmp0_subject === 'connection.connect') {
                       this.ARGUMENT10__1 = this._this__u8e3s4__1.codec_1;
-                      this.state_1 = 23;
+                      this.state_1 = 25;
                       suspendResult = this._this__u8e3s4__1.api_1.get_connection_x01z89_k$().connect_dziydp_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_8.serializer_9w0wvi_k$(), this.input_1), this);
                       if (suspendResult === get_COROUTINE_SUSPENDED()) {
                         return suspendResult;
@@ -398,7 +408,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                     } else {
                       if (tmp0_subject === 'connection.disconnect') {
                         this.ARGUMENT11__1 = this._this__u8e3s4__1.codec_1;
-                        this.state_1 = 22;
+                        this.state_1 = 24;
                         suspendResult = this._this__u8e3s4__1.api_1.get_connection_x01z89_k$().disconnect_p5l3uw_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                         if (suspendResult === get_COROUTINE_SUSPENDED()) {
                           return suspendResult;
@@ -407,7 +417,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                       } else {
                         if (tmp0_subject === 'connection.startSearch') {
                           this.ARGUMENT12__1 = this._this__u8e3s4__1.codec_1;
-                          this.state_1 = 21;
+                          this.state_1 = 23;
                           suspendResult = this._this__u8e3s4__1.api_1.get_connection_x01z89_k$().startSearch_2yvmre_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                           if (suspendResult === get_COROUTINE_SUSPENDED()) {
                             return suspendResult;
@@ -416,7 +426,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                         } else {
                           if (tmp0_subject === 'connection.stopSearch') {
                             this.ARGUMENT13__1 = this._this__u8e3s4__1.codec_1;
-                            this.state_1 = 20;
+                            this.state_1 = 22;
                             suspendResult = this._this__u8e3s4__1.api_1.get_connection_x01z89_k$().stopSearch_f31kyi_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                             if (suspendResult === get_COROUTINE_SUSPENDED()) {
                               return suspendResult;
@@ -425,7 +435,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                           } else {
                             if (tmp0_subject === 'diagnostics.clearTrace') {
                               this.ARGUMENT14__1 = this._this__u8e3s4__1.codec_1;
-                              this.state_1 = 19;
+                              this.state_1 = 21;
                               suspendResult = this._this__u8e3s4__1.api_1.get_diagnostics_1ne72b_k$().clearTrace_hplzho_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                               if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                 return suspendResult;
@@ -435,7 +445,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                               if (tmp0_subject === 'diagnostics.readLog') {
                                 this.ARGUMENT16__1 = this._this__u8e3s4__1.codec_1;
                                 this.ARGUMENT15__1 = Companion_getInstance_6().serializer_9w0wvi_k$();
-                                this.state_1 = 18;
+                                this.state_1 = 20;
                                 suspendResult = this._this__u8e3s4__1.api_1.get_diagnostics_1ne72b_k$().readLog_dxnng4_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_7.serializer_9w0wvi_k$(), this.input_1), this);
                                 if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                   return suspendResult;
@@ -445,7 +455,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                 if (tmp0_subject === 'diagnostics.readTrace') {
                                   this.ARGUMENT18__1 = this._this__u8e3s4__1.codec_1;
                                   this.ARGUMENT17__1 = Companion_getInstance_5().serializer_9w0wvi_k$();
-                                  this.state_1 = 17;
+                                  this.state_1 = 19;
                                   suspendResult = this._this__u8e3s4__1.api_1.get_diagnostics_1ne72b_k$().readTrace_rqzjvh_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                   if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                     return suspendResult;
@@ -454,7 +464,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                 } else {
                                   if (tmp0_subject === 'diagnostics.startTrace') {
                                     this.ARGUMENT19__1 = this._this__u8e3s4__1.codec_1;
-                                    this.state_1 = 16;
+                                    this.state_1 = 18;
                                     suspendResult = this._this__u8e3s4__1.api_1.get_diagnostics_1ne72b_k$().startTrace_p6thj3_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                     if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                       return suspendResult;
@@ -463,7 +473,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                   } else {
                                     if (tmp0_subject === 'diagnostics.stopTrace') {
                                       this.ARGUMENT20__1 = this._this__u8e3s4__1.codec_1;
-                                      this.state_1 = 15;
+                                      this.state_1 = 17;
                                       suspendResult = this._this__u8e3s4__1.api_1.get_diagnostics_1ne72b_k$().stopTrace_plz4pt_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                       if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                         return suspendResult;
@@ -472,7 +482,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                     } else {
                                       if (tmp0_subject === 'exports.close') {
                                         this.ARGUMENT21__1 = this._this__u8e3s4__1.codec_1;
-                                        this.state_1 = 14;
+                                        this.state_1 = 16;
                                         suspendResult = this._this__u8e3s4__1.api_1.get_exports_kdto6i_k$().close_iucfdq_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_4().serializer_9w0wvi_k$(), this.input_1), this);
                                         if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                           return suspendResult;
@@ -482,7 +492,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                         if (tmp0_subject === 'exports.open') {
                                           this.ARGUMENT23__1 = this._this__u8e3s4__1.codec_1;
                                           this.ARGUMENT22__1 = Companion_getInstance_2().serializer_9w0wvi_k$();
-                                          this.state_1 = 13;
+                                          this.state_1 = 15;
                                           suspendResult = this._this__u8e3s4__1.api_1.get_exports_kdto6i_k$().open_q8d9y8_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_3().serializer_9w0wvi_k$(), this.input_1), this);
                                           if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                             return suspendResult;
@@ -491,7 +501,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                         } else {
                                           if (tmp0_subject === 'health.refresh') {
                                             this.ARGUMENT24__1 = this._this__u8e3s4__1.codec_1;
-                                            this.state_1 = 12;
+                                            this.state_1 = 14;
                                             suspendResult = this._this__u8e3s4__1.api_1.get_health_e7o95x_k$().refresh_9897qq_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_5.serializer_9w0wvi_k$(), this.input_1), this);
                                             if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                               return suspendResult;
@@ -500,7 +510,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                           } else {
                                             if (tmp0_subject === 'health.retrySave') {
                                               this.ARGUMENT25__1 = this._this__u8e3s4__1.codec_1;
-                                              this.state_1 = 11;
+                                              this.state_1 = 13;
                                               suspendResult = this._this__u8e3s4__1.api_1.get_health_e7o95x_k$().retrySave_er7rw_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_5.serializer_9w0wvi_k$(), this.input_1), this);
                                               if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                 return suspendResult;
@@ -510,7 +520,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                               if (tmp0_subject === 'history.addExampleRides') {
                                                 this.ARGUMENT27__1 = this._this__u8e3s4__1.codec_1;
                                                 this.ARGUMENT26__1 = Companion_instance_6.serializer_9w0wvi_k$();
-                                                this.state_1 = 10;
+                                                this.state_1 = 12;
                                                 suspendResult = this._this__u8e3s4__1.api_1.get_history_glfd0r_k$().addExampleRides_r0s8yg_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                                 if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                   return suspendResult;
@@ -519,7 +529,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                               } else {
                                                 if (tmp0_subject === 'history.delete') {
                                                   this.ARGUMENT28__1 = this._this__u8e3s4__1.codec_1;
-                                                  this.state_1 = 9;
+                                                  this.state_1 = 11;
                                                   suspendResult = this._this__u8e3s4__1.api_1.get_history_glfd0r_k$().delete_9uaqte_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_5.serializer_9w0wvi_k$(), this.input_1), this);
                                                   if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                     return suspendResult;
@@ -529,7 +539,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                                   if (tmp0_subject === 'history.page') {
                                                     this.ARGUMENT30__1 = this._this__u8e3s4__1.codec_1;
                                                     this.ARGUMENT29__1 = Companion_getInstance_1().serializer_9w0wvi_k$();
-                                                    this.state_1 = 8;
+                                                    this.state_1 = 10;
                                                     suspendResult = this._this__u8e3s4__1.api_1.get_history_glfd0r_k$().page_kcsng4_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_4.serializer_9w0wvi_k$(), this.input_1), this);
                                                     if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                       return suspendResult;
@@ -538,7 +548,7 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                                   } else {
                                                     if (tmp0_subject === 'imports.close') {
                                                       this.ARGUMENT31__1 = this._this__u8e3s4__1.codec_1;
-                                                      this.state_1 = 7;
+                                                      this.state_1 = 9;
                                                       suspendResult = this._this__u8e3s4__1.api_1.get_imports_x49mdh_k$().close_g8qgtk_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_3.serializer_9w0wvi_k$(), this.input_1), this);
                                                       if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                         return suspendResult;
@@ -548,61 +558,81 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
                                                       if (tmp0_subject === 'imports.open') {
                                                         this.ARGUMENT33__1 = this._this__u8e3s4__1.codec_1;
                                                         this.ARGUMENT32__1 = Companion_instance_1.serializer_9w0wvi_k$();
-                                                        this.state_1 = 6;
+                                                        this.state_1 = 8;
                                                         suspendResult = this._this__u8e3s4__1.api_1.get_imports_x49mdh_k$().open_qahg8l_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_2.serializer_9w0wvi_k$(), this.input_1), this);
                                                         if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                           return suspendResult;
                                                         }
                                                         continue $sm;
                                                       } else {
-                                                        if (tmp0_subject === 'recording.control') {
+                                                        if (tmp0_subject === 'recording.cancelStart') {
                                                           this.ARGUMENT34__1 = this._this__u8e3s4__1.codec_1;
-                                                          this.state_1 = 5;
-                                                          suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().control_guc3pk_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_0().serializer_9w0wvi_k$(), this.input_1), this);
+                                                          this.state_1 = 7;
+                                                          suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().cancelStart_uebhus_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                                           if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                             return suspendResult;
                                                           }
                                                           continue $sm;
                                                         } else {
-                                                          if (tmp0_subject === 'recording.refreshPermissions') {
+                                                          if (tmp0_subject === 'recording.control') {
                                                             this.ARGUMENT35__1 = this._this__u8e3s4__1.codec_1;
-                                                            this.state_1 = 4;
-                                                            suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().refreshPermissions_38tw2j_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
+                                                            this.state_1 = 6;
+                                                            suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().control_guc3pk_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_getInstance_0().serializer_9w0wvi_k$(), this.input_1), this);
                                                             if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                               return suspendResult;
                                                             }
                                                             continue $sm;
                                                           } else {
-                                                            if (tmp0_subject === 'recording.requestPermissions') {
+                                                            if (tmp0_subject === 'recording.refreshPermissions') {
                                                               this.ARGUMENT36__1 = this._this__u8e3s4__1.codec_1;
-                                                              this.state_1 = 3;
-                                                              suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().requestPermissions_tbrlbl_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
+                                                              this.state_1 = 5;
+                                                              suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().refreshPermissions_38tw2j_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                                               if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                                 return suspendResult;
                                                               }
                                                               continue $sm;
                                                             } else {
-                                                              if (tmp0_subject === 'recording.start') {
+                                                              if (tmp0_subject === 'recording.requestPermissions') {
                                                                 this.ARGUMENT37__1 = this._this__u8e3s4__1.codec_1;
-                                                                this.state_1 = 2;
-                                                                suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().start_wael36_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
+                                                                this.state_1 = 4;
+                                                                suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().requestPermissions_tbrlbl_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                                                 if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                                   return suspendResult;
                                                                 }
                                                                 continue $sm;
                                                               } else {
-                                                                if (tmp0_subject === 'settings.change') {
+                                                                if (tmp0_subject === 'recording.start') {
                                                                   this.ARGUMENT38__1 = this._this__u8e3s4__1.codec_1;
-                                                                  this.state_1 = 1;
-                                                                  suspendResult = this._this__u8e3s4__1.api_1.get_settings_82sm50_k$().change_bdabcr_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_0.serializer_9w0wvi_k$(), this.input_1), this);
+                                                                  this.state_1 = 3;
+                                                                  suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().start_wael36_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
                                                                   if (suspendResult === get_COROUTINE_SUSPENDED()) {
                                                                     return suspendResult;
                                                                   }
                                                                   continue $sm;
                                                                 } else {
-                                                                  this.WHEN_RESULT0__1 = null;
-                                                                  this.state_1 = 29;
-                                                                  continue $sm;
+                                                                  if (tmp0_subject === 'recording.testBeep') {
+                                                                    this.ARGUMENT39__1 = this._this__u8e3s4__1.codec_1;
+                                                                    this.state_1 = 2;
+                                                                    suspendResult = this._this__u8e3s4__1.api_1.get_recording_oy27go_k$().testBeep_jtgsn0_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Empty_getInstance().serializer_9w0wvi_k$(), this.input_1), this);
+                                                                    if (suspendResult === get_COROUTINE_SUSPENDED()) {
+                                                                      return suspendResult;
+                                                                    }
+                                                                    continue $sm;
+                                                                  } else {
+                                                                    if (tmp0_subject === 'settings.change') {
+                                                                      this.ARGUMENT40__1 = this._this__u8e3s4__1.codec_1;
+                                                                      this.state_1 = 1;
+                                                                      suspendResult = this._this__u8e3s4__1.api_1.get_settings_82sm50_k$().change_bdabcr_k$(this._this__u8e3s4__1.codec_1.decode_b9ccpp_k$(Companion_instance_0.serializer_9w0wvi_k$(), this.input_1), this);
+                                                                      if (suspendResult === get_COROUTINE_SUSPENDED()) {
+                                                                        return suspendResult;
+                                                                      }
+                                                                      continue $sm;
+                                                                    } else {
+                                                                      this.WHEN_RESULT0__1 = null;
+                                                                      this.state_1 = 31;
+                                                                      continue $sm;
+                                                                    }
+                                                                  }
                                                                 }
                                                               }
                                                             }
@@ -634,152 +664,162 @@ protoOf($callCOROUTINE$).doResume_5yljmg_k$ = function () {
 
         case 1:
           var ARGUMENT = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT38__1.answerUnit_1g2htx_k$(ARGUMENT);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT40__1.answerUnit_1g2htx_k$(ARGUMENT);
+          this.state_1 = 31;
           continue $sm;
         case 2:
           var ARGUMENT_0 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT37__1.answerUnit_1g2htx_k$(ARGUMENT_0);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT39__1.answerUnit_1g2htx_k$(ARGUMENT_0);
+          this.state_1 = 31;
           continue $sm;
         case 3:
           var ARGUMENT_1 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT36__1.answerUnit_1g2htx_k$(ARGUMENT_1);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT38__1.answerUnit_1g2htx_k$(ARGUMENT_1);
+          this.state_1 = 31;
           continue $sm;
         case 4:
           var ARGUMENT_2 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT35__1.answerUnit_1g2htx_k$(ARGUMENT_2);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT37__1.answerUnit_1g2htx_k$(ARGUMENT_2);
+          this.state_1 = 31;
           continue $sm;
         case 5:
           var ARGUMENT_3 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT34__1.answerUnit_1g2htx_k$(ARGUMENT_3);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT36__1.answerUnit_1g2htx_k$(ARGUMENT_3);
+          this.state_1 = 31;
           continue $sm;
         case 6:
           var ARGUMENT_4 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT33__1.answer_ekkhzf_k$(this.ARGUMENT32__1, ARGUMENT_4);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT35__1.answerUnit_1g2htx_k$(ARGUMENT_4);
+          this.state_1 = 31;
           continue $sm;
         case 7:
           var ARGUMENT_5 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT31__1.answerUnit_1g2htx_k$(ARGUMENT_5);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT34__1.answerUnit_1g2htx_k$(ARGUMENT_5);
+          this.state_1 = 31;
           continue $sm;
         case 8:
           var ARGUMENT_6 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT30__1.answer_ekkhzf_k$(this.ARGUMENT29__1, ARGUMENT_6);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT33__1.answer_ekkhzf_k$(this.ARGUMENT32__1, ARGUMENT_6);
+          this.state_1 = 31;
           continue $sm;
         case 9:
           var ARGUMENT_7 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT28__1.answerUnit_1g2htx_k$(ARGUMENT_7);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT31__1.answerUnit_1g2htx_k$(ARGUMENT_7);
+          this.state_1 = 31;
           continue $sm;
         case 10:
           var ARGUMENT_8 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT27__1.answer_ekkhzf_k$(this.ARGUMENT26__1, ARGUMENT_8);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT30__1.answer_ekkhzf_k$(this.ARGUMENT29__1, ARGUMENT_8);
+          this.state_1 = 31;
           continue $sm;
         case 11:
           var ARGUMENT_9 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT25__1.answerUnit_1g2htx_k$(ARGUMENT_9);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT28__1.answerUnit_1g2htx_k$(ARGUMENT_9);
+          this.state_1 = 31;
           continue $sm;
         case 12:
           var ARGUMENT_10 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT24__1.answerUnit_1g2htx_k$(ARGUMENT_10);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT27__1.answer_ekkhzf_k$(this.ARGUMENT26__1, ARGUMENT_10);
+          this.state_1 = 31;
           continue $sm;
         case 13:
           var ARGUMENT_11 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT23__1.answer_ekkhzf_k$(this.ARGUMENT22__1, ARGUMENT_11);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT25__1.answerUnit_1g2htx_k$(ARGUMENT_11);
+          this.state_1 = 31;
           continue $sm;
         case 14:
           var ARGUMENT_12 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT21__1.answerUnit_1g2htx_k$(ARGUMENT_12);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT24__1.answerUnit_1g2htx_k$(ARGUMENT_12);
+          this.state_1 = 31;
           continue $sm;
         case 15:
           var ARGUMENT_13 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT20__1.answerUnit_1g2htx_k$(ARGUMENT_13);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT23__1.answer_ekkhzf_k$(this.ARGUMENT22__1, ARGUMENT_13);
+          this.state_1 = 31;
           continue $sm;
         case 16:
           var ARGUMENT_14 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT19__1.answerUnit_1g2htx_k$(ARGUMENT_14);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT21__1.answerUnit_1g2htx_k$(ARGUMENT_14);
+          this.state_1 = 31;
           continue $sm;
         case 17:
           var ARGUMENT_15 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT18__1.answer_ekkhzf_k$(this.ARGUMENT17__1, ARGUMENT_15);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT20__1.answerUnit_1g2htx_k$(ARGUMENT_15);
+          this.state_1 = 31;
           continue $sm;
         case 18:
           var ARGUMENT_16 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT16__1.answer_ekkhzf_k$(this.ARGUMENT15__1, ARGUMENT_16);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT19__1.answerUnit_1g2htx_k$(ARGUMENT_16);
+          this.state_1 = 31;
           continue $sm;
         case 19:
           var ARGUMENT_17 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT14__1.answerUnit_1g2htx_k$(ARGUMENT_17);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT18__1.answer_ekkhzf_k$(this.ARGUMENT17__1, ARGUMENT_17);
+          this.state_1 = 31;
           continue $sm;
         case 20:
           var ARGUMENT_18 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT13__1.answerUnit_1g2htx_k$(ARGUMENT_18);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT16__1.answer_ekkhzf_k$(this.ARGUMENT15__1, ARGUMENT_18);
+          this.state_1 = 31;
           continue $sm;
         case 21:
           var ARGUMENT_19 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT12__1.answerUnit_1g2htx_k$(ARGUMENT_19);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT14__1.answerUnit_1g2htx_k$(ARGUMENT_19);
+          this.state_1 = 31;
           continue $sm;
         case 22:
           var ARGUMENT_20 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT11__1.answerUnit_1g2htx_k$(ARGUMENT_20);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT13__1.answerUnit_1g2htx_k$(ARGUMENT_20);
+          this.state_1 = 31;
           continue $sm;
         case 23:
           var ARGUMENT_21 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT10__1.answerUnit_1g2htx_k$(ARGUMENT_21);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT12__1.answerUnit_1g2htx_k$(ARGUMENT_21);
+          this.state_1 = 31;
           continue $sm;
         case 24:
           var ARGUMENT_22 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT9__1.answer_ekkhzf_k$(this.ARGUMENT8__1, ARGUMENT_22);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT11__1.answerUnit_1g2htx_k$(ARGUMENT_22);
+          this.state_1 = 31;
           continue $sm;
         case 25:
           var ARGUMENT_23 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT7__1.answer_ekkhzf_k$(this.ARGUMENT6__1, ARGUMENT_23);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT10__1.answerUnit_1g2htx_k$(ARGUMENT_23);
+          this.state_1 = 31;
           continue $sm;
         case 26:
           var ARGUMENT_24 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT5__1.answer_ekkhzf_k$(this.ARGUMENT4__1, ARGUMENT_24);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT9__1.answer_ekkhzf_k$(this.ARGUMENT8__1, ARGUMENT_24);
+          this.state_1 = 31;
           continue $sm;
         case 27:
           var ARGUMENT_25 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT3__1.answer_ekkhzf_k$(this.ARGUMENT2__1, ARGUMENT_25);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT7__1.answer_ekkhzf_k$(this.ARGUMENT6__1, ARGUMENT_25);
+          this.state_1 = 31;
           continue $sm;
         case 28:
           var ARGUMENT_26 = suspendResult;
-          this.WHEN_RESULT0__1 = this.ARGUMENT1__1.answerUnit_1g2htx_k$(ARGUMENT_26);
-          this.state_1 = 29;
+          this.WHEN_RESULT0__1 = this.ARGUMENT5__1.answer_ekkhzf_k$(this.ARGUMENT4__1, ARGUMENT_26);
+          this.state_1 = 31;
           continue $sm;
         case 29:
-          return this.WHEN_RESULT0__1;
+          var ARGUMENT_27 = suspendResult;
+          this.WHEN_RESULT0__1 = this.ARGUMENT3__1.answer_ekkhzf_k$(this.ARGUMENT2__1, ARGUMENT_27);
+          this.state_1 = 31;
+          continue $sm;
         case 30:
+          var ARGUMENT_28 = suspendResult;
+          this.WHEN_RESULT0__1 = this.ARGUMENT1__1.answerUnit_1g2htx_k$(ARGUMENT_28);
+          this.state_1 = 31;
+          continue $sm;
+        case 31:
+          return this.WHEN_RESULT0__1;
+        case 32:
           throw this.exception_1;
       }
     } catch ($p) {
       var e = $p;
-      if (this.exceptionState_1 === 30) {
+      if (this.exceptionState_1 === 32) {
         throw e;
       } else {
         this.state_1 = this.exceptionState_1;
@@ -1141,7 +1181,7 @@ function BridgeSession$closeExport$ref(p0) {
     var tmp0 = p0;
     closeExport(tmp0, p0_0);
     return Unit_instance;
-  }, 1, 0, 45, 'closeExport', [p0]);
+  }, 1, 0, 47, 'closeExport', [p0]);
 }
 function BridgeSession$call$slambda$slambda$lambda_1(it) {
   return _RideId___get_value__impl__cq2ata(it.importId_1);
@@ -1154,7 +1194,7 @@ function BridgeSession$closeImport$ref(p0) {
     var tmp0 = p0;
     closeImport(tmp0, p0_0);
     return Unit_instance;
-  }, 1, 0, 46, 'closeImport', [p0]);
+  }, 1, 0, 48, 'closeImport', [p0]);
 }
 function BridgeSession$call$slambda$slambda($op, this$0, $input, resultContinuation) {
   this.$op_1 = $op;
@@ -2197,7 +2237,7 @@ protoOf(BridgeSession).call_dty52r_k$ = function (op, request, reply) {
   if (this.ledger_1.load_1zbae_k$().closed_1)
     return Unit_instance;
   if (op === 'apiVersion')
-    return reply(this.codec_1.answer_ekkhzf_k$(Companion_instance_12.serializer_9w0wvi_k$(), new Ok(new ApiVersion('06e8873292ea985e'))));
+    return reply(this.codec_1.answer_ekkhzf_k$(Companion_instance_12.serializer_9w0wvi_k$(), new Ok(new ApiVersion('566fa83534aba78b'))));
   serve(this, reply, BridgeSession$call$slambda_0(this, request, op, null));
 };
 protoOf(BridgeSession).next_87exco_k$ = function (stream, request, reply) {
@@ -2403,7 +2443,7 @@ protoOf(Composition).create_a1tn6p_k$ = function (executors, clock, ports, store
   var tmp_0 = tmp;
   var tmp_1 = devTools == null ? null : devTools.get_exampleRides_2v5x16_k$();
   var tmp_2 = !(devTools == null);
-  var application = new PowerLogApplication(executors, clock, stores, composed.device_1, composed.permissions_1, composed.picker_1, composed.ble_1, composed.location_1, composed.health_1, composed.keepAlive_1, composed.tabLock_1, composed.persistence_1, composed.rideCard_1, composed.watch_1, tmp_0, composed.scheduler_1, tmp_1, tmp_2, crashLines, Unexpected$line$ref(Unexpected_instance));
+  var application = new PowerLogApplication(executors, clock, stores, composed.device_1, composed.permissions_1, composed.picker_1, composed.ble_1, composed.location_1, composed.health_1, composed.keepAlive_1, composed.tabLock_1, composed.persistence_1, composed.rideCard_1, composed.tones_1, composed.watch_1, tmp_0, composed.scheduler_1, tmp_1, tmp_2, crashLines, Unexpected$line$ref(Unexpected_instance));
   application.attach_3sr4i3_k$();
   var tmp5_elvis_lhs = stores.log_1;
   var log = tmp5_elvis_lhs == null ? Unlogged_instance : tmp5_elvis_lhs;
@@ -2420,7 +2460,7 @@ var Composition_instance;
 function Composition_getInstance() {
   return Composition_instance;
 }
-function Ports(permissions, picker, device, ble, location, health, keepAlive, tabLock, persistence, rideCard, watch, scheduler) {
+function Ports(permissions, picker, device, ble, location, health, keepAlive, tabLock, persistence, rideCard, watch, scheduler, tones) {
   this.permissions_1 = permissions;
   this.picker_1 = picker;
   this.device_1 = device;
@@ -2433,6 +2473,7 @@ function Ports(permissions, picker, device, ble, location, health, keepAlive, ta
   this.rideCard_1 = rideCard;
   this.watch_1 = watch;
   this.scheduler_1 = scheduler;
+  this.tones_1 = tones;
 }
 function PowerLogRuntime(host, api, clock, log, ble) {
   this.host_1 = host;
@@ -2534,7 +2575,7 @@ function Unexpected_getInstance() {
 function Unexpected$line$ref(p0) {
   return constructCallableReference(function (p0_0, p1, p2) {
     return p0.line_qs174y_k$(p0_0, p1, p2);
-  }, 3, 0, 47, 'line', [p0]);
+  }, 3, 0, 49, 'line', [p0]);
 }
 function RuntimeHost$launch$slambda$slambda(this$0, $context, resultContinuation) {
   this.this$0__1 = this$0;
@@ -3110,7 +3151,7 @@ function WebLoop$channel$delegate$lambda$lambda(it) {
 function WebLoop$_get_channel_$ref_v20w27() {
   return constructCallableReference(function (p0) {
     return _get_channel__c6e3yq(p0);
-  }, 1, 0, 48);
+  }, 1, 0, 50);
 }
 function WebLoop() {
   WebLoop_instance = this;
@@ -3154,7 +3195,7 @@ function WebLoop_getInstance() {
 function Clock$read$ref(p0) {
   return constructCallableReference(function () {
     return p0.read_22xsm_k$();
-  }, 0, 0, 49, 'read', [p0]);
+  }, 0, 0, 51, 'read', [p0]);
 }
 function WebRuntime() {
 }
@@ -4539,7 +4580,19 @@ function WebHost$start$lambda_0($navigator) {
     return (tmp0_safe_receiver == null ? null : tmp0_safe_receiver.isActive) != false;
   };
 }
-function WebHost$start$lambda_1(it) {
+function WebHost$start$lambda_1($page) {
+  return function () {
+    return Companion_instance_22.browser_lsixig_k$($page);
+  };
+}
+function WebHost$start$lambda_2($navigator) {
+  return function () {
+    // Inline function 'kotlin.js.asDynamic' call
+    var tmp0_safe_receiver = $navigator.userActivation;
+    return (tmp0_safe_receiver == null ? null : tmp0_safe_receiver.hasBeenActive) != false;
+  };
+}
+function WebHost$start$lambda_3(it) {
   return Unit_instance;
 }
 function WebHost$forward$lambda$lambda() {
@@ -4629,10 +4682,12 @@ protoOf(WebHost).start_wlj1wj_k$ = function (archiveName, appVersion, page) {
   // Inline function 'kotlin.js.asDynamic' call
   // Inline function 'kotlin.js.unsafeCast' call
   var tmp$ret$19 = navigator.storage;
-  var ports = new Ports(tmp_1, tmp_4, tmp_5, tmp_7, tmp_9, null, null, tmp_11, new WebStoragePersistence(tmp$ret$19), null, null, null);
+  var tmp_12 = new WebStoragePersistence(tmp$ret$19);
+  var tmp_13 = WebHost$start$lambda_1(page);
+  var ports = new Ports(tmp_1, tmp_4, tmp_5, tmp_7, tmp_9, null, null, tmp_11, tmp_12, null, null, null, new WebTonePlayer(tmp_13, WebHost$start$lambda_2(navigator), clock, post));
   var runtime = WebRuntime_instance.create_cekgv0_k$(clock, ports, archiveName);
-  var tmp_12 = new LaunchContext(LaunchReason_userInterface_getInstance());
-  runtime.host_1.launch_ouhdty_k$(tmp_12, WebHost$start$lambda_1);
+  var tmp_14 = new LaunchContext(LaunchReason_userInterface_getInstance());
+  runtime.host_1.launch_ouhdty_k$(tmp_14, WebHost$start$lambda_3);
   this.forward_gbzz86_k$(runtime.host_1, page);
   return new WebSession(runtime.openBridgeSession_4m138j_k$());
 };
@@ -5100,6 +5155,231 @@ protoOf(WebTabLock).acquire_muzcrp_k$ = function (name, waitIfHeld, reply) {
     tmp_1.then(WebTabLock$acquire$lambda_2(reply, this, error));
   }
 };
+function Playing(reply) {
+  this.reply_1 = reply;
+  var tmp = this;
+  // Inline function 'kotlin.collections.mutableListOf' call
+  tmp.sources_1 = ArrayList_init_$Create$();
+}
+function Timeline(contextTime, performanceMs) {
+  this.contextTime_1 = contextTime;
+  this.performanceMs_1 = performanceMs;
+}
+protoOf(Timeline).contextTime_cv39uw_k$ = function (monoUs) {
+  // Inline function 'kotlin.Long.div' call
+  var tmp$ret$0 = toNumber(monoUs) / 1000.0;
+  return this.contextTime_1 + (tmp$ret$0 - this.performanceMs_1) / 1000.0;
+};
+protoOf(Timeline).presentedUs_7p682a_k$ = function (contextTime) {
+  return roundToLong((this.performanceMs_1 + (contextTime - this.contextTime_1) * 1000.0) * 1000.0);
+};
+function schedule($this, audio, current, tones, sync) {
+  var timeline_0 = timeline($this, audio);
+  var _iterator__ex2g4s = tones.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var tone = _iterator__ex2g4s.next_20eer_k$();
+    var buffer = audio.createBuffer(1, tone.samples_1.length, tone.sampleRateHz_1);
+    // Inline function 'kotlin.js.unsafeCast' call
+    // Inline function 'kotlin.js.asDynamic' call
+    var tmp$ret$0 = tone.samples_1;
+    buffer.copyToChannel(tmp$ret$0, 0);
+    var source = audio.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audio.destination);
+    var tmp0 = timeline_0.contextTime_cv39uw_k$(tone.atMonoUs_1);
+    // Inline function 'kotlin.comparisons.maxOf' call
+    var b = audio.currentTime;
+    var startsAt = Math.max(tmp0, b);
+    if (tone === sync) {
+      source.onended = WebTonePlayer$schedule$lambda($this, audio, current, sync, startsAt, timeline_0);
+    }
+    source.start(startsAt);
+    // Inline function 'kotlin.collections.plusAssign' call
+    current.sources_1.add_utx5q5_k$(source);
+  }
+}
+function played($this, audio, current, sync, startedAt, planned) {
+  if (!($this.playing_1 === current))
+    return Unit_instance;
+  var tmp0_elvis_lhs = outputTimeline($this, audio);
+  var presentedUs = (tmp0_elvis_lhs == null ? planned : tmp0_elvis_lhs).presentedUs_7p682a_k$(startedAt);
+  var onset = new ToneOnset(subtract(presentedUs, sync.atMonoUs_1), AudioRoute_other_getInstance());
+  end($this, current, null);
+  current.reply_1.ok_x9uwl9_k$(onset);
+}
+function timeline($this, audio) {
+  var tmp0_elvis_lhs = outputTimeline($this, audio);
+  var tmp;
+  if (tmp0_elvis_lhs == null) {
+    var tmp_0 = audio.currentTime;
+    // Inline function 'kotlin.Long.div' call
+    var this_0 = $this.clock_1.monoUs_ho5i5b_k$();
+    var tmp_1 = toNumber(this_0) / 1000.0;
+    var tmp1_elvis_lhs = audio.outputLatency;
+    var tmp2_elvis_lhs = tmp1_elvis_lhs == null ? audio.baseLatency : tmp1_elvis_lhs;
+    tmp = new Timeline(tmp_0, tmp_1 + (tmp2_elvis_lhs == null ? 0.0 : tmp2_elvis_lhs) * 1000.0);
+  } else {
+    tmp = tmp0_elvis_lhs;
+  }
+  return tmp;
+}
+function outputTimeline($this, audio) {
+  // Inline function 'kotlin.js.asDynamic' call
+  if (!(typeof audio.getOutputTimestamp === 'function'))
+    return null;
+  var stamp = audio.getOutputTimestamp();
+  var tmp0_elvis_lhs = stamp.performanceTime;
+  var tmp;
+  if (tmp0_elvis_lhs == null) {
+    return null;
+  } else {
+    tmp = tmp0_elvis_lhs;
+  }
+  var performanceMs = tmp;
+  var tmp1_elvis_lhs = stamp.contextTime;
+  var tmp_0;
+  if (tmp1_elvis_lhs == null) {
+    return null;
+  } else {
+    tmp_0 = tmp1_elvis_lhs;
+  }
+  var contextTime = tmp_0;
+  return performanceMs > 0 ? new Timeline(contextTime, performanceMs) : null;
+}
+function end($this, current, error) {
+  if (current == null || !($this.playing_1 === current))
+    return Unit_instance;
+  $this.playing_1 = null;
+  var _iterator__ex2g4s = current.sources_1.iterator_jk1svi_k$();
+  while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
+    var source = _iterator__ex2g4s.next_20eer_k$();
+    source.onended = null;
+    source.stop();
+  }
+  var tmp0_safe_receiver = $this.context_1;
+  if (tmp0_safe_receiver == null)
+    null;
+  else
+    tmp0_safe_receiver.suspend();
+  if (!(error == null)) {
+    $this.post_1(WebTonePlayer$end$lambda(current, error));
+  }
+}
+function failure_1($this, error) {
+  var name = error == null ? null : error.name;
+  var tmp;
+  if (typeof name === 'string') {
+    // Inline function 'kotlin.js.unsafeCast' call
+    tmp = new PlatformCode('DOMException', name);
+  } else {
+    tmp = null;
+  }
+  var code = tmp;
+  return new PortError(PortErrorKind_failed_getInstance(), code);
+}
+function Companion_6() {
+}
+protoOf(Companion_6).browser_lsixig_k$ = function (window_0) {
+  var tmp0_elvis_lhs = window_0.AudioContext;
+  var type = tmp0_elvis_lhs == null ? window_0.webkitAudioContext : tmp0_elvis_lhs;
+  if (type == null)
+    return null;
+  var options = {};
+  options.latencyHint = 'interactive';
+  // Inline function 'kotlin.arrayOf' call
+  // Inline function 'kotlin.js.unsafeCast' call
+  // Inline function 'kotlin.js.asDynamic' call
+  var tmp$ret$0 = [options];
+  // Inline function 'kotlin.js.unsafeCast' call
+  return Reflect.construct(type, tmp$ret$0);
+};
+var Companion_instance_22;
+function Companion_getInstance_32() {
+  return Companion_instance_22;
+}
+function WebTonePlayer$play$lambda($reply) {
+  return function () {
+    $reply.failed_s3r5j9_k$(new PortError(PortErrorKind_unsupported_getInstance()));
+    return Unit_instance;
+  };
+}
+function WebTonePlayer$play$lambda_0($reply) {
+  return function () {
+    $reply.failed_s3r5j9_k$(new PortError(PortErrorKind_noUserActivation_getInstance()));
+    return Unit_instance;
+  };
+}
+function WebTonePlayer$play$lambda_1(this$0, $current, $audio, $tones, $sync) {
+  return function (it) {
+    var tmp;
+    if (this$0.playing_1 === $current) {
+      schedule(this$0, $audio, $current, $tones, $sync);
+      tmp = Unit_instance;
+    }
+    return Unit_instance;
+  };
+}
+function WebTonePlayer$play$lambda_2(this$0, $current) {
+  return function (error) {
+    end(this$0, $current, failure_1(this$0, error));
+    return Unit_instance;
+  };
+}
+function WebTonePlayer$schedule$lambda(this$0, $audio, $current, $sync, $startsAt, $timeline) {
+  return function (_unused_var__etf5q3) {
+    played(this$0, $audio, $current, $sync, $startsAt, $timeline);
+    return Unit_instance;
+  };
+}
+function WebTonePlayer$end$lambda($current, $error) {
+  return function () {
+    $current.reply_1.failed_s3r5j9_k$($error);
+    return Unit_instance;
+  };
+}
+function WebTonePlayer(open, activated, clock, post) {
+  this.open_1 = open;
+  this.activated_1 = activated;
+  this.clock_1 = clock;
+  this.post_1 = post;
+  this.context_1 = null;
+  this.playing_1 = null;
+}
+protoOf(WebTonePlayer).play_gw6tdi_k$ = function (tones, reply) {
+  end(this, this.playing_1, new PortError(PortErrorKind_cancelled_getInstance()));
+  var sync = lastOrNull(tones);
+  var tmp0_elvis_lhs = this.context_1;
+  var tmp;
+  if (tmp0_elvis_lhs == null) {
+    var tmp1_safe_receiver = this.open_1();
+    var tmp_0;
+    if (tmp1_safe_receiver == null) {
+      tmp_0 = null;
+    } else {
+      // Inline function 'kotlin.also' call
+      this.context_1 = tmp1_safe_receiver;
+      tmp_0 = tmp1_safe_receiver;
+    }
+    tmp = tmp_0;
+  } else {
+    tmp = tmp0_elvis_lhs;
+  }
+  var audio = tmp;
+  if (sync == null || audio == null) {
+    return this.post_1(WebTonePlayer$play$lambda(reply));
+  }
+  if (!this.activated_1()) {
+    return this.post_1(WebTonePlayer$play$lambda_0(reply));
+  }
+  var current = new Playing(reply);
+  this.playing_1 = current;
+  var tmp_1 = audio.resume();
+  var tmp_2 = WebTonePlayer$play$lambda_1(this, current, audio, tones, sync);
+  tmp_1.then(tmp_2, WebTonePlayer$play$lambda_2(this, current));
+};
+protoOf(WebTonePlayer).stop_pnug4y_k$ = function () {
+  end(this, this.playing_1, new PortError(PortErrorKind_cancelled_getInstance()));
+};
 //region block: post-declaration
 protoOf($serializer).typeParametersSerializers_fr94fx_k$ = typeParametersSerializers;
 //endregion
@@ -5113,6 +5393,7 @@ Companion_instance_18 = new Companion_2();
 Companion_instance_20 = new Companion_4();
 WebHost_instance = new WebHost();
 Companion_instance_21 = new Companion_5();
+Companion_instance_22 = new Companion_6();
 //endregion
 //region block: exports
 export {

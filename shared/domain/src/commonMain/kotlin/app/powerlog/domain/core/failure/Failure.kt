@@ -58,6 +58,7 @@ public enum class FailureCode(public val retryable: Boolean) {
     importUnreadable(false),
     settingsSaveFailed(true),
     uiUnavailable(true),
+    syncBeepFailed(false),
     apiMismatch(false),
     unknown(true),
 }

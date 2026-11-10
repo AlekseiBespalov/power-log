@@ -43,6 +43,7 @@ class RideLifecycleTest {
         locationDenied: Boolean = false,
         healthSessionEnding: Boolean = false,
         healthWriteDenied: Boolean = false,
+        syncBeeps: Boolean = false,
     ) =
         StartContext(
             ownerForeign,
@@ -55,6 +56,7 @@ class RideLifecycleTest {
             locationDenied,
             healthSessionEnding,
             healthWriteDenied,
+            syncBeeps,
         )
 
     private val none = LifecycleState(null, null)
@@ -242,6 +244,16 @@ class RideLifecycleTest {
         assertEquals(1, decision.next.clock!!.activeInterval)
         assertEquals(0L, decision.next.clock!!.intervalStartUs)
         assertEquals(RideTiming(at(7).utcUs, 7_000_000, 5_000_000), RideLifecycle.timing(decision.next, at(7)))
+    }
+
+    @Test
+    fun aRideStartedOnASyncBeepTimesFromTheBeep() {
+        val preparing = preparing(context(syncBeeps = true))
+        assertTrue(preparing.clock!!.syncBeeps)
+        val decision = accepted(RideLifecycle.observe(preparing, RideSignal.StartConfirmed(rideId), at(2)))
+        assertEquals(at(0).monoUs, decision.next.clock!!.timerOriginMonoUs)
+        assertEquals(RideTiming(at(2).utcUs, 2_000_000, 2_000_000), decision.saved!!.checkpoint)
+        assertEquals(RideTiming(at(5).utcUs, 5_000_000, 5_000_000), RideLifecycle.timing(decision.next, at(5)))
     }
 
     @Test

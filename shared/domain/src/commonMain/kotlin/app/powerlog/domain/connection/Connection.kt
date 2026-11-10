@@ -55,6 +55,11 @@ public class ControllerLink(
     private var awaitingRelease: LinkAction.Reconnect? = null
     private val linkAges = ArrayDeque<Long>()
     private var planning = true
+    private var pinMonoUs: Long? = null
+
+    public fun pin(atMonoUs: Long?) {
+        pinMonoUs = atMonoUs
+    }
 
     public fun attempt(nowMonoUs: Long): Long {
         endLink()
@@ -90,11 +95,13 @@ public class ControllerLink(
                 planned != null &&
                 linkUp != null &&
                 lastReadingMonoUs == nowMonoUs &&
-                nowMonoUs - linkUp >= planned
+                nowMonoUs - linkUp >= planned &&
+                !heldForPin(nowMonoUs)
         )
             return awaitRelease(LinkAction.Reconnect(nowMonoUs, adopt = false), nowMonoUs)
         if (inFlight != null || waiting != null) return wait()
-        val due = nextPollMonoUs ?: nowMonoUs
+        val scheduled = nextPollMonoUs ?: nowMonoUs
+        val due = pinMonoUs?.let { minOf(scheduled, it) } ?: scheduled
         return if (nowMonoUs >= due) send(ControllerRequest.telemetry, resent = false) else LinkAction.Wait(due)
     }
 
@@ -150,6 +157,7 @@ public class ControllerLink(
                 firstReadingMonoUs = first
                 lastReadingMonoUs = nowMonoUs
                 if (nowMonoUs - first >= ControllerPolicy.silenceUs) retries = 0
+                if (pinMonoUs?.let { nowMonoUs >= it } == true) pinMonoUs = null
             }
             is ControllerReply.Refused -> Unit
         }
@@ -314,6 +322,9 @@ public class ControllerLink(
             )
         return LinkAction.Wait(deadlines.minOrNull() ?: Long.MAX_VALUE)
     }
+
+    private fun heldForPin(nowMonoUs: Long): Boolean =
+        pinMonoUs?.let { nowMonoUs >= it - ControllerPolicy.pinHoldUs } == true
 
     private fun plannedAgeUs(): Long? {
         if (!plansLinkLimit || !planning || linkAges.size < ControllerPolicy.linkLimitDrops) return null

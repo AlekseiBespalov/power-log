@@ -136,6 +136,11 @@ internal object FailureTexts {
             FailureCode.settingsSaveFailed to FailureText("Your settings weren’t saved.", "Try again."),
             FailureCode.uiUnavailable to
                 FailureText("Power Log couldn't open this screen.", "Open Power Log, then try again."),
+            FailureCode.syncBeepFailed to
+                FailureText(
+                    "The sync beep didn't play. The ride still moved on time.",
+                    "Check the volume with Play test beep in Settings.",
+                ),
             FailureCode.apiMismatch to FailureText("", "Install the current Power Log build."),
             FailureCode.unknown to FailureText("Something went wrong.", TRY_AGAIN_KEPT),
         )

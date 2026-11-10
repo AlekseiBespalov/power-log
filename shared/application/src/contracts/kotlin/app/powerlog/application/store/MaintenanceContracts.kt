@@ -297,6 +297,7 @@ abstract class SettingsContract : ArchiveContract() {
                         useWatch = true,
                         saveToHealth = null,
                         recordGps = null,
+                        syncBeeps = null,
                     ),
                 app =
                     AppSettingsDraft(

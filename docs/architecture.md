@@ -50,7 +50,7 @@ and may embed other slices' panels: the Ride screen embeds `connection` and `cha
 | --- | --- | --- | --- | --- | --- |
 | core and plumbing | `src/app/`, `src/components/`; the client in `modules/power-log/src/` | `api` (group `device`; `cancel`, `apiVersion`), `launch`, `port`, `store`, `Executors` | `core.*`; `kit` | `StoreHost`, `ArchiveWriter`, `RideRepository`, `MeasurementRepository` | `Clock`, `DeviceInfo` (`device/`) |
 | `connection` | `src/features/connection/` | `connection`; `connection.*` | `connection` | `ConnectionRepository` | `BleCentral` (`ble/`) |
-| `recording` | `src/features/recording/`; the ride card in `targets/live-activity/` and `platform/ridecard/` | `recording`; `recording.*` | `recording` | the core's; `MemoryMeasurementRepository` for the preview | `LocationSource` (`location/`), `PermissionGate` (`permissions/`), `RecordingKeepAlive` (`keepalive/`), `RideCard` (`ridecard/`), `TabLock` (`tablock/`) |
+| `recording` | `src/features/recording/`; the ride card in `targets/live-activity/` and `platform/ridecard/` | `recording`; `recording.*` | `recording` | the core's; `MemoryMeasurementRepository` for the preview | `LocationSource` (`location/`), `PermissionGate` (`permissions/`), `RecordingKeepAlive` (`keepalive/`), `RideCard` (`ridecard/`), `TabLock` (`tablock/`), `TonePlayer` (`tones/`) |
 | `watch` | `targets/watch/views/` | `watch`; no group | — | — | `WatchLink` (`watch/`) |
 | `history` | `src/features/history/` | `history`; `history.*` | — | `MaintenanceRepository`, `CacheRepository` (summaries) | — |
 | `charts` | `src/features/charts/`, `src/components/charts/`, the native chart views | `charts`; `charts.*` | `charts` | `CacheRepository` (tiles), `MemoryMeasurementRepository` | — |
@@ -155,12 +155,12 @@ TypeScript API types, the API hash and the Kotlin dispatch are checked in under 
 
 ## Ports
 
-Thirteen ports, owned by the application:
+Fourteen ports, owned by the application:
 
 | Slice | Ports |
 | --- | --- |
 | `connection` | `BleCentral` |
-| `recording` | `LocationSource`, `PermissionGate`, `RecordingKeepAlive`, `RideCard`, `TabLock` |
+| `recording` | `LocationSource`, `PermissionGate`, `RecordingKeepAlive`, `RideCard`, `TabLock`, `TonePlayer` |
 | `watch` | `WatchLink` |
 | `imports` | `FilePicker` |
 | `health` | `HealthProvider` (Health access, readback, the Apple workout session the Watch also runs, the Health Connect writer), `BackgroundScheduler` |

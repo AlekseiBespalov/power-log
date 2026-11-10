@@ -11,6 +11,7 @@ import app.powerlog.application.port.RecordingKeepAlive
 import app.powerlog.application.port.RideCard
 import app.powerlog.application.port.StoragePersistence
 import app.powerlog.application.port.TabLock
+import app.powerlog.application.port.TonePlayer
 import app.powerlog.application.port.WatchLink
 
 public class Ports(
@@ -26,4 +27,5 @@ public class Ports(
     public val rideCard: RideCard?,
     public val watch: WatchLink?,
     public val scheduler: BackgroundScheduler?,
+    public val tones: TonePlayer?,
 )

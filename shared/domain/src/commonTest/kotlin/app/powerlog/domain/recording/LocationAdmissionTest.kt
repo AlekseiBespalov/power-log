@@ -36,7 +36,7 @@ class LocationAdmissionTest {
                         EventId("start"),
                         rideId,
                         Device.androidPhone,
-                        StartContext(false, false, true, true, options, false, false, false, false, false),
+                        StartContext(false, false, true, true, options, false, false, false, false, false, false),
                     ),
                     at(0),
                     null,

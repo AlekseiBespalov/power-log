@@ -93,6 +93,7 @@ internal class EncoderPagesBrowserSuite(private val fixtures: dynamic, private v
                 tabLock = null,
                 persistence = null,
                 rideCard = null,
+                tones = null,
                 watch = null,
                 watchCodec = null,
                 scheduler = null,

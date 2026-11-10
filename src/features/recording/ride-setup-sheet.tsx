@@ -120,6 +120,14 @@ export function RideSetupSheet({
                   onPress={() => model.start()}
                 />
                 {state.startReason && !state.start.busy && <Body muted>{state.startReason}</Body>}
+                {state.cancelStart && (
+                  <ControlButton
+                    testID="setup-cancel-start"
+                    secondary
+                    control={state.cancelStart}
+                    onPress={() => model.cancelStart()}
+                  />
+                )}
               </>
             ) : (
               <>

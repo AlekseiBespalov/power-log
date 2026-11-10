@@ -44,6 +44,7 @@ transport.emit(
       useWatch: true,
       saveToHealth: true,
       recordGps: null,
+      syncBeeps: false,
     },
     app: {
       units: 'metric',

@@ -95,6 +95,7 @@ internal object ExportHarness {
                 tabLock = null,
                 persistence = null,
                 rideCard = null,
+                tones = null,
                 watch = null,
                 watchCodec = null,
                 scheduler = null,

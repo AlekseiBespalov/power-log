@@ -44,6 +44,7 @@ class PhoneDevToolsTest {
             rideCard = null,
             watch = null,
             scheduler = null,
+            tones = null,
         )
 
     private var switchReads = 0
@@ -100,7 +101,7 @@ class PhoneDevToolsTest {
         val gate = FakePermissionGate(post)
         val real =
             real(central).let {
-                Ports(gate, it.picker, it.device, it.ble, null, null, null, null, null, null, null, null)
+                Ports(gate, it.picker, it.device, it.ble, null, null, null, null, null, null, null, null, null)
             }
         val ports = tools(bike = false).ports(real)
         assertEquals(0, switchReads)
