@@ -9984,18 +9984,24 @@ protoOf(TraceWireField).equals = function (other) {
     return false;
   return true;
 };
-function DecodeResult(replies, discardedBytes, pendingBytes) {
+function DecodeResult(replies, discardedBytes, pendingBytes, unknownFrames, unknownCommand) {
+  unknownFrames = unknownFrames === VOID ? 0 : unknownFrames;
+  unknownCommand = unknownCommand === VOID ? null : unknownCommand;
   this.replies_1 = replies;
   this.discardedBytes_1 = discardedBytes;
   this.pendingBytes_1 = pendingBytes;
+  this.unknownFrames_1 = unknownFrames;
+  this.unknownCommand_1 = unknownCommand;
 }
 protoOf(DecodeResult).toString = function () {
-  return 'DecodeResult(replies=' + toString_0(this.replies_1) + ', discardedBytes=' + this.discardedBytes_1.toString() + ', pendingBytes=' + this.pendingBytes_1 + ')';
+  return 'DecodeResult(replies=' + toString_0(this.replies_1) + ', discardedBytes=' + this.discardedBytes_1.toString() + ', pendingBytes=' + this.pendingBytes_1 + ', unknownFrames=' + this.unknownFrames_1 + ', unknownCommand=' + this.unknownCommand_1 + ')';
 };
 protoOf(DecodeResult).hashCode = function () {
   var result = hashCode(this.replies_1);
   result = imul(result, 31) + this.discardedBytes_1.hashCode() | 0;
   result = imul(result, 31) + this.pendingBytes_1 | 0;
+  result = imul(result, 31) + this.unknownFrames_1 | 0;
+  result = imul(result, 31) + (this.unknownCommand_1 == null ? 0 : this.unknownCommand_1) | 0;
   return result;
 };
 protoOf(DecodeResult).equals = function (other) {
@@ -10008,6 +10014,10 @@ protoOf(DecodeResult).equals = function (other) {
   if (!equalsLong(this.discardedBytes_1, other.discardedBytes_1))
     return false;
   if (!(this.pendingBytes_1 === other.pendingBytes_1))
+    return false;
+  if (!(this.unknownFrames_1 === other.unknownFrames_1))
+    return false;
+  if (!(this.unknownCommand_1 == other.unknownCommand_1))
     return false;
   return true;
 };
@@ -10221,6 +10231,13 @@ function CycDecoder_getInstance() {
     new CycDecoder();
   return CycDecoder_instance;
 }
+function newDiscards($this) {
+  var total = $this.frames_1.discardedBytes_1;
+  // Inline function 'kotlin.also' call
+  var this_0 = subtract(total, $this.reportedDiscards_1);
+  $this.reportedDiscards_1 = total;
+  return this_0;
+}
 function reply($this, payload, identity) {
   var tmp0_safe_receiver = firstOrNull(payload);
   var tmp1_safe_receiver = tmp0_safe_receiver == null ? null : tmp0_safe_receiver;
@@ -10287,30 +10304,30 @@ function Companion_getInstance_47() {
 }
 function CycFramer() {
   this.frames_1 = new CycFrameDecoder();
+  this.reportedDiscards_1 = new Long(0, 0);
 }
 protoOf(CycFramer).feed_hfp651_k$ = function (bytes, identity) {
-  // Inline function 'kotlin.collections.mapNotNull' call
-  var tmp0 = this.frames_1.feed_7nij5u_k$(bytes);
-  // Inline function 'kotlin.collections.mapNotNullTo' call
-  var destination = ArrayList_init_$Create$_0();
-  // Inline function 'kotlin.collections.forEach' call
-  var _iterator__ex2g4s = tmp0.iterator_jk1svi_k$();
+  // Inline function 'kotlin.collections.mutableListOf' call
+  var replies = ArrayList_init_$Create$_0();
+  var unknownFrames = 0;
+  var unknownCommand = null;
+  var _iterator__ex2g4s = this.frames_1.feed_7nij5u_k$(bytes).iterator_jk1svi_k$();
   while (_iterator__ex2g4s.hasNext_bitz1p_k$()) {
-    var element = _iterator__ex2g4s.next_20eer_k$();
-    var tmp0_safe_receiver = reply(this, element, identity);
-    if (tmp0_safe_receiver == null)
-      null;
-    else {
-      // Inline function 'kotlin.let' call
-      destination.add_utx5q5_k$(tmp0_safe_receiver);
+    var payload = _iterator__ex2g4s.next_20eer_k$();
+    var reply_0 = reply(this, payload, identity);
+    if (!(reply_0 == null)) {
+      // Inline function 'kotlin.collections.plusAssign' call
+      replies.add_utx5q5_k$(reply_0);
+    } else {
+      unknownFrames = unknownFrames + 1 | 0;
+      unknownCommand = payload[0] & 255;
     }
   }
-  var replies = destination;
-  return new DecodeResult(replies, this.frames_1.discardedBytes_1, this.frames_1.get_pendingBytes_6sv5ul_k$());
+  return new DecodeResult(replies, newDiscards(this), this.frames_1.get_pendingBytes_6sv5ul_k$(), unknownFrames, unknownCommand);
 };
 protoOf(CycFramer).reset_1sjh3j_k$ = function () {
   this.frames_1.reset_5u6xz3_k$();
-  return new DecodeResult(emptyList(), this.frames_1.discardedBytes_1, this.frames_1.get_pendingBytes_6sv5ul_k$());
+  return new DecodeResult(emptyList(), newDiscards(this), this.frames_1.get_pendingBytes_6sv5ul_k$());
 };
 function _get_$cachedSerializer__te6jhj_5($this) {
   return $this.$cachedSerializer$delegate_1.get_value_j01efc_k$();

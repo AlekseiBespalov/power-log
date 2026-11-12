@@ -82,15 +82,31 @@ public object CycDecoder : ControllerDecoder {
 
 private class CycFramer : ControllerFramer {
     private val frames = CycFrameDecoder()
+    private var reportedDiscards = 0L
 
     override fun feed(bytes: ByteArray, identity: ControllerIdentity?): DecodeResult {
-        val replies = frames.feed(bytes).mapNotNull { reply(it, identity) }
-        return DecodeResult(replies, frames.discardedBytes, frames.pendingBytes)
+        val replies = mutableListOf<ControllerReply>()
+        var unknownFrames = 0
+        var unknownCommand: Int? = null
+        for (payload in frames.feed(bytes)) {
+            val reply = reply(payload, identity)
+            if (reply != null) replies += reply
+            else {
+                unknownFrames++
+                unknownCommand = payload[0].toInt() and 0xff
+            }
+        }
+        return DecodeResult(replies, newDiscards(), frames.pendingBytes, unknownFrames, unknownCommand)
     }
 
     override fun reset(): DecodeResult {
         frames.reset()
-        return DecodeResult(emptyList(), frames.discardedBytes, frames.pendingBytes)
+        return DecodeResult(emptyList(), newDiscards(), frames.pendingBytes)
+    }
+
+    private fun newDiscards(): Long {
+        val total = frames.discardedBytes
+        return (total - reportedDiscards).also { reportedDiscards = total }
     }
 
     private fun reply(payload: ByteArray, identity: ControllerIdentity?): ControllerReply? {

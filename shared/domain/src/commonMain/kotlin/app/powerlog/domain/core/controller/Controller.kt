@@ -84,6 +84,8 @@ public data class DecodeResult(
     public val replies: List<ControllerReply>,
     public val discardedBytes: Long,
     public val pendingBytes: Int,
+    public val unknownFrames: Int = 0,
+    public val unknownCommand: Int? = null,
 )
 
 public sealed interface ControllerReply {

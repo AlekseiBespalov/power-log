@@ -44,6 +44,7 @@ import app.powerlog.domain.core.controller.ControllerIdentity
 import app.powerlog.domain.core.controller.ControllerPolicy
 import app.powerlog.domain.core.controller.ControllerReply
 import app.powerlog.domain.core.controller.ControllerRequest
+import app.powerlog.domain.core.controller.DecodeResult
 import app.powerlog.domain.core.controller.GattResult
 import app.powerlog.domain.core.controller.TraceContract
 import app.powerlog.domain.core.failure.Availability
@@ -84,6 +85,25 @@ internal class ControllerConnection(
     private class Remembered(val bikeId: BikeId, val known: ControllerIdentity?, val adopt: Boolean)
 
     private class Cancelled(val reason: String, val linkUpMonoUs: Long?)
+
+    private class Arrivals {
+        var notifications = 0
+        var discardedBytes = 0L
+        var pendingBytes = 0
+        var unknownFrames = 0
+        var unknownCommand: Int? = null
+        var droppedReplies = 0
+
+        fun fields(): Array<Pair<String, Any?>> =
+            arrayOf(
+                "notifications" to notifications,
+                "discardedBytes" to discardedBytes,
+                "pendingBytes" to pendingBytes,
+                "unknownFrames" to unknownFrames,
+                "unknownCommand" to unknownCommand,
+                "droppedReplies" to droppedReplies,
+            )
+    }
 
     var changed: () -> Unit = {}
     var rideOpen: () -> Boolean = { false }
@@ -145,6 +165,7 @@ internal class ControllerConnection(
     private var pace: Pair<Int, Boolean>? = null
     private var notificationErrors = 0
     private var discardedBytes = 0L
+    private var arrivals = Arrivals()
     private var replies = 0
     private var replySumUs = 0L
     private var replyMaxUs = 0L
@@ -556,6 +577,7 @@ internal class ControllerConnection(
                 "linkMs" to (ended?.linkUpMonoUs ?: linkUpMonoUs)?.let { (now - it) / 1_000 },
                 "sampleAgeMs" to newestMonoUs?.let { (now - it) / 1_000 },
                 "platform" to error?.platform,
+                *if (ended == null) arrivals.fields() else emptyArray(),
             )
         if (cancelled.remove(link)) {
             if (link == releasing) {
@@ -627,15 +649,12 @@ internal class ControllerConnection(
 
     override fun notified(link: Long, bytes: ByteArray, at: ClockReading) {
         if (link != linkId) return
-        if (!inFlight) {
-            if (trace.capturing) trace.record("notification", "ignored=noRequest", bytes, at)
-            return
-        }
         val current = this.link ?: return
         val frames = framer ?: return
-        if (current.notified(at.monoUs)) frames.reset()
+        arrivals.notifications++
+        if (current.notified(at.monoUs)) count(frames.reset())
         val decoded = frames.feed(bytes, identity)
-        discardedBytes += decoded.discardedBytes
+        count(decoded)
         if (trace.capturing) {
             trace.record("notification", "", bytes, at)
             trace.record(
@@ -646,6 +665,7 @@ internal class ControllerConnection(
             )
         }
         val replies = current.replies(decoded, at.monoUs)
+        arrivals.droppedReplies += decoded.replies.size - replies.size
         if (replies.isEmpty()) return
         inFlight = false
         for (reply in replies) {
@@ -665,6 +685,14 @@ internal class ControllerConnection(
             }
         }
         run(next(current, at.monoUs))
+    }
+
+    private fun count(decoded: DecodeResult) {
+        discardedBytes += decoded.discardedBytes
+        arrivals.discardedBytes += decoded.discardedBytes
+        arrivals.pendingBytes = decoded.pendingBytes
+        arrivals.unknownFrames += decoded.unknownFrames
+        decoded.unknownCommand?.let { arrivals.unknownCommand = it }
     }
 
     override fun notificationFailed(link: Long, error: PortError) {
@@ -744,6 +772,7 @@ internal class ControllerConnection(
                 inFlight = true
                 lastSend = null
                 sentMonoUs = clock.monoUs()
+                if (!action.resent) arrivals = Arrivals()
                 arm(current.accepted(clock.monoUs()))
             }
             SendResult.blocked -> arm(current.blocked(clock.monoUs()))
@@ -812,6 +841,7 @@ internal class ControllerConnection(
         lastSend = null
         identity = null
         framer = chosen.newFramer()
+        arrivals = Arrivals()
         attempts++
         linkAttempt++
         attemptMonoUs = clock.monoUs()
@@ -885,6 +915,7 @@ internal class ControllerConnection(
                     "request" to if (identity == null) ControllerRequest.identity else ControllerRequest.telemetry,
                     "held" to (timeout == "writeTimeout"),
                     "waitedMs" to sentMonoUs?.let { (now - it) / 1_000 },
+                    *arrivals.fields(),
                 )
         }
         run(if (action is LinkAction.Wait) next(current, now) else action)
@@ -1135,7 +1166,7 @@ internal class ControllerConnection(
     fun summary(): ConnectionSummary {
         val summary =
             ConnectionSummary(
-                replyMeanMs = (replySumUs / replies / 1_000).takeIf { replies > 0 },
+                replyMeanMs = if (replies > 0) replySumUs / replies / 1_000 else null,
                 replyMaxMs = (replyMaxUs / 1_000).takeIf { replies > 0 },
                 notificationErrors = notificationErrors,
                 discardedBytes = discardedBytes,

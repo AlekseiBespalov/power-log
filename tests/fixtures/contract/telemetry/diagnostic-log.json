@@ -154,7 +154,13 @@
         "systemReconnecting": "flag",
         "linkMs": "integer",
         "sampleAgeMs": "integer",
-        "platform": "platform"
+        "platform": "platform",
+        "notifications": "integer",
+        "discardedBytes": "integer",
+        "pendingBytes": "integer",
+        "unknownFrames": "integer",
+        "unknownCommand": "integer",
+        "droppedReplies": "integer"
       },
       "linkFailed": {
         "attempt": "integer",
@@ -183,7 +189,13 @@
       "replyTimeout": {
         "request": "enum:ControllerRequest",
         "held": "flag",
-        "waitedMs": "integer"
+        "waitedMs": "integer",
+        "notifications": "integer",
+        "discardedBytes": "integer",
+        "pendingBytes": "integer",
+        "unknownFrames": "integer",
+        "unknownCommand": "integer",
+        "droppedReplies": "integer"
       },
       "writeFailed": {
         "result": ["accepted", "blocked", "tooLong", "notConnected", "failed"],

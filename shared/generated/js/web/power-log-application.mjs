@@ -105,6 +105,7 @@ import {
   intersect7qttw6wlmz1n as intersect,
   maxOrNull2e5ok5wkly1cp as maxOrNull,
   numberToInt1ygmcfwhs2fkq as numberToInt,
+  arrayConcat3qsij7vh68m69 as arrayConcat,
   joinToString1cxrrlmo0chqs as joinToString,
   toList3jhuyej2anx2q as toList,
   ArrayDeque_init_$Create$6m79olxzrhzp as ArrayDeque_init_$Create$,
@@ -891,6 +892,7 @@ initMetadataForObject($serializer_27, '$serializer', VOID, VOID, [GeneratedSeria
 initMetadataForClass(ConnectionAllowed, 'ConnectionAllowed', VOID, VOID, VOID, VOID, VOID, {0: $serializer_getInstance_45});
 initMetadataForClass(Remembered, 'Remembered');
 initMetadataForClass(Cancelled_1, 'Cancelled');
+initMetadataForClass(Arrivals, 'Arrivals', Arrivals);
 initMetadataForCompanion(Companion_36);
 initMetadataForLambda(ControllerConnection$start$slambda, CoroutineImpl, VOID, [1]);
 initMetadataForLambda(ControllerConnection$foreground$slambda, CoroutineImpl, VOID, [1]);
@@ -17252,6 +17254,20 @@ function Cancelled_1(reason, linkUpMonoUs) {
   this.reason_1 = reason;
   this.linkUpMonoUs_1 = linkUpMonoUs;
 }
+function Arrivals() {
+  this.notifications_1 = 0;
+  this.discardedBytes_1 = new Long(0, 0);
+  this.pendingBytes_1 = 0;
+  this.unknownFrames_1 = 0;
+  this.unknownCommand_1 = null;
+  this.droppedReplies_1 = 0;
+}
+protoOf(Arrivals).fields_l2xf7r_k$ = function () {
+  // Inline function 'kotlin.arrayOf' call
+  // Inline function 'kotlin.js.unsafeCast' call
+  // Inline function 'kotlin.js.asDynamic' call
+  return [to('notifications', this.notifications_1), to('discardedBytes', this.discardedBytes_1), to('pendingBytes', this.pendingBytes_1), to('unknownFrames', this.unknownFrames_1), to('unknownCommand', this.unknownCommand_1), to('droppedReplies', this.droppedReplies_1)];
+};
 function remembered($this, adopt, $completion) {
   var tmp = new $rememberedCOROUTINE$($this, adopt, $completion);
   tmp.result_1 = Unit_instance;
@@ -17308,6 +17324,21 @@ function connectRefused($this, answer, previous, shownBike, code) {
   var refused = shown($this, code);
   answer.complete_ixf84q_k$(refused);
   return refused;
+}
+function count($this, decoded) {
+  $this.discardedBytes_1 = add($this.discardedBytes_1, decoded.discardedBytes_1);
+  var _receiver__tnumb7 = $this.arrivals_1;
+  _receiver__tnumb7.discardedBytes_1 = add(_receiver__tnumb7.discardedBytes_1, decoded.discardedBytes_1);
+  $this.arrivals_1.pendingBytes_1 = decoded.pendingBytes_1;
+  var _receiver__tnumb7_0 = $this.arrivals_1;
+  _receiver__tnumb7_0.unknownFrames_1 = _receiver__tnumb7_0.unknownFrames_1 + decoded.unknownFrames_1 | 0;
+  var tmp0_safe_receiver = decoded.unknownCommand_1;
+  if (tmp0_safe_receiver == null)
+    null;
+  else {
+    // Inline function 'kotlin.let' call
+    $this.arrivals_1.unknownCommand_1 = tmp0_safe_receiver;
+  }
 }
 function verified($this, verified) {
   var tmp0_elvis_lhs = $this.decoder_1;
@@ -17477,6 +17508,8 @@ function send($this, action) {
       $this.inFlight_1 = true;
       $this.lastSend_1 = null;
       $this.sentMonoUs_1 = $this.clock_1.monoUs_ho5i5b_k$();
+      if (!action.resent_1)
+        $this.arrivals_1 = new Arrivals();
       arm($this, current.accepted_85vt4z_k$($this.clock_1.monoUs_ho5i5b_k$()));
       break;
     case 1:
@@ -17616,6 +17649,7 @@ function open($this, adopt) {
   $this.lastSend_1 = null;
   $this.identity_1 = null;
   $this.framer_1 = chosen.newFramer_g1nicb_k$();
+  $this.arrivals_1 = new Arrivals();
   $this.attempts_1 = $this.attempts_1 + 1 | 0;
   $this.linkAttempt_1 = $this.linkAttempt_1 + 1 | 0;
   $this.attemptMonoUs_1 = $this.clock_1.monoUs_ho5i5b_k$();
@@ -17713,7 +17747,7 @@ function due($this) {
         var this_0 = subtract(now, tmp4_safe_receiver);
         tmp_5 = divide(this_0, fromInt(1000));
       }
-      note($this, tmp_2, 'replyTimeout', [tmp_3, tmp_4, to('waitedMs', tmp_5)]);
+      note($this, tmp_2, 'replyTimeout', arrayConcat([[tmp_3, tmp_4, to('waitedMs', tmp_5)], $this.arrivals_1.fields_l2xf7r_k$()]));
     }
   }
   var tmp_6;
@@ -19546,6 +19580,7 @@ function ControllerConnection(scope, ride, clock, ble, permissions, device, conn
   this.pace_1 = null;
   this.notificationErrors_1 = 0;
   this.discardedBytes_1 = new Long(0, 0);
+  this.arrivals_1 = new Arrivals();
   this.replies_1 = 0;
   this.replySumUs_1 = new Long(0, 0);
   this.replyMaxUs_1 = new Long(0, 0);
@@ -19932,7 +19967,15 @@ protoOf(ControllerConnection).linkDown_6dvnke_k$ = function (link, error, system
       tmp_5 = divide(this_1, fromInt(1000));
     }
     var tmp_6 = to('sampleAgeMs', tmp_5);
-    note(this, tmp, 'linkDown', [tmp_0, tmp_1, tmp_2, tmp_4, tmp_6, to('platform', error == null ? null : error.platform_1)]);
+    var tmp_7 = [tmp_0, tmp_1, tmp_2, tmp_4, tmp_6, to('platform', error == null ? null : error.platform_1)];
+    var tmp_8;
+    if (ended == null) {
+      tmp_8 = this.arrivals_1.fields_l2xf7r_k$();
+    } else {
+      // Inline function 'kotlin.emptyArray' call
+      tmp_8 = [];
+    }
+    note(this, tmp, 'linkDown', arrayConcat([tmp_7, tmp_8]));
   }
   if (this.cancelled_1.remove_cedx0m_k$(link)) {
     if (link.equals(this.releasing_1)) {
@@ -19954,13 +19997,13 @@ protoOf(ControllerConnection).linkDown_6dvnke_k$ = function (link, error, system
       var released = tmp7_safe_receiver == null ? null : tmp7_safe_receiver.released_7b9uop_k$(this.clock_1.monoUs_ho5i5b_k$());
       if (released instanceof Reconnect)
         this.reconnect_1 = released;
-      var tmp_7;
+      var tmp_9;
       if (!(released == null)) {
-        tmp_7 = !(released instanceof Reconnect);
+        tmp_9 = !(released instanceof Reconnect);
       } else {
-        tmp_7 = false;
+        tmp_9 = false;
       }
-      if (tmp_7) {
+      if (tmp_9) {
         run(this, released);
       } else {
         var tmp8_safe_receiver = this.reconnect_1;
@@ -20038,12 +20081,6 @@ protoOf(ControllerConnection).canSend_wzrz7g_k$ = function (link) {
 protoOf(ControllerConnection).notified_ht5q1l_k$ = function (link, bytes, at) {
   if (!link.equals(this.linkId_1))
     return Unit_instance;
-  if (!this.inFlight_1) {
-    if (this.trace_1.get_capturing_gzdo9y_k$()) {
-      this.trace_1.record_esg381_k$('notification', 'ignored=noRequest', bytes, at);
-    }
-    return Unit_instance;
-  }
   var tmp0_elvis_lhs = this.link_1;
   var tmp;
   if (tmp0_elvis_lhs == null) {
@@ -20060,16 +20097,20 @@ protoOf(ControllerConnection).notified_ht5q1l_k$ = function (link, bytes, at) {
     tmp_0 = tmp1_elvis_lhs;
   }
   var frames = tmp_0;
+  var _receiver__tnumb7 = this.arrivals_1;
+  _receiver__tnumb7.notifications_1 = _receiver__tnumb7.notifications_1 + 1 | 0;
   if (current.notified_jw9rjg_k$(at.monoUs_1)) {
-    frames.reset_1sjh3j_k$();
+    count(this, frames.reset_1sjh3j_k$());
   }
   var decoded = frames.feed_hfp651_k$(bytes, this.identity_1);
-  this.discardedBytes_1 = add(this.discardedBytes_1, decoded.discardedBytes_1);
+  count(this, decoded);
   if (this.trace_1.get_capturing_gzdo9y_k$()) {
     this.trace_1.record_esg381_k$('notification', '', bytes, at);
     this.trace_1.record_esg381_k$('decoder', 'replies=' + decoded.replies_1.get_size_woubt6_k$() + ' discarded=' + decoded.discardedBytes_1.toString() + ' pending=' + decoded.pendingBytes_1, null, at);
   }
   var replies = current.replies_z1vupd_k$(decoded, at.monoUs_1);
+  var _receiver__tnumb7_0 = this.arrivals_1;
+  _receiver__tnumb7_0.droppedReplies_1 = _receiver__tnumb7_0.droppedReplies_1 + (decoded.replies_1.get_size_woubt6_k$() - replies.get_size_woubt6_k$() | 0) | 0;
   if (replies.isEmpty_y1axqb_k$())
     return Unit_instance;
   this.inFlight_1 = false;
@@ -20199,27 +20240,25 @@ protoOf(ControllerConnection).snapshot_4plubo_k$ = function () {
   return new ConnectionSnapshot(tmp, tmp_0, tmp_2, tmp_3, tmp_4, tmp_5, tmp_7, tmp_10, tmp_13);
 };
 protoOf(ControllerConnection).summary_upzom2_k$ = function () {
-  var tmp0 = this.replySumUs_1;
-  // Inline function 'kotlin.Long.div' call
-  var other = this.replies_1;
-  // Inline function 'kotlin.Long.div' call
-  var this_0 = divide(tmp0, fromInt(other));
-  // Inline function 'kotlin.takeIf' call
-  var this_1 = divide(this_0, fromInt(1000));
   var tmp;
   if (this.replies_1 > 0) {
-    tmp = this_1;
+    var tmp0 = this.replySumUs_1;
+    // Inline function 'kotlin.Long.div' call
+    var other = this.replies_1;
+    // Inline function 'kotlin.Long.div' call
+    var this_0 = divide(tmp0, fromInt(other));
+    tmp = divide(this_0, fromInt(1000));
   } else {
     tmp = null;
   }
   var tmp_0 = tmp;
   // Inline function 'kotlin.Long.div' call
-  var this_2 = this.replyMaxUs_1;
+  var this_1 = this.replyMaxUs_1;
   // Inline function 'kotlin.takeIf' call
-  var this_3 = divide(this_2, fromInt(1000));
+  var this_2 = divide(this_1, fromInt(1000));
   var tmp_1;
   if (this.replies_1 > 0) {
-    tmp_1 = this_3;
+    tmp_1 = this_2;
   } else {
     tmp_1 = null;
   }
@@ -20227,15 +20266,15 @@ protoOf(ControllerConnection).summary_upzom2_k$ = function () {
   var tmp_3 = this.notificationErrors_1;
   var tmp_4 = this.discardedBytes_1;
   // Inline function 'kotlin.takeIf' call
-  var this_4 = paceNow(this).first_1;
+  var this_3 = paceNow(this).first_1;
   var tmp_5;
   if (!(this.link_1 == null)) {
-    tmp_5 = this_4;
+    tmp_5 = this_3;
   } else {
     tmp_5 = null;
   }
-  var tmp$ret$7 = tmp_5;
-  var summary = new ConnectionSummary(tmp_0, tmp_2, tmp_3, tmp_4, tmp$ret$7);
+  var tmp$ret$5 = tmp_5;
+  var summary = new ConnectionSummary(tmp_0, tmp_2, tmp_3, tmp_4, tmp$ret$5);
   this.replies_1 = 0;
   this.replySumUs_1 = new Long(0, 0);
   this.replyMaxUs_1 = new Long(0, 0);

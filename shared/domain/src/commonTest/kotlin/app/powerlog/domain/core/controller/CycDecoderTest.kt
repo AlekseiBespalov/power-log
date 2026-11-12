@@ -123,6 +123,35 @@ class CycDecoderTest {
     }
 
     @Test
+    fun aFeedReportsOnlyTheBytesItDiscarded() {
+        val whole = frame(bytes(telemetry["payloadHex"].text()))
+        val framer = CycDecoder.newFramer()
+        assertEquals(3L, framer.feed(bytes("aabbcc") + whole, x6).discardedBytes)
+        val clean = framer.feed(whole, x6)
+        assertIs<ControllerReply.Reading>(clean.replies.single())
+        assertEquals(0L, clean.discardedBytes)
+    }
+
+    @Test
+    fun anUnrecognisedCommandIsCountedWithItsCode() {
+        val decoded = CycDecoder.newFramer().feed(frame(bytes("07")), x6)
+        assertEquals(emptyList(), decoded.replies)
+        assertEquals(1, decoded.unknownFrames)
+        assertEquals(7, decoded.unknownCommand)
+    }
+
+    @Test
+    fun aStalePartialFrameDoesNotHideTheNextReply() {
+        val whole = frame(bytes(telemetry["payloadHex"].text()))
+        val framer = CycDecoder.newFramer()
+        framer.feed(whole.copyOfRange(0, 20), x6)
+        val next = framer.feed(whole, x6)
+        assertIs<ControllerReply.Reading>(next.replies.single())
+        assertEquals(20L, next.discardedBytes)
+        assertEquals(0, next.pendingBytes)
+    }
+
+    @Test
     fun theRegistryHoldsCycByIdAndService() {
         assertEquals(listOf<ControllerDecoder>(CycDecoder), ControllerDecoders.all)
         assertSame(CycDecoder, ControllerDecoders.of(DecoderId("cyc")))

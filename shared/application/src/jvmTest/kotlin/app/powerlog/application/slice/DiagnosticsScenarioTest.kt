@@ -4,13 +4,18 @@ import app.powerlog.application.api.Empty
 import app.powerlog.application.api.LaunchResult
 import app.powerlog.application.api.Outcome
 import app.powerlog.application.api.StreamAnswer
+import app.powerlog.application.connection.ConnectInput
 import app.powerlog.application.diagnostics.DiagnosticsPage
 import app.powerlog.application.diagnostics.DiagnosticsReadInput
 import app.powerlog.application.diagnostics.DiagnosticsView
 import app.powerlog.application.diagnostics.TraceDocument
+import app.powerlog.application.store.LogLine
+import app.powerlog.application.store.LogValue
 import app.powerlog.domain.connection.ConnectionState
+import app.powerlog.domain.core.controller.ControllerRequest
 import app.powerlog.domain.core.controller.cyc.CycDecoder
 import app.powerlog.domain.core.failure.FailureCode
+import app.powerlog.domain.core.ids.BikeId
 import app.powerlog.domain.diagnostics.TraceState
 import app.powerlog.domain.diagnostics.TraceStopReason
 import kotlin.test.Test
@@ -19,9 +24,132 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 
 class DiagnosticsScenarioTest {
+    private fun LogLine.integer(key: String): Long? =
+        (fields.firstOrNull { it.key == key }?.value as? LogValue.Integer)?.value
+
+    private fun LogLine.text(key: String): String? =
+        (fields.firstOrNull { it.key == key }?.value as? LogValue.Text)?.value
+
+    private fun identityTimeout(answer: ByteArray?): LogLine {
+        val scenario = Scenario()
+        scenario.replies = false
+        lateinit var timeout: LogLine
+        scenario.test {
+            assertEquals(LaunchResult.Ready, scenario.launch())
+            with(scenario) { search() }
+            scenario.discovered()
+            scenario.connection { view -> view.found.any { it.bikeId == BikeId(Scenario.BIKE) } }
+            val connecting = async { scenario.api.connection.connect(ConnectInput(BikeId(Scenario.BIKE))) }
+            while (ControllerRequest.identity !in scenario.sent) delay(1)
+            answer?.let { scenario.fake.os.notify(it) }
+            delay(3_000)
+            timeout = scenario.archive.log.first { it.event == "replyTimeout" }
+            connecting.await()
+        }
+        assertEquals(ControllerRequest.identity.name, timeout.text("request"))
+        return timeout
+    }
+
+    @Test
+    fun captureSummariesContinueThroughWindowsWithoutReplies() {
+        val scenario = Scenario()
+        scenario.test {
+            with(scenario) { riding() }
+            scenario.telemetryReplies = false
+            val from = scenario.archive.log.size
+            delay(95_000)
+            val summaries = scenario.archive.log.drop(from).filter { it.event == "captureSummary" }
+            assertTrue(summaries.count { it.integer("replyMeanMs") == null } >= 2, "$summaries")
+            assertTrue(scenario.archive.log.none { it.event == "unexpected" })
+        }
+    }
+
+    @Test
+    fun aTelemetrySilenceTimesOutWithNothingArrived() {
+        val scenario = Scenario()
+        scenario.test {
+            assertEquals(LaunchResult.Ready, scenario.launch())
+            with(scenario) { connect() }
+            scenario.connection { it.state == ConnectionState.connected }
+            scenario.telemetryReplies = false
+            delay(5_000)
+            val timeout = scenario.archive.log.first { it.event == "replyTimeout" }
+            assertEquals(ControllerRequest.telemetry.name, timeout.text("request"))
+            assertEquals(0L, timeout.integer("notifications"))
+            assertEquals(0L, timeout.integer("droppedReplies"))
+            assertEquals(0L, timeout.integer("unknownFrames"))
+            assertEquals(0L, timeout.integer("discardedBytes"))
+            assertEquals(0L, timeout.integer("pendingBytes"))
+        }
+    }
+
+    @Test
+    fun anIdentitySilenceTimesOutWithNothingArrived() {
+        val timeout = identityTimeout(null)
+        assertEquals(0L, timeout.integer("notifications"))
+        assertEquals(0L, timeout.integer("droppedReplies"))
+    }
+
+    @Test
+    fun anUnrecognisedFrameIsLoggedWithItsCommand() {
+        val timeout = identityTimeout(Scenario.frame("07"))
+        assertEquals(1L, timeout.integer("notifications"))
+        assertEquals(1L, timeout.integer("unknownFrames"))
+        assertEquals(7L, timeout.integer("unknownCommand"))
+        assertEquals(0L, timeout.integer("droppedReplies"))
+    }
+
+    @Test
+    fun aReadingWhileIdentityIsPendingIsADroppedReply() {
+        val timeout = identityTimeout(Scenario.telemetryFrame)
+        assertEquals(1L, timeout.integer("notifications"))
+        assertEquals(1L, timeout.integer("droppedReplies"))
+        assertEquals(0L, timeout.integer("unknownFrames"))
+        assertNull(timeout.integer("unknownCommand"))
+    }
+
+    @Test
+    fun aDuplicateReplyBetweenPollsAddsNoReading() {
+        val scenario = Scenario()
+        scenario.test {
+            assertEquals(LaunchResult.Ready, scenario.launch())
+            with(scenario) { connect() }
+            scenario.connection { it.state == ConnectionState.connected }
+            delay(2_000)
+            val sends = scenario.sentAtUs.size
+            while (scenario.sentAtUs.size == sends) delay(1)
+            delay(Scenario.REPLY_MS + 10)
+            scenario.fake.os.notify(Scenario.telemetryFrame)
+            runCurrent()
+            val page =
+                assertIs<Outcome.Ok<DiagnosticsPage>>(scenario.api.diagnostics.readLog(DiagnosticsReadInput(null)))
+                    .value
+            val gapMs = assertNotNull(assertNotNull(page.connection).lastGapMs)
+            assertTrue(gapMs > Scenario.REPLY_MS + 10, "last gap $gapMs ms")
+        }
+    }
+
+    @Test
+    fun aLinkTheBikeEndsCarriesWhatArrived() {
+        val scenario = Scenario()
+        scenario.test {
+            assertEquals(LaunchResult.Ready, scenario.launch())
+            with(scenario) { connect() }
+            scenario.connection { it.state == ConnectionState.connected }
+            scenario.linkUps = false
+            scenario.fake.os.disconnected(Scenario.BIKE)
+            scenario.connection { it.state == ConnectionState.reconnecting }
+            val down = scenario.archive.log.first { it.event == "linkDown" }
+            assertEquals("peerOrSystem", down.text("initiator"))
+            assertNotNull(down.integer("notifications"))
+            assertNotNull(down.integer("droppedReplies"))
+        }
+    }
+
     @Test
     fun aTraceStopsAtItsTimeLimitAndReadsBackTodaysEvents() {
         val scenario = Scenario()

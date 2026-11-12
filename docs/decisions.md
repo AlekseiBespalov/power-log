@@ -91,10 +91,13 @@ complexity is wrong too.
   most often while the motor draws current. A telemetry request without a reply after 1 s is sent again on the same
   connection; only 3 s of unanswered requests or a system disconnect closes the link. Replies carry no request number,
   so a reply completes the request outstanding when it arrives and keeps its arrival time; a late reply and the reply
-  to its re-sent request record one reading. A reconnect after the app closes a live link waits at least 2 s, because
-  Android ends the released link a second later. A reconnect that keeps delivering telemetry for 3 s restarts the
-  backoff; a bike that is off, or drops again sooner, keeps backing off. A failed service lookup retries for a known
-  controller or during a ride.
+  to its re-sent request record one reading. Bytes that arrive with no request outstanding are decoded and counted,
+  never recorded, so a late duplicate split across the next request completes it like any late reply. Each reply
+  timeout, and each link the bike or the phone ends, logs what arrived since its request was first sent:
+  notifications, discarded and pending bytes, unrecognised frames and replies the link did not use. A reconnect after
+  the app closes a live link waits at least 2 s, because Android ends the released link a second later. A reconnect
+  that keeps delivering telemetry for 3 s restarts the backoff; a bike that is off, or drops again sooner, keeps
+  backing off. A failed service lookup retries for a known controller or during a ride.
 - **On the iPhone, a ride reconnects just before the bike's own link limit.** The X6 asks for a connection interval
   under 15 ms at 5, 35 and 65 s into every link; iOS never grants it, and the X6 ends the link at 95 s (HCI 0x3B).
   Once the bike has ended three links of at least 30 s at ages within 1 s of each other, a ride closes the link at its
@@ -321,10 +324,11 @@ complexity is wrong too.
 ## Diagnostics
 
 - **The diagnostic log** has one closed vocabulary and field whitelist
-  (`tests/fixtures/contract/telemetry/diagnostic-log.json`): events, reasons, timings, counters and platform error
-  codes, never names, identifiers, payloads or ride measurements. Beyond Bluetooth and storage it records each ride
-  phase, each Health outcome and every failure from Health, the Watch, the keep-alive, permissions, files and exports.
-  Two 4 MiB files hold at least ten hours of riding. Durations are whole milliseconds; timestamps are µs.
+  (`tests/fixtures/contract/telemetry/diagnostic-log.json`): events, reasons, timings, counters, platform error codes
+  and the command code of an unrecognised controller frame, never names, identifiers, payloads or ride measurements.
+  Beyond Bluetooth and storage it records each ride phase, each Health outcome and every failure from Health, the
+  Watch, the keep-alive, permissions, files and exports. Two 4 MiB files hold at least ten hours of riding. Durations
+  are whole milliseconds; timestamps are µs.
 - **Release builds write only warnings and errors to the OS log.**
 - **No crash service and no MetricKit.** The Kotlin crash hook keeps the stack on both phones, and an exception inside a
   task logs its frames; Android logs why the previous process ended, once per launch; iPhone exit causes come from the
